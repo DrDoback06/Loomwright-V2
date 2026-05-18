@@ -1074,7 +1074,29 @@
       const all = await StorageService.get(KEYS.occurrences, []);
       await StorageService.set(KEYS.occurrences, all.map((o) => o.entityId === fromId ? { ...o, entityId: toId } : o));
     },
+    async markStale(occurrenceId, reason = "offset-mismatch") {
+      if (!occurrenceId) return;
+      const all = await StorageService.get(KEYS.occurrences, []);
+      await StorageService.set(KEYS.occurrences, all.map((o) =>
+        o.occurrenceId === occurrenceId ? { ...o, stale: true, staleReason: reason, staleAt: nowIso() } : o
+      ));
+    },
   };
+
+  // -------------------------------------------------------------------
+  // isOccurrenceStale — true when the stored exactText no longer matches
+  // bodyText.slice(startOffset, endOffset). Cheap pure helper exposed on
+  // the Backend so renderers can verify before highlighting and the WR
+  // double-click resolver can avoid opening the wrong entity.
+  // -------------------------------------------------------------------
+  function isOccurrenceStale(occ, bodyText) {
+    if (!occ) return true;
+    if (occ.stale) return true;
+    if (occ.startOffset == null || occ.endOffset == null) return true;
+    if (typeof bodyText !== "string") return true;
+    if (occ.endOffset > bodyText.length || occ.startOffset < 0) return true;
+    return bodyText.slice(occ.startOffset, occ.endOffset) !== occ.exactText;
+  }
 
   const ExtractionService = {
     loadSessionSync() {
@@ -1494,6 +1516,7 @@
     AIService,
     ExtractionService,
     OccurrenceService,
+    isOccurrenceStale,
     SampleProjectService,
     exportProject,
     importProject,

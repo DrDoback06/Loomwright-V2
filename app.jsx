@@ -633,14 +633,27 @@ const AppShell = () => {
   const onOpenEntityFromManuscript = _uc_a((detail) => {
     if (!detail || !detail.type) return;
     // ID-first resolution: if an occurrenceId was provided on the span,
-    // look up the canonical entityId via OccurrenceService. If neither
-    // the occurrence nor the entity can be located, surface a friendly
-    // notice (fuzzy label match below remains the legacy fallback only).
+    // look up the canonical entityId via OccurrenceService. Before
+    // trusting the occurrence's entityId, verify it isn't stale (paragraph
+    // text changed without re-indexing). If stale, fall back to fuzzy
+    // label match and notify the user that the mention may need relinking.
     const OS = window.LoomwrightBackend?.OccurrenceService;
+    const isStaleFn = window.LoomwrightBackend?.isOccurrenceStale;
     if (detail.occurrenceId && OS) {
       const occ = OS.listAllSync().find((o) => o.occurrenceId === detail.occurrenceId);
       if (occ?.entityId) {
-        detail = { ...detail, id: occ.entityId, type: occ.entityType || detail.type };
+        const canvas = document.querySelector("[data-ui='ManuscriptCanvas']");
+        const bodyText = canvas?.innerText || "";
+        const stale = isStaleFn ? isStaleFn(occ, bodyText) : false;
+        if (stale) {
+          OS.markStale?.(occ.occurrenceId, "offset-mismatch");
+          window.dispatchEvent(new CustomEvent("lw:backend-notice", {
+            detail: { message: "This mention may need relinking." },
+          }));
+          // Fall through to fuzzy label match below.
+        } else {
+          detail = { ...detail, id: occ.entityId, type: occ.entityType || detail.type };
+        }
       }
     }
     const ES = window.LoomwrightBackend?.EntityService;
