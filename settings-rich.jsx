@@ -599,7 +599,15 @@ const SetIntel = ({ onRequest }) => {
         Project Intelligence distills it into a structured brief. Onboarding answers live inside it too.
       </p>
       <div className="set-stack">
-        <button className="set-btn set-btn--outline" data-callback="onOpenProjectIntelligenceFile">
+        <button className="set-btn set-btn--outline" data-callback="onOpenProjectIntelligenceFile"
+          onClick={async () => {
+            if (!window.ProjectIntelService) return;
+            const text = await window.ProjectIntelService.copyJson();
+            onRequest && onRequest.setToast && onRequest.setToast({
+              title: "Project Intelligence copied",
+              sub: text ? "JSON written to clipboard" : "Stored locally — clipboard unavailable",
+            });
+          }}>
           <Icon name="paper" size={11}/> Open Project Intelligence File
         </button>
         <button className="set-btn set-btn--outline" onClick={openResearchLibrary} data-callback="onOpenReferences">
@@ -607,6 +615,17 @@ const SetIntel = ({ onRequest }) => {
         </button>
         <button className="set-btn set-btn--outline" onClick={openOnboardingAnswers} data-callback="onOpenOnboardingAnswers">
           <Icon name="info" size={11}/> Open onboarding answers
+        </button>
+        <button className="set-btn set-btn--outline" data-callback="onSyncProjectIntelligenceFromOnboarding"
+          onClick={async () => {
+            if (!window.ProjectIntelService) return;
+            await window.ProjectIntelService.syncFromOnboarding();
+            onRequest && onRequest.setToast && onRequest.setToast({
+              title: "Project Intelligence updated",
+              sub: "Synced from onboarding answers",
+            });
+          }}>
+          <Icon name="sparkle" size={11}/> Sync from onboarding answers
         </button>
       </div>
 
@@ -628,10 +647,44 @@ const SetIntel = ({ onRequest }) => {
               instructions: "Improve this Project Intelligence brief. Return JSON with the same top-level keys.",
               projectContext: { title: "The Auger's Door", genre: "Literary fantasy", projectIntelligence: { voice: "—", canon: [], taboos: [], currentArc: "—" } },
             }}/>
-          <button className="set-btn set-btn--outline" data-callback="onCopyProjectContextPack"><Icon name="code" size={11}/> Copy full project context</button>
-          <button className="set-btn set-btn--outline" data-callback="onCopyStyleProfilePack"><Icon name="code" size={11}/> Copy style profile</button>
-          <button className="set-btn set-btn--outline" data-callback="onCopyCanonRulesPack"><Icon name="code" size={11}/> Copy canon rules</button>
-          <button className="set-btn set-btn--outline" data-callback="onCopyCharacterBiblePack"><Icon name="code" size={11}/> Copy character bible</button>
+          <button className="set-btn set-btn--outline" data-callback="onCopyProjectContextPack"
+            onClick={async () => {
+              const intel = window.ProjectIntelService ? await window.ProjectIntelService.load() : {};
+              const onb = window.OnboardingService ? await window.OnboardingService.load() : {};
+              const refs = window.ReferencesService ? await window.ReferencesService.list() : [];
+              const pack = { intel, onboarding: onb, references: refs.slice(0, 50) };
+              try { await navigator.clipboard.writeText(JSON.stringify(pack, null, 2)); } catch (_) { /* clipboard unavailable */ }
+              onRequest && onRequest.setToast && onRequest.setToast({ title: "Project context copied", sub: "JSON written to clipboard" });
+            }}>
+            <Icon name="code" size={11}/> Copy full project context
+          </button>
+          <button className="set-btn set-btn--outline" data-callback="onCopyStyleProfilePack"
+            onClick={async () => {
+              const intel = window.ProjectIntelService ? await window.ProjectIntelService.load() : {};
+              const text = JSON.stringify({ writingStyleGuide: intel.writingStyleGuide, toneKeywords: intel.toneKeywords || [] }, null, 2);
+              try { await navigator.clipboard.writeText(text); } catch (_) { /* noop */ }
+              onRequest && onRequest.setToast && onRequest.setToast({ title: "Style profile copied" });
+            }}>
+            <Icon name="code" size={11}/> Copy style profile
+          </button>
+          <button className="set-btn set-btn--outline" data-callback="onCopyCanonRulesPack"
+            onClick={async () => {
+              const intel = window.ProjectIntelService ? await window.ProjectIntelService.load() : {};
+              const text = JSON.stringify({ canonRules: intel.canonRules || [] }, null, 2);
+              try { await navigator.clipboard.writeText(text); } catch (_) { /* noop */ }
+              onRequest && onRequest.setToast && onRequest.setToast({ title: "Canon rules copied" });
+            }}>
+            <Icon name="code" size={11}/> Copy canon rules
+          </button>
+          <button className="set-btn set-btn--outline" data-callback="onCopyCharacterBiblePack"
+            onClick={async () => {
+              const cast = window.EntityService ? await window.EntityService.list("cast") : [];
+              const text = JSON.stringify(cast, null, 2);
+              try { await navigator.clipboard.writeText(text); } catch (_) { /* noop */ }
+              onRequest && onRequest.setToast && onRequest.setToast({ title: "Character bible copied", sub: cast.length + " cast entries" });
+            }}>
+            <Icon name="code" size={11}/> Copy character bible
+          </button>
         </div>
       )}
     </SetGroupCard>
