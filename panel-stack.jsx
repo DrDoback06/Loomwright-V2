@@ -225,8 +225,21 @@ const DockedPanel = ({
           // bespoke bodies can call typed handlers (onCreateEntity, queue actions,
           // delete request, source-mention open) without prop-drilling. Existing
           // bodies that ignore the extra props are unaffected.
+          // panelContext gives bodies a consistent snapshot of "where am I and
+          // what's focused" — used by buttons that need projectId / activeChapter
+          // / selectedEntity without re-deriving it from the DOM.
+          const panelContext = {
+            projectId: window.LoomwrightBackend?.projectId || "default",
+            panelKind: panel.entityType || panel.kind || panel.id,
+            panelId: panel.id,
+            selectedEntityId: panel.selected?.id || panel.selectedId || null,
+            focusedEntity: panelFilter || null,
+            activeChapterId: (typeof document !== "undefined" && document.querySelector?.("[data-ui='ManuscriptCanvas']")?.getAttribute("data-chapter-id")) || null,
+            activeWorkspaceId: panel.workspaceId || null,
+          };
           const bespokeProps = {
             panel,
+            panelContext,
             onSelectEntity,
             onCreateEntity: (opts) => panelActions?.onCreateEntity?.(opts, panel),
             onEditEntity: (e) => panelActions?.onEditEntity?.(e, panel),
