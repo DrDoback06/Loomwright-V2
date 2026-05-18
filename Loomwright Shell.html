@@ -862,14 +862,48 @@ const WritersRoomScreen = ({
   const L = layout || _localLayout;
   const setL = setLayout || _setLocalLayout;
 
-  // Chapters
+  // Chapters — load from persistence, seed from demo data if empty
   const [chapters, setChapters] = _wrUS(WR_CHAPTERS);
   const [activeId, setActiveId] = _wrUS(WR_CHAPTERS.find((c) => c.active)?.id || "c7");
   const activeChapter = chapters.find((c) => c.id === activeId);
+  const [chaptersLoaded, setChaptersLoaded] = _wrUS(false);
+
+  _wrUE(() => {
+    (async () => {
+      try {
+        const saved = await StorageService.get("wr_chapters");
+        if (saved && saved.length > 0) {
+          setChapters(saved);
+          const active = saved.find((c) => c.active);
+          if (active) setActiveId(active.id);
+        }
+      } catch {}
+      setChaptersLoaded(true);
+    })();
+  }, []);
+
+  // Persist chapter changes
+  _wrUE(() => {
+    if (!chaptersLoaded) return;
+    StorageService.set("wr_chapters", chapters).catch(() => {});
+  }, [chapters, chaptersLoaded]);
 
   // Manuscript state
   const [canvasState, setCanvasState] = _wrUS("writing"); // writing | empty | loading | error | saving | saved | offline
-  const paragraphs = activeChapter && !activeChapter.reserved ? WR_MANUSCRIPT : [];
+
+  // Manuscript content — load from persistence per chapter
+  const [manuscriptStore, setManuscriptStore] = _wrUS({});
+  _wrUE(() => {
+    (async () => {
+      try {
+        const saved = await StorageService.get("wr_manuscripts");
+        if (saved) setManuscriptStore(saved);
+      } catch {}
+    })();
+  }, []);
+  const paragraphs = activeChapter && !activeChapter.reserved
+    ? (manuscriptStore[activeId] || WR_MANUSCRIPT)
+    : [];
 
   // Authors
   const [activeAuthorId, setActiveAuthorId] = _wrUS("em");
@@ -893,6 +927,21 @@ const WritersRoomScreen = ({
   const [extFilter, setExtFilter] = _wrUS("all");
   const [notes, setNotes] = _wrUS(WR_NOTES);
   const [extractions, setExtractions] = _wrUS(WR_EXTRACTIONS);
+
+  // Load persisted notes
+  _wrUE(() => {
+    (async () => {
+      try {
+        const saved = await StorageService.get("wr_notes");
+        if (saved && saved.length > 0) setNotes(saved);
+      } catch {}
+    })();
+  }, []);
+  // Persist note changes
+  _wrUE(() => {
+    if (!chaptersLoaded) return;
+    StorageService.set("wr_notes", notes).catch(() => {});
+  }, [notes, chaptersLoaded]);
   const [selectedExtId, setSelectedExtId] = _wrUS("x5");
   const [extractionState, setExtractionState] = _wrUS("idle"); // idle | running | complete | error
 
@@ -948,8 +997,12 @@ const WritersRoomScreen = ({
   const onSave = _wrUC(() => {
     setCanvasState("saving");
     onSetSyncState && onSetSyncState("syncing");
+    // Persist manuscript content for current chapter
+    const updated = { ...manuscriptStore, [activeId]: paragraphs };
+    setManuscriptStore(updated);
+    StorageService.set("wr_manuscripts", updated).catch(() => {});
     setTimeout(() => { setCanvasState("writing"); onSetSyncState && onSetSyncState("saved"); }, 700);
-  }, [onSetSyncState]);
+  }, [onSetSyncState, activeId, paragraphs, manuscriptStore]);
   const onSaveAndExtract = _wrUC(() => {
     setExtractionState("running");
     setProgressMode("quick"); setProgressStage(0); setProgressFailed(false); setProgressOpen(true);

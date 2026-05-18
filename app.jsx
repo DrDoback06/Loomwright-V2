@@ -103,6 +103,26 @@ const AppShell = () => {
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [layout, setLayout] = useLayoutState();
 
+  // Backend initialisation — runs once on mount. Seeds IndexedDB from
+  // ENTITY_SAMPLES when the store is empty, loads persisted settings.
+  const [backendReady, setBackendReady] = _us_a(false);
+  _ue_a(() => {
+    (async () => {
+      try {
+        await EntityService.init();
+        // Load persisted settings into component-accessible globals
+        const savedSettings = await StorageService.get("settings");
+        if (savedSettings) {
+          window.__LW_SETTINGS = savedSettings;
+        }
+        setBackendReady(true);
+      } catch (err) {
+        console.warn("[Loomwright] Backend init error:", err);
+        setBackendReady(true); // Continue with in-memory fallback
+      }
+    })();
+  }, []);
+
   // Brand object derived from tweaks (ALL naming sources from here)
   const brand = {
     ...BRAND,
@@ -786,16 +806,33 @@ const AppShell = () => {
         mode={editor.mode}
         promoteFrom={editor.promoteFrom}
         onClose={closeEntityEditor}
-        onSave={(p, opts) => {
-          // Hook: route create/draft/active here. For now, also open the
-          // composition overlay when the user chose "Save + Add to Composition".
-          if (opts.mode === "compose") {
-            dropEntityIntoComposition({
-              entityType: p.entityType,
-              id: p.payload.id || ("new-" + Date.now()),
-              name: p.payload.name || p.payload.title || "Untitled",
-              summary: p.payload.summary,
-            });
+        onSave={async (p, opts) => {
+          const entityType = p.entityType || editor.type || "generic";
+          const fields = p.payload || p;
+          const id = fields.id || EntityService.generateId();
+          const entityData = {
+            ...fields,
+            id,
+            type: entityType,
+            name: fields.name || fields.title || "Untitled",
+          };
+
+          try {
+            if (opts.mode === "draft") {
+              await EntityService.saveDraft(entityType, entityData);
+            } else if (opts.mode === "compose") {
+              await EntityService.saveActive(entityType, entityData);
+              dropEntityIntoComposition({
+                entityType,
+                id,
+                name: entityData.name,
+                summary: entityData.summary,
+              });
+            } else {
+              await EntityService.saveActive(entityType, entityData);
+            }
+          } catch (err) {
+            console.warn("[Loomwright] Entity save error:", err);
           }
         }}
       />
