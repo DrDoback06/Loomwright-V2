@@ -267,6 +267,7 @@
   const BACKEND_HANDLED = new Set([
     "onExportProjectData", "onImportProjectData", "onExportEntityLibrary",
     "onImportEntityLibrary", "onExportSettingsProfile", "onClearLocalDemoData",
+    "onResetProjectData",
     "onBackupNow", "onTestAIProviderConnection", "onLoadSampleProject",
     "onSave", "onSaveAndExtract", "onSaveAndDeepExtract",
     "onCopyProjectContextPack", "onCopyStyleProfilePack", "onCopyCanonRulesPack",

@@ -389,6 +389,7 @@ window.__LW_CALLBACK_NAMES = [
   "onReserveChapter",
   "onResetIntel",
   "onResetLayout",
+  "onResetProjectData",
   "onResolveCanonContradiction",
   "onRestoreFromTrash",
   "onRestoreTrashItem",

@@ -234,6 +234,7 @@
           ...clone(row),
           id,
           type: nt,
+          source: row.source || "sample",
           status: row.status || "active",
           createdAt: row.createdAt || nowIso(),
           updatedAt: row.updatedAt || nowIso(),
@@ -1197,12 +1198,54 @@
       return true;
     },
     async clearSample() {
+      // Remove only records tagged source === "sample". User-created records
+      // are preserved. The destructive full wipe is resetProjectData below.
+      const entities = EntityService.listAllSync();
+      let removed = 0;
+      for (const [type, byId] of Object.entries(entities)) {
+        for (const e of Object.values(byId || {})) {
+          if (e?.source === "sample") {
+            // Hard delete — don't send sample records to trash.
+            const all = await StorageService.get(KEYS.entities, {});
+            const bucket = { ...(all[type] || {}) };
+            delete bucket[e.id];
+            await StorageService.set(KEYS.entities, { ...all, [type]: bucket });
+            removed++;
+          }
+        }
+      }
+      // References tagged as sample.
+      const refs = await StorageService.get(KEYS.references, []);
+      const refsKept = refs.filter((r) => r?.source !== "sample");
+      if (refsKept.length !== refs.length) await StorageService.set(KEYS.references, refsKept);
+      // Sample chapters from the manuscript bundle (if any).
+      const mcs = ManuscriptChapterService.loadSync();
+      const sampleChapterIds = (mcs.chapters || []).filter((c) => c?.source === "sample").map((c) => c.id);
+      if (sampleChapterIds.length) {
+        const manuscripts = { ...(mcs.manuscripts || {}) };
+        for (const cid of sampleChapterIds) delete manuscripts[cid];
+        await ManuscriptChapterService.save({
+          ...mcs,
+          chapters: (mcs.chapters || []).filter((c) => !sampleChapterIds.includes(c.id)),
+          manuscripts,
+        });
+      }
       await StorageService.set(KEYS.sampleLoaded, false);
       window.__LW_SAMPLE_LOADED__ = false;
+      applyEntityGlobals();
+      window.dispatchEvent(new CustomEvent("lw:project-imported", { detail: { cleared: true, scope: "sample", removed } }));
+      notify(`Cleared ${removed} sample record(s); your work is untouched.`);
+    },
+    async resetProjectData() {
+      // Destructive: wipes ALL persistent state. Caller must double-confirm.
+      for (const key of Object.values(KEYS)) {
+        await StorageService.remove(key);
+      }
       clearDemoGlobals();
-      await StorageService.set(KEYS.entities, {});
-      applyEntityGlobals({});
-      window.dispatchEvent(new CustomEvent("lw:project-imported", { detail: { cleared: true } }));
+      window.__LW_SAMPLE_LOADED__ = false;
+      await initialise();
+      window.dispatchEvent(new CustomEvent("lw:project-imported", { detail: { cleared: true, scope: "all" } }));
+      notify("Project data reset.");
     },
   };
 
@@ -1364,10 +1407,17 @@
         }
         if (cb === "onClearLocalDemoData") {
           e.preventDefault();
-          if (window.confirm && !window.confirm("Clear all local Loomwright data in this browser?")) return;
-          await StorageService.clear();
-          await initialise();
-          notify("Local Loomwright data cleared.");
+          // Scoped: remove only records tagged source: "sample".
+          // User-created data is preserved. For a full wipe, use
+          // onResetProjectData (separate, double-confirmed).
+          await SampleProjectService.clearSample();
+        }
+        if (cb === "onResetProjectData") {
+          e.preventDefault();
+          if (!window.confirm) return;
+          if (!window.confirm("Reset ALL local Loomwright data in this browser? This cannot be undone.")) return;
+          if (!window.confirm("Are you absolutely sure? Every entity, chapter, reference, and setting will be erased.")) return;
+          await SampleProjectService.resetProjectData();
         }
         if (cb === "onTestAIProviderConnection") {
           e.preventDefault();

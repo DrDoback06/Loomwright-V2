@@ -388,6 +388,7 @@
   "onReserveChapter",
   "onResetIntel",
   "onResetLayout",
+  "onResetProjectData",
   "onResolveCanonContradiction",
   "onRestoreFromTrash",
   "onRestoreTrashItem",

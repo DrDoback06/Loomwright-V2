@@ -768,7 +768,8 @@ const SetDebug = () => (
     <div className="set-card__divider"/>
     <div className="set-row__inline">
       <button className="set-btn set-btn--outline" data-callback="onResetLayout"><Icon name="refresh" size={11}/> Reset layout</button>
-      <button className="set-btn set-btn--outline" data-callback="onClearLocalDemoData"><Icon name="trash" size={11}/> Clear local demo data</button>
+      <button className="set-btn set-btn--outline" data-callback="onClearLocalDemoData"><Icon name="trash" size={11}/> Clear sample data</button>
+      <button className="set-btn set-btn--outline" data-callback="onResetProjectData"><Icon name="trash" size={11}/> Reset project data</button>
       <button className="set-btn set-btn--outline" data-callback="onShowLastAIHandoff"><Icon name="sparkle" size={11}/> Show last AI handoff pack</button>
     </div>
   </SetGroupCard>
