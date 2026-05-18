@@ -306,8 +306,41 @@ const OnboardingJsonPanel = ({ answers, onCopyJson, onPasteJson, onValidateJson,
 // RESEARCH LIBRARY (References) ----------------------------------------
 // =====================================================================
 const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible, toast, onDismissToast }) => {
-  // Reference library — pulls window.REFERENCES if available, else mock.
-  const live = window.REFERENCES || [];
+  // Reference library — hydrate from ReferencesService + EntityService.
+  // Falls back to window.REFERENCES (and then to a static demo list) so the
+  // workspace keeps rendering even before storage is ready.
+  const [hydratedRefs, setHydratedRefs] = _ws_us(window.REFERENCES || []);
+  _ws_ue(() => {
+    let cancelled = false;
+    async function load() {
+      const fromStorage = window.ReferencesService ? await window.ReferencesService.list() : [];
+      const fromEntities = window.EntityService ? await window.EntityService.list("references") : [];
+      const merged = [].concat(
+        fromStorage.map((r) => Object.assign({ kind: r.type || "note" }, r)),
+        fromEntities.map((e) => ({
+          id: e.id,
+          kind: e.kind || e.refType || "note",
+          title: e.name || e.title || "Untitled",
+          sub: e.summary || e.subtitle || "",
+          aiContext: e.aiContext !== false,
+          style: !!e.style,
+          canon: !!e.canon,
+          _source: "entity",
+        })),
+      );
+      if (!cancelled) setHydratedRefs(merged);
+    }
+    load();
+    const onChange = () => load();
+    window.addEventListener("lw:references-changed", onChange);
+    window.addEventListener("lw:entity-saved", onChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("lw:references-changed", onChange);
+      window.removeEventListener("lw:entity-saved", onChange);
+    };
+  }, []);
+  const live = hydratedRefs && hydratedRefs.length ? hydratedRefs : (window.REFERENCES || []);
   const fallback = [
     { id: "r-1", kind: "upload",   title: "Loomwright field journal.pdf",       sub: "Uploaded · 14 pages", aiContext: true, style: false, canon: false },
     { id: "r-2", kind: "url",      title: "Atlas of the Pale Reach (atlas.org)",  sub: "Web · referenced 4×", aiContext: true, style: false, canon: false },
@@ -334,6 +367,28 @@ const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisi
       ? window.ONBOARDING_ANSWERS
       : ONBOARDING_ANSWERS_FALLBACK
   );
+  // Phase 6/8 — Persist onboarding answers through OnboardingService and
+  // hydrate from storage on first mount. We keep the in-memory shape exactly
+  // as before so the editor doesn't have to change.
+  _ws_ue(() => {
+    if (!window.OnboardingService) return;
+    let cancelled = false;
+    (async () => {
+      const stored = await window.OnboardingService.load();
+      if (cancelled || !stored) return;
+      // Only replace the local state if the stored payload looks non-empty.
+      const hasAny = stored && typeof stored === "object" && Object.keys(stored).some((k) => {
+        const v = stored[k];
+        return v && (typeof v === "string" ? v.trim() : Object.keys(v).length);
+      });
+      if (hasAny) setOnbAnswers(stored);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  _ws_ue(() => {
+    if (!window.OnboardingService) return;
+    window.OnboardingService.save(onbAnswers).catch(() => {});
+  }, [onbAnswers]);
 
   // Workspace-level listener: lets other components ask the library to
   // jump straight into onboarding mode (Settings → Project Intelligence

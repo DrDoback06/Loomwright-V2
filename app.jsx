@@ -266,9 +266,26 @@ const AppShell = () => {
     const onOpenWs = (e) => openPanelWorkspace(e.detail || {});
     const onExitWs = () => exitPanelWorkspace();
     const onRefAdd = (e) => {
-      // Reference-flavoured create. Default = open generic reference editor.
-      // Sub-actions can route differently in the future.
-      openEntityEditor({ type: "references", mode: "full", initial: { kind: e?.detail?.actionId } });
+      // Reference-flavoured create. Phase 6: route URL / paste / style /
+      // canon / research with content directly to ReferencesService when
+      // the dispatcher provides a `content` payload; otherwise fall back to
+      // opening the entity editor (which now persists via EntityService).
+      const detail = (e && e.detail) || {};
+      const action = detail.actionId;
+      const fast = window.ReferencesService && detail.content;
+      if (fast && (action === "url" || action === "paste" || action === "style" || action === "canon" || action === "research" || action === "note")) {
+        const map = {
+          url: (c, x) => window.ReferencesService.addUrl(c, x),
+          paste: (c, x) => window.ReferencesService.addNote(c, x),
+          style: (c, x) => window.ReferencesService.addStyleSample(c, x),
+          canon: (c, x) => window.ReferencesService.addCanonSource(c, x),
+          research: (c, x) => window.ReferencesService.addResearchNote(c, x),
+          note: (c, x) => window.ReferencesService.addNote(c, x),
+        };
+        map[action](detail.content, detail.extra || {}).catch(() => {});
+        return;
+      }
+      openEntityEditor({ type: "references", mode: "full", initial: { kind: action } });
     };
     const onSettingsAdd = (e) => {
       // Settings add — route the user into the Control Centre on the
