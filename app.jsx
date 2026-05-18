@@ -279,6 +279,13 @@ const AppShell = () => {
       // (The Control Centre listens for this event to scroll to the right section.)
       window.dispatchEvent(new CustomEvent("lw:settings-section", { detail: { actionId } }));
     };
+    // Phase 5 — Review queue placeholder hook. Any panel that wants to
+    // enqueue an extraction suggestion can dispatch a CustomEvent named
+    // "lw:review-suggest" with a payload understood by ReviewQueueService.
+    const onReviewSuggest = (e) => {
+      if (!window.ReviewQueueService || !e?.detail) return;
+      window.ReviewQueueService.add(e.detail).catch(() => {});
+    };
     window.addEventListener("lw:open-entity-editor", onOpenEd);
     window.addEventListener("lw:open-panel", onOpenPan);
     window.addEventListener("lw:drop-to-composition", onDropToComp);
@@ -286,6 +293,7 @@ const AppShell = () => {
     window.addEventListener("lw:exit-panel-workspace", onExitWs);
     window.addEventListener("lw:reference-add", onRefAdd);
     window.addEventListener("lw:settings-add", onSettingsAdd);
+    window.addEventListener("lw:review-suggest", onReviewSuggest);
     return () => {
       window.removeEventListener("lw:open-entity-editor", onOpenEd);
       window.removeEventListener("lw:open-panel", onOpenPan);
@@ -294,6 +302,7 @@ const AppShell = () => {
       window.removeEventListener("lw:exit-panel-workspace", onExitWs);
       window.removeEventListener("lw:reference-add", onRefAdd);
       window.removeEventListener("lw:settings-add", onSettingsAdd);
+      window.removeEventListener("lw:review-suggest", onReviewSuggest);
     };
   }, [openEntityEditor, openPanelWorkspace, exitPanelWorkspace]);
 
