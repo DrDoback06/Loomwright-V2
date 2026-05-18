@@ -190,19 +190,39 @@ for (const name of PROVIDER_GATED) {
   if (!isReached(name)) providerGatedMissing.push(name);
 }
 
+// Hard-fail rules — after the burn-down pass:
+//   1. Bucket A core local actions must NOT reach the generic default notice.
+//   2. The provider-gating helper must be defined in the registry.
+//   3. Bucket B callbacks must reach an explicit branch (not the default).
+if (missingActions.length) {
+  console.error("\nERROR: Bucket A core local actions reaching the generic default notice:");
+  for (const n of missingActions) console.error("  -", n);
+  console.error("\nThese are action-shaped callbacks (Create/Save/Delete/Accept/Add/Import/Export/etc.)");
+  console.error("They must perform a real action, not show 'isn't wired yet'. Wire them in");
+  console.error("callback-registry.jsx or — if intentionally React-owned — add to REACT_OWNED.");
+  process.exit(1);
+}
+if (!providerGatedHasHelper) {
+  console.error("\nERROR: callback-registry.jsx lacks the requireProviderOrNotice helper.");
+  console.error("Bucket B callbacks need a provider-gated path that emits a specific notice.");
+  process.exit(1);
+}
+if (providerGatedMissing.length) {
+  console.error("\nERROR: Bucket B provider-gated callbacks reach the generic default:");
+  for (const n of providerGatedMissing) console.error("  -", n);
+  console.error("Add an explicit branch using requireProviderOrNotice(label).");
+  process.exit(1);
+}
+
 console.log("OK:", uiNames.size, "UI callbacks; registry bootstraps", listed.length, "handlers");
 console.log("OK: registry default branch emits a user-visible notice (no silent fall-through).");
-console.log("INFO:", required.length, "action-shaped callbacks total;", missingActions.length, "Bucket A reach default notice (feature-pending).");
-console.log("INFO:", PROVIDER_GATED.size, "Bucket B (provider-gated) callbacks declared;",
-  providerGatedMissing.length, "still reach generic default;",
-  providerGatedHasHelper ? "requireProviderOrNotice helper present." : "requireProviderOrNotice helper NOT yet present.");
-console.log("INFO:", REACT_OWNED.size, "Bucket D (React-owned) callbacks declared.");
-console.log("INFO:", unimplemented.length - missingActions.length - providerGatedMissing.length - REACT_OWNED.size, "other callbacks fall to default notice (housekeeping/dispatch).");
+console.log("OK: 0 Bucket A action callbacks reach the generic default notice.");
+console.log("OK:", PROVIDER_GATED.size, "Bucket B (provider-gated) callbacks use requireProviderOrNotice.");
+console.log("OK:", REACT_OWNED.size, "Bucket D (React-owned) callbacks declared.");
+console.log("INFO:", unimplemented.length - REACT_OWNED.size, "other callbacks fall to default notice (housekeeping/dispatch).");
 if (process.env.AUDIT_VERBOSE) {
-  console.log("\nBucket A — feature-pending action callbacks:");
-  for (const n of missingActions) console.log("  -", n);
-  if (providerGatedMissing.length) {
-    console.log("\nBucket B — provider-gated callbacks not yet using requireProviderOrNotice:");
-    for (const n of providerGatedMissing) console.log("  -", n);
-  }
+  console.log("\nBucket B — provider-gated callbacks:");
+  for (const n of PROVIDER_GATED) console.log("  -", n);
+  console.log("\nBucket D — React-owned callbacks:");
+  for (const n of REACT_OWNED) console.log("  -", n);
 }
