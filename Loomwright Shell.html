@@ -922,6 +922,36 @@ const WritersRoomScreen = ({
   // Delete confirm modal
   const [deletingChapter, setDeletingChapter] = _wrUS(null);
 
+  // Phase 3 — Persist chapter state (+ active chapter id) to ChaptersService
+  // and rehydrate the active chapter id on first mount so the user returns
+  // to whichever chapter they last opened.
+  _wrUE(() => {
+    if (!window.ChaptersService) return;
+    let cancelled = false;
+    (async () => {
+      const stored = await window.ChaptersService.load();
+      if (cancelled || !stored) {
+        if (window.ChaptersService) {
+          window.ChaptersService.ensureSeeded({
+            activeChapterId: activeId,
+            chapters: WR_CHAPTERS,
+            manuscript: { [activeId]: WR_MANUSCRIPT },
+          }).catch(() => {});
+        }
+        return;
+      }
+      if (stored.chapters && Array.isArray(stored.chapters) && stored.chapters.length) {
+        setChapters(stored.chapters);
+      }
+      if (stored.activeChapterId) setActiveId(stored.activeChapterId);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  _wrUE(() => {
+    if (!window.ChaptersService) return;
+    window.ChaptersService.save({ chapters, activeChapterId: activeId }).catch(() => {});
+  }, [chapters, activeId]);
+
   // ----- callbacks -----
   const onSelectChapter = _wrUC((id) => setActiveId(id), []);
   const onCreateChapter = _wrUC(() => {

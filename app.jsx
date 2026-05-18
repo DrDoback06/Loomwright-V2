@@ -489,6 +489,28 @@ const AppShell = () => {
     const preset = PANEL_PRESETS[panelKind];
     const canonicalType = preset.entityType || detail.type;
 
+    // Phase 3 — Ask EntityService for a canonical entity match. We still
+    // fuzzy-match in the panel below, but record a source-mention on the
+    // entity so the manuscript ↔ entity relationship persists across runs.
+    if (window.EntityService) {
+      const lookupType = canonicalType || detail.type;
+      window.EntityService
+        .findByLabel(detail.label || detail.text || "", { type: lookupType })
+        .then((found) => {
+          const targetId = (found && found.id) || detail.id;
+          if (!targetId) return;
+          if (detail.chapterId || detail.paragraphId || detail.quote) {
+            window.EntityService.addSourceMention(targetId, {
+              chapter: detail.chapterId,
+              paragraph: detail.paragraphId,
+              quote: detail.quote,
+              source: detail.source || "manuscript",
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
     // Single combined panel update: open-or-front-front + try to select the
     // best-matching row by label. Keeps the demo feeling wired even though
     // there's no shared entity store.
