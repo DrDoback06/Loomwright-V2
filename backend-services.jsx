@@ -9,8 +9,9 @@
 
 (function () {
   const DB_NAME = "loomwright-v2";
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const STORE = "kv";
+  const KEYRING_STORE = "keyring";
   const PREFIX = "lw:v2:";
 
   const KEYS = {
@@ -63,6 +64,7 @@
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+        if (!db.objectStoreNames.contains(KEYRING_STORE)) db.createObjectStore(KEYRING_STORE);
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
@@ -72,6 +74,30 @@
 
   function txStore(db, mode = "readonly") {
     return db.transaction(STORE, mode).objectStore(STORE);
+  }
+
+  function keyringStore(db, mode = "readonly") {
+    return db.transaction(KEYRING_STORE, mode).objectStore(KEYRING_STORE);
+  }
+
+  async function getKeyringItem(key) {
+    const db = await openDb();
+    if (!db || !db.objectStoreNames.contains(KEYRING_STORE)) return null;
+    return new Promise((resolve) => {
+      const req = keyringStore(db).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  }
+
+  async function setKeyringItem(key, value) {
+    const db = await openDb();
+    if (!db || !db.objectStoreNames.contains(KEYRING_STORE)) return false;
+    return new Promise((resolve) => {
+      const req = keyringStore(db, "readwrite").put(value, key);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => resolve(false);
+    });
   }
 
   const StorageService = {
@@ -468,16 +494,33 @@
 
   const bufferToBase64 = (buffer) => btoa(String.fromCharCode(...new Uint8Array(buffer)));
   const base64ToBuffer = (base64) => Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
+  const API_KEY_ROOT = "api-key-encryption-root";
 
   async function getCryptoKey() {
     if (!window.crypto?.subtle) throw new Error("Web Crypto is unavailable in this browser.");
-    const existing = localMirror.get("crypto_root_key", null);
-    if (existing) {
-      return crypto.subtle.importKey("jwk", existing, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+
+    const keyringKey = await getKeyringItem(API_KEY_ROOT);
+    if (keyringKey) return keyringKey;
+
+    // Migrate any root key created by earlier localStorage-backed versions
+    // into IndexedDB as a non-extractable CryptoKey, then remove the JWK.
+    const legacyJwk = localMirror.get("crypto_root_key", null);
+    if (legacyJwk) {
+      const migrated = await crypto.subtle.importKey("jwk", legacyJwk, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+      await setKeyringItem(API_KEY_ROOT, migrated);
+      localMirror.remove("crypto_root_key");
+      return migrated;
     }
-    const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
-    const jwk = await crypto.subtle.exportKey("jwk", key);
-    localMirror.set("crypto_root_key", jwk);
+
+    const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    const stored = await setKeyringItem(API_KEY_ROOT, key);
+    if (!stored) {
+      // Last-resort fallback for browsers where IndexedDB is blocked. This
+      // keeps BYOK values encrypted at rest, but decryption will last only for
+      // the current tab session because the root key is intentionally not
+      // exported into localStorage.
+      console.warn("[Loomwright] IndexedDB keyring unavailable; API keys are encrypted for this browser session only.");
+    }
     return key;
   }
 
@@ -518,8 +561,11 @@
     },
     async clearProviderKey(providerId) {
       const allKeys = await StorageService.get(KEYS.apiKeys, {});
+      const allSettings = await StorageService.get(KEYS.providerSettings, {});
       delete allKeys[providerId];
+      if (allSettings[providerId]) allSettings[providerId] = { ...allSettings[providerId], hasKey: false, updatedAt: nowIso() };
       await StorageService.set(KEYS.apiKeys, allKeys);
+      await StorageService.set(KEYS.providerSettings, allSettings);
     },
     async testProvider(providerId) {
       const settings = this.loadProviderSync(providerId);

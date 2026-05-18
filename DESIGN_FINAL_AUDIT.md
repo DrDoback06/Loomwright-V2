@@ -35,6 +35,7 @@
 
 - API keys are user-provided only.
 - API keys are encrypted with Web Crypto AES-GCM before storage.
+- The encryption root is a non-extractable CryptoKey stored in IndexedDB, not a plaintext localStorage value.
 - No provider test sends a real network request.
 - AI Handoff remains copy/paste/export/import only.
 - Local-only mode and user confirmation language remain visible.

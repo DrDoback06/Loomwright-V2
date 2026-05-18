@@ -25,7 +25,7 @@ Do not edit `Loomwright.bundle.jsx`; the shell does not load it.
 - Persisted the composition overlay.
 - Added manuscript save snapshots from Writer's Room save/extract buttons.
 - Persisted Settings sections through `SettingsService`.
-- Encrypted BYOK API keys through Web Crypto AES-GCM in `KeysService`.
+- Encrypted BYOK API keys through Web Crypto AES-GCM in `KeysService`; the root key is a non-extractable CryptoKey stored in IndexedDB.
 - Persisted onboarding answers and enabled Project Intelligence merge.
 - Added project/entity/settings export/import delegate handlers.
 - Added AI handoff event logging/import handling.
@@ -102,7 +102,7 @@ Project Intelligence:
 ## Known Constraints
 
 - No real AI calls are made. Provider test connection is mocked.
-- Key encryption is local AES-GCM using Web Crypto and a browser-local root key. It protects against casual localStorage inspection but is not a substitute for OS credential storage.
+- Key encryption is local AES-GCM using Web Crypto and a browser-local, non-extractable root key in IndexedDB. It protects against casual localStorage inspection but is not a substitute for OS credential storage.
 - Writer's Room manuscript persistence snapshots the current rendered title/body text on save. The rich inline demo manuscript remains React-rendered static content.
 - The app is static/global-script based, not a bundler module graph.
 

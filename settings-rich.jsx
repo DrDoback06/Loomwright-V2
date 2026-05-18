@@ -348,7 +348,12 @@ const SetAIProviders = () => {
   const [addOpen, setAddOpen] = _set_us(false);
 
   const up = (id, k, v) => setProviders((arr) => {
-    const next = arr.map((p) => p.id === id ? { ...p, [k]: v } : p);
+    const next = arr.map((p) => {
+      if (p.id !== id) return p;
+      if (k === "apiKey") return { ...p, apiKey: v, hasKey: !!v || !!p.hasKey };
+      if (k === "hasKey" && v === false) return { ...p, hasKey: false, apiKey: "" };
+      return { ...p, [k]: v };
+    });
     const provider = next.find((p) => p.id === id);
     if (provider) {
       window.LoomwrightBackend?.KeysService?.saveProvider(id, provider);

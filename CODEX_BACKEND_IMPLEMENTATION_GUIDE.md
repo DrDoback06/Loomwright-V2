@@ -159,7 +159,7 @@ await ProjectIntelService.mergeFromOnboarding(answers);
 
 ### BYOK Key Storage
 
-`KeysService` encrypts user-provided keys with Web Crypto AES-GCM before storing them in local storage/IndexedDB:
+`KeysService` encrypts user-provided keys with Web Crypto AES-GCM before storing them in local storage/IndexedDB. The encryption root is a non-extractable `CryptoKey` kept in the browser's IndexedDB keyring store, not mirrored into localStorage:
 
 ```js
 await KeysService.saveProvider("openai", {
