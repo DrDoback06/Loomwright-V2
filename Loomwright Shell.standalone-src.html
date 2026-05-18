@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en" data-theme="parchment-light" data-density="balanced" data-typeset="literary">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=1280, initial-scale=1"/>
+  <title>Loomwright — Shell & Design System</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+  <link rel="stylesheet" href="tokens.css"/>
+  <link rel="stylesheet" href="components.css"/>
+  <link rel="stylesheet" href="writers-room.css"/>
+  <link rel="stylesheet" href="extraction-review.css"/>
+  <link rel="stylesheet" href="cast.css"/>
+  <link rel="stylesheet" href="entity-framework.css"/>
+  <link rel="stylesheet" href="atlas.css"/>
+  <link rel="stylesheet" href="atlas-quick.css"/>
+</head>
+<body>
+  <template id="__bundler_thumbnail" data-bg-color="#f1e9d4">
+    <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="1200" height="800" fill="#f1e9d4"/>
+      <g transform="translate(600 400)">
+        <circle cx="0" cy="0" r="220" fill="none" stroke="#4a381c" stroke-width="3" opacity="0.55"/>
+        <circle cx="0" cy="0" r="206" fill="none" stroke="#4a381c" stroke-width="1" stroke-dasharray="2 4" opacity="0.45"/>
+        <g stroke="#4a381c" stroke-width="2" opacity="0.35">
+          <line x1="-120" y1="-150" x2="-120" y2="150"/>
+          <line x1="-80"  y1="-150" x2="-80"  y2="150"/>
+          <line x1="-40"  y1="-150" x2="-40"  y2="150"/>
+          <line x1="0"    y1="-150" x2="0"    y2="150"/>
+          <line x1="40"   y1="-150" x2="40"   y2="150"/>
+          <line x1="80"   y1="-150" x2="80"   y2="150"/>
+          <line x1="120"  y1="-150" x2="120"  y2="150"/>
+        </g>
+        <path d="M -70 -130 L -70 110 L 100 110" fill="none" stroke="#3a2a14" stroke-width="22" stroke-linecap="square" stroke-linejoin="miter"/>
+        <path d="M -70 -130 L -70 110 L 100 110" fill="none" stroke="#c9a04a" stroke-width="4" stroke-linecap="square" opacity="0.85"/>
+      </g>
+    </svg>
+  </template>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" data-presets="react" src="Loomwright.bundle.jsx"></script>
+</body>
+</html>

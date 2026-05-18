@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en" data-theme="parchment-light" data-density="balanced" data-typeset="literary">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=1280, initial-scale=1"/>
+  <title>Loomwright — Shell & Design System (Print)</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+  <link rel="stylesheet" href="tokens.css"/>
+  <link rel="stylesheet" href="components.css"/>
+  <style>
+    @page { size: 1440px 900px; margin: 0; }
+    html, body { background: var(--bg-app); }
+    body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    .print-page {
+      width: 1440px;
+      min-height: 900px;
+      page-break-after: always;
+      break-after: page;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-app);
+    }
+    .print-page:last-child { page-break-after: auto; break-after: auto; }
+
+    /* Shell page: lock to viewport-style sizing without 100vh */
+    .print-page .app-shell { height: 900px; }
+
+    /* Specimen page: let it flow */
+    .print-specimen-page { min-height: 900px; height: auto; }
+    .print-specimen-page .specimen { min-height: 0; padding: 48px 56px; }
+
+    /* Hide tweaks + mobile note in print */
+    .twk-panel, .twk-fab, .mobile-note { display: none !important; }
+
+    /* Make sure animated dots/skeletons are static */
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+
+    @media print {
+      .print-page { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" data-presets="react" src="brand.jsx"></script>
+  <script type="text/babel" data-presets="react" src="icons.jsx"></script>
+  <script type="text/babel" data-presets="react" src="primitives.jsx"></script>
+  <script type="text/babel" data-presets="react" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" data-presets="react" src="shell-parts.jsx"></script>
+  <script type="text/babel" data-presets="react" src="panels.jsx"></script>
+  <script type="text/babel" data-presets="react" src="overlays.jsx"></script>
+  <script type="text/babel" data-presets="react" src="workspace.jsx"></script>
+  <script type="text/babel" data-presets="react" src="specimen.jsx"></script>
+
+  <script type="text/babel" data-presets="react">
+    // Print-mode app: Shell page + Specimen page, no rails toggling, no overlays.
+    const PrintApp = () => {
+      React.useEffect(() => {
+        const html = document.documentElement;
+        html.setAttribute("data-theme", "parchment-light");
+        html.setAttribute("data-density", "balanced");
+        html.setAttribute("data-typeset", "literary");
+      }, []);
+
+      const brand = BRAND;
+      const project = BRAND.project;
+      const panels = [{
+        id: "p-cast", kind: "entity", entityType: "cast",
+        title: "Cast", subtitle: "12 entries · 3 in review",
+        state: "overview", pinned: false, expanded: false,
+        rows: [
+          { id: "c1", label: "Aelinor Vey",   meta: "Ch.1–7", selected: true },
+          { id: "c2", label: "Saren of Hess", meta: "Ch.3–7", queue: 1 },
+          { id: "c3", label: "Captain Brec",  meta: "Ch.2–5" },
+          { id: "c4", label: "The Auger",     meta: "Ch.7" },
+          { id: "c5", label: "Mara of Hess",  meta: "Ch.4" },
+          { id: "c6", label: "Dav the Quiet", meta: "Ch.6", queue: 1 },
+        ],
+      }];
+
+      const globalQueueCount = NAV_ITEMS.reduce((a, n) => a + (n.queue || 0), 0);
+      const noop = () => {};
+
+      return (
+        <>
+          {/* Page 1: Shell */}
+          <div className="print-page">
+            <div className="app-shell" data-leftrail="expanded" data-rightrail="collapsed">
+              <div className="app-topbar">
+                <TopBar
+                  brand={brand} project={project}
+                  view="shell" onSetView={noop}
+                  leftRailExpanded={true} onToggleLeftRail={noop}
+                  privacyMode="local" onTogglePrivacyMode={noop}
+                  syncState="saved" globalQueueCount={globalQueueCount}
+                  selectedEntity={{ type: "cast", label: "Aelinor Vey" }}
+                  onOpenCommandPalette={noop} onOpenSettings={noop}
+                  onOpenProfile={noop} onOpenReviewQueue={noop}
+                  onSelectProject={noop} onSelectBook={noop}
+                />
+              </div>
+              <div className="app-left">
+                <LeftRail items={NAV_ITEMS} activeId="writers-room" expanded={true} dropTargetId={null} onSelectTab={noop}/>
+              </div>
+              <div className="app-work">
+                <Workspace routeId="writers-room" demoState="default" onOpenAdaptiveWheel={noop} onOpenPanel={noop} onCreateEntity={noop}/>
+                <div className="panels-host">
+                  {panels.map((p) => (
+                    <SlidingPanel key={p.id} panel={p} onClosePanel={noop} onPinPanel={noop} onExpandPanel={noop} onOpenReviewQueue={noop} onSelectEntity={noop}/>
+                  ))}
+                </div>
+              </div>
+              <div className="app-right">
+                <RightUtilityRail expanded={false} queues={{ review: globalQueueCount, today: 4, notifs: 1 }} onOpenPanel={noop} onOpenReviewQueue={noop} onToggleExpanded={noop}/>
+              </div>
+              <div className="app-status">
+                <BottomStatusStrip mode="Writer's Room" lastSavedAt="2 min ago" isLocal={true} wordCount={31482} reviewQueueCount={globalQueueCount} activeAuthor={project.author} extractionState="idle"/>
+              </div>
+            </div>
+          </div>
+
+          {/* Page 2: Design System Specimen */}
+          <div className="print-page print-specimen-page">
+            <Specimen/>
+          </div>
+        </>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<PrintApp/>);
+
+    // Auto-print after fonts + render settle
+    (async () => {
+      try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+      await new Promise((r) => setTimeout(r, 1200));
+      window.print();
+    })();
+  </script>
+</body>
+</html>

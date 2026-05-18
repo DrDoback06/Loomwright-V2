@@ -1,0 +1,293 @@
+// =====================================================================
+// onboarding.jsx — OnboardingWizard host. Controls step state, autosave,
+// data, top bar, footer nav, and renders the active step body.
+// =====================================================================
+
+const { useState: _us_W, useEffect: _ue_W, useMemo: _um_W, useRef: _ur_W, useCallback: _uc_W } = React;
+
+// --- defaults --------------------------------------------------------
+const ONBOARDING_DEFAULTS = {
+  welcome:    { title: "The Hollow Crown", series: "The Auger Cycle", book: "Book II — Ash & Auger", format: "Novel", genre: "Fantasy", subgenre: "Gothic", audience: "Adult", length: "Standard (60–100k)", stage: "Outlining", start: "blank" },
+  foundation: { premise: "", logline: "", coreConflict: "", themes: [], toneWords: [], comparables: "", isNot: "", pov: "Close third", tense: "Past", readerExperience: "Atmospheric" },
+  style:      { dials: { vocab: 3, sentence: 3, pacing: 2, dialogue: 2, description: 3, humour: 1, tension: 3 }, narratorTone: "", avoid: "", signature: "" },
+  voice:      { sample: "", samples: [], primary: false, analyzed: false },
+  world:      { worldType: "Secondary fantasy", magic: "", politics: "", factions: "", locations: "", history: "", canonRules: [], forbidden: [], terminology: [] },
+  cast:       { seeds: [] },
+  rpg:        { template: "Genre-neutral", suggestExamples: true, toggles: { classes: false, races: false, stats: false, abilities: false, skillTrees: false, inventory: false, quests: true, factions: true } },
+  plot:       { beats: [], targetChapters: 28 },
+  manuscript: { mode: "blank", chapters: [], autoDetect: true, manualSplit: true, reserve: true, runExtraction: true },
+  references: { items: [], pasteTitle: "", pasteText: "" },
+  ai:         { mode: "local", provider: "anthropic", storeLocal: true, allowEgress: false, key: "", validation: "idle" },
+  review:     { autoAddHigh: true, showAutoInQueue: true, aggressiveness: 2, falsePositive: 1, missingTolerance: 2, queueDisplay: "by-confidence", scan: { cast: true, locations: true, items: true, factions: true, lore: true, stats: false, relationships: true, events: true } },
+  workspace:  { startTab: "writers-room", editorWidth: 740, font: "Source Serif 4", margins: true, panelStack: "stack-right", focus: false, themeIntensity: 50, chapterRail: "left", authorAttribution: true, mobileCompact: true },
+};
+
+// --- progress / completion ------------------------------------------
+const isStepComplete = (id, data) => {
+  switch (id) {
+    case "welcome":    return !!(data.welcome?.title && data.welcome?.format && data.welcome?.start);
+    case "foundation": return !!(data.foundation?.premise && (data.foundation?.themes?.length || data.foundation?.toneWords?.length));
+    case "style":      return Object.keys(data.style?.dials || {}).length >= 4;
+    case "voice":      return !!(data.voice?.sample || data.voice?.uploaded);
+    case "world":      return (data.world?.canonRules?.length || 0) > 0 || !!data.world?.worldType;
+    case "cast":       return (data.cast?.seeds?.length || 0) > 0;
+    case "rpg":        return Object.values(data.rpg?.toggles || {}).some(Boolean) || !!data.rpg?.template;
+    case "plot":       return (data.plot?.beats?.length || 0) > 0;
+    case "manuscript": return !!data.manuscript?.mode;
+    case "references": return true;
+    case "ai":         return !!data.ai?.mode;
+    case "review":     return !!data.review?.queueDisplay;
+    case "workspace":  return !!data.workspace?.startTab;
+    case "summary":    return false;
+    default: return false;
+  }
+};
+
+// --- top bar ---------------------------------------------------------
+const OnboardingTopBar = ({ saveState, onExit, onMinimize }) => (
+  <div className="ob__topbar" data-ui="OnboardingTopBar">
+    <div className="ob__topbar__brand">
+      <div className="ob__topbar__seal">{BRAND.shortName}</div>
+      <div className="ob__topbar__title">
+        <strong>{BRAND.name}</strong>
+        <span>New project ritual · Welcome to your writing room</span>
+      </div>
+    </div>
+    <div className="ob__topbar__right">
+      <span className={"ob__autosave ob__autosave--" + saveState.kind}>
+        <span className="chip__dot"/>{saveState.label}
+      </span>
+      <Btn variant="ghost"   size="sm" icon="bookmark" onClick={onMinimize} data-callback="onMinimizeOnboarding">Save & continue later</Btn>
+      <Btn variant="outline" size="sm" icon="x"        onClick={onExit}     data-callback="onExitOnboarding">Exit setup</Btn>
+    </div>
+  </div>
+);
+
+// --- footer / nav ----------------------------------------------------
+const OnboardingFooter = ({ stepIdx, total, step, complete, onBack, onSkip, onNext, onFinish, isLast }) => (
+  <div className="ob__footer">
+    <div className="ob__footer__hint">
+      <span><kbd>↵</kbd> next</span>
+      <span><kbd>⇧↵</kbd> back</span>
+      <span><kbd>⌘S</kbd> save draft</span>
+      <span><kbd>esc</kbd> close</span>
+    </div>
+    <div className="ob__footer__btns">
+      <Btn variant="ghost" icon="arrow-left" onClick={onBack} disabled={stepIdx === 0} data-callback="onOnboardingStepChange">Back</Btn>
+      {step.optional && !isLast && <Btn variant="outline" onClick={onSkip} data-callback="onSkipOnboardingStep">Skip step</Btn>}
+      {isLast ? (
+        <Btn variant="primary" icon="feather" onClick={onFinish} data-callback="onCompleteOnboarding">Open the door</Btn>
+      ) : (
+        <Btn variant="primary" icon="arrow-right" onClick={onNext} data-callback="onOnboardingStepChange">
+          {complete ? "Continue" : (step.optional ? "Continue" : "Save & continue")}
+        </Btn>
+      )}
+    </div>
+  </div>
+);
+
+// --- step header -----------------------------------------------------
+const OnboardingStepHeader = ({ step, idx, total }) => (
+  <div className="ob__step__header">
+    <div className="ob__step__eyebrow" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <span>Step {idx + 1} of {total} · {step.short}</span>
+      {step.optional && <span className="chip chip--neutral">optional</span>}
+      {step.id !== "summary" && <IntelSaveIndicator category={step.id}/>}
+    </div>
+    <h1 className="ob__step__h1">{step.title}</h1>
+    <p className="ob__step__lede">{step.lede}</p>
+  </div>
+);
+
+// =====================================================================
+// OnboardingWizard — the host
+// =====================================================================
+const OnboardingWizard = ({ initial = {}, onCompleteOnboarding, onExitOnboarding, onMinimizeOnboarding }) => {
+  const [data, setData] = _us_W({ ...ONBOARDING_DEFAULTS, ...initial });
+  const [currentId, setCurrentId] = _us_W("welcome");
+  const [completedIds, setCompletedIds] = _us_W([]);
+  const [saveState, setSaveState] = _us_W({ kind: "saved", label: "Draft saved · just now" });
+  const [intelOpen, setIntelOpen] = _us_W(false);
+  const [history, setHistory] = _us_W([]);
+  const saveTimer = _ur_W(null);
+
+  const stepIdx  = ONBOARDING_STEPS.findIndex((s) => s.id === currentId);
+  const step     = ONBOARDING_STEPS[stepIdx] || ONBOARDING_STEPS[0];
+  const total    = ONBOARDING_STEPS.length;
+  const isLast   = currentId === "summary";
+  const complete = isStepComplete(currentId, data);
+  const percent  = Math.round(
+    (ONBOARDING_STEPS.filter((s) => isStepComplete(s.id, data)).length / (total - 1)) * 100
+  );
+
+  // setData for one section
+  const setSection = _uc_W((key, val) => {
+    setData((d) => {
+      setHistory((h) => [...h.slice(-9), { key, prev: d[key] }]);
+      return { ...d, [key]: val };
+    });
+    // schedule autosave
+    setSaveState({ kind: "saving", label: "Saving draft…" });
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      setSaveState({ kind: "saved", label: "Draft saved · just now" });
+    }, 700);
+  }, []);
+
+  // navigation
+  const jumpTo = (id) => setCurrentId(id);
+  const goNext = () => {
+    if (complete && !completedIds.includes(currentId) && currentId !== "summary") {
+      setCompletedIds((ids) => [...ids, currentId]);
+    }
+    if (stepIdx < total - 1) setCurrentId(ONBOARDING_STEPS[stepIdx + 1].id);
+  };
+  const goBack = () => {
+    if (stepIdx > 0) setCurrentId(ONBOARDING_STEPS[stepIdx - 1].id);
+  };
+  const skip = () => {
+    if (stepIdx < total - 1) setCurrentId(ONBOARDING_STEPS[stepIdx + 1].id);
+  };
+  const finish = () => {
+    onCompleteOnboarding && onCompleteOnboarding(data);
+  };
+
+  // keybindings
+  _ue_W(() => {
+    const onKey = (e) => {
+      const inField = e.target?.matches?.("input,textarea,select,[contenteditable]");
+      if (e.key === "Enter" && !e.shiftKey && !inField) { e.preventDefault(); isLast ? finish() : goNext(); }
+      if (e.key === "Enter" &&  e.shiftKey && !inField) { e.preventDefault(); goBack(); }
+      if (e.key === "s" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setSaveState({ kind: "saved", label: "Draft saved · " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }); }
+      if (e.key === "Escape") { onExitOnboarding && onExitOnboarding(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [stepIdx, isLast]);
+
+  // scroll content area to top on step change
+  const scrollRef = _ur_W(null);
+  _ue_W(() => { scrollRef.current && scrollRef.current.scrollTo({ top: 0, behavior: "smooth" }); }, [currentId]);
+
+  // --- callbacks bag passed to step bodies ---------------------------
+  const callbacks = {
+    onCopyHelperPrompt:    (p) => console.log("[loom] copy helper prompt", p?.length, "chars"),
+    onQuickImportJson:     (obj) => console.log("[loom] quick import json", obj),
+    onCopyStepJsonPrompt:  ({ category, prompt }) => console.log("[loom] copy step prompt", category, prompt?.length),
+    onPasteStepJson:       ({ category, parsed, status }) => console.log("[loom] paste step", category, status),
+    onApplyStepJson:       ({ category, parsed }) => {
+      console.log("[loom] apply step json", category, parsed);
+      setSection(category, { ...(data[category] || {}), ...parsed });
+    },
+    onOpenIntelFile:       () => setIntelOpen(true),
+    onValidateProviderKey: (x) => console.log("[loom] validate key", x?.provider),
+    onTogglePrivacyMode:   (m) => console.log("[loom] privacy mode", m),
+    onStartWriting:        () => onCompleteOnboarding && onCompleteOnboarding({ ...data, __dest: "writers-room" }),
+    onOpenCast:            () => onCompleteOnboarding && onCompleteOnboarding({ ...data, __dest: "cast" }),
+    onOpenAtlas:           () => onCompleteOnboarding && onCompleteOnboarding({ ...data, __dest: "atlas" }),
+    onGoToDashboard:       () => onCompleteOnboarding && onCompleteOnboarding({ ...data, __dest: "home" }),
+  };
+
+  // --- intel actions -------------------------------------------------
+  const exportIntel = () => {
+    const json = JSON.stringify(data, null, 2);
+    try { navigator.clipboard?.writeText(json); } catch (e) {}
+    setSaveState({ kind: "saved", label: "JSON copied to clipboard" });
+  };
+  const undoLast = () => {
+    setHistory((h) => {
+      if (!h.length) return h;
+      const last = h[h.length - 1];
+      setData((d) => ({ ...d, [last.key]: last.prev }));
+      return h.slice(0, -1);
+    });
+  };
+  const resetIntel = () => {
+    if (confirm("Reset every answer to defaults? This cannot be undone after closing.")) {
+      setData({ ...ONBOARDING_DEFAULTS });
+      setHistory([]);
+    }
+  };
+
+  // --- conflict detection (simple heuristics) -----------------------
+  const conflicts = [];
+  if (data.ai?.mode === "local" && data.ai?.allowEgress)
+    conflicts.push("AI is set to 'Local only' but egress is allowed.");
+  if (data.foundation?.themes?.length === 0 && data.foundation?.toneWords?.length === 0 && completedIds.includes("foundation"))
+    conflicts.push("Foundation marked complete but no themes or tone words set.");
+
+  const StepBody = STEP_RENDERERS[currentId] || STEP_RENDERERS.welcome;
+
+  return (
+    <div className="ob" data-screen-label={"Onboarding · " + step.num + " " + step.title}>
+      <OnboardingTopBar
+        saveState={saveState}
+        onExit={onExitOnboarding}
+        onMinimize={onMinimizeOnboarding}
+      />
+      <div className="ob__layout">
+        <OnboardingStepRail
+          steps={ONBOARDING_STEPS}
+          currentId={currentId}
+          completedIds={completedIds}
+          onOnboardingStepChange={jumpTo}
+          projectName={data.welcome?.title}
+          percent={percent}
+        />
+        <main className="ob__main" ref={scrollRef} data-ui="OnboardingStepBody" data-step={currentId}>
+          {currentId !== "summary" && (
+            <StepJsonTools
+              category={currentId}
+              prompt={STEP_JSON_PROMPTS[currentId] || FOUNDATION_PROMPT}
+              current={data[currentId] || {}}
+              onCopyStepJsonPrompt={callbacks.onCopyStepJsonPrompt}
+              onPasteStepJson={callbacks.onPasteStepJson}
+              onApplyStepJson={callbacks.onApplyStepJson}
+              onOpenIntelFile={() => setIntelOpen(true)}
+            />
+          )}
+          <div className="ob__main__inner">
+            <OnboardingStepHeader step={step} idx={stepIdx} total={total}/>
+            <StepBody
+              data={data}
+              set={setSection}
+              callbacks={callbacks}
+              jumpTo={jumpTo}
+            />
+          </div>
+          <OnboardingFooter
+            stepIdx={stepIdx}
+            total={total}
+            step={step}
+            complete={complete}
+            isLast={isLast}
+            onBack={goBack}
+            onSkip={skip}
+            onNext={goNext}
+            onFinish={finish}
+          />
+        </main>
+        <ProjectIntelligencePanel
+          data={data}
+          percent={percent}
+          conflicts={conflicts}
+          onOpenIntelFile={() => setIntelOpen(true)}
+          onExportIntelFile={exportIntel}
+          onUndoLast={undoLast}
+          onResetIntel={resetIntel}
+        />
+      </div>
+      {intelOpen && (
+        <ProjectIntelligenceFileModal
+          data={data}
+          percent={percent}
+          onClose={() => setIntelOpen(false)}
+          onCopyIntelFile={exportIntel}
+          onExportIntelFile={exportIntel}
+        />
+      )}
+    </div>
+  );
+};
+
+Object.assign(window, { OnboardingWizard, ONBOARDING_DEFAULTS, isStepComplete });
