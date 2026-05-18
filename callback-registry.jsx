@@ -446,7 +446,22 @@
       notify("Removed from trash.");
       return;
     }
-    if (name === "onSearchTrash" || name === "onFilterTrashByType" || name === "onSortTrash" || name === "onPreviewTrashItem") {
+    // onSearchTrash / onFilterTrashByType / onSortTrash are React-state-owned
+    // by TrashPanelBody via <input>/<select> onChange — the click that fires on
+    // these controls intentionally has no registry-side effect.
+    if (name === "onSearchTrash" || name === "onFilterTrashByType" || name === "onSortTrash") {
+      return;
+    }
+    if (name === "onPreviewTrashItem") {
+      const item = ctx.detail || {};
+      const previewId = item.id || id;
+      const previewType = item.type || type;
+      if (previewId && previewType && previewType !== "settings" && previewType !== "note" && previewType !== "canvas" && previewType !== "tangle") {
+        openPanel(previewType === "entity" ? "cast" : previewType);
+        focusEntity(previewType, previewId, item.name);
+      } else {
+        notify(item.name ? `Preview: ${item.name}` : "Preview is not available for this item.");
+      }
       return;
     }
 
