@@ -303,6 +303,34 @@ const AppShell = () => {
       if (!window.ReviewQueueService || !e?.detail) return;
       window.ReviewQueueService.add(e.detail).catch(() => {});
     };
+    // Phase 9 — AI Handoff event bridge. The drawer dispatches these.
+    const onHandoffCopyJson = (e) => {
+      if (window.HandoffService) window.HandoffService.record(e?.detail?.pack, "copy-json").catch(() => {});
+    };
+    const onHandoffSave = (e) => {
+      if (window.HandoffService) window.HandoffService.record(e?.detail?.pack, "save").catch(() => {});
+    };
+    const onHandoffImport = (e) => {
+      if (!window.HandoffService) return;
+      window.HandoffService.applyResult(e?.detail || {}).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn("[Loomwright] Handoff applyResult failed:", err);
+      });
+    };
+    const onHandoffSaveRef = (e) => {
+      // Forward as applyResult with mode=saveReference so it routes through
+      // ReferencesService just like the in-drawer save path.
+      if (!window.HandoffService) return;
+      window.HandoffService.applyResult(Object.assign({ mode: "saveReference" }, e?.detail || {})).catch(() => {});
+    };
+    const onHandoffDraftReady = (e) => {
+      // Drop the AI-generated prose into the composition overlay so the
+      // user can review before inserting into the manuscript.
+      const prose = e?.detail?.prose;
+      if (!prose) return;
+      updateCompositionInstructions(prose);
+      openCompositionOverlay();
+    };
     window.addEventListener("lw:open-entity-editor", onOpenEd);
     window.addEventListener("lw:open-panel", onOpenPan);
     window.addEventListener("lw:drop-to-composition", onDropToComp);
@@ -311,6 +339,11 @@ const AppShell = () => {
     window.addEventListener("lw:reference-add", onRefAdd);
     window.addEventListener("lw:settings-add", onSettingsAdd);
     window.addEventListener("lw:review-suggest", onReviewSuggest);
+    window.addEventListener("lw:ai-handoff-copy-json", onHandoffCopyJson);
+    window.addEventListener("lw:ai-handoff-save", onHandoffSave);
+    window.addEventListener("lw:ai-handoff-import", onHandoffImport);
+    window.addEventListener("lw:ai-handoff-save-reference", onHandoffSaveRef);
+    window.addEventListener("lw:ai-handoff-draft-ready", onHandoffDraftReady);
     return () => {
       window.removeEventListener("lw:open-entity-editor", onOpenEd);
       window.removeEventListener("lw:open-panel", onOpenPan);
@@ -320,8 +353,13 @@ const AppShell = () => {
       window.removeEventListener("lw:reference-add", onRefAdd);
       window.removeEventListener("lw:settings-add", onSettingsAdd);
       window.removeEventListener("lw:review-suggest", onReviewSuggest);
+      window.removeEventListener("lw:ai-handoff-copy-json", onHandoffCopyJson);
+      window.removeEventListener("lw:ai-handoff-save", onHandoffSave);
+      window.removeEventListener("lw:ai-handoff-import", onHandoffImport);
+      window.removeEventListener("lw:ai-handoff-save-reference", onHandoffSaveRef);
+      window.removeEventListener("lw:ai-handoff-draft-ready", onHandoffDraftReady);
     };
-  }, [openEntityEditor, openPanelWorkspace, exitPanelWorkspace]);
+  }, [openEntityEditor, openPanelWorkspace, exitPanelWorkspace, openCompositionOverlay, updateCompositionInstructions]);
 
   // ----- callbacks -----
   const onToggleLeftRail = _uc_a(() => setLeftExpanded((v) => !v), []);
