@@ -422,6 +422,57 @@
       notify("Composition cleared.");
       return;
     }
+    if (name === "onUpdateCompositionInstructions") {
+      const text = ctx.detail?.text != null ? ctx.detail.text : (ctx.detail?.value || "");
+      await CompositionService.save({ ...CompositionService.loadSync({}), instructions: text });
+      return;
+    }
+    if (name === "onUpdateCompositionEntityRole") {
+      const { idx, role, entityId } = ctx.detail || {};
+      const state = CompositionService.loadSync({ entities: [] });
+      const entities = (state.entities || []).map((e, i) => {
+        const match = idx != null ? i === idx : (entityId && e.id === entityId);
+        return match ? { ...e, role } : e;
+      });
+      await CompositionService.save({ ...state, entities });
+      return;
+    }
+    if (name === "onRemoveEntityFromComposition") {
+      const { idx, entityId } = ctx.detail || {};
+      const state = CompositionService.loadSync({ entities: [] });
+      const entities = (state.entities || []).filter((e, i) => (
+        idx != null ? i !== idx : (entityId ? e.id !== entityId : true)
+      ));
+      await CompositionService.save({ ...state, entities });
+      return;
+    }
+    if (name === "onSetCompositionMode" || name === "onSetCompositionPOV" || name === "onSetCompositionLength" || name === "onSetCompositionTone" || name === "onSetCompositionChapterTarget") {
+      const key = name.replace(/^onSetComposition/, "").replace(/^[A-Z]/, (c) => c.toLowerCase());
+      const value = ctx.detail?.value != null ? ctx.detail.value : ctx.detail;
+      const state = CompositionService.loadSync({ settings: {} });
+      await CompositionService.save({ ...state, settings: { ...(state.settings || {}), [key]: value } });
+      return;
+    }
+    if (name === "onToggleCompositionContextOption") {
+      const key = ctx.detail?.key || ctx.detail?.id;
+      if (!key) return;
+      const state = CompositionService.loadSync({ contextOptions: {} });
+      const co = state.contextOptions || {};
+      await CompositionService.save({ ...state, contextOptions: { ...co, [key]: !co[key] } });
+      return;
+    }
+    if (name === "onCreateChapterFromComposition") {
+      const state = CompositionService.loadSync({ entities: [], instructions: "" });
+      const draft = ctx.detail?.draft || ctx.detail?.text || "";
+      const chapter = await B().ManuscriptChapterService.createFromComposition({
+        title: ctx.detail?.title || state.settings?.chapterTitle || "",
+        draft,
+        compositionId: state.id || null,
+      });
+      window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room", chapterId: chapter.id } }));
+      notify(`Chapter created: ${chapter.title}.`);
+      return;
+    }
 
     // —— Extraction ——
     if (name === "onSaveAndExtract" || name === "onRunExtraction" || name === "onStartExtraction") {

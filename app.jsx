@@ -332,6 +332,32 @@ const AppShell = () => {
       // (The Control Centre listens for this event to scroll to the right section.)
       window.dispatchEvent(new CustomEvent("lw:settings-section", { detail: { actionId } }));
     };
+    const onOpenRoute = (e) => {
+      const r = e?.detail?.routeId;
+      if (r) setRouteId(r);
+    };
+    const onInsertDraft = (e) => {
+      const text = e?.detail?.text || e?.detail?.draft || "";
+      if (!text) return;
+      const canvas = document.querySelector("[data-ui='ManuscriptCanvas']");
+      const chapterId = canvas?.getAttribute("data-chapter-id");
+      if (!chapterId) {
+        window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Open a chapter first to insert a draft." } }));
+        return;
+      }
+      const svc = window.LoomwrightBackend?.ManuscriptChapterService;
+      if (!svc) return;
+      const state = svc.loadSync();
+      const prev = (state.manuscripts && state.manuscripts[chapterId]) || { html: "", text: "" };
+      const nextHtml = (prev.html || "") + (prev.html ? "\n\n" : "") + text;
+      const nextText = (prev.text || "") + (prev.text ? "\n\n" : "") + text;
+      svc.setChapterContent(chapterId, { html: nextHtml, text: nextText });
+      window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Draft inserted into current chapter." } }));
+    };
+    const onChapterCreated = () => {
+      setRouteId("writers-room");
+      window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "New chapter created from composition." } }));
+    };
     window.addEventListener("lw:open-entity-editor", onOpenEd);
     window.addEventListener("lw:open-panel", onOpenPan);
     window.addEventListener("lw:drop-to-composition", onDropToComp);
@@ -339,6 +365,9 @@ const AppShell = () => {
     window.addEventListener("lw:exit-panel-workspace", onExitWs);
     window.addEventListener("lw:reference-add", onRefAdd);
     window.addEventListener("lw:settings-add", onSettingsAdd);
+    window.addEventListener("lw:open-route", onOpenRoute);
+    window.addEventListener("lw:composition-insert-draft", onInsertDraft);
+    window.addEventListener("lw:chapter-created", onChapterCreated);
     return () => {
       window.removeEventListener("lw:open-entity-editor", onOpenEd);
       window.removeEventListener("lw:open-panel", onOpenPan);
@@ -347,6 +376,9 @@ const AppShell = () => {
       window.removeEventListener("lw:exit-panel-workspace", onExitWs);
       window.removeEventListener("lw:reference-add", onRefAdd);
       window.removeEventListener("lw:settings-add", onSettingsAdd);
+      window.removeEventListener("lw:open-route", onOpenRoute);
+      window.removeEventListener("lw:composition-insert-draft", onInsertDraft);
+      window.removeEventListener("lw:chapter-created", onChapterCreated);
     };
   }, [openEntityEditor, openPanelWorkspace, exitPanelWorkspace]);
 
@@ -931,11 +963,11 @@ const AppShell = () => {
           onSetTone={(v) => setCompositionSetting("tone", v)}
           onSetChapterTarget={(v) => setCompositionSetting("chapterTarget", v)}
           onToggleContext={toggleCompositionContext}
-          onGenerateDraft={() => { /* host-wired AI */ }}
-          onInsertDraft={() => { /* host-wired */ }}
-          onCreateChapter={() => { /* host-wired */ }}
-          onCopyPrompt={() => { /* host-wired */ }}
-          onSavePreset={() => { /* host-wired */ }}
+          onGenerateDraft={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onGenerateCompositionDraft" } }))}
+          onInsertDraft={(text) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onInsertCompositionDraft", detail: { text } } }))}
+          onCreateChapter={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onCreateChapterFromComposition", detail: { title: overlay.settings?.chapterTitle } } }))}
+          onCopyPrompt={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onCopyCompositionPrompt" } }))}
+          onSavePreset={(preset) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onSaveCompositionPreset", detail: preset } }))}
           onClearAll={clearCompositionAll}
         />
       )}

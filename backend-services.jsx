@@ -656,6 +656,32 @@
         activeChapterId: chapterId,
       });
     },
+    async createFromComposition(payload = {}) {
+      const state = this.loadSync();
+      const id = payload.id || uuid("chapter");
+      const slotNumber = (state.chapters?.length || 0) + 1;
+      const title = payload.title || `Chapter ${slotNumber}`;
+      const chapter = {
+        id,
+        slotNumber,
+        title,
+        status: payload.status || "draft",
+        bodyHtml: payload.bodyHtml || payload.draft || "",
+        bodyText: payload.bodyText || payload.draft || "",
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        compositionId: payload.compositionId || null,
+      };
+      const next = {
+        ...state,
+        chapters: [...(state.chapters || []), chapter],
+        manuscripts: { ...(state.manuscripts || {}), [id]: { html: chapter.bodyHtml, text: chapter.bodyText } },
+        activeChapterId: id,
+      };
+      await this.save(next);
+      window.dispatchEvent(new CustomEvent("lw:chapter-created", { detail: { chapter } }));
+      return chapter;
+    },
   };
 
   const LinkService = {
