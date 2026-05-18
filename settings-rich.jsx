@@ -13,7 +13,32 @@
 //   user's own API keys. Settings makes this explicit but never scary.
 // =====================================================================
 
-const { useState: _set_us, useMemo: _set_um } = React;
+const { useState: _set_us, useMemo: _set_um, useEffect: _set_ue } = React;
+
+// Shared hook: load section state from StorageService, persist on change.
+function usePersistedSettings(sectionKey, defaults) {
+  const [state, setState] = _set_us(defaults);
+  const [loaded, setLoaded] = _set_us(false);
+
+  _set_ue(() => {
+    (async () => {
+      try {
+        const saved = await StorageService.get("settings_" + sectionKey);
+        if (saved && typeof saved === "object") {
+          setState((prev) => ({ ...prev, ...saved }));
+        }
+      } catch {}
+      setLoaded(true);
+    })();
+  }, []);
+
+  _set_ue(() => {
+    if (!loaded) return;
+    StorageService.set("settings_" + sectionKey, state).catch(() => {});
+  }, [state, loaded]);
+
+  return [state, setState, loaded];
+}
 
 // ---------------------------------------------------------------------
 // AI provider catalogue — curated top 6 visible by default; rest live
@@ -177,12 +202,12 @@ const SetGroupCard = ({ title, hint, children, actions }) => (
 // PROJECT
 // =====================================================================
 const SetProject = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = usePersistedSettings("project", {
     projectName: "The Auger's Door", seriesName: "The Vraska Cycle", bookName: "Book II",
     genre: "Literary fantasy", targetFormat: "Novel", wordCountGoal: 95000,
     projectStatus: "drafting", defaultRoute: "writers-room",
   });
-  const up = (k, v) => { setS({ ...s, [k]: v }); window.dispatchEvent(new CustomEvent("lw:settings-update", { detail: { section: "project", key: k, value: v } })); };
+  const up = (k, v) => { setS((prev) => ({ ...prev, [k]: v })); window.dispatchEvent(new CustomEvent("lw:settings-update", { detail: { section: "project", key: k, value: v } })); };
   return (
     <SetGroupCard title="Project" hint="Identity and goals for this book.">
       <SetRow label="Project name"><SetInput value={s.projectName} onChange={(v) => up("projectName", v)}/></SetRow>
@@ -215,12 +240,12 @@ const SetProject = () => {
 // BRAND / THEME
 // =====================================================================
 const SetBrand = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = usePersistedSettings("brand", {
     accent: "#9a7b3a", theme: "parchment-light", density: "balanced",
     manuscriptFont: "Source Serif 4", uiFont: "Inter Tight",
     reducedMotion: false,
   });
-  const up = (k, v) => setS({ ...s, [k]: v });
+  const up = (k, v) => setS((prev) => ({ ...prev, [k]: v }));
   return (
     <SetGroupCard title="Brand & theme" hint="Look-and-feel — not just decoration; it affects readability for long sessions.">
       <SetRow label="Theme">
@@ -253,13 +278,13 @@ const SetBrand = () => {
 // EDITOR
 // =====================================================================
 const SetEditor = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = usePersistedSettings("editor", {
     spellcheck: true, grammarSuggestions: true, styleSuggestions: false, thesaurus: true,
     sentenceRestructure: false, voiceConsistency: true,
     autosave: true, autosaveInterval: 30,
     marginsDefault: "both", chapterTabBehaviour: "expand", authorStamp: true,
   });
-  const up = (k, v) => setS({ ...s, [k]: v });
+  const up = (k, v) => setS((prev) => ({ ...prev, [k]: v }));
   return (
     <SetGroupCard title="Editor" hint="What happens while you type and what shows in the margins.">
       <SetRow label="Linting"><div className="set-stack">
@@ -293,11 +318,26 @@ const SetEditor = () => {
 // AUTHORS
 // =====================================================================
 const SetAuthors = () => {
-  const [authors, setAuthors] = _set_us([
+  const DEFAULT_AUTHORS = [
     { id: "em",  name: "E. Marlowe",      initials: "EM", color: "#9a7b3a", role: "Primary author",   style: "Terse / cold / restrained" },
     { id: "ann", name: "Ann (co-writer)", initials: "AN", color: "#7a6aa3", role: "Co-writer",        style: "Maximalist / lyrical" },
     { id: "ai",  name: "Loomwright AI",   initials: "LW", color: "#3e6db5", role: "AI",               style: "Match Primary" },
-  ]);
+  ];
+  const [authors, setAuthors] = _set_us(DEFAULT_AUTHORS);
+  const [loaded, setLoaded] = _set_us(false);
+  _set_ue(() => {
+    (async () => {
+      try {
+        const saved = await StorageService.get("authors");
+        if (saved && Array.isArray(saved) && saved.length > 0) setAuthors(saved);
+      } catch {}
+      setLoaded(true);
+    })();
+  }, []);
+  _set_ue(() => {
+    if (!loaded) return;
+    StorageService.set("authors", authors).catch(() => {});
+  }, [authors, loaded]);
   return (
     <SetGroupCard title="Author profiles" hint="Track who wrote what; colour-code attribution in the manuscript."
       actions={<button className="set-btn set-btn--accent" data-callback="onCreateAuthorProfile" onClick={() => setAuthors([...authors, { id: "new-" + Date.now(), name: "New author", initials: "NA", color: "#888", role: "Co-writer", style: "" }])}><Icon name="plus" size={11}/> Add author</button>}>
@@ -328,13 +368,56 @@ const SetAuthors = () => {
 // AI PROVIDERS (BYOK)
 // =====================================================================
 const SetAIProviders = () => {
-  const [providers, setProviders] = _set_us(() => SET_AI_PROVIDERS.map((p) => ({
+  const DEFAULT_PROVIDERS = SET_AI_PROVIDERS.map((p) => ({
     ...p, enabled: false, apiKey: "", model: p.defaultModel,
     uses: p.suggestedUses.reduce((acc, u) => ({ ...acc, [u]: true }), {}),
-  })));
+  }));
+  const [providers, setProviders] = _set_us(DEFAULT_PROVIDERS);
   const [addOpen, setAddOpen] = _set_us(false);
+  const [loaded, setLoaded] = _set_us(false);
 
-  const up = (id, k, v) => setProviders((arr) => arr.map((p) => p.id === id ? { ...p, [k]: v } : p));
+  // Load persisted provider settings (keys loaded separately via KeysService)
+  _set_ue(() => {
+    (async () => {
+      try {
+        const saved = await StorageService.get("settings_ai_providers");
+        if (saved && Array.isArray(saved) && saved.length > 0) {
+          // Merge saved config with defaults (to pick up new providers)
+          const merged = DEFAULT_PROVIDERS.map((def) => {
+            const s = saved.find((x) => x.id === def.id);
+            return s ? { ...def, ...s, apiKey: "" } : def;
+          });
+          // Add any extra providers the user added
+          const extras = saved.filter((s) => !DEFAULT_PROVIDERS.find((d) => d.id === s.id));
+          merged.push(...extras.map((e) => ({ ...e, apiKey: "" })));
+          // Decrypt stored keys
+          for (const p of merged) {
+            if (p.enabled) {
+              const key = await KeysService.load(p.id);
+              if (key) p.apiKey = key;
+            }
+          }
+          setProviders(merged);
+        }
+      } catch {}
+      setLoaded(true);
+    })();
+  }, []);
+
+  // Persist provider config (without plaintext keys)
+  _set_ue(() => {
+    if (!loaded) return;
+    const toSave = providers.map((p) => ({ ...p, apiKey: "" }));
+    StorageService.set("settings_ai_providers", toSave).catch(() => {});
+  }, [providers, loaded]);
+
+  const up = (id, k, v) => {
+    setProviders((arr) => arr.map((p) => p.id === id ? { ...p, [k]: v } : p));
+    // Encrypt and persist API keys separately
+    if (k === "apiKey") {
+      KeysService.save(id, v).catch(() => {});
+    }
+  };
 
   const addExtra = (def) => {
     if (providers.find((p) => p.id === def.id)) return;
@@ -443,12 +526,12 @@ const SetAIProviders = () => {
 // AI ROUTING / COST
 // =====================================================================
 const SetAIRouting = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = usePersistedSettings("ai_routing", {
     mode: "balanced",
     summariseFirst: true, cacheContext: true, excludeDormant: true, preferSummaries: true, confirmManuscript: true,
     maxContext: 16000,
   });
-  const up = (k, v) => setS({ ...s, [k]: v });
+  const up = (k, v) => setS((prev) => ({ ...prev, [k]: v }));
   return (
     <SetGroupCard title="AI routing & cost" hint="Decide how much context Loomwright sends, and when.">
       <SetRow label="Routing mode" hint="A quick floor for token budget — affects what context is included by default.">
@@ -485,11 +568,11 @@ const SetAIRouting = () => {
 // PRIVACY
 // =====================================================================
 const SetPrivacy = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = usePersistedSettings("privacy", {
     localOnly: false, requireConfirm: true, disableCloud: false,
     redactSensitive: false,
   });
-  const up = (k, v) => setS({ ...s, [k]: v });
+  const up = (k, v) => setS((prev) => ({ ...prev, [k]: v }));
   return (
     <SetGroupCard title="Privacy" hint="What leaves your machine, and when.">
       <SetRow label="Mode">
@@ -515,13 +598,13 @@ const SetPrivacy = () => {
 // EXTRACTION
 // =====================================================================
 const SetExtraction = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = usePersistedSettings("extraction", {
     aggressiveness: "balanced",
     autoAdd95: true, showAutoAddedInReview: true,
     scan: { cast: true, locations: true, items: true, quests: true, events: true, stats: true, relationships: true, lore: true, timeline: true, inventory: true },
     threshold: 80,
   });
-  const up = (k, v) => setS({ ...s, [k]: v });
+  const up = (k, v) => setS((prev) => ({ ...prev, [k]: v }));
   return (
     <SetGroupCard title="Extraction" hint="What scans the manuscript and how aggressively.">
       <SetRow label="Aggressiveness">
@@ -555,12 +638,12 @@ const SetExtraction = () => {
 // REVIEW QUEUE
 // =====================================================================
 const SetReview = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = usePersistedSettings("review", {
     defaultFilter: "uncertain",
     showBands: true, bulkActions: true, sourceQuote: true,
     showAutoAdded: false, showDenied: false, mergeSuggestions: true,
   });
-  const up = (k, v) => setS({ ...s, [k]: v });
+  const up = (k, v) => setS((prev) => ({ ...prev, [k]: v }));
   return (
     <SetGroupCard title="Review queue" hint="What the queue shows by default and how it behaves.">
       <SetRow label="Default filter">
@@ -628,10 +711,26 @@ const SetIntel = ({ onRequest }) => {
               instructions: "Improve this Project Intelligence brief. Return JSON with the same top-level keys.",
               projectContext: { title: "The Auger's Door", genre: "Literary fantasy", projectIntelligence: { voice: "—", canon: [], taboos: [], currentArc: "—" } },
             }}/>
-          <button className="set-btn set-btn--outline" data-callback="onCopyProjectContextPack"><Icon name="code" size={11}/> Copy full project context</button>
-          <button className="set-btn set-btn--outline" data-callback="onCopyStyleProfilePack"><Icon name="code" size={11}/> Copy style profile</button>
-          <button className="set-btn set-btn--outline" data-callback="onCopyCanonRulesPack"><Icon name="code" size={11}/> Copy canon rules</button>
-          <button className="set-btn set-btn--outline" data-callback="onCopyCharacterBiblePack"><Icon name="code" size={11}/> Copy character bible</button>
+          <button className="set-btn set-btn--outline" data-callback="onCopyProjectContextPack" onClick={async () => {
+            const intel = await ProjectIntelService.load();
+            const refs = await ReferencesService.list();
+            const onboarding = await OnboardingService.load();
+            const pack = { projectIntelligence: intel, references: refs.filter((r) => r.aiContext), onboarding };
+            try { await navigator.clipboard.writeText(JSON.stringify(pack, null, 2)); } catch {}
+          }}><Icon name="code" size={11}/> Copy full project context</button>
+          <button className="set-btn set-btn--outline" data-callback="onCopyStyleProfilePack" onClick={async () => {
+            const intel = await ProjectIntelService.load();
+            const pack = { writingStyle: intel?.writingStyleGuide, toneKeywords: intel?.toneKeywords };
+            try { await navigator.clipboard.writeText(JSON.stringify(pack, null, 2)); } catch {}
+          }}><Icon name="code" size={11}/> Copy style profile</button>
+          <button className="set-btn set-btn--outline" data-callback="onCopyCanonRulesPack" onClick={async () => {
+            const intel = await ProjectIntelService.load();
+            try { await navigator.clipboard.writeText(JSON.stringify(intel?.canonRules || [], null, 2)); } catch {}
+          }}><Icon name="code" size={11}/> Copy canon rules</button>
+          <button className="set-btn set-btn--outline" data-callback="onCopyCharacterBiblePack" onClick={async () => {
+            const entities = await EntityService.list("cast");
+            try { await navigator.clipboard.writeText(JSON.stringify(entities, null, 2)); } catch {}
+          }}><Icon name="code" size={11}/> Copy character bible</button>
         </div>
       )}
     </SetGroupCard>
@@ -673,20 +772,45 @@ const SetReferences = ({ onRequest }) => {
 // =====================================================================
 // IMPORT / EXPORT
 // =====================================================================
-const SetImport = () => (
-  <SetGroupCard title="Import / Export" hint="Move your project in and out.">
-    <div className="set-grid-2">
-      <button className="set-btn set-btn--outline" data-callback="onExportProjectData"><Icon name="download" size={11}/> Export project</button>
-      <button className="set-btn set-btn--outline" data-callback="onImportProjectData"><Icon name="paper" size={11}/> Import project</button>
-      <button className="set-btn set-btn--outline" data-callback="onExportEntityLibrary"><Icon name="download" size={11}/> Export entity library</button>
-      <button className="set-btn set-btn--outline" data-callback="onImportEntityLibrary"><Icon name="paper" size={11}/> Import entity library</button>
-      <button className="set-btn set-btn--outline" data-callback="onExportAIHandoffPack"><Icon name="sparkle" size={11}/> Export AI Handoff Pack</button>
-      <button className="set-btn set-btn--outline" data-callback="onExportSettingsProfile"><Icon name="download" size={11}/> Export settings profile</button>
-      <button className="set-btn set-btn--outline" data-callback="onImportSettingsProfile"><Icon name="paper" size={11}/> Import settings profile</button>
-      <button className="set-btn set-btn--outline" data-callback="onBackupNow"><Icon name="stack" size={11}/> Backup now</button>
-    </div>
-  </SetGroupCard>
-);
+const SetImport = () => {
+  const fileRef = React.useRef(null);
+  const [importMode, setImportMode] = _set_us(null);
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      if (importMode === "project") await ExportService.importProject(file);
+      else if (importMode === "entities") await ExportService.importEntityLibrary(file);
+      else if (importMode === "settings") await ExportService.importSettingsProfile(file);
+    } catch (err) {
+      console.warn("[Loomwright] Import error:", err);
+    }
+    setImportMode(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const triggerImport = (mode) => {
+    setImportMode(mode);
+    if (fileRef.current) { fileRef.current.value = ""; fileRef.current.click(); }
+  };
+
+  return (
+    <SetGroupCard title="Import / Export" hint="Move your project in and out.">
+      <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleFileChange}/>
+      <div className="set-grid-2">
+        <button className="set-btn set-btn--outline" data-callback="onExportProjectData" onClick={() => ExportService.exportProject()}><Icon name="download" size={11}/> Export project</button>
+        <button className="set-btn set-btn--outline" data-callback="onImportProjectData" onClick={() => triggerImport("project")}><Icon name="paper" size={11}/> Import project</button>
+        <button className="set-btn set-btn--outline" data-callback="onExportEntityLibrary" onClick={() => ExportService.exportEntityLibrary()}><Icon name="download" size={11}/> Export entity library</button>
+        <button className="set-btn set-btn--outline" data-callback="onImportEntityLibrary" onClick={() => triggerImport("entities")}><Icon name="paper" size={11}/> Import entity library</button>
+        <button className="set-btn set-btn--outline" data-callback="onExportAIHandoffPack" onClick={() => HandoffService.downloadPack()}><Icon name="sparkle" size={11}/> Export AI Handoff Pack</button>
+        <button className="set-btn set-btn--outline" data-callback="onExportSettingsProfile" onClick={() => ExportService.exportSettingsProfile()}><Icon name="download" size={11}/> Export settings profile</button>
+        <button className="set-btn set-btn--outline" data-callback="onImportSettingsProfile" onClick={() => triggerImport("settings")}><Icon name="paper" size={11}/> Import settings profile</button>
+        <button className="set-btn set-btn--outline" data-callback="onBackupNow" onClick={() => ExportService.backupNow()}><Icon name="stack" size={11}/> Backup now</button>
+      </div>
+    </SetGroupCard>
+  );
+};
 
 // =====================================================================
 // SHORTCUTS
@@ -721,21 +845,27 @@ const SetShortcuts = () => (
 // =====================================================================
 // DEBUG
 // =====================================================================
-const SetDebug = () => (
-  <SetGroupCard title="Debug & tweaks" hint="State diagnostics and reset tools.">
-    <div className="set-stack">
-      <SetToggle label="Show debug panel" hint="Live panel/route state + last drag payload."/>
-      <SetToggle label="Verbose extraction logs"/>
-      <SetToggle label="Show z-index ladder overlay"/>
-    </div>
-    <div className="set-card__divider"/>
-    <div className="set-row__inline">
-      <button className="set-btn set-btn--outline" data-callback="onResetLayout"><Icon name="refresh" size={11}/> Reset layout</button>
-      <button className="set-btn set-btn--outline" data-callback="onClearLocalDemoData"><Icon name="trash" size={11}/> Clear local demo data</button>
-      <button className="set-btn set-btn--outline" data-callback="onShowLastAIHandoff"><Icon name="sparkle" size={11}/> Show last AI handoff pack</button>
-    </div>
-  </SetGroupCard>
-);
+const SetDebug = () => {
+  const [s, setS] = usePersistedSettings("debug", {
+    showDebug: false, verboseExtraction: false, showZIndex: false,
+  });
+  const up = (k, v) => setS((prev) => ({ ...prev, [k]: v }));
+  return (
+    <SetGroupCard title="Debug & tweaks" hint="State diagnostics and reset tools.">
+      <div className="set-stack">
+        <SetToggle checked={s.showDebug} onChange={(v) => up("showDebug", v)} label="Show debug panel" hint="Live panel/route state + last drag payload."/>
+        <SetToggle checked={s.verboseExtraction} onChange={(v) => up("verboseExtraction", v)} label="Verbose extraction logs"/>
+        <SetToggle checked={s.showZIndex} onChange={(v) => up("showZIndex", v)} label="Show z-index ladder overlay"/>
+      </div>
+      <div className="set-card__divider"/>
+      <div className="set-row__inline">
+        <button className="set-btn set-btn--outline" data-callback="onResetLayout" onClick={() => StorageService.remove("loomwright.layout.v1")}><Icon name="refresh" size={11}/> Reset layout</button>
+        <button className="set-btn set-btn--outline" data-callback="onClearLocalDemoData" onClick={async () => { await StorageService.clear(); window.location.reload(); }}><Icon name="trash" size={11}/> Clear local demo data</button>
+        <button className="set-btn set-btn--outline" data-callback="onShowLastAIHandoff" onClick={async () => { const p = await HandoffService.getLastPack(); if (p) { console.log("[Loomwright] Last handoff pack:", p); try { await navigator.clipboard.writeText(JSON.stringify(p, null, 2)); } catch {} } }}><Icon name="sparkle" size={11}/> Show last AI handoff pack</button>
+      </div>
+    </SetGroupCard>
+  );
+};
 
 // =====================================================================
 // Dispatcher — used by ControlCentreWorkspace
