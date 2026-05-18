@@ -216,14 +216,42 @@ but the modular reference file was stale.
   Pale Reach (Locations), Auger of Hess (Items), Auger Wake (Events), the
   Vraska Pass (Atlas), Grey Coats (Lore / Canon).
 - References → Onboarding Answers editor: 8 sections render, JSON I/O
-  copy/paste/validate/preview/apply works (UI-only — no persistence).
+  copy/paste/validate/preview/apply works. **Now persists via OnboardingService.**
 - Project Intelligence is linkable from Settings, References (library view),
   References (onboarding view), and the AI Handoff Pack section.
+  **Now backed by ProjectIntelService.**
+
+## Backend Integration Status (Post-Implementation)
+
+The following backend services have been implemented and wired:
+
+- **StorageService** (`storage-service.jsx`): IndexedDB via localForage with
+  localStorage fallback. All persistent data flows through this service.
+- **EntityService** (`entity-service.jsx`): Full CRUD for all entity types.
+  Seeded from `ENTITY_SAMPLES` on first load. Entities persist across sessions.
+- **ReferencesService** (`references-service.jsx`): Manages reference items.
+  Research Library workspace now loads from this service.
+- **OnboardingService** (`references-service.jsx`): Persists onboarding answers.
+  Editor changes auto-save.
+- **ProjectIntelService** (`references-service.jsx`): Stores the distilled
+  Project Intelligence brief. "Send to Project Intelligence" button works.
+- **KeysService** (`keys-service.jsx`): BYOK API keys encrypted with AES-GCM
+  via Web Crypto API before storage.
+- **HandoffService** (`handoff-service.jsx`): AI Handoff Pack generation,
+  clipboard copy, file download, and result import.
+- **ExportService** (`export-service.jsx`): Full project import/export, entity
+  library export, settings profile export. Wired to Settings UI buttons.
+
+All settings sections now persist via `usePersistedSettings` hook. Writer's Room
+chapters, manuscript content, and margin notes persist via StorageService.
 
 ### Reminder
 
-**The modular `*.jsx` files are the canonical source** for the next coding
-agent. `Loomwright Shell.html` inlines the Writer's Room because of legacy
-artefact, but every other surface is loaded by `<script src=…>` from a
-modular file. `Loomwright.bundle.jsx` and the standalone HTML exports are
-stale — regenerate, don't edit.
+**The modular `*.jsx` files are the canonical source.** `Loomwright Shell.html`
+inlines the Writer's Room because of legacy artefact, but every other surface is
+loaded by `<script src=…>` from a modular file. `Loomwright.bundle.jsx` and the
+standalone HTML exports are stale — regenerate, don't edit.
+
+Backend service files are loaded before UI components in Shell.html:
+`storage-service.jsx` → `entity-service.jsx` → `references-service.jsx` →
+`keys-service.jsx` → `handoff-service.jsx` → `export-service.jsx`
