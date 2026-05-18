@@ -156,6 +156,7 @@ const DockedPanel = ({
   onClosePanel, onPinPanel, onExpandPanel,
   onBringPanelToFront, onReorderPanels,
   onOpenReviewQueue, onSelectEntity, onClearPanelFilter,
+  panelActions,
   zoneClass = "",
 }) => {
   const dragRef = _ps_ur(null);
@@ -185,6 +186,7 @@ const DockedPanel = ({
       className={cls}
       data-ui="SlidingPanel"
       data-panel-id={panel.id}
+      data-panel-kind={panel.kind || panel.entityType}
       data-state={panel.state}
       data-pinned={panel.pinned ? "true" : "false"}
       role="dialog"
@@ -259,9 +261,15 @@ const DockedPanel = ({
           <EntityFrameworkPanelBody
             panel={panel}
             onSelectEntity={onSelectEntity}
-            onCreateEntity={(opts) => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: panel.entityType, ...(opts || {}) } }))}
-            onEditEntity={(e) => { if (!e || !e.save) window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: panel.entityType, initial: e } })); }}
-            onImportEntity={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: panel.entityType, mode: "json" } }))}
+            onCreateEntity={(opts) => panelActions?.onCreateEntity?.(opts, panel)}
+            onEditEntity={(e) => { if (!e || !e.save) panelActions?.onEditEntity?.(e, panel); }}
+            onImportEntity={() => panelActions?.onImportEntity?.(panel)}
+            onAcceptQueueItem={(item) => window.LoomwrightDispatchCallback?.("onAcceptQueueItem", { detail: item, entityId: item?.entityId, entityType: panel.entityType })}
+            onEditQueueItem={(item) => window.LoomwrightDispatchCallback?.("onEditQueueItem", { detail: item, entityType: panel.entityType })}
+            onMergeQueueItem={(item) => window.LoomwrightDispatchCallback?.("onMergeQueueItem", { detail: item, entityType: panel.entityType })}
+            onDenyQueueItem={(item) => window.LoomwrightDispatchCallback?.("onDenyQueueItem", { detail: item, entityType: panel.entityType })}
+            onDeleteEntityRequest={(e) => window.LoomwrightDispatchCallback?.("onDeleteEntityRequest", { entityId: e?.id, entityType: panel.entityType })}
+            onOpenSourceMention={(m) => window.dispatchEvent(new CustomEvent("lw:open-source-mention", { detail: m }))}
           />
         ) : (<>
         {panel.state === "overview"   && <PanelOverview panel={panel} onSelectEntity={onSelectEntity}/>}
@@ -294,6 +302,19 @@ const PanelStack = ({
   onBringPanelToFront, onReorderPanels, onRestorePanel,
   onOpenReviewQueue, onSelectEntity, onClearPanelFilter,
 }) => {
+  const panelActions = {
+    ...(window.LoomwrightCallbacks || {}),
+    onSelectEntity,
+    onCreateEntity: (opts, panel) => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
+      detail: { type: panel?.entityType, ...(opts || {}) },
+    })),
+    onEditEntity: (e, panel) => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
+      detail: { type: panel?.entityType, initial: e },
+    })),
+    onImportEntity: (panel) => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
+      detail: { type: panel?.entityType, mode: "json" },
+    })),
+  };
   if (!panels || panels.length === 0) return null;
 
   // Sort by 'order' for deterministic render
@@ -338,6 +359,7 @@ const PanelStack = ({
       onOpenReviewQueue={onOpenReviewQueue}
       onSelectEntity={onSelectEntity}
       onClearPanelFilter={onClearPanelFilter}
+      panelActions={panelActions}
       zoneClass={zoneClass}
     />
   );

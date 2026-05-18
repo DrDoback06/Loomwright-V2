@@ -38,8 +38,22 @@ const INITIAL_TRASH = [
   { id: "tr12", type: "note",         name: "Comment thread: 'Tone of arrival'",from: "Writer's Room · Ch. 7",deletedAt: "5 hours ago", by: "Ann (co-writer)", resolved: true },
 ];
 
+const mapTrashItem = (it) => ({
+  id: it.id,
+  type: it.type || "entity",
+  name: it.name || it.title || "Untitled",
+  from: it.type ? (it.type.charAt(0).toUpperCase() + it.type.slice(1)) : "Entity",
+  deletedAt: it.deletedAt || "Recently",
+  by: it.by || "",
+  note: it.summary || it.note || "",
+});
+
 const TrashPanelBody = ({ panel }) => {
-  const [items, setItems] = _tr_us(INITIAL_TRASH);
+  const loadTrash = () => {
+    const rows = window.LoomwrightBackend?.TrashService?.listSync() || [];
+    return rows.length ? rows.map(mapTrashItem) : [];
+  };
+  const [items, setItems] = _tr_us(loadTrash);
   const [typeFilter, setTypeFilter] = _tr_us("all");
   const [search, setSearch] = _tr_us("");
   const [sortBy, setSortBy] = _tr_us("recent");
@@ -54,12 +68,24 @@ const TrashPanelBody = ({ panel }) => {
   if (sortBy === "from")  visible = [...visible].sort((a, b) => (a.from || "").localeCompare(b.from || ""));
   // recent = preserve initial order (newest at top by construction)
 
-  const onRestore = (item) => {
-    setItems((curr) => curr.filter((x) => x.id !== item.id));
+  React.useEffect(() => {
+    const refresh = () => setItems(loadTrash());
+    window.addEventListener("lw:entity-store-updated", refresh);
+    window.addEventListener("lw:project-imported", refresh);
+    return () => {
+      window.removeEventListener("lw:entity-store-updated", refresh);
+      window.removeEventListener("lw:project-imported", refresh);
+    };
+  }, []);
+
+  const onRestore = async (item) => {
+    await window.LoomwrightBackend?.TrashService?.restore(item.id);
+    setItems(loadTrash());
   };
-  const onDeleteForever = (item) => {
+  const onDeleteForever = async (item) => {
     if (confirming !== item.id) { setConfirming(item.id); return; }
-    setItems((curr) => curr.filter((x) => x.id !== item.id));
+    await window.LoomwrightBackend?.TrashService?.purge(item.id);
+    setItems(loadTrash());
     setConfirming(null);
   };
 

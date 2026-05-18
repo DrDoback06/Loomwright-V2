@@ -220,6 +220,7 @@ const EntityBrushHighlight = ({ type, id, children, onClick, onDoubleClick, onMo
       data-ui="EntityBrushHighlight"
       data-callback="onOpenEntityFromManuscript"
       data-entity={type}
+      data-entity-type={type}
       data-entity-id={id}
       style={{ "--ec": t.color, "--es": t.soft, "--ed": t.deep }}
       onClick={onClick}
@@ -753,14 +754,31 @@ const WritersRoomScreen = ({
   const L = layout || _localLayout;
   const setL = setLayout || _setLocalLayout;
 
+  const loadStored = () => {
+    const svc = window.LoomwrightBackend?.ManuscriptChapterService;
+    if (!svc) return null;
+    const s = svc.loadSync();
+    if (s?.chapters?.length) return s;
+    return null;
+  };
+
+  const storedInit = loadStored();
+  const defaultChapters = storedInit?.chapters?.length
+    ? storedInit.chapters
+    : [{ id: "c1", num: 1, title: "Chapter 1", state: "unsaved", queue: 0, words: 0, author: "em", active: true }];
+  const defaultActiveId = storedInit?.activeChapterId || defaultChapters.find((c) => c.active)?.id || defaultChapters[0]?.id;
+
   // Chapters
-  const [chapters, setChapters] = _wrUS(WR_CHAPTERS);
-  const [activeId, setActiveId] = _wrUS(WR_CHAPTERS.find((c) => c.active)?.id || "c7");
+  const [chapters, setChapters] = _wrUS(defaultChapters);
+  const [activeId, setActiveId] = _wrUS(defaultActiveId);
+  const [manuscriptsByChapter, setManuscriptsByChapter] = _wrUS(storedInit?.manuscripts || {});
   const activeChapter = chapters.find((c) => c.id === activeId);
 
   // Manuscript state
   const [canvasState, setCanvasState] = _wrUS("writing"); // writing | empty | loading | error | saving | saved | offline
-  const paragraphs = activeChapter && !activeChapter.reserved ? WR_MANUSCRIPT : [];
+  const paragraphs = activeChapter && !activeChapter.reserved
+    ? (manuscriptsByChapter[activeId] || [])
+    : [];
 
   // Authors
   const [activeAuthorId, setActiveAuthorId] = _wrUS("em");
@@ -782,9 +800,66 @@ const WritersRoomScreen = ({
   // Margins state
   const [noteFilter, setNoteFilter] = _wrUS("open");
   const [extFilter, setExtFilter] = _wrUS("all");
-  const [notes, setNotes] = _wrUS(WR_NOTES);
-  const [extractions, setExtractions] = _wrUS(WR_EXTRACTIONS);
+  const [notes, setNotes] = _wrUS([]);
+  const loadReviewExtractions = () => {
+    const items = window.LoomwrightBackend?.ReviewService?.listSync() || [];
+    return items.filter((i) => i.status === "pending").map((i) => ({
+      id: i.id,
+      type: i.entityType,
+      name: i.name,
+      quote: i.reason || "",
+      conf: i.level || "med",
+      pct: i.value || 70,
+      summary: i.reason,
+    }));
+  };
+  const [extractions, setExtractions] = _wrUS(() => loadReviewExtractions());
   const [selectedExtId, setSelectedExtId] = _wrUS("x5");
+
+  const persistChapters = _wrUC((nextChapters, nextManuscripts, nextActiveId, nextNotes, nextExtractions) => {
+    const svc = window.LoomwrightBackend?.ManuscriptChapterService;
+    if (!svc) return;
+    svc.save({
+      chapters: nextChapters ?? chapters,
+      activeChapterId: nextActiveId ?? activeId,
+      manuscripts: nextManuscripts ?? manuscriptsByChapter,
+      notes: { default: nextNotes ?? notes },
+      extractions: { default: nextExtractions ?? extractions },
+      authors: WR_AUTHORS,
+    });
+  }, [activeId, chapters, manuscriptsByChapter, notes, extractions]);
+
+  _wrUE(() => {
+    const onReady = () => {
+      const s = loadStored();
+      if (s?.chapters?.length) {
+        setChapters(s.chapters);
+        setActiveId(s.activeChapterId || s.chapters[0]?.id);
+        setManuscriptsByChapter(s.manuscripts || {});
+        if (s.notes?.default) setNotes(s.notes.default);
+        if (s.extractions?.default) setExtractions(s.extractions.default);
+        else {
+          const rq = loadReviewExtractions();
+          if (rq.length) setExtractions(rq);
+        }
+      } else {
+        const rq = loadReviewExtractions();
+        if (rq.length) setExtractions(rq);
+      }
+    };
+    window.addEventListener("lw:backend-ready", onReady);
+    window.addEventListener("lw:manuscript-chapters-updated", onReady);
+    window.addEventListener("lw:project-imported", onReady);
+    window.addEventListener("lw:entity-store-updated", onReady);
+    if (window.LoomwrightBackend) onReady();
+    return () => {
+      window.removeEventListener("lw:backend-ready", onReady);
+      window.removeEventListener("lw:manuscript-chapters-updated", onReady);
+      window.removeEventListener("lw:project-imported", onReady);
+      window.removeEventListener("lw:entity-store-updated", onReady);
+    };
+  }, []);
+
   const [extractionState, setExtractionState] = _wrUS("idle"); // idle | running | complete | error
 
   // Extraction modal flow
@@ -816,7 +891,10 @@ const WritersRoomScreen = ({
   const [deletingChapter, setDeletingChapter] = _wrUS(null);
 
   // ----- callbacks -----
-  const onSelectChapter = _wrUC((id) => setActiveId(id), []);
+  const onSelectChapter = _wrUC((id) => {
+    setActiveId(id);
+    persistChapters(chapters, manuscriptsByChapter, id);
+  }, [chapters, manuscriptsByChapter, persistChapters]);
   const onCreateChapter = _wrUC(() => {
     const next = chapters.length + 1;
     setChapters((curr) => [...curr, { id: "c" + next, num: next, title: "New chapter", state: "unsaved", queue: 0, words: 0, author: activeAuthorId }]);
@@ -836,11 +914,16 @@ const WritersRoomScreen = ({
   }, [deletingChapter]);
   const onReorderChapter = _wrUC(() => {}, []);
 
-  const onSave = _wrUC(() => {
+  const onSave = _wrUC(async () => {
     setCanvasState("saving");
     onSetSyncState && onSetSyncState("syncing");
-    setTimeout(() => { setCanvasState("writing"); onSetSyncState && onSetSyncState("saved"); }, 700);
-  }, [onSetSyncState]);
+    await window.LoomwrightBackend?.ManuscriptService?.saveCurrentDom();
+    const next = { ...manuscriptsByChapter, [activeId]: paragraphs };
+    setManuscriptsByChapter(next);
+    persistChapters(chapters, next, activeId);
+    setCanvasState("writing");
+    onSetSyncState && onSetSyncState("saved");
+  }, [onSetSyncState, chapters, manuscriptsByChapter, activeId, persistChapters]);
   const onSaveAndExtract = _wrUC(() => {
     setExtractionState("running");
     setProgressMode("quick"); setProgressStage(0); setProgressFailed(false); setProgressOpen(true);
@@ -876,8 +959,9 @@ const WritersRoomScreen = ({
   const onLinkEntity = _wrUC(() => onOpenPanel && onOpenPanel("recent"), [onOpenPanel]);
   const onOpenEntity = _wrUC(() => onOpenPanel && onOpenPanel("demo"), [onOpenPanel]);
   const onShowMentions = _wrUC(() => {}, []);
-  const onAcceptQueueItem = _wrUC((idOrItem) => {
+  const onAcceptQueueItem = _wrUC(async (idOrItem) => {
     const id = typeof idOrItem === "string" ? idOrItem : idOrItem?.id;
+    if (window.LoomwrightDispatchCallback) await window.LoomwrightDispatchCallback("onAcceptQueueItem", { detail: { id } });
     setExtractions((curr) => curr.filter((x) => x.id !== id));
   }, []);
   const onEditQueueItem = _wrUC((item) => {
@@ -1238,4 +1322,11 @@ Object.assign(window, {
   EntityBrushHighlight, FloatingEntityChip, FloatingSelectionToolbar,
   LeftMargin, RightMargin, MarginNoteCard, MarginExtractionCard,
   SaveModeControls, AuthorSelector, ChapterDeleteConfirmModal,
+  WR_DEMO_PROJECT: {
+    authors: WR_AUTHORS,
+    chapters: WR_CHAPTERS,
+    manuscripts: { c7: WR_MANUSCRIPT },
+    notes: WR_NOTES,
+    extractions: WR_EXTRACTIONS,
+  },
 });

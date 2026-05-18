@@ -27,6 +27,9 @@
     composition: "composition_overlay",
     handoffLog: "ai_handoff_log",
     trash: "trash",
+    manuscriptChapters: "manuscript_chapters",
+    speedReader: "speed_reader",
+    extractionSession: "extraction_session",
   };
 
   const nowIso = () => new Date().toISOString();
@@ -255,7 +258,7 @@
     normaliseType,
 
     listAllSync() {
-      return StorageService.getSync(KEYS.entities, collectDefaultEntities());
+      return StorageService.getSync(KEYS.entities, {});
     },
 
     listSync(type) {
@@ -270,26 +273,21 @@
       return null;
     },
 
-    async seedDefaultsIfEmpty() {
+    async hydrateFromStorage() {
       const stored = await StorageService.get(KEYS.entities, null);
-      if (stored && Object.keys(stored).length) {
-        applyEntityGlobals(stored);
-        return stored;
-      }
-      const defaults = collectDefaultEntities();
-      await StorageService.set(KEYS.entities, defaults);
-      applyEntityGlobals(defaults);
-      return defaults;
+      const map = stored && typeof stored === "object" ? stored : {};
+      applyEntityGlobals(map);
+      return map;
     },
 
     async list(type) {
-      const all = await StorageService.get(KEYS.entities, collectDefaultEntities());
+      const all = await StorageService.get(KEYS.entities, {});
       return Object.values(all[normaliseType(type)] || {});
     },
 
     async save(type, fields = {}, opts = {}) {
       const entityType = normaliseType(type || fields.type || fields.entityType);
-      const all = await StorageService.get(KEYS.entities, collectDefaultEntities());
+      const all = await StorageService.get(KEYS.entities, {});
       const byType = all[entityType] || {};
       const id = fields.id || uuid(entityType);
       const previous = byType[id] || {};
@@ -387,21 +385,11 @@
       const refs = StorageService.getSync(KEYS.references, window.REFERENCES || []);
       return kind ? refs.filter((r) => r.kind === kind || r.type === kind) : refs;
     },
-    async seedDefaultsIfEmpty() {
+    async hydrateFromStorage() {
       const stored = await StorageService.get(KEYS.references, null);
-      if (stored && stored.length) {
-        window.REFERENCES = stored;
-        return stored;
-      }
-      const defaults = (window.REFERENCES || []).map((r) => ({
-        ...clone(r),
-        id: r.id || uuid("ref"),
-        createdAt: r.createdAt || nowIso(),
-        updatedAt: r.updatedAt || nowIso(),
-      }));
-      await StorageService.set(KEYS.references, defaults);
-      window.REFERENCES = defaults;
-      return defaults;
+      const refs = Array.isArray(stored) ? stored : [];
+      window.REFERENCES = refs;
+      return refs;
     },
     async save(ref = {}) {
       const refs = await StorageService.get(KEYS.references, []);
@@ -568,14 +556,7 @@
       await StorageService.set(KEYS.providerSettings, allSettings);
     },
     async testProvider(providerId) {
-      const settings = this.loadProviderSync(providerId);
-      return {
-        ok: true,
-        providerId,
-        mode: "mock",
-        message: "Mock connection OK. No network request was made.",
-        hasKey: !!settings?.hasKey,
-      };
+      return AIService.testConnection(providerId);
     },
   };
 
@@ -625,6 +606,242 @@
       const next = [{ ...clone(item), deletedAt: item.deletedAt || nowIso() }, ...all];
       await StorageService.set(KEYS.trash, next);
       return item;
+    },
+    async restore(id) {
+      const all = await StorageService.get(KEYS.trash, []);
+      const item = all.find((t) => t.id === id);
+      if (!item) return null;
+      const nextTrash = all.filter((t) => t.id !== id);
+      await StorageService.set(KEYS.trash, nextTrash);
+      const { deletedAt, ...entity } = item;
+      await EntityService.save(entity.type, { ...entity, status: "active" });
+      return entity;
+    },
+    async purge(id) {
+      const all = await StorageService.get(KEYS.trash, []);
+      await StorageService.set(KEYS.trash, id ? all.filter((t) => t.id !== id) : []);
+    },
+  };
+
+  const ManuscriptChapterService = {
+    defaultState() {
+      return {
+        authors: [],
+        chapters: [],
+        activeChapterId: null,
+        manuscripts: {},
+        notes: {},
+        extractions: {},
+        updatedAt: nowIso(),
+      };
+    },
+    loadSync() {
+      return StorageService.getSync(KEYS.manuscriptChapters, this.defaultState());
+    },
+    async save(state) {
+      const next = { ...this.loadSync(), ...clone(state), updatedAt: nowIso() };
+      await StorageService.set(KEYS.manuscriptChapters, next);
+      window.dispatchEvent(new CustomEvent("lw:manuscript-chapters-updated", { detail: next }));
+      return next;
+    },
+    async setChapterContent(chapterId, manuscript, meta = {}) {
+      const state = this.loadSync();
+      const chapters = (state.chapters || []).map((c) => (
+        c.id === chapterId ? { ...c, ...meta, updatedAt: nowIso() } : c
+      ));
+      return this.save({
+        ...state,
+        chapters: chapters.length ? chapters : state.chapters,
+        manuscripts: { ...(state.manuscripts || {}), [chapterId]: manuscript },
+        activeChapterId: chapterId,
+      });
+    },
+  };
+
+  const LinkService = {
+    async patchEntity(entityId, entityType, patch) {
+      return EntityService.update(entityType, entityId, patch);
+    },
+    async linkField(entityId, entityType, field, targetId, targetType) {
+      const entity = EntityService.getSync(entityId, entityType);
+      if (!entity) return null;
+      const data = { ...(entity.data || {}) };
+      const list = Array.isArray(data[field]) ? [...data[field]] : [];
+      if (!list.includes(targetId)) list.push(targetId);
+      data[field] = list;
+      if (targetType) data[field + "Type"] = targetType;
+      return EntityService.update(entityType, entityId, { data });
+    },
+    async setStatus(entityId, entityType, status) {
+      return EntityService.update(entityType, entityId, { status });
+    },
+    async toggleFlag(entityId, entityType, flag) {
+      const entity = EntityService.getSync(entityId, entityType);
+      if (!entity) return null;
+      const flags = new Set(entity.flags || []);
+      if (flags.has(flag)) flags.delete(flag); else flags.add(flag);
+      return EntityService.update(entityType, entityId, { flags: [...flags] });
+    },
+    async mergeEntities(targetId, targetType, sourceIds = []) {
+      const target = EntityService.getSync(targetId, targetType);
+      if (!target) return null;
+      for (const sid of sourceIds) {
+        const src = EntityService.getSync(sid, targetType);
+        if (src) await EntityService.delete(targetType, sid);
+      }
+      return target;
+    },
+    async equipItem(itemId, ownerId) {
+      const item = EntityService.getSync(itemId, "items");
+      return EntityService.update("items", itemId, {
+        data: { ...(item?.data || {}), ownerId, equipped: true },
+      });
+    },
+    async unequipItem(itemId) {
+      const item = EntityService.getSync(itemId, "items");
+      return EntityService.update("items", itemId, {
+        data: { ...(item?.data || {}), equipped: false },
+      });
+    },
+    async assignOwner(itemId, ownerId) {
+      const item = EntityService.getSync(itemId, "items");
+      return EntityService.update("items", itemId, {
+        data: { ...(item?.data || {}), ownerId },
+      });
+    },
+    async setParentLocation(locationId, parentId) {
+      return EntityService.update("locations", locationId, {
+        data: { ...(EntityService.getSync(locationId, "locations")?.data || {}), parentId },
+      });
+    },
+  };
+
+  const AIService = {
+    async getProviderConfig(providerId = "openai") {
+      const settings = KeysService.loadProviderSync(providerId) || {};
+      return {
+        providerId,
+        baseUrl: settings.baseUrl || "https://api.openai.com/v1",
+        model: settings.model || "gpt-4o-mini",
+        apiKey: await KeysService.loadKey(providerId),
+      };
+    },
+    async testConnection(providerId = "openai") {
+      const cfg = await this.getProviderConfig(providerId);
+      if (!cfg.apiKey) {
+        return { ok: false, providerId, message: "No API key stored for this provider." };
+      }
+      try {
+        const res = await fetch(`${cfg.baseUrl.replace(/\/$/, "")}/models`, {
+          headers: { Authorization: `Bearer ${cfg.apiKey}` },
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          return { ok: false, providerId, message: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+        }
+        return { ok: true, providerId, message: "Connection successful." };
+      } catch (err) {
+        return { ok: false, providerId, message: err.message || String(err) };
+      }
+    },
+    async complete({ prompt, providerId = "openai", system, maxTokens = 1200 }) {
+      const cfg = await this.getProviderConfig(providerId);
+      if (!cfg.apiKey) throw new Error("No API key configured. Add one in Settings → AI Providers.");
+      const body = {
+        model: cfg.model,
+        max_tokens: maxTokens,
+        messages: [
+          ...(system ? [{ role: "system", content: system }] : []),
+          { role: "user", content: prompt },
+        ],
+      };
+      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${cfg.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`AI request failed (${res.status}): ${text.slice(0, 300)}`);
+      }
+      const json = await res.json();
+      return json.choices?.[0]?.message?.content || "";
+    },
+  };
+
+  const ExtractionService = {
+    loadSessionSync() {
+      return StorageService.getSync(KEYS.extractionSession, { status: "idle", items: [] });
+    },
+    async saveSession(session) {
+      await StorageService.set(KEYS.extractionSession, { ...session, updatedAt: nowIso() });
+      window.dispatchEvent(new CustomEvent("lw:extraction-updated", { detail: session }));
+    },
+    async runExtraction({ chapterId, text, deep = false }) {
+      const prompt = deep
+        ? `Extract RPG/world entities from this manuscript chapter as JSON array with objects {type,name,summary,confidence}. Text:\n\n${text}`
+        : `List notable named entities (characters, locations, items, quests, events) from this text as JSON array {type,name,summary}:\n\n${text}`;
+      const raw = await AIService.complete({
+        prompt,
+        system: "Return valid JSON only. No markdown fences.",
+        maxTokens: deep ? 2500 : 1200,
+      });
+      let items = [];
+      try {
+        const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim());
+        items = Array.isArray(parsed) ? parsed : parsed.items || parsed.entities || [];
+      } catch (_) {
+        items = [{ type: "references", name: "Extraction result", summary: raw.slice(0, 500) }];
+      }
+      await ReviewService.addMany(items.map((item) => ({
+        id: uuid("rq"),
+        entityType: normaliseType(item.type || "references"),
+        name: item.name || "Suggestion",
+        action: deep ? "Deep extract" : "Extract",
+        level: "suggestion",
+        value: item.confidence || 70,
+        reason: item.summary || "Extracted from manuscript",
+        payload: item,
+        chapterId,
+        status: "pending",
+      })));
+      const session = { status: "complete", chapterId, deep, itemCount: items.length, updatedAt: nowIso() };
+      await this.saveSession(session);
+      return { session, items };
+    },
+  };
+
+  const SampleProjectService = {
+    async loadSample() {
+      const demo = window.WR_DEMO_PROJECT || {};
+      const entities = collectDefaultEntities();
+      await StorageService.set(KEYS.entities, entities);
+      applyEntityGlobals(entities);
+      const refs = (window.REFERENCES || []).map((r) => ({
+        ...clone(r),
+        id: r.id || uuid("ref"),
+        createdAt: r.createdAt || nowIso(),
+        updatedAt: r.updatedAt || nowIso(),
+      }));
+      await StorageService.set(KEYS.references, refs);
+      window.REFERENCES = refs;
+      if (demo.chapters) {
+        await ManuscriptChapterService.save({
+          authors: demo.authors || [],
+          chapters: demo.chapters,
+          activeChapterId: demo.chapters.find((c) => c.active)?.id || demo.chapters[0]?.id,
+          manuscripts: demo.manuscripts || {},
+          notes: { default: demo.notes || [] },
+          extractions: { default: demo.extractions || [] },
+        });
+      }
+      window.PROJECT_INTELLIGENCE = await ProjectIntelService.save(ProjectIntelService.defaultIntel());
+      window.dispatchEvent(new CustomEvent("lw:project-imported", { detail: { sample: true } }));
+      notify("Sample project loaded.");
+      return true;
     },
   };
 
@@ -791,7 +1008,15 @@
         }
         if (cb === "onTestAIProviderConnection") {
           e.preventDefault();
-          notify("Mock provider connection OK. No network request was made.");
+          const providerId = el.getAttribute("data-provider-id") || "openai";
+          const result = await KeysService.testProvider(providerId);
+          window.dispatchEvent(new CustomEvent("lw:ai-provider-test", { detail: result }));
+          notify(result.message || (result.ok ? "Connection OK." : "Connection failed."));
+        }
+        if (cb === "onLoadSampleProject") {
+          e.preventDefault();
+          if (window.confirm && !window.confirm("Load the sample demo project? This merges sample data into your local store.")) return;
+          await SampleProjectService.loadSample();
         }
         if (cb === "onSave" || cb === "onSaveAndExtract" || cb === "onSaveAndDeepExtract") {
           await ManuscriptService.saveCurrentDom();
@@ -814,8 +1039,8 @@
 
   async function initialise() {
     await StorageService.ready();
-    await EntityService.seedDefaultsIfEmpty();
-    await ReferencesService.seedDefaultsIfEmpty();
+    await EntityService.hydrateFromStorage();
+    await ReferencesService.hydrateFromStorage();
     const onb = await OnboardingService.load(window.ONBOARDING_ANSWERS || {});
     if (onb && Object.keys(onb).length) window.ONBOARDING_ANSWERS = onb;
     window.PROJECT_INTELLIGENCE = ProjectIntelService.loadSync();
@@ -837,9 +1062,14 @@
     SettingsService,
     KeysService,
     ManuscriptService,
+    ManuscriptChapterService,
     CompositionService,
     HandoffService,
     TrashService,
+    LinkService,
+    AIService,
+    ExtractionService,
+    SampleProjectService,
     exportProject,
     importProject,
     initialise,

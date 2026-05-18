@@ -423,7 +423,10 @@ const SetAIProviders = () => {
                 </SetRow>
                 <SetRow label="Connection" hint="Sends a test request (no manuscript content).">
                   <div className="set-row__inline">
-                    <button className="set-btn set-btn--outline" data-callback="onTestAIProviderConnection" onClick={() => window.LoomwrightBackend?.KeysService?.testProvider(p.id)}>
+                    <button className="set-btn set-btn--outline" data-callback="onTestAIProviderConnection" data-provider-id={p.id} onClick={async () => {
+                      const result = await window.LoomwrightBackend?.KeysService?.testProvider(p.id);
+                      window.dispatchEvent(new CustomEvent("lw:ai-provider-test", { detail: result }));
+                    }}>
                       <Icon name="bolt" size={11}/> Test connection
                     </button>
                     {p.hasKey && (
@@ -717,6 +720,7 @@ const SetImport = () => (
       <button className="set-btn set-btn--outline" data-callback="onExportSettingsProfile"><Icon name="download" size={11}/> Export settings profile</button>
       <button className="set-btn set-btn--outline" data-callback="onImportSettingsProfile"><Icon name="paper" size={11}/> Import settings profile</button>
       <button className="set-btn set-btn--outline" data-callback="onBackupNow"><Icon name="stack" size={11}/> Backup now</button>
+      <button className="set-btn set-btn--primary" data-callback="onLoadSampleProject"><Icon name="sparkle" size={11}/> Load sample project</button>
     </div>
   </SetGroupCard>
 );

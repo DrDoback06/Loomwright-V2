@@ -139,7 +139,7 @@ const ItemDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSourceMent
   const events      = e.events      || [];
   const sites       = e.sites       || {};   // { found, used: [], lost }
   return (
-    <div className="rpg-detail" data-ui="ItemDetail">
+    <div className="rpg-detail" data-ui="ItemDetail" data-entity-id={e.id} data-entity-type="items">
       <RpgFacets items={[
         { k: "Type",   v: e.itemType || "—" },
         { k: "Rarity", v: e.rarity || "Common", tone: ITEM_RARITY_TONES[e.rarity] || "neutral" },
@@ -278,7 +278,7 @@ const ItemDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSourceMent
 const ClassDetail = ({ entity, onSelectEntity }) => {
   const e = entity || {};
   return (
-    <div className="rpg-detail" data-ui="ClassDetail">
+    <div className="rpg-detail" data-ui="ClassDetail" data-entity-id={e.id} data-entity-type="classes">
       <RpgFacets items={[
         { k: "Category", v: e.category || "Generic" },
         { k: "Role",     v: e.role || "—" },
@@ -354,7 +354,7 @@ const ClassDetail = ({ entity, onSelectEntity }) => {
 const RaceDetail = ({ entity, onSelectEntity }) => {
   const e = entity || {};
   return (
-    <div className="rpg-detail" data-ui="RaceDetail">
+    <div className="rpg-detail" data-ui="RaceDetail" data-entity-id={e.id} data-entity-type="races">
       <RpgFacets items={[
         { k: "Category", v: e.category || "Folk" },
         { k: "Members",  v: (e.examples && e.examples.length) || 0 },
@@ -440,7 +440,7 @@ const StatDetail = ({ entity, onSelectEntity, onOpenSourceMention }) => {
   const history = e.history || [];
   const rules   = e.extractionRules || [];
   return (
-    <div className="rpg-detail" data-ui="StatDetail">
+    <div className="rpg-detail" data-ui="StatDetail" data-entity-id={e.id} data-entity-type="stats">
       <RpgFacets items={[
         { k: "Value type", v: e.valueType || "number" },
         { k: "Default",    v: e.defaultValue ?? "—" },
@@ -545,7 +545,7 @@ const AbilityDetail = ({ entity, onSelectEntity, onOpenSourceMention }) => {
   const upgrades = e.upgradePath || [];
   const usage    = e.usageHistory || [];
   return (
-    <div className="rpg-detail" data-ui="AbilityDetail">
+    <div className="rpg-detail" data-ui="AbilityDetail" data-entity-id={e.id} data-entity-type="abilities">
       <RpgFacets items={[
         { k: "Type",      v: e.abilityType || "active", tone: ABILITY_TYPE_TONES[e.abilityType] || "neutral" },
         e.cost      ? { k: "Cost",      v: e.cost      } : null,

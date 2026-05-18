@@ -468,6 +468,7 @@ const AppShell = () => {
     const type = (panel && panel.entityType) || row.entityType;
     if (type) {
       setFocusedByType((m) => ({ ...m, [type]: { id: row.id, label: row.label, ts: Date.now() } }));
+      window.__LW_LAST_SELECTION__ = { entityId: row.id, entityType: type, label: row.label };
     }
   }, []);
   const onClearPanelFilter = _uc_a((panelId) => {
@@ -552,16 +553,27 @@ const AppShell = () => {
       const selectMatchingRow = (panel) => {
         const rows = panel.rows || [];
         if (rows.length === 0) return panel;
-        const target = (detail.label || "").toLowerCase().trim();
-        if (!target) return panel;
-        // Fuzzy: exact label, then substring either way, then first significant word.
-        const norm = (s) => (s || "").toLowerCase().trim();
-        let match = rows.find((r) => norm(r.label) === target)
-                 || rows.find((r) => norm(r.label).includes(target) || target.includes(norm(r.label)));
+        const backend = window.LoomwrightBackend?.EntityService;
+        let match = null;
+        if (detail.id && backend) {
+          const entity = backend.getSync(detail.id, canonicalType);
+          if (entity) {
+            match = rows.find((r) => r.id === entity.id)
+              || rows.find((r) => (r.label || "").toLowerCase() === (entity.name || "").toLowerCase());
+          }
+        }
+        if (!match && detail.id) match = rows.find((r) => r.id === detail.id);
         if (!match) {
-          const firstWord = target.split(/\s+/)[0];
-          if (firstWord && firstWord.length >= 3) {
-            match = rows.find((r) => norm(r.label).split(/\s+/).includes(firstWord));
+          const target = (detail.label || "").toLowerCase().trim();
+          if (!target) return panel;
+          const norm = (s) => (s || "").toLowerCase().trim();
+          match = rows.find((r) => norm(r.label) === target)
+               || rows.find((r) => norm(r.label).includes(target) || target.includes(norm(r.label)));
+          if (!match) {
+            const firstWord = target.split(/\s+/)[0];
+            if (firstWord && firstWord.length >= 3) {
+              match = rows.find((r) => norm(r.label).split(/\s+/).includes(firstWord));
+            }
           }
         }
         if (!match) return panel;

@@ -101,9 +101,9 @@ Project Intelligence:
 
 ## Known Constraints
 
-- No real AI calls are made. Provider test connection is mocked.
+- AI calls run only when the user explicitly triggers Test Connection, Generate, or Extraction. BYOK keys stay local.
 - Key encryption is local AES-GCM using Web Crypto and a browser-local, non-extractable root key in IndexedDB. It protects against casual localStorage inspection but is not a substitute for OS credential storage.
-- Writer's Room manuscript persistence snapshots the current rendered title/body text on save. The rich inline demo manuscript remains React-rendered static content.
+- Writer's Room chapters and paragraph structures persist via `ManuscriptChapterService`. Load sample project from Settings → Import/export for demo content.
 - The app is static/global-script based, not a bundler module graph.
 
 ## Continue-From-Here Tasks

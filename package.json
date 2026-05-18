@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "start": "npm run dev",
-    "validate": "node scripts/validate-static-site.js",
+    "validate": "node scripts/validate-static-site.js && node scripts/audit-callbacks.js",
+    "audit-callbacks": "node scripts/export-callback-names.js && node scripts/generate-callback-names-data.js && node scripts/audit-callbacks.js",
     "build": "node scripts/build-static.js",
     "preview": "vite preview --host 0.0.0.0"
   },
