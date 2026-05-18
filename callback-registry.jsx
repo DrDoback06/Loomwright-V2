@@ -178,6 +178,22 @@
     }
   }
 
+  // -------------------------------------------------------------------
+  // Provider-gating helper for Bucket B (AI/provider) callbacks.
+  // Returns the provider config if one is configured, else surfaces a
+  // specific "Configure an AI provider..." notice and returns null so
+  // the caller short-circuits cleanly. Used by the audit script as a
+  // marker that Bucket B branches show a provider-specific message.
+  // -------------------------------------------------------------------
+  async function requireProviderOrNotice(featureLabel) {
+    try {
+      const cfg = await B().AIService.getProviderConfig();
+      if (cfg?.apiKey) return cfg;
+    } catch (_) {}
+    notify(`Configure an AI provider in Settings to use ${featureLabel}.`);
+    return null;
+  }
+
   function resolveExportTarget(name, ctx) {
     const backend = B();
     switch (name) {
@@ -568,10 +584,13 @@
 
     // —— Composition / AI generate ——
     if (name === "onGenerateCompositionDraft" || name === "onGenerateDraft") {
+      const cfg = await requireProviderOrNotice("composition draft generation");
+      if (!cfg) return;
       const comp = CompositionService.loadSync({});
       const prompt = comp.instructions || "Write a draft scene from the selected entities.";
       try {
         const text = await AIService.complete({ prompt, system: "You are a literary fiction co-writer." });
+        window.__LW_LAST_GENERATED_DRAFT__ = text;
         window.dispatchEvent(new CustomEvent("lw:composition-draft-generated", { detail: { text } }));
         notify("Draft generated.");
       } catch (e) { notify(e.message); }
@@ -658,6 +677,94 @@
         await ExtractionService.runExtraction({ chapterId: snap?.chapterId, text, deep: name.includes("Deep") });
         notify("Extraction complete.");
       } catch (e) { notify(e.message); }
+      return;
+    }
+
+    // —— Bucket B — AI/provider-gated. Show a specific notice if no
+    // provider is configured, else perform the AI call.
+    if (name === "onGenerateAIWriterDraft") {
+      const cfg = await requireProviderOrNotice("AI Writer draft generation");
+      if (!cfg) return;
+      const prompt = ctx.detail?.prompt || "Write a draft scene.";
+      try {
+        const text = await AIService.complete({ prompt, system: "You are a literary fiction co-writer." });
+        window.__LW_LAST_GENERATED_DRAFT__ = text;
+        window.dispatchEvent(new CustomEvent("lw:composition-draft-generated", { detail: { text } }));
+        notify("Draft generated.");
+      } catch (e) { notify(e.message); }
+      return;
+    }
+    if (name === "onGenerateDraftSkillTree") {
+      const cfg = await requireProviderOrNotice("Skill Tree draft generation");
+      if (!cfg) return;
+      const skillId = ctx.detail?.skillId || id;
+      const skill = skillId ? EntityService.getSync(skillId, "skills") : null;
+      const prompt = `Propose a draft skill tree for "${skill?.name || ctx.detail?.theme || "the selected skill"}" as JSON nodes array.`;
+      try {
+        const raw = await AIService.complete({ prompt, system: "Return JSON only." });
+        let nodes = [];
+        try { nodes = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim()); } catch (_) {}
+        if (Array.isArray(nodes) && skillId) {
+          const current = EntityService.getSync(skillId, "skills");
+          await EntityService.update("skills", skillId, {
+            data: { ...(current?.data || {}), draftNodes: nodes.map((n, i) => ({ id: B().uuid("sn"), ...n, index: i })) },
+          });
+        }
+        notify("Draft skill tree generated.");
+      } catch (e) { notify(e.message); }
+      return;
+    }
+    if (name === "onRunContinuityCheck") {
+      // Local heuristic always available; AI augmentation when provider set.
+      const refs = ReferencesService.listSync().filter((r) => r.kind === "canon" || r.isCanonSource);
+      const snap = B().ManuscriptService?.snapshotFromDom?.();
+      const text = (snap?.bodyText || "").toLowerCase();
+      const conflicts = [];
+      for (const ref of refs) {
+        const claim = (ref.content || ref.title || "").toLowerCase();
+        const negated = claim && text.includes("not " + claim);
+        if (negated) conflicts.push({ reference: ref.title, claim });
+      }
+      const cfg = await B().AIService.getProviderConfig().catch(() => null);
+      if (cfg?.apiKey) {
+        try {
+          const prompt = `Given the canon rules below and chapter text, list any contradictions as JSON.\nCanon:\n${refs.map((r) => "- " + (r.title || r.content)).join("\n")}\n\nChapter:\n${snap?.bodyText?.slice(0, 4000) || ""}`;
+          const raw = await AIService.complete({ prompt, system: "Return JSON array of {claim,evidence}." });
+          try { conflicts.push(...JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim())); } catch (_) {}
+        } catch (_) {}
+      }
+      window.dispatchEvent(new CustomEvent("lw:continuity-check", { detail: { conflicts } }));
+      notify(conflicts.length ? `${conflicts.length} potential contradiction(s) flagged.` : "No contradictions detected.");
+      return;
+    }
+    if (name === "onRunEntitySuggestion") {
+      // Local extraction always available; AI augmentation when provider set.
+      const snap = B().ManuscriptService?.snapshotFromDom?.();
+      const text = snap?.bodyText || "";
+      const cfg = await B().AIService.getProviderConfig().catch(() => null);
+      try {
+        await ExtractionService.runExtraction({ chapterId: snap?.chapterId, text, deep: !!cfg?.apiKey });
+        notify(cfg?.apiKey ? "Entity suggestions generated (with AI)." : "Entity suggestions generated (local).");
+      } catch (e) { notify(e.message); }
+      return;
+    }
+    if (name === "onAcceptGeneratedText") {
+      const text = ctx.detail?.text || window.__LW_LAST_GENERATED_DRAFT__;
+      if (!text) {
+        notify("Generate a draft first.");
+        return;
+      }
+      window.dispatchEvent(new CustomEvent("lw:composition-insert-draft", { detail: { text, source: "ai" } }));
+      notify("Generated text inserted into the current chapter.");
+      return;
+    }
+    if (name === "onCopyGeneratedText") {
+      const text = window.__LW_LAST_GENERATED_DRAFT__;
+      if (!text) { notify("No generated text to copy yet."); return; }
+      try {
+        await navigator.clipboard?.writeText(text);
+        notify("Copied generated text.");
+      } catch (e) { notify("Clipboard unavailable."); }
       return;
     }
 
