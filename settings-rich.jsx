@@ -13,7 +13,7 @@
 //   user's own API keys. Settings makes this explicit but never scary.
 // =====================================================================
 
-const { useState: _set_us, useMemo: _set_um } = React;
+const { useState: _set_us, useMemo: _set_um, useEffect: _set_ue } = React;
 
 // ---------------------------------------------------------------------
 // AI provider catalogue — curated top 6 visible by default; rest live
@@ -140,6 +140,16 @@ const SetToggle = ({ checked, onChange, label, hint }) => (
   </label>
 );
 
+const useLWSettingState = (section, initial) => {
+  const [state, setState] = _set_us(() => (
+    window.LoomwrightBackend?.SettingsService?.getSectionSync(section, initial) || initial
+  ));
+  _set_ue(() => {
+    window.LoomwrightBackend?.SettingsService?.saveSection(section, state);
+  }, [section, JSON.stringify(state)]);
+  return [state, setState];
+};
+
 const SetSegmented = ({ value, onChange, options }) => (
   <div className="set-segmented">
     {options.map((o) => (
@@ -177,7 +187,7 @@ const SetGroupCard = ({ title, hint, children, actions }) => (
 // PROJECT
 // =====================================================================
 const SetProject = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = useLWSettingState("project", {
     projectName: "The Auger's Door", seriesName: "The Vraska Cycle", bookName: "Book II",
     genre: "Literary fantasy", targetFormat: "Novel", wordCountGoal: 95000,
     projectStatus: "drafting", defaultRoute: "writers-room",
@@ -215,7 +225,7 @@ const SetProject = () => {
 // BRAND / THEME
 // =====================================================================
 const SetBrand = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = useLWSettingState("brand", {
     accent: "#9a7b3a", theme: "parchment-light", density: "balanced",
     manuscriptFont: "Source Serif 4", uiFont: "Inter Tight",
     reducedMotion: false,
@@ -253,7 +263,7 @@ const SetBrand = () => {
 // EDITOR
 // =====================================================================
 const SetEditor = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = useLWSettingState("editor", {
     spellcheck: true, grammarSuggestions: true, styleSuggestions: false, thesaurus: true,
     sentenceRestructure: false, voiceConsistency: true,
     autosave: true, autosaveInterval: 30,
@@ -293,7 +303,7 @@ const SetEditor = () => {
 // AUTHORS
 // =====================================================================
 const SetAuthors = () => {
-  const [authors, setAuthors] = _set_us([
+  const [authors, setAuthors] = useLWSettingState("authors", [
     { id: "em",  name: "E. Marlowe",      initials: "EM", color: "#9a7b3a", role: "Primary author",   style: "Terse / cold / restrained" },
     { id: "ann", name: "Ann (co-writer)", initials: "AN", color: "#7a6aa3", role: "Co-writer",        style: "Maximalist / lyrical" },
     { id: "ai",  name: "Loomwright AI",   initials: "LW", color: "#3e6db5", role: "AI",               style: "Match Primary" },
@@ -329,12 +339,27 @@ const SetAuthors = () => {
 // =====================================================================
 const SetAIProviders = () => {
   const [providers, setProviders] = _set_us(() => SET_AI_PROVIDERS.map((p) => ({
-    ...p, enabled: false, apiKey: "", model: p.defaultModel,
-    uses: p.suggestedUses.reduce((acc, u) => ({ ...acc, [u]: true }), {}),
+    ...p,
+    ...(window.LoomwrightBackend?.KeysService?.loadAllProviderSettingsSync()?.[p.id] || {}),
+    apiKey: "",
+    model: (window.LoomwrightBackend?.KeysService?.loadAllProviderSettingsSync()?.[p.id]?.model) || p.defaultModel,
+    uses: (window.LoomwrightBackend?.KeysService?.loadAllProviderSettingsSync()?.[p.id]?.uses) || p.suggestedUses.reduce((acc, u) => ({ ...acc, [u]: true }), {}),
   })));
   const [addOpen, setAddOpen] = _set_us(false);
 
-  const up = (id, k, v) => setProviders((arr) => arr.map((p) => p.id === id ? { ...p, [k]: v } : p));
+  const up = (id, k, v) => setProviders((arr) => {
+    const next = arr.map((p) => {
+      if (p.id !== id) return p;
+      if (k === "apiKey") return { ...p, apiKey: v, hasKey: !!v || !!p.hasKey };
+      if (k === "hasKey" && v === false) return { ...p, hasKey: false, apiKey: "" };
+      return { ...p, [k]: v };
+    });
+    const provider = next.find((p) => p.id === id);
+    if (provider) {
+      window.LoomwrightBackend?.KeysService?.saveProvider(id, provider);
+    }
+    return next;
+  });
 
   const addExtra = (def) => {
     if (providers.find((p) => p.id === def.id)) return;
@@ -381,7 +406,7 @@ const SetAIProviders = () => {
                   </SetRow>
                 )}
                 <SetRow label={p.isLocal ? "Endpoint" : "API key"} hint={p.keyHint || ""}>
-                  <SetInput value={p.apiKey} onChange={(v) => up(p.id, "apiKey", v)} placeholder={p.isLocal ? "http://localhost:11434" : "Paste your key"} mono/>
+                  <SetInput value={p.apiKey} onChange={(v) => up(p.id, "apiKey", v)} placeholder={p.isLocal ? "http://localhost:11434" : (p.hasKey ? "Stored encrypted locally — paste to replace" : "Paste your key")} mono/>
                 </SetRow>
                 <SetRow label="Model preference">
                   <SetInput value={p.model} onChange={(v) => up(p.id, "model", v)} placeholder={p.defaultModel || "model-id"} mono/>
@@ -398,9 +423,17 @@ const SetAIProviders = () => {
                 </SetRow>
                 <SetRow label="Connection" hint="Sends a test request (no manuscript content).">
                   <div className="set-row__inline">
-                    <button className="set-btn set-btn--outline" data-callback="onTestAIProviderConnection">
+                    <button className="set-btn set-btn--outline" data-callback="onTestAIProviderConnection" onClick={() => window.LoomwrightBackend?.KeysService?.testProvider(p.id)}>
                       <Icon name="bolt" size={11}/> Test connection
                     </button>
+                    {p.hasKey && (
+                      <button className="set-btn set-btn--ghost" data-callback="onClearAIProviderKey" onClick={() => {
+                        window.LoomwrightBackend?.KeysService?.clearProviderKey(p.id);
+                        up(p.id, "hasKey", false);
+                      }}>
+                        <Icon name="trash" size={11}/> Clear stored key
+                      </button>
+                    )}
                     {p.keyLink && (
                       <a className="set-link" href={p.keyLink} target="_blank" rel="noreferrer">
                         Where to get a key <Icon name="arrow-right" size={10}/>
@@ -443,7 +476,7 @@ const SetAIProviders = () => {
 // AI ROUTING / COST
 // =====================================================================
 const SetAIRouting = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = useLWSettingState("ai-routing", {
     mode: "balanced",
     summariseFirst: true, cacheContext: true, excludeDormant: true, preferSummaries: true, confirmManuscript: true,
     maxContext: 16000,
@@ -485,7 +518,7 @@ const SetAIRouting = () => {
 // PRIVACY
 // =====================================================================
 const SetPrivacy = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = useLWSettingState("privacy", {
     localOnly: false, requireConfirm: true, disableCloud: false,
     redactSensitive: false,
   });
@@ -515,7 +548,7 @@ const SetPrivacy = () => {
 // EXTRACTION
 // =====================================================================
 const SetExtraction = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = useLWSettingState("extraction", {
     aggressiveness: "balanced",
     autoAdd95: true, showAutoAddedInReview: true,
     scan: { cast: true, locations: true, items: true, quests: true, events: true, stats: true, relationships: true, lore: true, timeline: true, inventory: true },
@@ -555,7 +588,7 @@ const SetExtraction = () => {
 // REVIEW QUEUE
 // =====================================================================
 const SetReview = () => {
-  const [s, setS] = _set_us({
+  const [s, setS] = useLWSettingState("review", {
     defaultFilter: "uncertain",
     showBands: true, bulkActions: true, sourceQuote: true,
     showAutoAdded: false, showDenied: false, mergeSuggestions: true,

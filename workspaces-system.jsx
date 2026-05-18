@@ -181,6 +181,7 @@ const OnboardingAnswersEditor = ({ answers, sectionId, onChangeField, onChangeSe
             <Icon name="sparkle" size={11}/> Reopen full wizard
           </button>
           <button className="fws-topbar__exit" data-callback="onSendOnboardingToProjectIntelligence" onClick={() => {
+            window.LoomwrightBackend?.ProjectIntelService?.mergeFromOnboarding(answers || {});
             onRequest && onRequest.setToast && onRequest.setToast({
               title: "Sent to Project Intelligence",
               sub: section.label + " merged into the distilled brief.",
@@ -307,7 +308,8 @@ const OnboardingJsonPanel = ({ answers, onCopyJson, onPasteJson, onValidateJson,
 // =====================================================================
 const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible, toast, onDismissToast }) => {
   // Reference library — pulls window.REFERENCES if available, else mock.
-  const live = window.REFERENCES || [];
+  const [refsVersion, setRefsVersion] = _ws_us(0);
+  const live = window.LoomwrightBackend?.ReferencesService?.listSync() || window.REFERENCES || [];
   const fallback = [
     { id: "r-1", kind: "upload",   title: "Loomwright field journal.pdf",       sub: "Uploaded · 14 pages", aiContext: true, style: false, canon: false },
     { id: "r-2", kind: "url",      title: "Atlas of the Pale Reach (atlas.org)",  sub: "Web · referenced 4×", aiContext: true, style: false, canon: false },
@@ -330,10 +332,26 @@ const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisi
   const [view, setView] = _ws_us("library");
   const [onbSection, setOnbSection] = _ws_us("project");
   const [onbAnswers, setOnbAnswers] = _ws_us(() =>
-    (window.ONBOARDING_ANSWERS && typeof window.ONBOARDING_ANSWERS === "object")
+    (window.LoomwrightBackend?.OnboardingService?.loadSync(ONBOARDING_ANSWERS_FALLBACK))
+      ? window.LoomwrightBackend.OnboardingService.loadSync(ONBOARDING_ANSWERS_FALLBACK)
+      : (window.ONBOARDING_ANSWERS && typeof window.ONBOARDING_ANSWERS === "object")
       ? window.ONBOARDING_ANSWERS
       : ONBOARDING_ANSWERS_FALLBACK
   );
+
+  _ws_ue(() => {
+    const onRefs = () => setRefsVersion(Date.now());
+    window.addEventListener("lw:references-updated", onRefs);
+    window.addEventListener("lw:backend-ready", onRefs);
+    return () => {
+      window.removeEventListener("lw:references-updated", onRefs);
+      window.removeEventListener("lw:backend-ready", onRefs);
+    };
+  }, []);
+
+  _ws_ue(() => {
+    window.LoomwrightBackend?.OnboardingService?.save(onbAnswers);
+  }, [JSON.stringify(onbAnswers), refsVersion]);
 
   // Workspace-level listener: lets other components ask the library to
   // jump straight into onboarding mode (Settings → Project Intelligence
