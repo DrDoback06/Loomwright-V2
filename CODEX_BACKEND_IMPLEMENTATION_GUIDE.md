@@ -19,6 +19,8 @@ The shell is a static React 18 + Babel app. Files are loaded as globals, so back
 - Backend services: `backend-services.jsx`
 - Mount: `app.jsx`
 
+`vite.config.js` serves `.jsx` files as raw text during `npm run dev` so Babel Standalone receives the same modular source that a plain static server would serve.
+
 ## Backend Architecture
 
 ```mermaid
