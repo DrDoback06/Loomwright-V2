@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" data-theme="parchment-light" data-density="balanced" data-typeset="literary">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=1440, initial-scale=1"/>
+  <title>Loomwright — New Project Ritual</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+  <link rel="stylesheet" href="tokens.css"/>
+  <link rel="stylesheet" href="components.css"/>
+  <link rel="stylesheet" href="onboarding.css"/>
+  <link rel="stylesheet" href="onboarding-intel.css"/>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" data-presets="react" src="brand.jsx"></script>
+  <script type="text/babel" data-presets="react" src="icons.jsx"></script>
+  <script type="text/babel" data-presets="react" src="primitives.jsx"></script>
+
+  <script type="text/babel" data-presets="react" src="onboarding-data.jsx"></script>
+  <script type="text/babel" data-presets="react" src="onboarding-parts.jsx"></script>
+  <script type="text/babel" data-presets="react" src="onboarding-intel.jsx"></script>
+  <script type="text/babel" data-presets="react" src="onboarding-steps.jsx"></script>
+  <script type="text/babel" data-presets="react" src="onboarding.jsx"></script>
+
+  <script type="text/babel" data-presets="react">
+    const { useState: _us_boot, useEffect: _ue_boot } = React;
+
+    const Booted = () => {
+      const [view, setView] = _us_boot("wizard"); // wizard | minimized | done
+      const [completed, setCompleted] = _us_boot(null);
+
+      const finish = (data) => { setCompleted(data); setView("done"); };
+      const exit   = () => { if (confirm("Exit setup? Your draft is autosaved and you can resume any time.")) setView("minimized"); };
+      const minimize = () => setView("minimized");
+      const resume = () => setView("wizard");
+
+      if (view === "minimized") {
+        return (
+          <div className="ob ob__minimized" data-screen-label="Onboarding · Saved & paused">
+            <div className="ob__min-card">
+              <div className="ob__min-card__seal">{BRAND.shortName}</div>
+              <div className="ob__min-card__eyebrow">Draft saved · 2 minutes ago</div>
+              <h1 className="ob__min-card__h1">The desk is waiting.</h1>
+              <p className="ob__min-card__lede">Your project setup is paused. Pick it up when you’re ready, or start writing now and finish the ritual later from the Today tab.</p>
+              <div className="ob__min-card__btns">
+                <Btn variant="primary" icon="feather" onClick={resume}>Resume setup</Btn>
+                <Btn variant="outline" icon="paper" onClick={() => alert("Would open the writing room with current draft data.")}>Start writing now</Btn>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === "done") {
+        const dest = completed?.__dest || "writers-room";
+        const destLabel = { "writers-room": "Writer’s Room", "cast": "Cast", "atlas": "Atlas", "home": "Today" }[dest] || dest;
+        return (
+          <div className="ob ob__minimized" data-screen-label="Onboarding · Complete">
+            <div className="ob__min-card" style={{ maxWidth: 620 }}>
+              <div className="ob__min-card__seal">{BRAND.shortName}</div>
+              <div className="ob__min-card__eyebrow"><Icon name="check" size={11}/> Setup complete</div>
+              <h1 className="ob__min-card__h1">Welcome, {completed?.welcome?.title || "writer"}.</h1>
+              <p className="ob__min-card__lede">
+                Loomwright has prepared your desk: {Object.values(completed?.cast?.seeds || []).length} cast seeds, {(completed?.world?.canonRules || []).length} canon rules, {Object.values(completed?.rpg?.toggles || {}).filter(Boolean).length} tracking systems. Opening the {destLabel}…
+              </p>
+              <div className="ob__min-card__btns">
+                <Btn variant="primary" icon="arrow-right" onClick={() => setView("wizard")}>Return to setup</Btn>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <OnboardingWizard
+          onCompleteOnboarding={finish}
+          onExitOnboarding={exit}
+          onMinimizeOnboarding={minimize}
+        />
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<Booted/>);
+  </script>
+</body>
+</html>

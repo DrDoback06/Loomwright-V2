@@ -1,0 +1,16 @@
+{
+  "name": "loomwright-v2",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Extracted Loomwright v2 static design build.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "start": "npm run dev",
+    "validate": "node scripts/validate-static-site.js",
+    "build": "node scripts/build-static.js",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "devDependencies": {
+    "vite": "^8.0.13"
+  }
+}

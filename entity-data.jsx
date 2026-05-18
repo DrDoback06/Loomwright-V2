@@ -1,0 +1,205 @@
+// =====================================================================
+// entity-data.jsx — sample entities used by panels for non-cast tabs.
+// Realistic placeholder data only; mirrors the entity object shape
+// documented in ENTITY_FRAMEWORK_HOOKUP.md.
+// =====================================================================
+
+const ENTITY_SAMPLES = {
+  bestiary: [
+    { id: "b1", type: "bestiary", name: "Salt-wraith", glyphChar: "Sw", status: "active",
+      subtitle: "Wind-borne predator of the Reach",
+      summary: "A pale, ribbon-bodied predator that rides salt squalls down off the Auger Cliffs.",
+      aliases: ["the white ribbon"], chapterRange: "Ch. 2–6",
+      mentionsByChapter: [0, 4, 2, 0, 3, 6, 0, 0, 0, 0, 0, 0],
+      fields: [{ k: "Habitat", v: "Pale Reach littoral" }, { k: "Diet", v: "Carrion, gulls" }, { k: "Threat", v: "Solitary; lethal in fog" }],
+      related: [{ id:"a1", type:"locations", name:"Pale Reach" }, { id:"l1", type:"lore", name:"Auger Wake" }],
+      mentions: [
+        { id: "m1", excerpt: "It came in on the salt — a long pale thing the gulls would not call to.", cite: "Ch. 2, p. 41" },
+        { id: "m2", excerpt: "The Salt-wraith took the second auger-bearer before he made the cliff path.", cite: "Ch. 6, p. 162" },
+      ],
+      warnings: ["Mentioned in Ch. 6 but not yet keyed to Atlas"],
+      recent: [{ when: "Today", what: "Notes edited" }],
+    },
+    { id: "b2", type: "bestiary", name: "Vraska boar", glyphChar: "Vb", status: "active",
+      subtitle: "Pass-dwelling tusker", chapterRange: "Ch. 4–4", queue: 1,
+      mentionsByChapter: [0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0], summary: "Reclusive winter boar of the Vraska Pass." },
+    { id: "b3", type: "bestiary", name: "Hess gull", glyphChar: "Hg", status: "archived",
+      subtitle: "Common shore gull", chapterRange: "Ch. 1–7",
+      mentionsByChapter: [3,2,1,2,1,4,2,0,0,0,0,0], summary: "Plentiful; mostly background fauna." },
+  ],
+  locations: [
+    { id: "a1", type: "locations", name: "Pale Reach", glyphChar: "PR", status: "active",
+      subtitle: "Coastal queendom",
+      summary: "A salt-bleached coastal kingdom; seat of House Vey. Frames Acts I–III.",
+      chapterRange: "Ch. 1–7", queue: 2,
+      mentionsByChapter: [12, 8, 5, 9, 4, 11, 7, 0, 0, 0, 0, 0],
+      fields: [{ k: "Region", v: "Northern coast" }, { k: "Climate", v: "Salt-cold, fogged" }, { k: "Ruler", v: "Aelinor Vey" }],
+      related: [{ id:"c1", type:"cast", name:"Aelinor Vey" }, { id:"f1", type:"factions", name:"House Vey" }, { id:"a2", type:"locations", name:"Vraska Pass" }],
+      mentions: [
+        { id:"m3", excerpt: "Pale Reach taught patience the way the sea taught salt.", cite:"Ch. 1, p. 14" },
+        { id:"m4", excerpt: "From the Reach the Pass looked like a ledger half-closed.", cite:"Ch. 4, p. 91" },
+      ],
+      linkedChapters: [{ id:"ch1", label:"Ch. 1 — The Auger Wake" }, { id:"ch4", label:"Ch. 4 — Pass" }, { id:"ch7", label:"Ch. 7 — Salt" }],
+      notes: "Consider whether the Reach's eastern beaches need their own sub-entry by Act III.",
+    },
+    { id: "a2", type: "locations", name: "Vraska Pass", glyphChar: "Vp", status: "active",
+      subtitle: "Mountain pass between houses", chapterRange: "Ch. 4–6",
+      mentionsByChapter: [0,0,0,5,2,3,0,0,0,0,0,0] },
+    { id: "a3", type: "locations", name: "Glass Court", glyphChar: "Gc", status: "active",
+      subtitle: "Hess audience hall", chapterRange: "Ch. 3–7", queue: 1,
+      mentionsByChapter: [0,0,2,1,0,1,3,0,0,0,0,0] },
+  ],
+  items: [
+    { id: "i1", type: "items", name: "Bone Auger", glyphChar: "Ba", status: "active",
+      subtitle: "Inherited regalia weapon",
+      summary: "A drilling-blade tool turned heirloom; central to the Ch. 1 wake and Ch. 7 break.",
+      chapterRange: "Ch. 1–7", queue: 1,
+      mentionsByChapter: [4,2,0,1,0,1,3,0,0,0,0,0],
+      fields: [{ k: "Origin", v: "Pre-Vey" }, { k: "Material", v: "Whale-bone, salt-iron" }],
+      related: [{ id:"c1", type:"cast", name:"Aelinor Vey" }, { id:"l2", type:"lore", name:"Auger rite" }],
+      mentions: [{ id:"m5", excerpt:"\"Bring me the auger,\" Aelinor said, \"and the man who carries it.\"", cite:"Ch. 7, p. 188" }],
+    },
+    { id: "i2", type: "items", name: "Vey Signet", glyphChar: "Vs", status: "active",
+      subtitle: "Worn since coronation", chapterRange: "Ch. 1–7",
+      mentionsByChapter: [3,1,2,1,1,2,2,0,0,0,0,0] },
+  ],
+  classes: [
+    { id: "cl1", type: "classes", name: "Salt-bearer", glyphChar: "Sb", status: "active",
+      subtitle: "Pale Reach functionary class",
+      summary: "Officials trained to walk the salted causeways without harm.",
+      chapterRange: "Ch. 2–7", mentionsByChapter: [0,3,1,0,2,1,2,0,0,0,0,0] },
+    { id: "cl2", type: "classes", name: "Auger-keeper", glyphChar: "Ak", status: "active",
+      subtitle: "Bears the Bone Auger", chapterRange: "Ch. 1–7", queue: 1,
+      mentionsByChapter: [2,0,0,0,0,0,2,0,0,0,0,0] },
+  ],
+  races: [
+    { id: "r1", type: "races", name: "Reach-folk", glyphChar: "Rf", status: "active",
+      subtitle: "Salt-cold coastal people",
+      summary: "Hardy people of the Pale Reach; weather-tested, plain-spoken.",
+      chapterRange: "Ch. 1–7", mentionsByChapter: [3,1,2,1,1,2,1,0,0,0,0,0] },
+    { id: "r2", type: "races", name: "Hess-born", glyphChar: "Hb", status: "active",
+      subtitle: "Of House Hess and the Glass Court", chapterRange: "Ch. 3–7",
+      mentionsByChapter: [0,0,2,0,0,0,2,0,0,0,0,0] },
+  ],
+  stats: [
+    { id: "s1", type: "stats", name: "Resolve", glyphChar: "Re", status: "active",
+      subtitle: "How long a will holds in the cold", chapterRange: "Ch. 1–7",
+      summary: "Used in Cast and Faction sheets; gates several Ch. 7 outcomes." },
+    { id: "s2", type: "stats", name: "Cunning", glyphChar: "Cu", status: "active",
+      subtitle: "Reading the room before it is read", chapterRange: "Ch. 1–7" },
+    { id: "s3", type: "stats", name: "Compassion", glyphChar: "Co", status: "active",
+      subtitle: "Choosing kindness when costly", chapterRange: "Ch. 1–7" },
+  ],
+  abilities: [
+    { id: "ab1", type: "abilities", name: "Court tongue", glyphChar: "Ct", status: "active",
+      subtitle: "Read a room before a room knows it is read",
+      summary: "A learned ability; assigned to several House-trained characters.",
+      chapterRange: "Ch. 1, 3, 7" },
+    { id: "ab2", type: "abilities", name: "Letter-locking", glyphChar: "Ll", status: "active",
+      subtitle: "Folds papers no eye but the recipient may open whole", chapterRange: "Ch. 5", queue: 1 },
+  ],
+  skills: [
+    { id: "sk1", type: "skills", name: "Diplomacy tree", glyphChar: "Di", status: "active",
+      subtitle: "Listen → Hold the floor → Bind a treaty",
+      summary: "Used by Aelinor; partial overlap with Statecraft.", chapterRange: "Ch. 1–7" },
+    { id: "sk2", type: "skills", name: "Statecraft tree", glyphChar: "St", status: "active",
+      subtitle: "Read the ledger → Spend the granary", chapterRange: "Ch. 2–7" },
+  ],
+  quests: [
+    { id: "q1", type: "quests", name: "The Auger Wake", glyphChar: "Aw", status: "active",
+      subtitle: "Active — Acts I–III",
+      summary: "The funeral-rite that opens the manuscript and seeds every later break.",
+      chapterRange: "Ch. 1–7", queue: 2,
+      mentionsByChapter: [6,1,0,1,0,2,4,0,0,0,0,0] },
+    { id: "q2", type: "quests", name: "Brec's Letter", glyphChar: "Bl", status: "active",
+      subtitle: "Resolved — Ch. 5", chapterRange: "Ch. 2–5",
+      mentionsByChapter: [0,2,1,1,3,0,0,0,0,0,0,0] },
+  ],
+  events: [
+    { id: "e1", type: "events", name: "Hess negotiation", glyphChar: "Hn", status: "active",
+      subtitle: "Opens Ch. 3, breaks Ch. 7",
+      summary: "Two-sided negotiation that frames Acts II–III.",
+      chapterRange: "Ch. 3–7", mentionsByChapter: [0,0,4,2,1,2,5,0,0,0,0,0] },
+    { id: "e2", type: "events", name: "First salt-storm", glyphChar: "Fs", status: "active",
+      subtitle: "Ch. 2 set-piece", chapterRange: "Ch. 2", mentionsByChapter: [0,5,0,0,0,0,0,0,0,0,0,0] },
+  ],
+  factions: [
+    { id: "f1", type: "factions", name: "House Vey", glyphChar: "Hv", status: "active",
+      subtitle: "Reigning house of the Pale Reach",
+      summary: "Old salt-coast house; protagonist's seat. In tension with Hess.",
+      chapterRange: "Ch. 1–7", queue: 1,
+      mentionsByChapter: [4,2,1,2,1,3,3,0,0,0,0,0],
+      related: [{ id:"c1", type:"cast", name:"Aelinor Vey" }, { id:"a1", type:"locations", name:"Pale Reach" }] },
+    { id: "f2", type: "factions", name: "House Hess", glyphChar: "Hh", status: "active",
+      subtitle: "Rival mercantile house", chapterRange: "Ch. 3–7",
+      mentionsByChapter: [0,0,3,1,1,1,3,0,0,0,0,0] },
+  ],
+  lore: [
+    { id: "l1", type: "lore", name: "The Auger Wake", glyphChar: "Aw", status: "active",
+      subtitle: "Funeral-rite of the Reach",
+      summary: "Multi-day rite performed for fallen Salt-bearers; described first in Ch. 1.",
+      chapterRange: "Ch. 1, 7", mentionsByChapter: [4,0,0,0,0,0,3,0,0,0,0,0] },
+    { id: "l2", type: "lore", name: "Salt-cold", glyphChar: "Sc", status: "active",
+      subtitle: "Reach climate doctrine", chapterRange: "Ch. 1–7" },
+  ],
+  relationships: [
+    { id: "rel1", type: "relationships", name: "Aelinor ↔ Saren", glyphChar: "AS", status: "active",
+      subtitle: "Rivals; uneasy negotiators",
+      summary: "Strained from Ch. 3; broken in Ch. 7.", chapterRange: "Ch. 3–7", queue: 1 },
+    { id: "rel2", type: "relationships", name: "Aelinor ↔ Brec", glyphChar: "AB", status: "active",
+      subtitle: "Loyal-to; mutual trust", chapterRange: "Ch. 1–7" },
+  ],
+  timeline: [
+    { id: "t1", type: "timeline", name: "The Auger Wake", glyphChar: "Aw", status: "active",
+      subtitle: "Last week (in-world)", chapterRange: "Ch. 1" },
+    { id: "t2", type: "timeline", name: "Brec's letter", glyphChar: "Bl", status: "active",
+      subtitle: "Three nights ago (in-world)", chapterRange: "Ch. 5" },
+    { id: "t3", type: "timeline", name: "Hess break", glyphChar: "Hb", status: "active",
+      subtitle: "Tonight (in-world)", chapterRange: "Ch. 7", queue: 1 },
+  ],
+  references: [
+    { id: "rf1", type: "references", name: "Auger glossary draft", glyphChar: "Ag", status: "active",
+      subtitle: "Author note · 4pp",
+      summary: "Glossary draft pasted into the references panel; not yet promoted to Lore." },
+    { id: "rf2", type: "references", name: "House Hess sketch", glyphChar: "Hs", status: "active",
+      subtitle: "Author note · 1p" },
+  ],
+};
+
+const ENTITY_REVIEW_SAMPLES = {
+  bestiary: [
+    { id:"rq1", name:"Hess wolfhound", action:"New entry", level:"strong", value:84,
+      excerpt:"A grey hound at the door of the Glass Court — Hess-trained, by the look of the collar.",
+      cite:"Ch. 3, p. 76", reason:"Detected as new bestiary entry" },
+  ],
+  locations: [
+    { id:"rq2", name:"The Auger Cliffs", action:"New entry", level:"high", value:96,
+      excerpt:"From the Auger Cliffs the Pass looked like a ledger half-closed.", cite:"Ch. 4, p. 91",
+      reason:"Auto-added — appears in 3 chapters" },
+    { id:"rq3", name:"Glass Court ↔ Hess Hall", action:"Merge?", level:"uncertain", value:62,
+      excerpt:"They sat in the Glass Court — the same hall the Hess called their Hall of Hours.", cite:"Ch. 3, p. 78",
+      reason:"Possible duplicate of \"Glass Court\"" },
+  ],
+  items: [
+    { id:"rq4", name:"Salt cloak (Brec)", action:"New entry", level:"weak", value:38,
+      excerpt:"He had pulled the salt cloak around himself — but it was not his cloak.", cite:"Ch. 5, p. 122",
+      reason:"Low confidence — vague reference" },
+  ],
+};
+
+const ENTITY_SUGGESTION_SAMPLES = {
+  locations: [
+    { id:"sg1", level:"strong", value:81, lbl:"Promote 'eastern beach' to a sub-entry of Pale Reach", excerpt:"They walked the eastern beach until the salt let them speak." },
+    { id:"sg2", level:"uncertain", value:59, lbl:"Add coordinates to Vraska Pass" },
+  ],
+  bestiary: [
+    { id:"sg3", level:"high", value:96, lbl:"Auto-add 'Hess wolfhound' from Ch. 3", excerpt:"A grey hound at the door of the Glass Court." },
+  ],
+  factions: [
+    { id:"sg4", level:"strong", value:79, lbl:"Add neutrality stance to House Hess" },
+  ],
+};
+
+window.ENTITY_SAMPLES = ENTITY_SAMPLES;
+window.ENTITY_REVIEW_SAMPLES = ENTITY_REVIEW_SAMPLES;
+window.ENTITY_SUGGESTION_SAMPLES = ENTITY_SUGGESTION_SAMPLES;

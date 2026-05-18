@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="en" data-theme="parchment-light" data-density="balanced" data-typeset="literary">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=1280, initial-scale=1"/>
+  <title>Loomwright — Panel Stacking Concepts</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+  <link rel="stylesheet" href="tokens.css"/>
+  <link rel="stylesheet" href="components.css"/>
+  <link rel="stylesheet" href="writers-room.css"/>
+
+  <style>
+    /* ------- Concept-shared shell ------- */
+    .ps-shell {
+      position: relative;
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      grid-template-rows: 36px 1fr 22px;
+      width: 100%; height: 100%;
+      background: var(--bg-app);
+      color: var(--ink-1);
+      font-family: var(--font-sans);
+      overflow: hidden;
+      border-radius: 8px;
+    }
+    .ps-top {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--line-2);
+      background: var(--bg-paper);
+      font-size: var(--fs-xs); color: var(--ink-3);
+    }
+    .ps-top__title { color: var(--ink-1); font-family: var(--font-display); font-size: var(--fs-md); }
+    .ps-top__sub { color: var(--ink-4); }
+    .ps-top__spacer { flex: 1; }
+    .ps-top__chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 999px;
+      background: var(--accent-soft); color: var(--accent-deep);
+      font-size: var(--fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .ps-rail {
+      grid-row: 2;
+      border-right: 1px solid var(--line-2);
+      background: var(--bg-paper);
+      display: flex; flex-direction: column; padding: 6px 4px;
+      overflow-y: auto;
+      gap: 1px;
+    }
+    .ps-rail__sec {
+      font-size: 8px; text-transform: uppercase; letter-spacing: 0.14em;
+      color: var(--ink-4); padding: 8px 6px 4px; font-weight: 600;
+    }
+    .ps-rail__btn {
+      position: relative;
+      display: flex; align-items: center; justify-content: center;
+      height: 32px; width: 100%;
+      border-radius: 6px; border: 0; background: transparent; color: var(--ink-2);
+      cursor: pointer; transition: background .12s, color .12s;
+    }
+    .ps-rail__btn:hover { background: var(--bg-app); color: var(--ink-1); }
+    .ps-rail__btn.is-route { background: var(--accent-soft); color: var(--accent-deep); }
+    .ps-rail__btn .ps-dot {
+      position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
+      width: 3px; height: 14px; border-radius: 2px;
+    }
+    .ps-rail__btn.is-open .ps-dot { background: var(--ink-2); }
+    .ps-rail__btn.is-pinned .ps-dot { background: var(--accent); }
+    .ps-rail__btn .ps-badge {
+      position: absolute; top: 4px; right: 4px;
+      min-width: 14px; height: 14px; padding: 0 3px;
+      border-radius: 7px; background: #a84a3a; color: #fff;
+      font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    }
+    .ps-rail__btn .ps-glyph {
+      width: 10px; height: 10px; border-radius: 2px;
+    }
+    .ps-rail__btn .ps-icon {
+      font-family: var(--font-display); font-size: 14px;
+    }
+    .ps-rail__tip {
+      position: absolute; left: 100%; margin-left: 6px; top: 50%; transform: translateY(-50%);
+      background: var(--ink-1); color: var(--bg-paper);
+      font-size: var(--fs-2xs); padding: 4px 8px; border-radius: 4px;
+      white-space: nowrap; pointer-events: none; opacity: 0;
+      transition: opacity .12s; z-index: 50;
+    }
+    .ps-rail__btn:hover .ps-rail__tip { opacity: 1; }
+
+    .ps-work {
+      grid-row: 2; grid-column: 2;
+      position: relative;
+      display: flex;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .ps-status {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 12px; border-top: 1px solid var(--line-2);
+      background: var(--bg-paper);
+      font-size: 10px; color: var(--ink-4);
+      text-transform: uppercase; letter-spacing: 0.1em;
+    }
+
+    /* ------- Writer's Room (anchor) ------- */
+    .ps-wr {
+      flex: 1 1 480px;
+      min-width: 380px;
+      background: var(--bg-paper);
+      display: flex; flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+    .ps-wr__head {
+      padding: 8px 16px; border-bottom: 1px solid var(--line-2);
+      display: flex; align-items: center; gap: 8px;
+      font-family: var(--font-display); font-size: var(--fs-sm); color: var(--ink-2);
+    }
+    .ps-wr__head__chip {
+      font-family: var(--font-sans); font-size: 9px;
+      text-transform: uppercase; letter-spacing: 0.12em;
+      padding: 2px 6px; border-radius: 3px;
+      background: var(--accent-soft); color: var(--accent-deep);
+      font-weight: 600;
+    }
+    .ps-wr__body {
+      flex: 1; padding: 18px 28px; overflow-y: auto;
+      font-family: var(--font-serif);
+      font-size: 13px; line-height: 1.65;
+      color: var(--ink-1);
+    }
+    .ps-wr__body p { margin: 0 0 12px; text-wrap: pretty; }
+    .ps-wr__body .em { color: var(--accent-deep); font-style: italic; }
+    .ps-wr__body h3 {
+      font-family: var(--font-display); font-size: 16px; font-weight: 500;
+      margin: 0 0 14px; color: var(--ink-1); letter-spacing: 0.02em;
+    }
+
+    /* ------- Generic panel chrome (used by all 3 concepts) ------- */
+    .ps-panel {
+      background: var(--bg-paper);
+      border-left: 1px solid var(--line-2);
+      display: flex; flex-direction: column;
+      min-width: 0;
+      position: relative;
+    }
+    .ps-panel__head {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--line-2);
+      background: var(--bg-app);
+    }
+    .ps-panel__entity {
+      width: 18px; height: 18px; border-radius: 4px;
+      background: var(--ec, var(--accent));
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-size: 10px;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+    }
+    .ps-panel__title {
+      flex: 1; min-width: 0;
+      font-family: var(--font-display); font-size: var(--fs-sm);
+      color: var(--ink-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ps-panel__sub {
+      font-size: 9px; color: var(--ink-4); margin-left: 6px;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+    .ps-panel__btn {
+      width: 22px; height: 22px; border-radius: 4px;
+      border: 0; background: transparent; color: var(--ink-3);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 11px;
+      transition: background .12s, color .12s;
+    }
+    .ps-panel__btn:hover { background: var(--accent-soft); color: var(--accent-deep); }
+    .ps-panel__btn.is-on { background: var(--accent); color: #fff; }
+    .ps-panel__btn.is-on:hover { background: var(--accent-deep); }
+    .ps-panel__body {
+      flex: 1; padding: 10px 12px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .ps-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border-radius: 4px;
+      font-size: var(--fs-sm); color: var(--ink-1);
+      cursor: pointer;
+    }
+    .ps-row:hover { background: var(--bg-app); }
+    .ps-row.is-sel { background: var(--accent-soft); color: var(--accent-deep); }
+    .ps-row__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ec, var(--accent)); flex: 0 0 auto; }
+    .ps-row__meta { font-size: 10px; color: var(--ink-4); margin-left: auto; }
+    .ps-row__badge {
+      background: #a84a3a; color: #fff; font-size: 9px; font-weight: 700;
+      padding: 1px 5px; border-radius: 7px; min-width: 14px; text-align: center;
+    }
+
+    /* Pin glow */
+    .ps-panel.is-pinned .ps-panel__head {
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .ps-panel.is-front {
+      box-shadow: -8px 0 24px -16px rgba(0,0,0,.18);
+    }
+
+    /* ===================================================
+       CONCEPT A — Pinned Anchor + Stacked Column
+       Pinned panels dock immediately right of Writer's Room.
+       Unpinned panels stack right of pinned, oldest unpinned
+       auto-collapses to vertical tab when count > MAX.
+       =================================================== */
+    .pa-pinned-zone {
+      display: flex;
+      flex: 0 0 auto;
+      max-width: 56%;
+      position: relative;
+    }
+    .pa-pinned-zone:not(:empty)::before {
+      content: "PINNED";
+      position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+      font-size: 8px; font-weight: 700; letter-spacing: 0.16em;
+      color: var(--accent-deep); background: var(--accent-soft);
+      padding: 1px 6px; border-radius: 3px;
+      z-index: 5; pointer-events: none;
+      opacity: 0.7;
+    }
+    .pa-pinned-zone .ps-panel {
+      width: 240px;
+      border-left: 2px solid var(--accent);
+    }
+    .pa-stack-zone {
+      display: flex;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .pa-stack-zone .ps-panel {
+      flex: 1 1 240px;
+      min-width: 200px;
+      max-width: 320px;
+    }
+    .pa-collapsed-rail {
+      flex: 0 0 28px;
+      border-left: 1px solid var(--line-2);
+      background: var(--bg-app);
+      display: flex; flex-direction: column; padding: 6px 0; gap: 4px;
+    }
+    .pa-collapsed-tab {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      padding: 8px 4px;
+      font-size: 11px;
+      font-family: var(--font-display);
+      color: var(--ink-2);
+      cursor: pointer;
+      border-left: 2px solid var(--ec, var(--accent));
+      margin: 2px;
+      background: var(--bg-paper);
+      border-radius: 3px 0 0 3px;
+      display: flex; align-items: center; gap: 4px;
+      transition: background .12s;
+    }
+    .pa-collapsed-tab:hover { background: var(--accent-soft); color: var(--accent-deep); }
+
+    /* ===================================================
+       CONCEPT B — Slot Tray (3 fixed slots; replace oldest)
+       Predictable, maximum 3 panels visible. Pinned slots are
+       protected from replacement. Visual slot lanes always shown.
+       =================================================== */
+    .sl-tray {
+      flex: 1 1 auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      min-width: 0;
+      background:
+        repeating-linear-gradient(
+          90deg,
+          var(--bg-app) 0 1px,
+          transparent 1px calc(100% / 3)
+        );
+    }
+    .sl-slot {
+      border-left: 1px solid var(--line-2);
+      display: flex;
+      min-width: 0;
+      position: relative;
+    }
+    .sl-slot:first-child { border-left: 1px solid var(--line-2); }
+    .sl-slot--empty {
+      background: var(--bg-app);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 6px;
+      color: var(--ink-4);
+      font-size: 10px;
+      text-transform: uppercase; letter-spacing: 0.12em;
+    }
+    .sl-slot--empty__num {
+      font-family: var(--font-display);
+      font-size: 28px; color: var(--line-1);
+      line-height: 1;
+    }
+    .sl-slot .ps-panel {
+      flex: 1; border-left: 0;
+    }
+    .sl-slot__lock {
+      position: absolute; top: 4px; right: 6px;
+      font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+      color: var(--accent-deep);
+      z-index: 5; pointer-events: none;
+    }
+    .sl-toast {
+      position: absolute;
+      bottom: 12px; left: 50%; transform: translateX(-50%);
+      background: var(--ink-1); color: var(--bg-paper);
+      padding: 6px 10px; border-radius: 6px;
+      font-size: var(--fs-xs);
+      display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.18);
+      z-index: 10;
+      animation: sl-toast .3s ease;
+    }
+    @keyframes sl-toast { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+    .sl-toast button {
+      background: transparent; color: var(--accent-soft);
+      border: 0; font-weight: 600; cursor: pointer; font-size: var(--fs-xs);
+      padding: 2px 4px;
+    }
+
+    /* ===================================================
+       CONCEPT C — Accordion Drawer
+       All opened panels are slim headers in a vertical stack.
+       Click to expand/collapse. Up to N expanded at once.
+       Pinned panels stay expanded.
+       =================================================== */
+    .ac-drawer {
+      flex: 0 0 320px;
+      background: var(--bg-paper);
+      border-left: 1px solid var(--line-2);
+      display: flex; flex-direction: column;
+      overflow-y: auto;
+    }
+    .ac-drawer__head {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--line-2);
+      font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em;
+      color: var(--ink-4); font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg-app);
+    }
+    .ac-drawer__head__count {
+      margin-left: auto;
+      color: var(--accent-deep); background: var(--accent-soft);
+      padding: 1px 6px; border-radius: 3px;
+    }
+    .ac-item {
+      border-bottom: 1px solid var(--line-2);
+      display: flex; flex-direction: column;
+      transition: flex .2s ease;
+    }
+    .ac-item.is-collapsed { flex: 0 0 auto; }
+    .ac-item.is-expanded { flex: 1 1 auto; min-height: 180px; }
+    .ac-item__head {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 10px;
+      cursor: pointer;
+      background: var(--bg-paper);
+      transition: background .12s;
+    }
+    .ac-item__head:hover { background: var(--bg-app); }
+    .ac-item.is-pinned .ac-item__head {
+      box-shadow: inset 3px 0 0 var(--accent);
+      background: linear-gradient(90deg, color-mix(in srgb, var(--accent-soft) 50%, transparent) 0%, var(--bg-paper) 30%);
+    }
+    .ac-item__chev {
+      width: 14px; height: 14px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--ink-3); font-size: 10px;
+      transition: transform .15s;
+    }
+    .ac-item.is-expanded .ac-item__chev { transform: rotate(90deg); }
+    .ac-item__body {
+      flex: 1; padding: 8px 12px 12px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 4px;
+      background: var(--bg-paper);
+    }
+    .ac-item__actions {
+      display: flex; gap: 2px; margin-left: auto;
+    }
+
+    /* ------- design canvas tweaks ------- */
+    body { background: #f0eee9; margin: 0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" data-presets="react" src="brand.jsx"></script>
+  <script type="text/babel" data-presets="react" src="design-canvas.jsx"></script>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useCallback, useMemo, useEffect } = React;
+
+    // -----------------------------------------------------------------
+    // Sample panel definitions — entities from the existing brand
+    // -----------------------------------------------------------------
+    const PANEL_LIB = {
+      cast: {
+        id: "cast", entityType: "cast", title: "Cast", sub: "12 entries",
+        rows: [
+          { id: "c1", label: "Aelinor Vey",   meta: "Ch.1–7", selected: true },
+          { id: "c2", label: "Saren of Hess", meta: "Ch.3–7", queue: 1 },
+          { id: "c3", label: "Captain Brec",  meta: "Ch.2–5" },
+          { id: "c4", label: "The Auger",     meta: "Ch.7" },
+          { id: "c5", label: "Mara of Hess",  meta: "Ch.4" },
+          { id: "c6", label: "Dav the Quiet", meta: "Ch.6", queue: 1 },
+        ],
+      },
+      atlas: {
+        id: "atlas", entityType: "atlas", title: "Atlas", sub: "4 regions",
+        rows: [
+          { id: "a1", label: "Pale Reach",   meta: "Region", selected: true },
+          { id: "a2", label: "Vraska Pass",  meta: "Pass" },
+          { id: "a3", label: "Glass Court",  meta: "Court" },
+          { id: "a4", label: "Hess",         meta: "City" },
+        ],
+      },
+      quests: {
+        id: "quests", entityType: "quests", title: "Quests", sub: "2 in review",
+        rows: [
+          { id: "q1", label: "Find the Auger",   meta: "Open", queue: 1 },
+          { id: "q2", label: "Wake the Reach",   meta: "Open" },
+          { id: "q3", label: "Bind House Vey",   meta: "Drafting", queue: 1 },
+        ],
+      },
+      relationships: {
+        id: "relationships", entityType: "relationships", title: "Relationships", sub: "Aelinor ↔ all",
+        rows: [
+          { id: "r1", label: "Aelinor → Saren",  meta: "Rival" },
+          { id: "r2", label: "Aelinor → Brec",   meta: "Sworn" },
+          { id: "r3", label: "Aelinor → Auger",  meta: "Bound" },
+        ],
+      },
+      lore: {
+        id: "lore", entityType: "lore", title: "Lore / Canon", sub: "7 in review",
+        rows: [
+          { id: "l1", label: "The Pale Wake",   meta: "Era" },
+          { id: "l2", label: "House Vey origin", meta: "Origin" },
+          { id: "l3", label: "Auger pact",       meta: "Canon" },
+        ],
+      },
+      timeline: {
+        id: "timeline", entityType: "timeline", title: "Timeline", sub: "Days, eras",
+        rows: [
+          { id: "t1", label: "The Auger Wake", meta: "Last week" },
+          { id: "t2", label: "Brec's letter",  meta: "3 nights ago" },
+          { id: "t3", label: "Glass Court",    meta: "Ch.5" },
+        ],
+      },
+      items: {
+        id: "items", entityType: "items", title: "Items", sub: "9 entries",
+        rows: [
+          { id: "i1", label: "Bone Auger",     meta: "Relic" },
+          { id: "i2", label: "Crown of Vey",   meta: "Regalia" },
+          { id: "i3", label: "Brec's blade",   meta: "Weapon" },
+        ],
+      },
+      bestiary: {
+        id: "bestiary", entityType: "bestiary", title: "Bestiary", sub: "1 in review",
+        rows: [
+          { id: "b1", label: "Pale Wraith",    meta: "Spectre", queue: 1 },
+          { id: "b2", label: "Reach Hound",    meta: "Beast" },
+        ],
+      },
+    };
+
+    const PANEL_KEYS = Object.keys(PANEL_LIB);
+
+    // -----------------------------------------------------------------
+    // Shared rail / Writer's Room
+    // -----------------------------------------------------------------
+    const RAIL_MAIN = [
+      { id: "home",  glyph: "⌂", label: "Home" },
+      { id: "today", glyph: "☀", label: "Today", badge: 4 },
+      { id: "wr",    glyph: "✎", label: "Writer's Room", badge: 12, route: true },
+    ];
+    const RAIL_ENTITIES = [
+      { id: "cast",          label: "Cast",          badge: 3 },
+      { id: "bestiary",      label: "Bestiary",      badge: 1 },
+      { id: "atlas",         label: "Atlas" },
+      { id: "items",         label: "Items" },
+      { id: "relationships", label: "Relationships" },
+      { id: "quests",        label: "Quests",        badge: 2 },
+      { id: "timeline",      label: "Timeline" },
+      { id: "lore",          label: "Lore", badge: 7 },
+    ];
+
+    const Rail = ({ openIds, pinnedIds, onOpen }) => (
+      <nav className="ps-rail" aria-label="Rail">
+        {RAIL_MAIN.map(it => (
+          <button key={it.id} className={"ps-rail__btn " + (it.route ? "is-route" : "")} title={it.label}>
+            <span className="ps-icon">{it.glyph}</span>
+            {it.badge && <span className="ps-badge">{it.badge}</span>}
+            <span className="ps-rail__tip">{it.label}</span>
+          </button>
+        ))}
+        <div className="ps-rail__sec">Entities</div>
+        {RAIL_ENTITIES.map(it => {
+          const isPinned = pinnedIds.includes(it.id);
+          const isOpen = openIds.includes(it.id);
+          const t = window.ENTITY_TYPES?.[it.id];
+          return (
+            <button
+              key={it.id}
+              className={"ps-rail__btn " + (isPinned ? "is-pinned" : isOpen ? "is-open" : "")}
+              onClick={() => onOpen(it.id)}
+              title={it.label}
+            >
+              {(isOpen || isPinned) && <span className="ps-dot"/>}
+              <span className="ps-glyph" style={{ background: t?.color || "var(--ink-3)" }}/>
+              {it.badge && <span className="ps-badge">{it.badge}</span>}
+              <span className="ps-rail__tip">{it.label}{isPinned ? " · pinned" : isOpen ? " · open" : ""}</span>
+            </button>
+          );
+        })}
+      </nav>
+    );
+
+    const WritersRoom = () => (
+      <section className="ps-wr" data-screen-label="Writer's Room (anchor)">
+        <div className="ps-wr__head">
+          <span>Chapter 7 · The Pale Reach</span>
+          <span className="ps-wr__head__chip">Anchor</span>
+          <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--ink-4)", textTransform: "uppercase", letterSpacing: ".1em" }}>3,142 words</span>
+        </div>
+        <div className="ps-wr__body">
+          <h3>Chapter 7 — The Pale Reach</h3>
+          <p>The wind off the <span className="em">Reach</span> tasted of salt and char. Aelinor stood at the lip of the cliff, the sea's grey hide rolling beneath her, and counted the ships she could no longer see.</p>
+          <p>"They came at dusk," <span className="em">Saren</span> said behind her, voice low. "Six hulls. Vey colours in the gunner's light."</p>
+          <p>She did not turn. "Brec?"</p>
+          <p>"Held the pass. Lost twelve. Asks if you'll send the auger."</p>
+          <p>The wind lifted her hair. Below, gulls keened into the dark — a sound like prayer, or grief. She thought of the bone in its silk, asleep in the wardroom; of the small dark queen she was supposed to be.</p>
+          <p>"Tell him no," she said. "Not yet."</p>
+        </div>
+      </section>
+    );
+
+    // -----------------------------------------------------------------
+    // Generic Panel (used by all concepts)
+    // -----------------------------------------------------------------
+    const Panel = ({ panel, isFront, onPin, onClose, onExpand, onFront, expanded, pinned }) => {
+      const t = window.ENTITY_TYPES?.[panel.entityType];
+      const style = t ? { "--ec": t.color } : {};
+      return (
+        <div
+          className={"ps-panel " + (pinned ? "is-pinned " : "") + (isFront ? "is-front " : "")}
+          style={style}
+          onMouseDown={onFront}
+        >
+          <div className="ps-panel__head">
+            <span className="ps-panel__entity">{t?.glyph || "◆"}</span>
+            <span className="ps-panel__title">{panel.title}</span>
+            <span className="ps-panel__sub">{panel.sub}</span>
+            <button className={"ps-panel__btn " + (pinned ? "is-on" : "")} onClick={(e) => { e.stopPropagation(); onPin(); }} title={pinned ? "Unpin" : "Pin"}>⚲</button>
+            {onExpand && <button className={"ps-panel__btn " + (expanded ? "is-on" : "")} onClick={(e) => { e.stopPropagation(); onExpand(); }} title="Expand">⤢</button>}
+            <button className="ps-panel__btn" onClick={(e) => { e.stopPropagation(); onClose(); }} title="Close">×</button>
+          </div>
+          <div className="ps-panel__body">
+            {panel.rows.map(r => (
+              <div key={r.id} className={"ps-row " + (r.selected ? "is-sel" : "")}>
+                <span className="ps-row__dot"/>
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+                {r.queue && <span className="ps-row__badge">{r.queue}</span>}
+                <span className="ps-row__meta">{r.meta}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    // -----------------------------------------------------------------
+    // CONCEPT A — Pinned Anchor + Stacked Column
+    // -----------------------------------------------------------------
+    const MAX_VISIBLE_A = 3;
+    const ConceptA = () => {
+      // Each panel: { id, pinned, expanded, openedAt }
+      const [panels, setPanels] = useState([
+        { id: "cast", pinned: true,  openedAt: 1 },
+        { id: "atlas", pinned: false, openedAt: 2 },
+        { id: "relationships", pinned: false, openedAt: 3 },
+      ]);
+      const [front, setFront] = useState("relationships");
+
+      const open = (id) => {
+        setPanels(curr => {
+          const exists = curr.find(p => p.id === id);
+          if (exists) { setFront(id); return curr; }
+          return [...curr, { id, pinned: false, openedAt: Date.now() }];
+        });
+        setFront(id);
+      };
+      const close = (id) => setPanels(curr => curr.filter(p => p.id !== id));
+      const pin = (id) => setPanels(curr => curr.map(p => p.id === id ? { ...p, pinned: !p.pinned } : p));
+
+      const pinned = panels.filter(p => p.pinned).sort((a,b) => a.openedAt - b.openedAt);
+      const unpinned = panels.filter(p => !p.pinned).sort((a,b) => a.openedAt - b.openedAt);
+      const visibleUnpinned = unpinned.slice(-MAX_VISIBLE_A);
+      const collapsedUnpinned = unpinned.slice(0, Math.max(0, unpinned.length - MAX_VISIBLE_A));
+
+      const openIds = panels.map(p => p.id);
+      const pinnedIds = pinned.map(p => p.id);
+
+      return (
+        <div className="ps-shell">
+          <div className="ps-top">
+            <span className="ps-top__title">Concept A</span>
+            <span className="ps-top__sub">Pinned Anchor · Stacked Column</span>
+            <span className="ps-top__spacer"/>
+            <span className="ps-top__chip">Pinned dock left · cap {MAX_VISIBLE_A}</span>
+          </div>
+          <Rail openIds={openIds} pinnedIds={pinnedIds} onOpen={open}/>
+          <div className="ps-work">
+            <WritersRoom/>
+            <div className="pa-pinned-zone">
+              {pinned.map(p => (
+                <Panel
+                  key={p.id} panel={PANEL_LIB[p.id]} pinned
+                  isFront={front === p.id}
+                  onPin={() => pin(p.id)} onClose={() => close(p.id)}
+                  onFront={() => setFront(p.id)}
+                />
+              ))}
+            </div>
+            <div className="pa-stack-zone">
+              {visibleUnpinned.map(p => (
+                <Panel
+                  key={p.id} panel={PANEL_LIB[p.id]}
+                  isFront={front === p.id}
+                  onPin={() => pin(p.id)} onClose={() => close(p.id)}
+                  onFront={() => setFront(p.id)}
+                />
+              ))}
+            </div>
+            {collapsedUnpinned.length > 0 && (
+              <div className="pa-collapsed-rail">
+                {collapsedUnpinned.map(p => {
+                  const def = PANEL_LIB[p.id];
+                  const t = window.ENTITY_TYPES?.[def.entityType];
+                  return (
+                    <div
+                      key={p.id} className="pa-collapsed-tab"
+                      style={{ "--ec": t?.color }}
+                      title="Click to bring forward"
+                      onClick={() => {
+                        setPanels(curr => curr.map(x => x.id === p.id ? { ...x, openedAt: Date.now() } : x));
+                        setFront(p.id);
+                      }}
+                    >
+                      <span>{def.title}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div className="ps-status">
+            <span>Mode · Writing</span>
+            <span style={{ marginLeft: "auto" }}>{pinned.length} pinned · {visibleUnpinned.length} stacked · {collapsedUnpinned.length} collapsed</span>
+          </div>
+        </div>
+      );
+    };
+
+    // -----------------------------------------------------------------
+    // CONCEPT B — Slot Tray (3 fixed slots; replace oldest unpinned)
+    // -----------------------------------------------------------------
+    const SLOT_COUNT = 3;
+    const ConceptB = () => {
+      // slots is array of length 3; each entry is { id, pinned } or null
+      const [slots, setSlots] = useState([
+        { id: "cast", pinned: true },
+        { id: "atlas", pinned: false },
+        null,
+      ]);
+      const [front, setFront] = useState(0);
+      const [toast, setToast] = useState(null);
+
+      const open = (id) => {
+        setSlots(curr => {
+          // bring to front if already open
+          const idx = curr.findIndex(s => s && s.id === id);
+          if (idx >= 0) { setFront(idx); return curr; }
+          // empty slot first
+          const empty = curr.findIndex(s => !s);
+          if (empty >= 0) {
+            const next = [...curr]; next[empty] = { id, pinned: false }; setFront(empty);
+            return next;
+          }
+          // replace oldest unpinned (first non-pinned in left→right order, excluding pinned)
+          const replaceIdx = curr.findIndex(s => s && !s.pinned);
+          if (replaceIdx < 0) {
+            setToast({ msg: "All slots are pinned. Unpin one to open " + PANEL_LIB[id].title, undo: null });
+            setTimeout(() => setToast(null), 2400);
+            return curr;
+          }
+          const replaced = curr[replaceIdx];
+          const next = [...curr]; next[replaceIdx] = { id, pinned: false }; setFront(replaceIdx);
+          setToast({
+            msg: PANEL_LIB[replaced.id].title + " replaced by " + PANEL_LIB[id].title,
+            undo: () => setSlots(c => { const n = [...c]; n[replaceIdx] = replaced; return n; }),
+          });
+          setTimeout(() => setToast(null), 3200);
+          return next;
+        });
+      };
+      const close = (i) => setSlots(curr => { const n = [...curr]; n[i] = null; return n; });
+      const pin = (i) => setSlots(curr => { const n = [...curr]; if (n[i]) n[i] = { ...n[i], pinned: !n[i].pinned }; return n; });
+
+      const openIds = slots.filter(Boolean).map(s => s.id);
+      const pinnedIds = slots.filter(s => s && s.pinned).map(s => s.id);
+
+      return (
+        <div className="ps-shell">
+          <div className="ps-top">
+            <span className="ps-top__title">Concept B</span>
+            <span className="ps-top__sub">Slot Tray · {SLOT_COUNT} fixed slots</span>
+            <span className="ps-top__spacer"/>
+            <span className="ps-top__chip">Replace oldest unpinned · undo toast</span>
+          </div>
+          <Rail openIds={openIds} pinnedIds={pinnedIds} onOpen={open}/>
+          <div className="ps-work">
+            <WritersRoom/>
+            <div className="sl-tray">
+              {slots.map((s, i) => (
+                <div key={i} className={"sl-slot " + (!s ? "sl-slot--empty" : "")}>
+                  {s && s.pinned && <span className="sl-slot__lock">PINNED</span>}
+                  {!s ? (
+                    <>
+                      <span className="sl-slot--empty__num">{i + 1}</span>
+                      <span>Slot {i + 1}</span>
+                      <span style={{ fontSize: 9, textTransform: "none", letterSpacing: 0, color: "var(--ink-4)" }}>open from rail</span>
+                    </>
+                  ) : (
+                    <Panel
+                      panel={PANEL_LIB[s.id]} pinned={s.pinned}
+                      isFront={front === i}
+                      onPin={() => pin(i)} onClose={() => close(i)}
+                      onFront={() => setFront(i)}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+            {toast && (
+              <div className="sl-toast">
+                <span>{toast.msg}</span>
+                {toast.undo && <button onClick={() => { toast.undo(); setToast(null); }}>Undo</button>}
+              </div>
+            )}
+          </div>
+          <div className="ps-status">
+            <span>Mode · Writing</span>
+            <span style={{ marginLeft: "auto" }}>{slots.filter(Boolean).length}/{SLOT_COUNT} slots used · {pinnedIds.length} pinned</span>
+          </div>
+        </div>
+      );
+    };
+
+    // -----------------------------------------------------------------
+    // CONCEPT C — Accordion Drawer
+    // -----------------------------------------------------------------
+    const MAX_EXPANDED = 3;
+    const ConceptC = () => {
+      const [items, setItems] = useState([
+        { id: "cast", pinned: true, expanded: true, openedAt: 1 },
+        { id: "atlas", pinned: false, expanded: true, openedAt: 2 },
+        { id: "quests", pinned: false, expanded: true, openedAt: 3 },
+        { id: "timeline", pinned: false, expanded: false, openedAt: 4 },
+        { id: "lore", pinned: false, expanded: false, openedAt: 5 },
+      ]);
+
+      const open = (id) => {
+        setItems(curr => {
+          const exists = curr.find(p => p.id === id);
+          if (exists) {
+            // toggle expand, respecting cap
+            return toggleExpand(curr, id);
+          }
+          return toggleExpand([...curr, { id, pinned: false, expanded: false, openedAt: Date.now() }], id);
+        });
+      };
+
+      const toggleExpand = (list, id) => {
+        const target = list.find(p => p.id === id);
+        if (!target) return list;
+        if (target.expanded && !target.pinned) {
+          // collapse it
+          return list.map(p => p.id === id ? { ...p, expanded: false } : p);
+        }
+        // expand it. if cap reached among unpinned, collapse the oldest unpinned-expanded
+        const expandedUnpinned = list.filter(p => p.expanded && !p.pinned && p.id !== id);
+        let next = list.map(p => p.id === id ? { ...p, expanded: true } : p);
+        const expandedCount = next.filter(p => p.expanded).length;
+        if (expandedCount > MAX_EXPANDED) {
+          const sorted = expandedUnpinned.sort((a,b) => a.openedAt - b.openedAt);
+          const collapseId = sorted[0]?.id;
+          if (collapseId) next = next.map(p => p.id === collapseId ? { ...p, expanded: false } : p);
+        }
+        return next;
+      };
+
+      const close = (id) => setItems(curr => curr.filter(p => p.id !== id));
+      const pin = (id) => setItems(curr => curr.map(p => p.id === id ? { ...p, pinned: !p.pinned, expanded: !p.pinned ? true : p.expanded } : p));
+
+      const openIds = items.map(p => p.id);
+      const pinnedIds = items.filter(p => p.pinned).map(p => p.id);
+      const expandedCount = items.filter(p => p.expanded).length;
+
+      return (
+        <div className="ps-shell">
+          <div className="ps-top">
+            <span className="ps-top__title">Concept C</span>
+            <span className="ps-top__sub">Accordion Drawer · all open, expand on demand</span>
+            <span className="ps-top__spacer"/>
+            <span className="ps-top__chip">Up to {MAX_EXPANDED} expanded</span>
+          </div>
+          <Rail openIds={openIds} pinnedIds={pinnedIds} onOpen={open}/>
+          <div className="ps-work">
+            <WritersRoom/>
+            <div className="ac-drawer">
+              <div className="ac-drawer__head">
+                <span>Open Panels</span>
+                <span className="ac-drawer__head__count">{expandedCount}/{MAX_EXPANDED} expanded · {items.length} open</span>
+              </div>
+              {items.map(it => {
+                const def = PANEL_LIB[it.id];
+                const t = window.ENTITY_TYPES?.[def.entityType];
+                return (
+                  <div
+                    key={it.id}
+                    className={"ac-item " + (it.expanded ? "is-expanded " : "is-collapsed ") + (it.pinned ? "is-pinned" : "")}
+                    style={{ "--ec": t?.color }}
+                  >
+                    <div className="ac-item__head" onClick={() => open(it.id)}>
+                      <span className="ac-item__chev">▶</span>
+                      <span className="ps-panel__entity" style={{ "--ec": t?.color }}>{t?.glyph || "◆"}</span>
+                      <span className="ps-panel__title">{def.title}</span>
+                      <span className="ps-panel__sub">{def.sub}</span>
+                      <span className="ac-item__actions">
+                        <button className={"ps-panel__btn " + (it.pinned ? "is-on" : "")} onClick={(e) => { e.stopPropagation(); pin(it.id); }} title={it.pinned ? "Unpin" : "Pin"}>⚲</button>
+                        <button className="ps-panel__btn" onClick={(e) => { e.stopPropagation(); close(it.id); }} title="Close">×</button>
+                      </span>
+                    </div>
+                    {it.expanded && (
+                      <div className="ac-item__body">
+                        {def.rows.map(r => (
+                          <div key={r.id} className={"ps-row " + (r.selected ? "is-sel" : "")}>
+                            <span className="ps-row__dot"/>
+                            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+                            {r.queue && <span className="ps-row__badge">{r.queue}</span>}
+                            <span className="ps-row__meta">{r.meta}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="ps-status">
+            <span>Mode · Writing</span>
+            <span style={{ marginLeft: "auto" }}>{items.length} open · {pinnedIds.length} pinned · {expandedCount} expanded</span>
+          </div>
+        </div>
+      );
+    };
+
+    // -----------------------------------------------------------------
+    // Mount on design canvas
+    // -----------------------------------------------------------------
+    const App = () => (
+      <DesignCanvas storageKey="loomwright-stacking-v1">
+        <DCSection
+          id="intro"
+          title="Panel stacking — three concepts"
+          subtitle="Writer's Room is always the anchor. Rail entities open as panels, never replace it. Try the rail buttons in each shell — open, pin, close, expand. ⚲ = pin · × = close · ⤢ = expand."
+        >
+        </DCSection>
+
+        <DCSection id="concepts" title="Three models" subtitle="Each shell is fully clickable.">
+          <DCArtboard id="a" label="A · Pinned Anchor + Stacked Column" width={1080} height={620}>
+            <ConceptA/>
+          </DCArtboard>
+          <DCArtboard id="b" label="B · Slot Tray (3 fixed slots)" width={1080} height={620}>
+            <ConceptB/>
+          </DCArtboard>
+          <DCArtboard id="c" label="C · Accordion Drawer" width={1080} height={620}>
+            <ConceptC/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection
+          id="notes"
+          title="How they differ"
+          subtitle="Trade-offs across the three"
+        >
+          <DCArtboard id="cmp" label="Comparison" width={1080} height={420}>
+            <div style={{ padding: "24px 32px", fontFamily: "var(--font-sans)", fontSize: 13, color: "var(--ink-1)", background: "var(--bg-paper)", height: "100%", overflow: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", borderBottom: "1px solid var(--line-2)" }}>
+                    <th style={{ padding: 8, fontFamily: "var(--font-display)" }}></th>
+                    <th style={{ padding: 8, fontFamily: "var(--font-display)" }}>A — Pinned Anchor</th>
+                    <th style={{ padding: 8, fontFamily: "var(--font-display)" }}>B — Slot Tray</th>
+                    <th style={{ padding: 8, fontFamily: "var(--font-display)" }}>C — Accordion Drawer</th>
+                  </tr>
+                </thead>
+                <tbody style={{ color: "var(--ink-2)" }}>
+                  {[
+                    ["Mental model",       "Pinned panels are anchors next to the page. New panels stack to the right.", "3 fixed slots. Opening a 4th replaces the oldest.", "All open panels live in a vertical drawer; expand a few at a time."],
+                    ["Writer's Room",      "Stays fixed-width on the left. Pinned + visible panels squeeze in beside.", "Stays fixed; tray is a fixed 3-column zone.", "Stays fixed; drawer is one fixed-width column."],
+                    ["Pinned panels",      "Sit in a 'pinned zone' immediately right of WR — closest to the manuscript.", "Locked in their slot. Visible 'PINNED' badge prevents replacement.", "Always expanded; gold edge bar; can't be auto-collapsed."],
+                    ["Overflow",           "Oldest unpinned collapses to a vertical tab; click to bring forward.", "Replace-with-undo toast. Predictable; never more than 3.", "Cap on expanded count — oldest unpinned auto-collapses to a header strip."],
+                    ["Comparison strength","Best for 4–5 entities at once. Pinned anchors stay 'sticky' for cross-reference.", "Best for tight 1:1:1 comparisons. Layout is highly predictable.", "Best when juggling many panels but only viewing 2–3 in detail."],
+                    ["Cost",               "Horizontal real estate; manuscript narrows. Collapse rail introduces a third zone.", "Hard cap can frustrate power users. Replace-on-open feels disruptive without trust in undo.", "Vertical scrolling inside the drawer; less side-by-side viewing."],
+                  ].map(([k, ...vs]) => (
+                    <tr key={k} style={{ borderBottom: "1px solid var(--line-2)", verticalAlign: "top" }}>
+                      <td style={{ padding: 10, fontWeight: 600, color: "var(--ink-1)", width: 120 }}>{k}</td>
+                      {vs.map((v, i) => <td key={i} style={{ padding: 10 }}>{v}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+  </script>
+</body>
+</html>

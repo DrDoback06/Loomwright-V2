@@ -1,0 +1,288 @@
+/* =====================================================================
+   tokens.css — Design tokens (light parchment + midnight ink)
+   Drives every surface, type, shadow, radius. Theme switches via
+   data-theme on <html>.
+   ===================================================================== */
+
+:root {
+  /* Type stacks — switchable via Tweaks (data-typeset on <html>) */
+  --font-display: "Cormorant Garamond", "EB Garamond", Georgia, serif;
+  --font-serif:   "Source Serif 4", "Source Serif Pro", Georgia, serif;
+  --font-sans:    "Inter Tight", "Inter", -apple-system, system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Type sizes (balanced density) */
+  --fs-3xs: 10px;
+  --fs-2xs: 11px;
+  --fs-xs:  12px;
+  --fs-sm:  13px;
+  --fs-md:  14px;
+  --fs-lg:  16px;
+  --fs-xl:  18px;
+  --fs-2xl: 22px;
+  --fs-3xl: 28px;
+  --fs-4xl: 36px;
+  --fs-5xl: 48px;
+
+  /* Spacing scale */
+  --sp-0:  0px;
+  --sp-1:  2px;
+  --sp-2:  4px;
+  --sp-3:  6px;
+  --sp-4:  8px;
+  --sp-5:  10px;
+  --sp-6:  12px;
+  --sp-7:  14px;
+  --sp-8:  16px;
+  --sp-9:  20px;
+  --sp-10: 24px;
+  --sp-11: 32px;
+  --sp-12: 40px;
+  --sp-13: 48px;
+  --sp-14: 64px;
+
+  /* Radii */
+  --r-1: 2px;
+  --r-2: 4px;
+  --r-3: 6px;
+  --r-4: 8px;
+  --r-5: 10px;
+  --r-6: 14px;
+  --r-pill: 999px;
+
+  /* Density modes — set via data-density on <html> */
+  --density-row: 30px;     /* leftRail item, list row */
+  --density-pad: 12px;     /* card/panel default padding */
+  --density-gap: 10px;
+  --density-control: 30px; /* button height */
+
+  /* Layout — fixed chrome metrics */
+  --topbar-h: 48px;
+  --statusbar-h: 28px;
+  --leftrail-w-collapsed: 56px;
+  --leftrail-w-expanded: 224px;
+  --rightrail-w: 52px;
+  --panel-w-default: 380px;
+  --panel-w-expanded: 540px;
+
+  /* Motion */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* ---------------------------------------------------------------------
+     Z-index ladder — final, single source of truth.
+     Order (low → high):
+       1. Shell chrome      — base layer (writers' room, app-work content)
+       2. Rails & topbar    — left/right rail, topbar, statusbar
+       3. Side panels       — panel stack
+       4. Full workspaces   — full-screen workspace overlays (.fws-overlay,
+                               .qe-fs, .tan-fs)
+       5. Composition       — Writer's Room floating composition overlay
+       6. Modal backdrop    — heavyweight modal scrims (uses --z-overlay)
+       7. Entity editor     — universal creation/edit panel (always on top
+                               of workspaces + composition)
+       8. Adaptive wheel    — right-click context wheel
+       9. Dialogs           — confirm / destructive prompts
+      10. Command palette   — global ⌘K
+      11. Tooltips          — hover popovers, drag previews
+     --------------------------------------------------------------------- */
+  --z-shell: 0;
+  --z-leftrail: 30;
+  --z-rightrail: 30;
+  --z-statusbar: 30;
+  --z-topbar: 40;
+  --z-panel: 50;
+  --z-panels: var(--z-panel);              /* alias */
+  --z-workspace: 60;
+  --z-workspace-toolbar: 64;
+  --z-workspace-popover: 68;
+  --z-composition-overlay: 75;
+  --z-overlay: 100;                        /* modal backdrop layer */
+  --z-entity-editor: 110;                  /* the editor panel itself */
+  --z-wheel: 150;
+  --z-dialog: 200;
+  --z-palette: 220;
+  --z-tooltip: 300;
+}
+
+/* Density variants */
+[data-density="spacious"] {
+  --density-row: 38px;
+  --density-pad: 16px;
+  --density-gap: 14px;
+  --density-control: 36px;
+}
+[data-density="compact"] {
+  --density-row: 26px;
+  --density-pad: 8px;
+  --density-gap: 6px;
+  --density-control: 26px;
+}
+
+/* Type sets */
+[data-typeset="literary"] {
+  --font-display: "Cormorant Garamond", "EB Garamond", Georgia, serif;
+  --font-serif:   "Source Serif 4", "Source Serif Pro", Georgia, serif;
+  --font-sans:    "Inter Tight", "Inter", system-ui, sans-serif;
+}
+[data-typeset="archive"] {
+  --font-display: "EB Garamond", "Cormorant Garamond", Georgia, serif;
+  --font-serif:   "EB Garamond", Georgia, serif;
+  --font-sans:    "Inter Tight", "Inter", system-ui, sans-serif;
+}
+[data-typeset="workhorse"] {
+  --font-display: "Inter Tight", "Inter", system-ui, sans-serif;
+  --font-serif:   "Source Serif 4", Georgia, serif;
+  --font-sans:    "Inter Tight", "Inter", system-ui, sans-serif;
+}
+
+/* =====================================================================
+   PARCHMENT-LIGHT theme
+   ===================================================================== */
+[data-theme="parchment-light"] {
+  /* Surfaces */
+  --bg-deep:    #ebe2cc;   /* outer chrome / rails */
+  --bg-app:     #f1e9d4;   /* app background */
+  --bg-paper:   #f8f1de;   /* workspace paper */
+  --bg-paper-2: #fbf6e8;   /* card / panel */
+  --bg-elev:    #ffffff;   /* highest elevation (modals, palette) */
+  --bg-sunken:  #e3d9bf;   /* inset wells */
+  --bg-tint:    rgba(120, 96, 50, 0.06);
+
+  /* Ink (text) */
+  --ink-1:   #2a2218;   /* primary */
+  --ink-2:   #4a3f2c;   /* secondary */
+  --ink-3:   #76684c;   /* tertiary */
+  --ink-4:   #9a8c6e;   /* muted */
+  --ink-5:   #b8ac8e;   /* faint */
+  --ink-on-accent: #1d150a;
+
+  /* Lines */
+  --line-1: rgba(58, 44, 18, 0.10);
+  --line-2: rgba(58, 44, 18, 0.16);
+  --line-3: rgba(58, 44, 18, 0.28);
+  --line-strong: rgba(58, 44, 18, 0.55);
+
+  /* Accent — antique gold (set by brand.colors.accent at runtime) */
+  --accent:       #9a7b3a;
+  --accent-deep:  #5a4520;
+  --accent-soft:  #e7d9b5;
+  --accent-on:    #fdf8eb;
+
+  /* Focus ring */
+  --focus-ring: 0 0 0 2px var(--bg-paper-2), 0 0 0 4px var(--accent);
+
+  /* Shadows — warm, low, paper-like */
+  --shadow-1: 0 1px 1px rgba(70, 50, 20, 0.06), 0 1px 0 rgba(70, 50, 20, 0.04) inset;
+  --shadow-2: 0 1px 2px rgba(70, 50, 20, 0.08), 0 4px 14px -6px rgba(70, 50, 20, 0.10);
+  --shadow-3: 0 2px 4px rgba(70, 50, 20, 0.10), 0 12px 28px -10px rgba(70, 50, 20, 0.18);
+  --shadow-4: 0 4px 8px rgba(70, 50, 20, 0.14), 0 24px 60px -16px rgba(70, 50, 20, 0.30);
+  --shadow-stamp: inset 0 0 0 1px var(--line-2), 0 1px 0 rgba(255,255,255,0.6) inset;
+
+  /* Paper texture (subtle noise via SVG, optional layer) */
+  --paper-grain:
+    radial-gradient(1100px 700px at 20% 10%, rgba(255, 250, 230, 0.6) 0%, transparent 60%),
+    radial-gradient(900px 600px at 90% 90%, rgba(220, 200, 160, 0.18) 0%, transparent 60%);
+
+  /* Selection */
+  --select-bg: rgba(154, 123, 58, 0.22);
+  --select-fg: var(--ink-1);
+}
+
+/* =====================================================================
+   MIDNIGHT-INK theme
+   ===================================================================== */
+[data-theme="midnight-ink"] {
+  --bg-deep:    #0e0d0a;
+  --bg-app:     #15140f;
+  --bg-paper:   #1c1a14;
+  --bg-paper-2: #221f17;
+  --bg-elev:    #2a2619;
+  --bg-sunken:  #100f0b;
+  --bg-tint:    rgba(220, 195, 130, 0.05);
+
+  --ink-1:   #f1e7cf;
+  --ink-2:   #d6c9a6;
+  --ink-3:   #a89a78;
+  --ink-4:   #7a6f56;
+  --ink-5:   #524a39;
+  --ink-on-accent: #1d150a;
+
+  --line-1: rgba(220, 195, 130, 0.08);
+  --line-2: rgba(220, 195, 130, 0.14);
+  --line-3: rgba(220, 195, 130, 0.22);
+  --line-strong: rgba(220, 195, 130, 0.40);
+
+  --accent:       #c9a24a;
+  --accent-deep:  #e6c478;
+  --accent-soft:  rgba(201, 162, 74, 0.18);
+  --accent-on:    #1a1407;
+
+  --focus-ring: 0 0 0 2px var(--bg-paper-2), 0 0 0 4px var(--accent);
+
+  --shadow-1: 0 1px 1px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.45), 0 6px 18px -6px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 4px 10px rgba(0, 0, 0, 0.5), 0 18px 40px -10px rgba(0, 0, 0, 0.6);
+  --shadow-4: 0 6px 14px rgba(0, 0, 0, 0.55), 0 36px 80px -20px rgba(0, 0, 0, 0.7);
+  --shadow-stamp: inset 0 0 0 1px var(--line-2);
+
+  --paper-grain:
+    radial-gradient(1100px 700px at 20% 10%, rgba(60, 52, 30, 0.4) 0%, transparent 60%),
+    radial-gradient(900px 600px at 90% 90%, rgba(20, 16, 8, 0.5) 0%, transparent 60%);
+
+  --select-bg: rgba(201, 162, 74, 0.28);
+  --select-fg: var(--ink-1);
+}
+
+/* =====================================================================
+   Base
+   ===================================================================== */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--bg-app);
+  color: var(--ink-1);
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: var(--select-bg); color: var(--select-fg); }
+:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--r-2); }
+
+/* Hairline rule helper */
+.hr {
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--line-2) 12%, var(--line-2) 88%, transparent);
+}
+
+/* Utility: subtle paper grain layer */
+.paper-grain {
+  position: relative;
+  isolation: isolate;
+}
+.paper-grain::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: var(--paper-grain);
+  pointer-events: none;
+  z-index: 0;
+}
+.paper-grain > * { position: relative; z-index: 1; }
+
+/* Tiny icon stroke alignment */
+.icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.icon svg { display: block; }
+
+/* Scrollbars (subtle) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line-3); border-radius: var(--r-pill); border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--line-strong); border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Stamp-like inner ring used on archive cards */
+.stamp { box-shadow: var(--shadow-stamp); }

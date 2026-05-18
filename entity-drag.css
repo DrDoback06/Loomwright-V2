@@ -1,0 +1,221 @@
+/* =====================================================================
+   entity-drag.css — Global entity drag/drop visuals + status pills.
+   - Every draggable entity card/chip uses .ent-draggable.
+   - Drop targets opt-in with data-ent-drop="kind" attrs.
+   - Body gets data-ent-dragging="<entityType>" while a drag is live,
+     which lights valid targets in antique gold and pulses the WR edges.
+   ===================================================================== */
+
+/* ----- Draggable card lift -------------------------------------- */
+.ent-draggable {
+  cursor: grab;
+}
+.ent-draggable:active { cursor: grabbing; }
+.ent-draggable[data-grip="true"] {
+  position: relative;
+}
+.ent-draggable.is-dragging,
+[draggable="true"].is-dragging {
+  opacity: 0.55;
+  transform: translateY(-1px) rotate(-0.3deg);
+  box-shadow: var(--shadow-3);
+  transition: transform var(--motion-fast) var(--ease-out), opacity var(--motion-fast) var(--ease-out);
+}
+
+/* Tiny grip handle marker on the left of any draggable */
+.ent-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px; height: 14px;
+  opacity: 0.35;
+  color: var(--ink-3);
+  cursor: grab;
+  flex-shrink: 0;
+}
+.ent-grip:hover { opacity: 0.7; }
+
+/* ----- Floating drag preview (we manage manually for nicer visuals) - */
+.ent-drag-preview {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  pointer-events: none;
+  padding: 6px 10px;
+  background: var(--bg-paper-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-3);
+  font-family: var(--font-serif);
+  font-size: var(--fs-sm);
+  color: var(--ink-1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transform: translate(8px, 8px) rotate(-1.5deg);
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ent-drag-preview__type {
+  font-family: var(--font-sans);
+  font-size: var(--fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-deep);
+  padding: 1px 4px;
+  background: var(--accent-soft);
+  border-radius: var(--r-1);
+}
+
+/* ----- Drop targets ------------------------------------------------ */
+/* When a drag is happening, every drop target gets the gold glow. */
+[data-ent-dragging] [data-ent-drop] {
+  outline: 1.5px dashed var(--accent);
+  outline-offset: -3px;
+  background: linear-gradient(0deg, var(--accent-soft), transparent 40%);
+  transition: outline-color var(--motion-fast) var(--ease-out);
+  position: relative;
+}
+[data-ent-dragging] [data-ent-drop].is-hover,
+[data-ent-dragging] [data-ent-drop]:has(.is-over) {
+  outline: 2px solid var(--accent-deep);
+  background: linear-gradient(0deg, var(--accent-soft), var(--accent-soft) 65%, transparent);
+  box-shadow: 0 0 0 4px rgba(154, 123, 58, 0.18);
+}
+
+/* Specifically, when dragging, the writer's room canvas edges pulse. */
+[data-ent-dragging] [data-ui="WritersRoomScreen"] .wr-canvas {
+  animation: ent-edge-pulse 1.4s var(--ease-in-out) infinite;
+  border-radius: var(--r-4);
+}
+@keyframes ent-edge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(154, 123, 58, 0); }
+  50%       { box-shadow: 0 0 0 8px rgba(154, 123, 58, 0.22); }
+}
+
+/* ----- Status pills ------------------------------------------------ */
+.ent-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px 1px 4px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-sans);
+  font-size: var(--fs-3xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 16px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-paper-2);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.ent-status::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  display: inline-block;
+}
+.ent-status--active    { color: #3e6a3e; background: rgba(78, 130, 78, 0.08); border-color: rgba(78, 130, 78, 0.25); }
+.ent-status--active::before { background: #4e824e; }
+.ent-status--important { color: #7a4a14; background: rgba(154, 123, 58, 0.14); border-color: rgba(154, 123, 58, 0.4); }
+.ent-status--important::before { background: var(--accent-deep); }
+.ent-status--needs-review { color: #93530f; background: rgba(196, 134, 60, 0.12); border-color: rgba(196, 134, 60, 0.4); }
+.ent-status--needs-review::before { background: #c4863c; }
+.ent-status--dormant   { color: #6b5d4a; background: rgba(120, 100, 70, 0.08); border-color: rgba(120, 100, 70, 0.25); font-style: italic; }
+.ent-status--dormant::before { background: #9a8c6e; }
+.ent-status--retired   { color: var(--ink-4); background: var(--bg-sunken); border-color: var(--line-1); text-decoration: line-through; }
+.ent-status--retired::before { background: var(--ink-5); }
+.ent-status--hidden    { color: var(--ink-4); background: var(--bg-sunken); border-color: var(--line-1); }
+.ent-status--hidden::before { background: var(--ink-4); }
+.ent-status--unresolved{ color: #8f3a2b; background: rgba(168, 74, 58, 0.10); border-color: rgba(168, 74, 58, 0.30); }
+.ent-status--unresolved::before { background: #a84a3a; }
+.ent-status--contradiction { color: #8f3a2b; background: rgba(168, 74, 58, 0.16); border-color: rgba(168, 74, 58, 0.45); }
+.ent-status--contradiction::before { background: #a84a3a; }
+.ent-status--draft     { color: var(--ink-3); background: var(--bg-paper-2); border-color: var(--line-2); font-style: italic; }
+.ent-status--draft::before { background: var(--ink-4); }
+.ent-status--archived  { color: var(--ink-4); background: var(--bg-sunken); border-color: var(--line-1); }
+.ent-status--archived::before { background: var(--ink-5); }
+
+/* Status menu (dropdown) */
+.ent-status-menu {
+  position: absolute;
+  z-index: var(--z-overlay);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-3);
+  min-width: 220px;
+  padding: 4px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+}
+.ent-status-menu__group {
+  padding: 6px 10px;
+  font-size: var(--fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+  border-top: 1px solid var(--line-1);
+  margin-top: 2px;
+}
+.ent-status-menu__group:first-child { border-top: none; margin-top: 0; }
+.ent-status-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--r-2);
+  cursor: pointer;
+  color: var(--ink-1);
+  user-select: none;
+}
+.ent-status-menu__item:hover { background: var(--bg-tint); }
+.ent-status-menu__item--current { background: var(--accent-soft); color: var(--accent-deep); }
+.ent-status-menu__item--danger:hover { background: rgba(168, 74, 58, 0.12); color: #8f3a2b; }
+.ent-status-menu__sep {
+  height: 1px;
+  background: var(--line-1);
+  margin: 4px 0;
+}
+
+/* Mention-gap warning */
+.ent-mention-gap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-sans);
+  font-size: var(--fs-3xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: #93530f;
+  background: rgba(196, 134, 60, 0.10);
+  border: 1px solid rgba(196, 134, 60, 0.3);
+}
+.ent-mention-gap__icon { font-size: 10px; }
+
+/* Sleep/wake button */
+.ent-sleep-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-2);
+  background: var(--bg-paper-2);
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: var(--fs-3xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out);
+}
+.ent-sleep-btn:hover { background: var(--bg-elev); border-color: var(--line-3); }
+.ent-sleep-btn--wake { color: var(--accent-deep); border-color: var(--accent); background: var(--accent-soft); }
