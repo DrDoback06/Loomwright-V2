@@ -1,3 +1,66 @@
+# Design Final Audit
+
+## Verified Design Boundaries
+
+- No UI redesign was performed.
+- Existing panels, routes, workspaces, drawers, and overlays remain in place.
+- `Loomwright Shell.html` remains the source of truth.
+- `index.html` remains a redirect to `Loomwright Shell.html`.
+- `Loomwright.bundle.jsx` was not edited.
+
+## Verified Structure
+
+- Main routes: Home, Today, Writer's Room.
+- Stackable panels: Cast, Bestiary, Locations, Items, Classes, Races, Stats, Skill Trees, Relationships, Quests, Events, Timeline, Lore/Canon, Tangle, Speed Reader, References, Settings, Trash.
+- Full workspaces: hosted by `FullWorkspaceHost`.
+- Entity editor: `EntityEditor` right-docked drawer.
+- Composition overlay: `CompositionOverlay`.
+- Settings Control Centre: `ControlCentreWorkspace` + `settings-rich.jsx`.
+- References/Onboarding: `ResearchLibraryWorkspace` + inline onboarding editor.
+
+## Changes Made
+
+- Added `backend-services.jsx`.
+- Loaded `backend-services.jsx` before `app.jsx`.
+- Wired `app.jsx` to:
+  - refresh panels from persistent entity data,
+  - save entities from the Entity Editor,
+  - persist the composition overlay,
+  - restore saved Writer's Room title snapshots.
+- Wired `settings-rich.jsx` to persist settings and encrypt BYOK keys.
+- Wired `workspaces-system.jsx` onboarding edits to persistent storage and Project Intelligence merge.
+- Added backend implementation guide and handoff docs.
+
+## Security Audit
+
+- API keys are user-provided only.
+- API keys are encrypted with Web Crypto AES-GCM before storage.
+- No provider test sends a real network request.
+- AI Handoff remains copy/paste/export/import only.
+- Local-only mode and user confirmation language remain visible.
+
+## Remaining Design-Only Items
+
+- Writer's Room entity double-click still supports the existing fuzzy demo fallback; persisted entity IDs are available for future exact linking.
+- Extraction/review remains mocked/placeheld rather than real NLP.
+- Trash restore/delete has a service layer, but the existing workspace buttons are still mostly presentational.
+- Rich manuscript editing is not redesigned; save snapshots preserve current rendered text/title.
+
+## QA Findings
+
+- Baseline `npm run validate && npm run build` passed before backend changes.
+- Final validation should pass with the new `backend-services.jsx` shell reference.
+- Manual browser QA should confirm:
+  - no console crashes on load,
+  - panels open/close/pin,
+  - entity editor saves,
+  - Settings Control Centre opens,
+  - References → Onboarding Answers opens,
+  - project export buttons download JSON.
+
+## Safe for Future Agents
+
+The implementation is intentionally conservative: it adds local backend services behind the existing static UI without changing layout, styling, panel structure, or workspace routing.
 # Loomwright v2 — Final Design Audit
 
 Snapshot of the final repair / handoff readiness pass. What was verified, what

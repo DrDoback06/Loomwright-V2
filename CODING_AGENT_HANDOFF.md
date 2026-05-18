@@ -1,3 +1,136 @@
+# Coding Agent Handoff
+
+## Source-of-Truth Files
+
+- Entry: `Loomwright Shell.html`
+- Redirect: `index.html`
+- Root app: `app.jsx`
+- Local backend layer: `backend-services.jsx`
+- Entity editor: `entity-editor.jsx`, `entity-editor-configs*.jsx`
+- Panels: `panel-stack.jsx`, `panels.jsx`, `cast.jsx`, `upgrades-*.jsx`
+- Workspaces: `full-workspaces.jsx`, `workspaces-rpg.jsx`, `workspaces-narrative.jsx`, `workspaces-system.jsx`
+- Settings: `settings-rich.jsx`
+- AI handoff: `ai-handoff.jsx`
+
+Do not edit `Loomwright.bundle.jsx`; the shell does not load it.
+
+## What Was Implemented
+
+- Added `backend-services.jsx`, a static-shell-compatible local backend.
+- Added IndexedDB persistence with localStorage mirror under `lw:v2:*`.
+- Seeded the persistent entity store from existing demo globals.
+- Wired `EntityEditor` saves to `EntityService`.
+- Draft saves create review queue placeholder items.
+- Save + Add stores the entity and drops it into the Writer's Room composition overlay.
+- Persisted the composition overlay.
+- Added manuscript save snapshots from Writer's Room save/extract buttons.
+- Persisted Settings sections through `SettingsService`.
+- Encrypted BYOK API keys through Web Crypto AES-GCM in `KeysService`.
+- Persisted onboarding answers and enabled Project Intelligence merge.
+- Added project/entity/settings export/import delegate handlers.
+- Added AI handoff event logging/import handling.
+
+## Core Globals
+
+```js
+window.LoomwrightBackend
+window.StorageService
+window.EntityService
+window.ReferencesService
+window.OnboardingService
+window.ProjectIntelService
+window.KeysService
+```
+
+## Important Storage Keys
+
+- `entities`
+- `references`
+- `onboarding_answers`
+- `project_intelligence`
+- `settings`
+- `ai_provider_settings`
+- `api_keys_encrypted`
+- `review_queue`
+- `manuscript`
+- `composition_overlay`
+- `ai_handoff_log`
+- `trash`
+
+## Event Flow
+
+```mermaid
+flowchart LR
+  Editor[EntityEditor] --> App[app.jsx saveEntityFromEditor]
+  App --> EntityService[EntityService.save]
+  EntityService --> Storage[StorageService]
+  Storage --> IDB[(IndexedDB)]
+  Storage --> LS[(localStorage mirror)]
+  EntityService --> Panels[PanelStack live decoration]
+  AI[AIHandoffDrawer] --> Events[lw:ai-handoff-* events]
+  Events --> Handoff[HandoffService]
+  Settings[Settings Control Centre] --> Keys[KeysService AES-GCM]
+```
+
+## Data Model Reminder
+
+Entity base:
+
+```js
+{
+  id, type, name, aliases, summary, description,
+  status, flags, tags, sourceMentions,
+  reviewQueueCount, createdAt, updatedAt
+}
+```
+
+Project Intelligence:
+
+```js
+{
+  projectFoundation,
+  writingStyleGuide,
+  toneKeywords,
+  canonRules,
+  characterSummaries,
+  extractionRules,
+  privacySettings,
+  lastUpdated
+}
+```
+
+## Known Constraints
+
+- No real AI calls are made. Provider test connection is mocked.
+- Key encryption is local AES-GCM using Web Crypto and a browser-local root key. It protects against casual localStorage inspection but is not a substitute for OS credential storage.
+- Writer's Room manuscript persistence snapshots the current rendered title/body text on save. The rich inline demo manuscript remains React-rendered static content.
+- The app is static/global-script based, not a bundler module graph.
+
+## Continue-From-Here Tasks
+
+1. Add deeper UI affordances for editing existing entities from panel detail views.
+2. Replace fuzzy manuscript entity focus with fully ID-based links everywhere.
+3. Extend `TrashService` into panel/workspace restore/delete buttons.
+4. Add automated browser smoke tests if a Playwright/Cypress setup is introduced.
+5. If real AI calls are ever added, keep BYOK, explicit user confirmation, and local-only defaults.
+
+## QA Commands
+
+```bash
+npm run validate
+npm run build
+npm run dev
+```
+
+Manual smoke:
+
+- Open Writer's Room.
+- Open Cast/Locations/Items panels.
+- Create an entity as draft and active.
+- Save + Add to Composition.
+- Open Settings → AI providers; store/clear a key.
+- Open References → Onboarding Answers; edit/apply JSON.
+- Export project data from Settings → Import/export.
 # Loomwright v2 — Coding Agent Handoff
 
 This document is the bridge between the **design build** of Loomwright v2 and the

@@ -145,6 +145,7 @@ const AppShell = () => {
 
   // Panels (docked side-panel stack)
   const [panels, setPanels] = _us_a(INITIAL_PANELS);
+  const [dataVersion, setDataVersion] = _us_a(0);
   const [lastRailClick, setLastRailClick] = _us_a(null);
 
   // Cross-panel focus map: { [entityType]: { id, label, ts } }
@@ -223,11 +224,14 @@ const AppShell = () => {
   const exitPanelWorkspace = _uc_a(() => setPanelWorkspace((s) => ({ ...s, open: false })), []);
 
   // ----- Writer's Room Composition Overlay -----
-  const [overlay, setOverlay] = _us_a({
-    open: false, minimised: false, pinned: false,
-    entities: [], instructions: "",
-    settings: { mode: "new-scene", pov: "Match current", length: "Medium (400–800)", tone: "Match manuscript voice" },
-    contextOptions: { currentChapter: true, projectIntel: true, obeyCanon: true, preserveVoices: true, avoidContradictions: true },
+  const [overlay, setOverlay] = _us_a(() => {
+    const persisted = window.LoomwrightBackend?.CompositionService?.loadSync(null);
+    return persisted || {
+      open: false, minimised: false, pinned: false,
+      entities: [], instructions: "",
+      settings: { mode: "new-scene", pov: "Match current", length: "Medium (400–800)", tone: "Match manuscript voice" },
+      contextOptions: { currentChapter: true, projectIntel: true, obeyCanon: true, preserveVoices: true, avoidContradictions: true },
+    };
   });
   const openCompositionOverlay = _uc_a(() => setOverlay((s) => ({ ...s, open: true, minimised: false })), []);
   const closeCompositionOverlay = _uc_a(() => setOverlay((s) => ({ ...s, open: false })), []);
@@ -254,6 +258,55 @@ const AppShell = () => {
   const setCompositionSetting = _uc_a((key, value) => setOverlay((s) => ({ ...s, settings: { ...s.settings, [key]: value } })), []);
   const toggleCompositionContext = _uc_a((key) => setOverlay((s) => ({ ...s, contextOptions: { ...s.contextOptions, [key]: !s.contextOptions[key] } })), []);
   const clearCompositionAll = _uc_a(() => setOverlay((s) => ({ ...s, entities: [], instructions: "" })), []);
+
+  _ue_a(() => {
+    window.LoomwrightBackend?.CompositionService?.save(overlay);
+  }, [overlay]);
+
+  const decoratePanelWithLiveData = _uc_a((panel) => (
+    window.LoomwrightBackend?.EntityService?.decoratePanel(panel) || panel
+  ), []);
+
+  const refreshPersistentData = _uc_a(() => {
+    setDataVersion(Date.now());
+    setPanels((curr) => curr.map((p) => decoratePanelWithLiveData(p)));
+  }, [decoratePanelWithLiveData]);
+
+  _ue_a(() => {
+    const refresh = () => refreshPersistentData();
+    window.addEventListener("lw:backend-ready", refresh);
+    window.addEventListener("lw:entity-store-updated", refresh);
+    window.addEventListener("lw:references-updated", refresh);
+    window.addEventListener("lw:project-imported", refresh);
+    refresh();
+    return () => {
+      window.removeEventListener("lw:backend-ready", refresh);
+      window.removeEventListener("lw:entity-store-updated", refresh);
+      window.removeEventListener("lw:references-updated", refresh);
+      window.removeEventListener("lw:project-imported", refresh);
+    };
+  }, [refreshPersistentData]);
+
+  _ue_a(() => {
+    // Restore the last explicitly saved Writer's Room title/body snapshot.
+    // The manuscript body is still demo-rendered React content; we restore
+    // only user-edited text surfaces after mount to avoid redesigning it.
+    const restore = () => {
+      const canvas = document.querySelector("[data-ui='ManuscriptCanvas']");
+      const chapterId = canvas?.getAttribute("data-chapter-id");
+      if (!chapterId) return;
+      const saved = window.LoomwrightBackend?.ManuscriptService?.loadChapterSync(chapterId);
+      if (!saved) return;
+      const title = canvas.querySelector(".wr-canvas__title");
+      if (title && saved.title && title.innerText !== saved.title) title.innerText = saved.title;
+    };
+    const t = setTimeout(restore, 120);
+    window.addEventListener("lw:manuscript-saved", restore);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("lw:manuscript-saved", restore);
+    };
+  }, [routeId, dataVersion]);
 
   // Listen for global "lw:open-entity-editor" / "lw:open-panel" events from
   // any panel that wants to launch the editor without prop-drilling.
@@ -547,6 +600,58 @@ const AppShell = () => {
     }));
   }, []);
 
+  const saveEntityFromEditor = _uc_a((payload, opts = {}) => {
+    const backend = window.LoomwrightBackend;
+    const entityType = payload?.entityType || "generic";
+    const fields = payload?.payload || {};
+    const mode = opts.mode || "active";
+    const status = mode === "draft" ? "draft" : "active";
+
+    if (!backend?.EntityService) {
+      if (mode === "compose") {
+        dropEntityIntoComposition({
+          entityType,
+          id: fields.id || ("new-" + Date.now()),
+          name: fields.name || fields.title || "Untitled",
+          summary: fields.summary,
+        });
+      }
+      return;
+    }
+
+    backend.EntityService.save(entityType, fields, { status }).then((entity) => {
+      if (backend.EntityService.normaliseType(entityType) === "references") {
+        backend.ReferencesService?.save({
+          id: entity.id,
+          kind: entity.kind || fields.kind || "note",
+          title: entity.title || entity.name,
+          content: entity.content || entity.summary || "",
+          aiContext: entity.aiContext ?? true,
+          style: entity.style,
+          canon: entity.canon,
+          linkedEntities: entity.linkedEntities || [],
+        });
+      }
+
+      if (mode === "compose") {
+        dropEntityIntoComposition({
+          entityType: entity.type,
+          id: entity.id,
+          name: entity.name || entity.title || "Untitled",
+          summary: entity.summary,
+        });
+      }
+
+      const panelKind = ENTITY_TYPE_TO_PANEL_KIND[entity.type] || entity.type;
+      if (PANEL_PRESETS[panelKind]) onOpenPanel(panelKind);
+      refreshPersistentData();
+      setSyncState("saved");
+    }).catch((err) => {
+      console.error("[Loomwright] Failed to save entity", err);
+      setSyncState("error");
+    });
+  }, [dropEntityIntoComposition, onOpenPanel, refreshPersistentData]);
+
   const onOpenProfile = _uc_a(() => {}, []);
   const onSelectProject = _uc_a(() => {}, []);
   const onSelectBook = _uc_a(() => {}, []);
@@ -584,9 +689,11 @@ const AppShell = () => {
   // Compute global queue count
   const globalQueueCount = NAV_ITEMS.reduce((acc, n) => acc + (n.queue || 0), 0);
 
+  const livePanels = panels.map((p) => decoratePanelWithLiveData(p));
+
   // Selected entity for top bar (first selected row in any panel)
   const selectedEntity = (() => {
-    for (const p of panels) {
+    for (const p of livePanels) {
       const r = (p.rows || []).find((x) => x.selected);
       if (r) return { type: p.entityType || "cast", label: r.label };
     }
@@ -700,7 +807,7 @@ const AppShell = () => {
           {/* Stacked panels — Concept A: pinned anchor + unpinned stack + collapsed rail */}
           {view === "shell" && panels.length > 0 && (
             <PanelStack
-              panels={panels}
+              panels={livePanels}
               focusedByType={focusedByType}
               onClosePanel={onClosePanel}
               onPinPanel={onPinPanel}
@@ -711,7 +818,7 @@ const AppShell = () => {
               onOpenReviewQueue={onOpenReviewQueue}
               onSelectEntity={(row) => {
                 // Find the panel that owns this row
-                const owner = panels.find((p) => (p.rows || []).some((r) => r.id === row.id));
+                const owner = livePanels.find((p) => (p.rows || []).some((r) => r.id === row.id));
                 onSelectEntity(row, owner);
               }}
               onClearPanelFilter={onClearPanelFilter}
@@ -786,18 +893,7 @@ const AppShell = () => {
         mode={editor.mode}
         promoteFrom={editor.promoteFrom}
         onClose={closeEntityEditor}
-        onSave={(p, opts) => {
-          // Hook: route create/draft/active here. For now, also open the
-          // composition overlay when the user chose "Save + Add to Composition".
-          if (opts.mode === "compose") {
-            dropEntityIntoComposition({
-              entityType: p.entityType,
-              id: p.payload.id || ("new-" + Date.now()),
-              name: p.payload.name || p.payload.title || "Untitled",
-              summary: p.payload.summary,
-            });
-          }
-        }}
+        onSave={saveEntityFromEditor}
       />
 
       {/* Writer's Room Composition Overlay — only over the manuscript. */}
