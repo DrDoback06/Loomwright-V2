@@ -329,16 +329,63 @@ const SetAuthors = () => {
 // =====================================================================
 const SetAIProviders = () => {
   const [providers, setProviders] = _set_us(() => SET_AI_PROVIDERS.map((p) => ({
-    ...p, enabled: false, apiKey: "", model: p.defaultModel,
+    ...p, enabled: false, apiKey: "", apiKeyHint: "", model: p.defaultModel,
     uses: p.suggestedUses.reduce((acc, u) => ({ ...acc, [u]: true }), {}),
   })));
   const [addOpen, setAddOpen] = _set_us(false);
+  const [testStatus, setTestStatus] = _set_us({});
+
+  // Phase 10 — Hydrate provider apiKey hints from the encrypted KeysService
+  // store. The plaintext is never read back into state; the user has to
+  // re-enter it to change it.
+  React.useEffect(() => {
+    if (!window.KeysService) return;
+    let cancelled = false;
+    (async () => {
+      const meta = await window.KeysService.listMeta();
+      if (cancelled) return;
+      const byProvider = Object.fromEntries(meta.map((m) => [m.provider, m]));
+      setProviders((arr) => arr.map((p) => byProvider[p.id]
+        ? { ...p, enabled: true, apiKeyHint: byProvider[p.id].hint, apiKey: "" }
+        : p));
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const up = (id, k, v) => setProviders((arr) => arr.map((p) => p.id === id ? { ...p, [k]: v } : p));
 
+  // Persist apiKey edits to encrypted storage when the user has stopped
+  // typing for ~500ms. Empty string clears the stored key.
+  const _keyTimers = React.useRef({});
+  const upKey = (id, v) => {
+    setProviders((arr) => arr.map((p) => p.id === id ? { ...p, apiKey: v } : p));
+    if (!window.KeysService) return;
+    if (_keyTimers.current[id]) clearTimeout(_keyTimers.current[id]);
+    _keyTimers.current[id] = setTimeout(() => {
+      const next = (v || "").trim();
+      if (!next) {
+        window.KeysService.clear(id).catch(() => {});
+      } else {
+        window.KeysService.save(id, next).catch(() => {});
+        setProviders((arr) => arr.map((p) => p.id === id ? { ...p, apiKeyHint: next.slice(-4), apiKey: "" } : p));
+      }
+    }, 500);
+  };
+
+  const runTest = async (id) => {
+    if (!window.KeysService) return;
+    setTestStatus((s) => ({ ...s, [id]: { state: "running" } }));
+    try {
+      const res = await window.KeysService.testConnection(id);
+      setTestStatus((s) => ({ ...s, [id]: { state: res.ok ? "ok" : "missing", message: res.message } }));
+    } catch (e) {
+      setTestStatus((s) => ({ ...s, [id]: { state: "error", message: e.message || "Test failed" } }));
+    }
+  };
+
   const addExtra = (def) => {
     if (providers.find((p) => p.id === def.id)) return;
-    setProviders([...providers, { ...def, enabled: false, apiKey: "", model: "", suggestedUses: ["writing"], uses: { writing: true } }]);
+    setProviders([...providers, { ...def, enabled: false, apiKey: "", apiKeyHint: "", model: "", suggestedUses: ["writing"], uses: { writing: true } }]);
     setAddOpen(false);
   };
 
@@ -380,8 +427,12 @@ const SetAIProviders = () => {
                     <SetInput value={p.baseUrl} onChange={(v) => up(p.id, "baseUrl", v)} placeholder="https://api.example.com/v1" mono/>
                   </SetRow>
                 )}
-                <SetRow label={p.isLocal ? "Endpoint" : "API key"} hint={p.keyHint || ""}>
-                  <SetInput value={p.apiKey} onChange={(v) => up(p.id, "apiKey", v)} placeholder={p.isLocal ? "http://localhost:11434" : "Paste your key"} mono/>
+                <SetRow label={p.isLocal ? "Endpoint" : "API key"} hint={p.apiKeyHint ? "Stored — ends in …" + p.apiKeyHint : (p.keyHint || "Stored encrypted (AES-GCM)")}>
+                  <SetInput
+                    value={p.apiKey}
+                    onChange={(v) => (p.isLocal ? up(p.id, "apiKey", v) : upKey(p.id, v))}
+                    placeholder={p.isLocal ? "http://localhost:11434" : (p.apiKeyHint ? "•••• ends in " + p.apiKeyHint : "Paste your key")}
+                    mono/>
                 </SetRow>
                 <SetRow label="Model preference">
                   <SetInput value={p.model} onChange={(v) => up(p.id, "model", v)} placeholder={p.defaultModel || "model-id"} mono/>
@@ -398,9 +449,15 @@ const SetAIProviders = () => {
                 </SetRow>
                 <SetRow label="Connection" hint="Sends a test request (no manuscript content).">
                   <div className="set-row__inline">
-                    <button className="set-btn set-btn--outline" data-callback="onTestAIProviderConnection">
+                    <button className="set-btn set-btn--outline" data-callback="onTestAIProviderConnection"
+                      onClick={() => runTest(p.id)}>
                       <Icon name="bolt" size={11}/> Test connection
                     </button>
+                    {testStatus[p.id] && (
+                      <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: testStatus[p.id].state === "ok" ? "#5a8a4a" : testStatus[p.id].state === "missing" ? "#a87a3a" : "#a84a3a" }}>
+                        {testStatus[p.id].state === "running" ? "Testing…" : (testStatus[p.id].message || testStatus[p.id].state)}
+                      </span>
+                    )}
                     {p.keyLink && (
                       <a className="set-link" href={p.keyLink} target="_blank" rel="noreferrer">
                         Where to get a key <Icon name="arrow-right" size={10}/>
