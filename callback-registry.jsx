@@ -661,6 +661,237 @@
       return;
     }
 
+    // —— Explicit Bucket A handlers (non-generic) ——
+
+    // Generic + Create (no type given) — open editor with panel kind.
+    if (name === "onCreate") {
+      const kind = ctx.panelKind;
+      const presetType = kind && window.PANEL_PRESETS?.[kind]?.entityType;
+      openEditor(presetType || "locations", null, "quick");
+      return;
+    }
+
+    // Quest workflow
+    if (name === "onAddQuestStep" || name === "onCompleteQuestStep" || name === "onBranchQuest") {
+      const questId = ctx.detail?.questId || id;
+      if (!questId) { notify("Open a quest first."); return; }
+      const quest = EntityService.getSync(questId, "quests");
+      if (!quest) { notify("Quest not found."); return; }
+      const data = { ...(quest.data || {}) };
+      if (name === "onAddQuestStep") {
+        const step = ctx.detail?.step || { id: B().uuid("qs"), title: ctx.detail?.title || "New step", status: "pending" };
+        data.steps = Array.isArray(data.steps) ? [...data.steps, step] : [step];
+        await EntityService.update("quests", questId, { data });
+        notify("Quest step added.");
+      } else if (name === "onCompleteQuestStep") {
+        const stepId = ctx.detail?.stepId;
+        data.steps = (data.steps || []).map((s) => s.id === stepId ? { ...s, status: "complete", completedAt: B().nowIso() } : s);
+        await EntityService.update("quests", questId, { data });
+        notify("Step completed.");
+      } else {
+        const branch = ctx.detail?.branch || { id: B().uuid("qb"), label: ctx.detail?.label || "Branch" };
+        data.branches = Array.isArray(data.branches) ? [...data.branches, branch] : [branch];
+        await EntityService.update("quests", questId, { data });
+        notify("Quest branched.");
+      }
+      window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      return;
+    }
+
+    // References
+    if (name === "onArchiveReference") {
+      const refId = ctx.detail?.id || id;
+      if (!refId) { notify("Select a reference first."); return; }
+      const refs = ReferencesService.listSync();
+      const ref = refs.find((r) => r.id === refId);
+      if (ref) await ReferencesService.save({ ...ref, status: "archived", updatedAt: B().nowIso() });
+      notify("Reference archived.");
+      return;
+    }
+    if (name === "onBuildReferenceContextPack") {
+      const selectedIds = ctx.detail?.selectedIds || [];
+      const refs = ReferencesService.listSync();
+      const pack = {
+        kind: "reference-context",
+        createdAt: B().nowIso(),
+        references: selectedIds.length ? refs.filter((r) => selectedIds.includes(r.id)) : refs.filter((r) => r.includedInAIContext),
+      };
+      await HandoffService.savePack(pack);
+      notify("Reference context pack saved.");
+      return;
+    }
+
+    // Canon facts
+    if (name === "onDenyCanonContradiction") {
+      const refId = ctx.detail?.id || id;
+      const ref = ReferencesService.listSync().find((r) => r.id === refId);
+      if (ref) await ReferencesService.save({ ...ref, contradictionStatus: "denied", updatedAt: B().nowIso() });
+      notify("Contradiction denied.");
+      return;
+    }
+    if (name === "onMergeCanonFact") {
+      window.dispatchEvent(new CustomEvent("lw:open-merge-modal", {
+        detail: { item: { id: null, entityType: "lore", candidate: { name: entity?.name }, payload: entity }, sourceId: id, type: "lore" },
+      }));
+      return;
+    }
+
+    // Skill tree drafts (review-queue-shaped local items on skill records)
+    if (name === "onAcceptDraftSkillNode" || name === "onDenyDraftSkillNode" || name === "onMergeDraftSkillNode") {
+      const skillId = ctx.detail?.skillId || id;
+      const draftId = ctx.detail?.draftId;
+      if (!skillId) { notify("Open the skill tree first."); return; }
+      const skill = EntityService.getSync(skillId, "skills");
+      if (!skill) return;
+      const data = { ...(skill.data || {}) };
+      data.draftNodes = (data.draftNodes || []).filter((n) => n.id !== draftId);
+      if (name === "onAcceptDraftSkillNode") {
+        const draft = (skill.data?.draftNodes || []).find((n) => n.id === draftId) || ctx.detail?.draft;
+        if (draft) {
+          data.nodes = Array.isArray(data.nodes) ? [...data.nodes, { ...draft, accepted: true }] : [{ ...draft, accepted: true }];
+        }
+      } else if (name === "onMergeDraftSkillNode") {
+        const draft = (skill.data?.draftNodes || []).find((n) => n.id === draftId);
+        const targetId = ctx.detail?.targetId;
+        const target = (data.nodes || []).find((n) => n.id === targetId);
+        if (target && draft) {
+          data.nodes = (data.nodes || []).map((n) => n.id === targetId ? { ...n, ...draft, id: targetId } : n);
+        }
+      }
+      await EntityService.update("skills", skillId, { data });
+      notify(name === "onAcceptDraftSkillNode" ? "Draft accepted." : name === "onDenyDraftSkillNode" ? "Draft denied." : "Draft merged.");
+      window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      return;
+    }
+
+    // Style profile (special: stored as a reference with kind=style)
+    if (name === "onAcceptStyleProfile") {
+      const profile = ctx.detail?.profile || ctx.detail || {};
+      await ReferencesService.save({
+        kind: "style",
+        title: profile.title || "Style profile",
+        content: typeof profile === "string" ? profile : JSON.stringify(profile, null, 2),
+        isStyleInfluence: true,
+      });
+      notify("Style profile saved.");
+      return;
+    }
+
+    // Onboarding
+    if (name === "onSaveOnboardingDraft") {
+      const current = OnboardingService.loadSync({}) || {};
+      await OnboardingService.save({ ...current, ...(ctx.detail || {}), status: "draft", updatedAt: B().nowIso() });
+      notify("Onboarding draft saved.");
+      return;
+    }
+    if (name === "onApplyStepJson" || name === "onPasteStepJson") {
+      const section = ctx.detail?.section;
+      const raw = ctx.detail?.json || (name === "onPasteStepJson" ? window.prompt("Paste step JSON:") : ctx.detail);
+      if (!raw) return;
+      let parsed = raw;
+      try { if (typeof raw === "string") parsed = JSON.parse(raw); } catch (e) { notify("Invalid JSON."); return; }
+      const current = OnboardingService.loadSync({}) || {};
+      const next = section ? { ...current, [section]: parsed } : { ...current, ...parsed };
+      await OnboardingService.save(next);
+      await ProjectIntelService.mergeFromOnboarding(next);
+      notify("Step JSON applied.");
+      return;
+    }
+
+    // Handoff
+    if (name === "onSaveHandoffPack") {
+      const pack = ctx.detail?.pack || ctx.detail;
+      await HandoffService.savePack(pack || { kind: "manual", createdAt: B().nowIso() });
+      notify("Handoff pack saved.");
+      return;
+    }
+
+    // Settings / Author profiles (stored in settings.authors[])
+    if (name === "onExportProfile") {
+      const data = B().SettingsService.getAllSync();
+      await B().downloadJson("loomwright-profile.json", data);
+      notify("Profile exported.");
+      return;
+    }
+
+    // Atlas focus
+    if (name === "onApplyAtlasFocus") {
+      window.dispatchEvent(new CustomEvent("lw:atlas-focus", { detail: ctx.detail || {} }));
+      notify("Atlas focus applied.");
+      return;
+    }
+
+    // Send between surfaces
+    if (name === "onSendSuggestionToWriter" || name === "onSendTangleItemToWriter") {
+      window.dispatchEvent(new CustomEvent("lw:composition-insert-draft", {
+        detail: { text: ctx.detail?.text || ctx.detail?.label || "", source: name },
+      }));
+      notify("Sent to Writer's Room.");
+      return;
+    }
+    if (name === "onSendSuggestionToTangle") {
+      const node = {
+        id: B().uuid("tn"),
+        kind: "suggestion",
+        title: ctx.detail?.title || ctx.detail?.label || "Suggestion",
+        body: ctx.detail?.text || "",
+        createdAt: B().nowIso(),
+      };
+      if (B().TangleService) await B().TangleService.addNode(node);
+      window.dispatchEvent(new CustomEvent("lw:tangle-updated"));
+      notify("Sent to Tangle.");
+      return;
+    }
+
+    // Stat phrase tester
+    if (name === "onTestStatPhrase") {
+      const phrase = ctx.detail?.phrase || "";
+      const rule = ctx.detail?.rule || "";
+      if (!phrase || !rule) { notify("Provide a phrase and a rule."); return; }
+      try {
+        const re = new RegExp(rule, "i");
+        const m = phrase.match(re);
+        notify(m ? `Match: "${m[0]}"` : "No match.");
+      } catch (e) { notify("Invalid rule: " + e.message); }
+      return;
+    }
+
+    // Provider key validation (delegates to existing test-connection path)
+    if (name === "onValidateProviderKey") {
+      const providerId = ctx.detail?.providerId;
+      try {
+        const ok = await AIService.testConnection(providerId);
+        notify(ok ? "Provider key valid." : "Provider key invalid.");
+      } catch (e) { notify("Validation failed: " + e.message); }
+      return;
+    }
+
+    // Today: local rule-based prompt generation. AI path activates if a
+    // provider is configured but is NOT required.
+    if (name === "onGenerateTodayPrompts") {
+      const all = EntityService.listAllSync();
+      const dormant = Object.values(all.cast || {}).filter((c) => (c.flags || []).includes("dormant")).slice(0, 1);
+      const openQuests = Object.values(all.quests || {}).filter((q) => q.status !== "complete").slice(0, 1);
+      const recentEvents = Object.values(all.events || {}).slice(-1);
+      const prompts = [
+        dormant[0] ? `Reintroduce ${dormant[0].name}, who hasn't appeared recently.` : null,
+        openQuests[0] ? `Advance the quest "${openQuests[0].name}".` : null,
+        recentEvents[0] ? `Follow up on the consequence of "${recentEvents[0].name}".` : null,
+      ].filter(Boolean);
+      window.dispatchEvent(new CustomEvent("lw:today-prompts", { detail: { prompts } }));
+      notify(prompts.length ? `Generated ${prompts.length} prompts.` : "No prompts yet — add some entities first.");
+      return;
+    }
+
+    // Command palette / wheel actions are meta-dispatchers: they carry a
+    // target callback name and forward to it.
+    if (name === "onRunCommand" || name === "onRunWheelAction") {
+      const targetName = ctx.detail?.commandId || ctx.detail?.action || ctx.detail?.callback;
+      if (!targetName) { notify("No command target."); return; }
+      window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: targetName, detail: ctx.detail?.detail } }));
+      return;
+    }
+
     // —— Trash ——
     if (name === "onRestoreFromTrash" || name === "onRestoreTrashItem") {
       await TrashService.restore(ctx.detail?.id || id);
