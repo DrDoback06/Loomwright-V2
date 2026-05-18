@@ -809,16 +809,53 @@ const AppShell = () => {
         promoteFrom={editor.promoteFrom}
         onClose={closeEntityEditor}
         onSave={(p, opts) => {
-          // Hook: route create/draft/active here. For now, also open the
-          // composition overlay when the user chose "Save + Add to Composition".
-          if (opts.mode === "compose") {
-            dropEntityIntoComposition({
-              entityType: p.entityType,
-              id: p.payload.id || ("new-" + Date.now()),
-              name: p.payload.name || p.payload.title || "Untitled",
-              summary: p.payload.summary,
-            });
-          }
+          // Phase 4 — Persist the entity via EntityService, then route based
+          // on the save mode (draft / active / compose). Composition drop is
+          // still triggered for "compose" so the Writer's Room overlay sees
+          // the new card immediately.
+          const mode = (opts && opts.mode) || "active";
+          const baseStatus = mode === "draft" ? "draft" : "active";
+          const fields = (p && p.payload) || {};
+          const entityType = (p && p.entityType) || "generic";
+          const draft = Object.assign({}, fields, {
+            type: entityType,
+            status: fields.status || baseStatus,
+          });
+
+          const savePromise = (window.EntityService
+            ? window.EntityService.save(draft)
+            : Promise.resolve(draft));
+
+          savePromise.then((saved) => {
+            // Drop the freshly-saved entity into the composition overlay if
+            // requested. Use the canonical id so duplicate drops collapse.
+            if (mode === "compose") {
+              dropEntityIntoComposition({
+                entityType: saved.type,
+                id: saved.id,
+                name: saved.name || saved.title || "Untitled",
+                summary: saved.summary,
+              });
+            }
+            // Draft saves create a pending Review Queue entry so the user
+            // can promote them later (Phase 5 placeholder hook).
+            if (mode === "draft" && window.ReviewQueueService) {
+              window.ReviewQueueService.add({
+                kind: "draft-promotion",
+                entityId: saved.id,
+                entityType: saved.type,
+                label: saved.name || saved.title || "Untitled",
+                summary: saved.summary || "",
+              }).catch(() => {});
+            }
+            // Tell any open panel (or other listeners) to refresh.
+            window.dispatchEvent(new CustomEvent("lw:entity-saved", {
+              detail: { entity: saved, mode, source: (p && p.createdViaMode) || null },
+            }));
+          }).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error("[Loomwright] Entity save failed:", err);
+          });
         }}
       />
 
