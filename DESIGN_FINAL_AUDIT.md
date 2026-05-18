@@ -227,3 +227,76 @@ agent. `Loomwright Shell.html` inlines the Writer's Room because of legacy
 artefact, but every other surface is loaded by `<script src=…>` from a
 modular file. `Loomwright.bundle.jsx` and the standalone HTML exports are
 stale — regenerate, don't edit.
+
+---
+
+## Backend integration audit (Phases 0–12)
+
+The backend-side audit below is the design-final record for the wiring
+that lands alongside the visual shell. The UI was not modified for
+backend reasons — every change is additive.
+
+### Backend files
+
+| File | Role |
+| --- | --- |
+| `lw-storage.jsx` | Async `StorageService` over `localStorage`. |
+| `lw-services.jsx` | Entity / Reference / Onboarding / Project Intel / Review / Chapter / Settings / Author services. |
+| `lw-crypto.jsx` | `KeysService` — Web Crypto / PBKDF2 / AES-GCM BYOK. |
+| `lw-handoff.jsx` | Handoff history + result parser / router. |
+| `lw-backup.jsx` | Project export / import bundle. |
+
+Loaded by `Loomwright Shell.html` before any feature script. Validation
+(`npm run validate` and `@babel/parser`) passes on every commit.
+
+### Persistence verified
+
+- Writer's Room chapter list + active chapter id hydrate from
+  `ChaptersService` and persist on change.
+- Entity Editor saves through `EntityService.save`; draft saves additionally
+  enqueue a `draft-promotion` item in `ReviewQueueService`.
+- Composition overlay receives the newly-saved entity for the
+  "Save + Add to Composition" mode.
+- References workspace pulls from `ReferencesService` and from
+  `EntityService.list("references")`, merging both sources.
+- Onboarding answers persist via `OnboardingService` on every change and
+  validate via `OnboardingService.validate` in the JSON panel.
+- Project Intelligence buttons in Settings populate the clipboard and
+  sync from onboarding answers.
+
+### Security verified
+
+- BYOK keys are stored under `lw:ai_keys` as
+  `{ provider, envelope: { iv, data, alg, v }, hint, updatedAt }`.
+- Encryption derives a 256-bit AES-GCM key from PBKDF2-SHA-256
+  (100 000 rounds, random salt) using the user passphrase.
+- Settings → AI Providers never re-displays a stored key; it shows
+  "…ends in XXXX" using the last-four hint.
+- `KeysService.testConnection` is mocked — it asserts decryption only and
+  reports `mocked: true`.
+
+### Outstanding design-only notes
+
+- **Fuzzy match for double-click panels**: still in place for legacy panel
+  rows; canonical resolution via `EntityService.findByLabel` is performed
+  in parallel and only used to persist `sourceMentions`.
+- **Extraction engine**: still UI-only; suggestions can be enqueued by
+  dispatching `lw:review-suggest`.
+- **Panel rows**: live from `PANEL_PRESETS` rather than `EntityService`.
+  Replacing the row source with `EntityService.list(type)` is the next
+  obvious refactor and is documented in `CODING_AGENT_HANDOFF.md` Appendix A.
+
+### QA checklist (manual)
+
+- [x] Writer's Room loads + chapter selection survives refresh.
+- [x] Entity Editor → Save Draft / Save Active / Save + Add to Composition
+  persists and routes correctly.
+- [x] Review Queue receives draft items.
+- [x] References library shows persisted notes/files.
+- [x] Onboarding editor round-trips JSON via clipboard.
+- [x] Settings → Project Intelligence copies bundles to clipboard.
+- [x] Settings → AI Providers stores encrypted keys; test-connection
+  reports success.
+- [x] Settings → Import / Export round-trips a JSON bundle through
+  `BackupService`.
+- [x] `npm run validate` passes on every phase commit.

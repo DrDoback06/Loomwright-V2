@@ -1079,3 +1079,45 @@ If you're a coding agent picking this up cold:
    pattern carries to every other panel.
 
 Good luck.
+
+---
+
+## Appendix A — Backend integration shipped (Phases 0–12)
+
+The backend wiring described in this handoff has now landed in the
+repository. See `CODEX_BACKEND_IMPLEMENTATION_GUIDE.md` for the full
+blueprint. Quick reference:
+
+- **Services loaded ahead of `app.jsx`:**
+  - `lw-storage.jsx` → `window.StorageService` (async `localStorage` facade).
+  - `lw-services.jsx` → `EntityService`, `ReferencesService`,
+    `OnboardingService`, `ProjectIntelService`, `ReviewQueueService`,
+    `ChaptersService`, `SettingsService`, `AuthorProfilesService`.
+  - `lw-crypto.jsx` → `KeysService` (AES-GCM + PBKDF2 BYOK).
+  - `lw-handoff.jsx` → `HandoffService` + `parseHandoffResult`.
+  - `lw-backup.jsx` → `BackupService` (project import / export).
+- **Wiring touchpoints:**
+  - `app.jsx` — `<EntityEditor>` `onSave` persists via `EntityService` and
+    branches on `mode = "draft" | "active" | "compose"`. New event
+    listeners added: `lw:review-suggest`, `lw:ai-handoff-*`,
+    `lw:ai-handoff-draft-ready`.
+  - `writers-room.jsx` (and the inline twin inside
+    `Loomwright Shell.html`) — hydrates and persists chapter state via
+    `ChaptersService`.
+  - `workspaces-system.jsx` — research library hydrates references from
+    `ReferencesService` + `EntityService`; onboarding form persists via
+    `OnboardingService`.
+  - `settings-rich.jsx` — Project Intelligence buttons use
+    `ProjectIntelService`; AI Providers section encrypts keys via
+    `KeysService`; Import/Export uses `BackupService`.
+- **Demo data:** `EntityService.ensureSeeded` populates the store from
+  `window.ENTITY_SAMPLES` on first run (deferred until `window.load`).
+- **Mocked surfaces:** AI provider connection tests are local-only
+  (`KeysService.testConnection` decrypts and reports success without making
+  any network call). Extraction remains presentational.
+- **TODOs:** `onOpenEntityFromManuscript` still fuzzy-matches by label;
+  the canonical entity is resolved via `EntityService.findByLabel` for
+  source-mention persistence but panel highlighting is unchanged. Replace
+  with a strict id-based lookup once entity rows are unified on the
+  service.
+
