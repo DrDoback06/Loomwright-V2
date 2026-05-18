@@ -738,8 +738,14 @@
       const target = EntityService.getSync(targetId, targetType);
       if (!target) return null;
       for (const sid of sourceIds) {
+        if (!sid || sid === targetId) continue;
         const src = EntityService.getSync(sid, targetType);
-        if (src) await EntityService.delete(targetType, sid);
+        if (src) {
+          // Re-point any occurrences referencing the source to the merge target
+          // so manuscript double-click keeps working after the source is gone.
+          await OccurrenceService.rebindEntity(sid, targetId);
+          await EntityService.delete(targetType, sid);
+        }
       }
       return target;
     },
@@ -824,6 +830,122 @@
     },
   };
 
+  // -------------------------------------------------------------------
+  // Local mention scanner — finds case-insensitive whole-word matches of
+  // a needle in haystack. Conservative on purpose: this is a fallback for
+  // the no-BYOK path and a stepping stone toward proper NLP extraction.
+  // -------------------------------------------------------------------
+  function findRanges(haystack, needle) {
+    if (!haystack || !needle || needle.length < 2) return [];
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, "gi");
+    const out = [];
+    let m;
+    while ((m = re.exec(haystack)) !== null) {
+      out.push({ start: m.index, end: m.index + m[0].length });
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+    return out;
+  }
+
+  function scanTextForKnownEntities(text, chapterId, sessionId) {
+    if (!text) return [];
+    const all = EntityService.listAllSync();
+    const out = [];
+    Object.entries(all).forEach(([type, byId]) => {
+      Object.values(byId || {}).forEach((entity) => {
+        const labels = [entity.name, ...(entity.aliases || [])].filter(Boolean);
+        labels.forEach((label) => {
+          const ranges = findRanges(text, label);
+          ranges.forEach((r) => out.push({
+            entityId: entity.id,
+            entityType: type,
+            exactText: text.slice(r.start, r.end),
+            chapterId,
+            startOffset: r.start,
+            endOffset: r.end,
+            extractionSessionId: sessionId,
+          }));
+        });
+      });
+    });
+    return out;
+  }
+
+  // -------------------------------------------------------------------
+  // OccurrenceService — persisted EntityOccurrence records linking
+  // manuscript spans to real entity IDs. Created by extraction or by
+  // accepting a review-queue candidate. Writer's Room can use these for
+  // ID-first double-click resolution (with fuzzy label match as fallback
+  // only for legacy/demo content).
+  // -------------------------------------------------------------------
+  const OccurrenceService = {
+    listAllSync() {
+      return StorageService.getSync(KEYS.occurrences, []);
+    },
+    listByChapterSync(chapterId) {
+      if (!chapterId) return [];
+      return this.listAllSync().filter((o) => o.chapterId === chapterId);
+    },
+    listByEntitySync(entityId) {
+      if (!entityId) return [];
+      return this.listAllSync().filter((o) => o.entityId === entityId);
+    },
+    async save(occ) {
+      const all = await StorageService.get(KEYS.occurrences, []);
+      const id = occ.occurrenceId || uuid("occ");
+      const row = {
+        occurrenceId: id,
+        entityId: occ.entityId || null,
+        entityType: occ.entityType ? normaliseType(occ.entityType) : null,
+        exactText: occ.exactText || "",
+        chapterId: occ.chapterId || null,
+        paragraphId: occ.paragraphId || null,
+        startOffset: occ.startOffset != null ? occ.startOffset : null,
+        endOffset: occ.endOffset != null ? occ.endOffset : null,
+        sourceMentionId: occ.sourceMentionId || null,
+        extractionSessionId: occ.extractionSessionId || null,
+        candidateId: occ.candidateId || null,
+        createdAt: occ.createdAt || nowIso(),
+      };
+      const idx = all.findIndex((o) => o.occurrenceId === id);
+      const next = idx >= 0 ? all.map((o, i) => i === idx ? row : o) : [...all, row];
+      await StorageService.set(KEYS.occurrences, next);
+      return row;
+    },
+    async saveMany(list = []) {
+      if (!list.length) return [];
+      const all = await StorageService.get(KEYS.occurrences, []);
+      const map = new Map(all.map((o) => [o.occurrenceId, o]));
+      const out = [];
+      for (const occ of list) {
+        const id = occ.occurrenceId || uuid("occ");
+        const row = { ...occ, occurrenceId: id, createdAt: occ.createdAt || nowIso() };
+        map.set(id, row);
+        out.push(row);
+      }
+      await StorageService.set(KEYS.occurrences, [...map.values()]);
+      return out;
+    },
+    async linkCandidateToEntity(candidateId, entityId, entityType) {
+      if (!candidateId || !entityId) return [];
+      const all = await StorageService.get(KEYS.occurrences, []);
+      const next = all.map((o) => o.candidateId === candidateId ? { ...o, entityId, entityType: entityType ? normaliseType(entityType) : o.entityType } : o);
+      await StorageService.set(KEYS.occurrences, next);
+      return next.filter((o) => o.candidateId === candidateId);
+    },
+    async deleteByCandidate(candidateId) {
+      if (!candidateId) return;
+      const all = await StorageService.get(KEYS.occurrences, []);
+      await StorageService.set(KEYS.occurrences, all.filter((o) => o.candidateId !== candidateId));
+    },
+    async rebindEntity(fromId, toId) {
+      if (!fromId || !toId || fromId === toId) return;
+      const all = await StorageService.get(KEYS.occurrences, []);
+      await StorageService.set(KEYS.occurrences, all.map((o) => o.entityId === fromId ? { ...o, entityId: toId } : o));
+    },
+  };
+
   const ExtractionService = {
     loadSessionSync() {
       return StorageService.getSync(KEYS.extractionSession, { status: "idle", items: [] });
@@ -833,22 +955,39 @@
       window.dispatchEvent(new CustomEvent("lw:extraction-updated", { detail: session }));
     },
     async runExtraction({ chapterId, text, deep = false }) {
-      const prompt = deep
-        ? `Extract RPG/world entities from this manuscript chapter as JSON array with objects {type,name,summary,confidence}. Text:\n\n${text}`
-        : `List notable named entities (characters, locations, items, quests, events) from this text as JSON array {type,name,summary}:\n\n${text}`;
-      const raw = await AIService.complete({
-        prompt,
-        system: "Return valid JSON only. No markdown fences.",
-        maxTokens: deep ? 2500 : 1200,
-      });
+      const sessionId = uuid("ext");
+      // Local pass: scan text for mentions of known entities and persist
+      // EntityOccurrence records pointing at real entity IDs. This runs
+      // regardless of AI configuration so double-click works without BYOK.
+      const occurrences = scanTextForKnownEntities(text || "", chapterId, sessionId);
+      if (occurrences.length) await OccurrenceService.saveMany(occurrences);
+
       let items = [];
-      try {
-        const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim());
-        items = Array.isArray(parsed) ? parsed : parsed.items || parsed.entities || [];
-      } catch (_) {
-        items = [{ type: "references", name: "Extraction result", summary: raw.slice(0, 500) }];
+      // Only invoke AI when a provider is configured. Otherwise the local
+      // pass alone produces useful occurrences without leaking text.
+      const aiAvailable = !!(await AIService.getProviderConfig().catch(() => null))?.apiKey;
+      if (aiAvailable) {
+        const prompt = deep
+          ? `Extract RPG/world entities from this manuscript chapter as JSON array with objects {type,name,summary,confidence}. Text:\n\n${text}`
+          : `List notable named entities (characters, locations, items, quests, events) from this text as JSON array {type,name,summary}:\n\n${text}`;
+        try {
+          const raw = await AIService.complete({
+            prompt,
+            system: "Return valid JSON only. No markdown fences.",
+            maxTokens: deep ? 2500 : 1200,
+          });
+          try {
+            const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim());
+            items = Array.isArray(parsed) ? parsed : parsed.items || parsed.entities || [];
+          } catch (_) {
+            items = [{ type: "references", name: "Extraction result", summary: raw.slice(0, 500) }];
+          }
+        } catch (e) {
+          // AI call failed — fall back to local-only results.
+          items = [];
+        }
       }
-      await ReviewService.addMany(items.map((item) => ({
+      const reviewItems = items.map((item) => ({
         id: uuid("rq"),
         entityType: normaliseType(item.type || "references"),
         name: item.name || "Suggestion",
@@ -858,11 +997,42 @@
         reason: item.summary || "Extracted from manuscript",
         payload: item,
         chapterId,
+        extractionSessionId: sessionId,
+        candidateId: uuid("cand"),
         status: "pending",
-      })));
-      const session = { status: "complete", chapterId, deep, itemCount: items.length, updatedAt: nowIso() };
+      }));
+      await ReviewService.addMany(reviewItems);
+      // Tag local-pass occurrences for unknown candidates so accept can
+      // backfill the entityId after entity creation.
+      for (const ri of reviewItems) {
+        const needle = (ri.payload?.name || "").toLowerCase();
+        if (!needle) continue;
+        const ranges = findRanges(text || "", needle);
+        if (!ranges.length) continue;
+        await OccurrenceService.saveMany(ranges.map((r) => ({
+          entityId: null,
+          entityType: ri.entityType,
+          exactText: text.slice(r.start, r.end),
+          chapterId,
+          startOffset: r.start,
+          endOffset: r.end,
+          extractionSessionId: sessionId,
+          candidateId: ri.candidateId,
+        })));
+      }
+      const session = {
+        status: "complete",
+        chapterId,
+        deep,
+        sessionId,
+        itemCount: items.length,
+        occurrenceCount: occurrences.length,
+        aiUsed: aiAvailable,
+        updatedAt: nowIso(),
+      };
       await this.saveSession(session);
-      return { session, items };
+      window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      return { session, items, occurrences };
     },
   };
 
@@ -1143,6 +1313,7 @@
     LinkService,
     AIService,
     ExtractionService,
+    OccurrenceService,
     SampleProjectService,
     exportProject,
     importProject,

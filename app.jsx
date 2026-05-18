@@ -632,6 +632,28 @@ const AppShell = () => {
   //   4. Do NOT open the full workspace; Writer's Room stays anchored.
   const onOpenEntityFromManuscript = _uc_a((detail) => {
     if (!detail || !detail.type) return;
+    // ID-first resolution: if an occurrenceId was provided on the span,
+    // look up the canonical entityId via OccurrenceService. If neither
+    // the occurrence nor the entity can be located, surface a friendly
+    // notice (fuzzy label match below remains the legacy fallback only).
+    const OS = window.LoomwrightBackend?.OccurrenceService;
+    if (detail.occurrenceId && OS) {
+      const occ = OS.listAllSync().find((o) => o.occurrenceId === detail.occurrenceId);
+      if (occ?.entityId) {
+        detail = { ...detail, id: occ.entityId, type: occ.entityType || detail.type };
+      }
+    }
+    const ES = window.LoomwrightBackend?.EntityService;
+    if (detail.id && ES && !ES.getSync(detail.id, detail.type)) {
+      // The span carries an entityId that isn't in the live store. Continue
+      // into the fuzzy fallback below, but warn the user that the link is
+      // stale so they know why the panel isn't focused on a real record.
+      if (!detail.label) {
+        window.dispatchEvent(new CustomEvent("lw:backend-notice", {
+          detail: { message: "This mention is not linked to an active entity yet." },
+        }));
+      }
+    }
     const panelKind = ENTITY_TYPE_TO_PANEL_KIND[detail.type] || detail.type;
     if (!PANEL_PRESETS[panelKind]) {
       // eslint-disable-next-line no-console

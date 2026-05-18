@@ -84,10 +84,17 @@
     const queue = B().ReviewService.listSync();
     const row = queue.find((q) => q.id === id) || item;
     if (!row) return;
+    let saved = null;
     if (row.payload && row.entityId) {
-      await B().EntityService.update(row.entityType, row.entityId, row.payload);
+      saved = await B().EntityService.update(row.entityType, row.entityId, row.payload);
     } else if (row.payload?.name) {
-      await B().EntityService.save(row.entityType || "references", row.payload, { status: "active" });
+      saved = await B().EntityService.save(row.entityType || "references", row.payload, { status: "active" });
+    }
+    // Backfill any pending occurrences that were recorded against this
+    // candidate during extraction so manuscript double-click can resolve
+    // by real entity ID.
+    if (saved?.id && row.candidateId && B().OccurrenceService) {
+      await B().OccurrenceService.linkCandidateToEntity(row.candidateId, saved.id, saved.type || row.entityType);
     }
     await B().ReviewService.resolve(id, "done");
     notify("Accepted suggestion.");
