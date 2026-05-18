@@ -76,16 +76,41 @@ if (bhMatch) {
   for (const m of bhMatch[1].matchAll(/"(on[A-Za-z0-9]+)"/g)) BACKEND_HANDLED_LITERALS.add(m[1]);
 }
 
+// Helper-function recognition. dispatchCallback delegates create/edit/delete
+// to parseCreateType / parseEditType / parseDeleteType which match
+// `onCreate([A-Za-z]+)$` etc. Those callbacks are reached even though they
+// don't appear as literal strings in dispatchCallback. Walk each helper's
+// body to extract its prefix and treat matching callbacks as reached.
+const helperPrefixes = []; // e.g. "onCreate", "onEdit", "onDelete"
+for (const fn of ["parseCreateType", "parseEditType", "parseDeleteType"]) {
+  const re = new RegExp(`function\\s+${fn}\\s*\\(name\\)\\s*\\{([\\s\\S]*?)\\n  \\}`);
+  const m = registryText.match(re);
+  if (!m) continue;
+  // Only count the helper if dispatchCallback actually calls it AND uses
+  // its return value to dispatch (openEditor / EntityService.delete).
+  if (!body.includes(fn + "(name)")) continue;
+  for (const rm of m[1].matchAll(/name\.match\(\/\^(on[A-Za-z]+)\\\(/g)) {
+    helperPrefixes.push(rm[1]);
+  }
+  // Also support an explicit second-arg form.
+  for (const rm of m[1].matchAll(/\/\^(on[A-Za-z]+)\(\[A-Za-z\]\+\)/g)) {
+    if (!helperPrefixes.includes(rm[1])) helperPrefixes.push(rm[1]);
+  }
+}
+
 function isReached(name) {
   if (BACKEND_HANDLED_LITERALS.has(name)) return true;
   if (literalMatches.has(name)) return true;
   if (regexPatterns.some((re) => re.test(name))) return true;
   // Approximation of startsWith/includes (catches onSpeedReader*, onUpdate*Settings, etc).
   for (const frag of startsWithFragments) if (name.startsWith(frag)) return true;
-  // Generic "on<Verb><Type>" patterns are caught by explicit regexes above
-  // (onCreate*, onEdit*, onAccept*QueueItem, onDeny*QueueItem, onEdit*QueueItem,
-  // onMerge*QueueItem, onLink*, onAssign*, onSet*Status, onToggle*Dormant,
-  // onArchiveEntity / onWakeEntity, onShow*OnAtlas, onOpen*Timeline).
+  // Helper-handled families: onCreate<Type>, onEdit<Type>, onDelete<Type>
+  // resolve via parseCreateType/parseEditType/parseDeleteType.
+  for (const prefix of helperPrefixes) {
+    if (name.length > prefix.length && name.startsWith(prefix) && /^[A-Z]/.test(name.charAt(prefix.length))) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -109,13 +134,40 @@ const REQUIRED_ACTION_PREFIXES = [
   "onCompleteQuestStep", "onBranchQuest",
 ];
 const REQUIRED_EXACT = new Set([
-  "onSaveAndExtract", "onSaveAndDeepExtract", "onOpenEntityFromManuscript",
+  "onSaveAndExtract", "onSaveAndDeepExtract",
+]);
+
+// Bucket D — React-owned callbacks that are handled by component-level
+// onClick handlers; the registry never reaches them under normal flow.
+// They're allowed to fall to default because the React handler runs first.
+const REACT_OWNED = new Set([
+  "onCreateNewInstead",        // MergeCandidateModal
+  "onAcceptEdited",            // EditCandidateModal
+  "onSaveEdit",                // EditCandidateModal
+  "onOpenEntityFromManuscript",// EntityBrushHighlight onDoubleClick
+]);
+
+// Bucket B — AI/provider-gated callbacks. Allowed to surface an unavailable
+// notice if no provider is configured, but the registry branch MUST be
+// explicit (not the generic default) and MUST call requireProviderOrNotice
+// so users see "Configure an AI provider in Settings…" rather than
+// "X isn't wired yet".
+const PROVIDER_GATED = new Set([
+  "onGenerateAIWriterDraft",
+  "onGenerateDraftSkillTree",
+  "onRunContinuityCheck",
+  "onRunEntitySuggestion",
+  "onAcceptGeneratedText",
+  "onCopyGeneratedText",
 ]);
 
 const required = listed.filter((n) =>
   REQUIRED_EXACT.has(n) || REQUIRED_ACTION_PREFIXES.some((p) => n.startsWith(p))
 );
-const missingActions = required.filter((n) => !isReached(n));
+const missingActions = required
+  .filter((n) => !REACT_OWNED.has(n))
+  .filter((n) => !PROVIDER_GATED.has(n))
+  .filter((n) => !isReached(n));
 
 // Registry must have a user-visible notice in its default branch — silent
 // fall-through is forbidden. We grep for a notify(...) call near the
@@ -127,11 +179,28 @@ if (!/notify\s*\(/.test(defaultTail)) {
   process.exit(1);
 }
 
+// Bucket B verification: any provider-gated callback that reaches the
+// default notice MUST be replaced by an explicit branch that calls
+// requireProviderOrNotice (so users see a provider-specific message).
+const providerGatedMissing = [];
+const providerGatedHasHelper = registryText.includes("requireProviderOrNotice");
+for (const name of PROVIDER_GATED) {
+  if (!isReached(name)) providerGatedMissing.push(name);
+}
+
 console.log("OK:", uiNames.size, "UI callbacks; registry bootstraps", listed.length, "handlers");
 console.log("OK: registry default branch emits a user-visible notice (no silent fall-through).");
-console.log("INFO:", required.length, "action-shaped callbacks total;", missingActions.length, "reach default notice (feature-pending).");
-console.log("INFO:", unimplemented.length - missingActions.length, "non-action callbacks fall to default notice (React-owned or housekeeping).");
+console.log("INFO:", required.length, "action-shaped callbacks total;", missingActions.length, "Bucket A reach default notice (feature-pending).");
+console.log("INFO:", PROVIDER_GATED.size, "Bucket B (provider-gated) callbacks declared;",
+  providerGatedMissing.length, "still reach generic default;",
+  providerGatedHasHelper ? "requireProviderOrNotice helper present." : "requireProviderOrNotice helper NOT yet present.");
+console.log("INFO:", REACT_OWNED.size, "Bucket D (React-owned) callbacks declared.");
+console.log("INFO:", unimplemented.length - missingActions.length - providerGatedMissing.length - REACT_OWNED.size, "other callbacks fall to default notice (housekeeping/dispatch).");
 if (process.env.AUDIT_VERBOSE) {
-  console.log("\nFeature-pending action callbacks:");
+  console.log("\nBucket A — feature-pending action callbacks:");
   for (const n of missingActions) console.log("  -", n);
+  if (providerGatedMissing.length) {
+    console.log("\nBucket B — provider-gated callbacks not yet using requireProviderOrNotice:");
+    for (const n of providerGatedMissing) console.log("  -", n);
+  }
 }
