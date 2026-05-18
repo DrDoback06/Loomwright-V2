@@ -251,25 +251,32 @@ const AIHandoffDrawer = ({ open, onClose, surface = "composition", context = {},
   };
   const onCopyJson = () => {
     safeCopy(packJson);
+    if (typeof HandoffService !== "undefined") HandoffService.saveLastPack(pack).catch(() => {});
     window.dispatchEvent(new CustomEvent("lw:ai-handoff-copy-json", { detail: { pack } }));
   };
   const onCopyPrompt = () => {
     safeCopy(promptText);
+    if (typeof HandoffService !== "undefined") HandoffService.saveLastPack(pack).catch(() => {});
     window.dispatchEvent(new CustomEvent("lw:ai-handoff-copy-prompt", { detail: { pack, prompt: promptText } }));
   };
   const onDownload = () => {
-    try {
-      const blob = new Blob([packJson], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "ai-handoff-pack-" + Date.now() + ".json";
-      document.body.appendChild(a); a.click();
-      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
-    } catch (e) { /* noop */ }
+    if (typeof HandoffService !== "undefined") {
+      HandoffService.downloadPack(pack);
+    } else {
+      try {
+        const blob = new Blob([packJson], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "ai-handoff-pack-" + Date.now() + ".json";
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+      } catch (e) { /* noop */ }
+    }
     window.dispatchEvent(new CustomEvent("lw:ai-handoff-download", { detail: { pack } }));
   };
   const onSavePack = () => {
+    if (typeof HandoffService !== "undefined") HandoffService.saveLastPack(pack).catch(() => {});
     window.dispatchEvent(new CustomEvent("lw:ai-handoff-save", { detail: { pack } }));
   };
 

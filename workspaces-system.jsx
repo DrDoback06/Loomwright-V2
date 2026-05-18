@@ -180,7 +180,20 @@ const OnboardingAnswersEditor = ({ answers, sectionId, onChangeField, onChangeSe
           }} data-callback="onReopenOnboardingWizard">
             <Icon name="sparkle" size={11}/> Reopen full wizard
           </button>
-          <button className="fws-topbar__exit" data-callback="onSendOnboardingToProjectIntelligence" onClick={() => {
+          <button className="fws-topbar__exit" data-callback="onSendOnboardingToProjectIntelligence" onClick={async () => {
+            try {
+              const onb = await OnboardingService.load();
+              const intel = await ProjectIntelService.load() || {};
+              if (section.id === "style") {
+                intel.writingStyleGuide = onb?.style?.tone || intel.writingStyleGuide;
+                intel.toneKeywords = (onb?.style?.tone || "").split(",").map((s) => s.trim()).filter(Boolean);
+              } else if (section.id === "world") {
+                intel.canonRules = onb?.world?.canonRules ? [onb.world.canonRules] : intel.canonRules;
+              } else if (section.id === "cast") {
+                intel.characterSummaries = [{ name: onb?.cast?.protagonist, summary: "Protagonist" }];
+              }
+              await ProjectIntelService.save(intel);
+            } catch {}
             onRequest && onRequest.setToast && onRequest.setToast({
               title: "Sent to Project Intelligence",
               sub: section.label + " merged into the distilled brief.",
@@ -306,8 +319,7 @@ const OnboardingJsonPanel = ({ answers, onCopyJson, onPasteJson, onValidateJson,
 // RESEARCH LIBRARY (References) ----------------------------------------
 // =====================================================================
 const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible, toast, onDismissToast }) => {
-  // Reference library — pulls window.REFERENCES if available, else mock.
-  const live = window.REFERENCES || [];
+  // Reference library — load from ReferencesService, fallback to demo data.
   const fallback = [
     { id: "r-1", kind: "upload",   title: "Loomwright field journal.pdf",       sub: "Uploaded · 14 pages", aiContext: true, style: false, canon: false },
     { id: "r-2", kind: "url",      title: "Atlas of the Pale Reach (atlas.org)",  sub: "Web · referenced 4×", aiContext: true, style: false, canon: false },
@@ -317,7 +329,28 @@ const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisi
     { id: "r-6", kind: "onboarding", title: "Onboarding · style influences",      sub: "Captured during onboarding", aiContext: true, style: true, canon: false },
     { id: "r-7", kind: "onboarding", title: "Onboarding · project intelligence",  sub: "Project rules, tone, taboos", aiContext: true, style: false, canon: true },
   ];
-  const refs = live.length ? live : fallback;
+  const [refs, setRefs] = _ws_us(fallback);
+
+  _ws_ue(() => {
+    (async () => {
+      try {
+        const saved = await ReferencesService.list();
+        if (saved && saved.length > 0) {
+          setRefs(saved.map((r) => ({ ...r, kind: r.type || r.kind || "research", sub: r.subtitle || r.sub || "" })));
+        }
+      } catch {}
+    })();
+    const handler = async () => {
+      try {
+        const saved = await ReferencesService.list();
+        if (saved && saved.length > 0) {
+          setRefs(saved.map((r) => ({ ...r, kind: r.type || r.kind || "research", sub: r.subtitle || r.sub || "" })));
+        }
+      } catch {}
+    };
+    window.addEventListener("lw:references-changed", handler);
+    return () => window.removeEventListener("lw:references-changed", handler);
+  }, []);
 
   const [filter, setFilter] = _ws_us("all");
   const [selectedId, setSelectedId] = _ws_us(refs[0]?.id || null);
@@ -329,11 +362,17 @@ const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisi
   // separate "setup" flow.
   const [view, setView] = _ws_us("library");
   const [onbSection, setOnbSection] = _ws_us("project");
-  const [onbAnswers, setOnbAnswers] = _ws_us(() =>
-    (window.ONBOARDING_ANSWERS && typeof window.ONBOARDING_ANSWERS === "object")
-      ? window.ONBOARDING_ANSWERS
-      : ONBOARDING_ANSWERS_FALLBACK
-  );
+  const [onbAnswers, setOnbAnswers] = _ws_us(ONBOARDING_ANSWERS_FALLBACK);
+
+  // Load onboarding answers from persistent store
+  _ws_ue(() => {
+    (async () => {
+      try {
+        const saved = await OnboardingService.load();
+        if (saved) setOnbAnswers(saved);
+      } catch {}
+    })();
+  }, []);
 
   // Workspace-level listener: lets other components ask the library to
   // jump straight into onboarding mode (Settings → Project Intelligence
@@ -362,10 +401,11 @@ const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisi
   const ICONS = { upload: "paper", url: "link", style: "feather", canon: "book", research: "book", onboarding: "info" };
 
   const updateAnswerField = (sectionId, key, value) => {
-    setOnbAnswers((prev) => ({
-      ...prev,
-      [sectionId]: { ...(prev[sectionId] || {}), [key]: value },
-    }));
+    setOnbAnswers((prev) => {
+      const updated = { ...prev, [sectionId]: { ...(prev[sectionId] || {}), [key]: value } };
+      OnboardingService.save(updated).catch(() => {});
+      return updated;
+    });
   };
 
   // ------------------------------------------------------------------
@@ -466,7 +506,7 @@ const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisi
             <div className="fws-tab-body">
               <OnboardingJsonPanel
                 answers={onbAnswers}
-                onApplyJson={(parsed) => setOnbAnswers(parsed)}
+                onApplyJson={(parsed) => { setOnbAnswers(parsed); OnboardingService.save(parsed).catch(() => {}); }}
               />
               <div style={{ marginTop: 10, padding: "8px 12px", fontSize: 11, color: "var(--ink-3)", fontFamily: "var(--font-serif)", fontStyle: "italic", lineHeight: 1.55 }}>
                 Onboarding answers are the raw source. Edits here flow into
