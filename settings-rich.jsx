@@ -783,20 +783,102 @@ const SetReferences = ({ onRequest }) => {
 // =====================================================================
 // IMPORT / EXPORT
 // =====================================================================
-const SetImport = () => (
-  <SetGroupCard title="Import / Export" hint="Move your project in and out.">
-    <div className="set-grid-2">
-      <button className="set-btn set-btn--outline" data-callback="onExportProjectData"><Icon name="download" size={11}/> Export project</button>
-      <button className="set-btn set-btn--outline" data-callback="onImportProjectData"><Icon name="paper" size={11}/> Import project</button>
-      <button className="set-btn set-btn--outline" data-callback="onExportEntityLibrary"><Icon name="download" size={11}/> Export entity library</button>
-      <button className="set-btn set-btn--outline" data-callback="onImportEntityLibrary"><Icon name="paper" size={11}/> Import entity library</button>
-      <button className="set-btn set-btn--outline" data-callback="onExportAIHandoffPack"><Icon name="sparkle" size={11}/> Export AI Handoff Pack</button>
-      <button className="set-btn set-btn--outline" data-callback="onExportSettingsProfile"><Icon name="download" size={11}/> Export settings profile</button>
-      <button className="set-btn set-btn--outline" data-callback="onImportSettingsProfile"><Icon name="paper" size={11}/> Import settings profile</button>
-      <button className="set-btn set-btn--outline" data-callback="onBackupNow"><Icon name="stack" size={11}/> Backup now</button>
-    </div>
-  </SetGroupCard>
-);
+const SetImport = ({ onRequest } = {}) => {
+  const fileInputRef = React.useRef(null);
+  const [busy, setBusy] = _set_us(null);
+
+  const toast = (title, sub) => onRequest && onRequest.setToast && onRequest.setToast({ title, sub });
+
+  const exportProject = async () => {
+    if (!window.BackupService) return;
+    setBusy("export");
+    try {
+      await window.BackupService.downloadBundle();
+      toast("Project exported", "Bundle saved as JSON download");
+    } catch (e) { toast("Export failed", e.message || "Unknown error"); }
+    setBusy(null);
+  };
+
+  const importProject = () => fileInputRef.current && fileInputRef.current.click();
+
+  const onPickFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file || !window.BackupService) return;
+    setBusy("import");
+    try {
+      const res = await window.BackupService.importFromFile(file);
+      toast("Project imported", "Restored " + (res.applied || []).length + " sections — refresh to see all panels");
+    } catch (err) { toast("Import failed", err.message || "Invalid JSON"); }
+    setBusy(null);
+  };
+
+  const exportEntities = async () => {
+    if (!window.EntityService) return;
+    const map = await window.EntityService.getMap();
+    const blob = new Blob([JSON.stringify(map, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "loomwright-entities-" + Date.now() + ".json";
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 250);
+    toast("Entity library exported", Object.keys(map).length + " entities");
+  };
+
+  return (
+    <SetGroupCard title="Import / Export" hint="Move your project in and out.">
+      <input ref={fileInputRef} type="file" accept="application/json,.json" style={{ display: "none" }} onChange={onPickFile}/>
+      <div className="set-grid-2">
+        <button className="set-btn set-btn--outline" data-callback="onExportProjectData" onClick={exportProject} disabled={busy === "export"}>
+          <Icon name="download" size={11}/> {busy === "export" ? "Exporting…" : "Export project"}
+        </button>
+        <button className="set-btn set-btn--outline" data-callback="onImportProjectData" onClick={importProject} disabled={busy === "import"}>
+          <Icon name="paper" size={11}/> {busy === "import" ? "Importing…" : "Import project"}
+        </button>
+        <button className="set-btn set-btn--outline" data-callback="onExportEntityLibrary" onClick={exportEntities}>
+          <Icon name="download" size={11}/> Export entity library
+        </button>
+        <button className="set-btn set-btn--outline" data-callback="onImportEntityLibrary" onClick={importProject}>
+          <Icon name="paper" size={11}/> Import entity library
+        </button>
+        <button className="set-btn set-btn--outline" data-callback="onExportAIHandoffPack"
+          onClick={async () => {
+            if (!window.HandoffService) return;
+            const hist = await window.HandoffService.history();
+            const blob = new Blob([JSON.stringify(hist, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a"); a.href = url;
+            a.download = "loomwright-handoff-history-" + Date.now() + ".json";
+            document.body.appendChild(a); a.click();
+            setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 250);
+            toast("Handoff history exported", hist.length + " entries");
+          }}>
+          <Icon name="sparkle" size={11}/> Export AI Handoff Pack
+        </button>
+        <button className="set-btn set-btn--outline" data-callback="onExportSettingsProfile"
+          onClick={async () => {
+            if (!window.SettingsService) return;
+            const s = await window.SettingsService.load();
+            const blob = new Blob([JSON.stringify(s, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a"); a.href = url;
+            a.download = "loomwright-settings-" + Date.now() + ".json";
+            document.body.appendChild(a); a.click();
+            setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 250);
+            toast("Settings exported");
+          }}>
+          <Icon name="download" size={11}/> Export settings profile
+        </button>
+        <button className="set-btn set-btn--outline" data-callback="onImportSettingsProfile" onClick={importProject}>
+          <Icon name="paper" size={11}/> Import settings profile
+        </button>
+        <button className="set-btn set-btn--outline" data-callback="onBackupNow" onClick={exportProject}>
+          <Icon name="stack" size={11}/> Backup now
+        </button>
+      </div>
+    </SetGroupCard>
+  );
+};
 
 // =====================================================================
 // SHORTCUTS
@@ -841,7 +923,15 @@ const SetDebug = () => (
     <div className="set-card__divider"/>
     <div className="set-row__inline">
       <button className="set-btn set-btn--outline" data-callback="onResetLayout"><Icon name="refresh" size={11}/> Reset layout</button>
-      <button className="set-btn set-btn--outline" data-callback="onClearLocalDemoData"><Icon name="trash" size={11}/> Clear local demo data</button>
+      <button className="set-btn set-btn--outline" data-callback="onClearLocalDemoData"
+        onClick={async () => {
+          if (!window.BackupService) return;
+          if (typeof window.confirm === "function" && !window.confirm("Erase ALL local Loomwright data? This cannot be undone.")) return;
+          await window.BackupService.clearProject();
+          if (typeof window.location !== "undefined") window.location.reload();
+        }}>
+        <Icon name="trash" size={11}/> Clear local demo data
+      </button>
       <button className="set-btn set-btn--outline" data-callback="onShowLastAIHandoff"><Icon name="sparkle" size={11}/> Show last AI handoff pack</button>
     </div>
   </SetGroupCard>
@@ -863,7 +953,7 @@ const RichSettingsSection = ({ sectionId, onRequest }) => {
     case "review":     return <SetReview/>;
     case "intel":      return <SetIntel onRequest={onRequest}/>;
     case "references": return <SetReferences onRequest={onRequest}/>;
-    case "import":     return <SetImport/>;
+    case "import":     return <SetImport onRequest={onRequest}/>;
     case "shortcuts":  return <SetShortcuts/>;
     case "debug":      return <SetDebug/>;
     default:           return null;
