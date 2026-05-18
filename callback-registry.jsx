@@ -609,9 +609,38 @@
       return;
     }
 
-    // —— Default: log and soft notify ——
+    // —— Default ——
+    // UI housekeeping (close/cancel/zoom/back/expand/etc.) is React-owned and
+    // intentionally has no registry-side effect. Everything else surfaces a
+    // clear "not yet wired" notice so users never click a button that does
+    // nothing without explanation.
+    if (UI_HOUSEKEEPING_PREFIXES.some((p) => name.startsWith(p))) return;
+    notify(`"${name.replace(/^on/, "").replace(/([A-Z])/g, " $1").trim()}" isn't wired yet.`);
+    // eslint-disable-next-line no-console
     console.debug("[Loomwright] callback", name, ctx);
   }
+
+  // Callbacks whose semantics are pure UI state (managed by React inside
+  // panels/workspaces). Reaching them in dispatchCallback means the click
+  // bubbled past the React handler — silently return so the audit doesn't
+  // flag a missing handler. Be careful: this is a prefix match, so adding
+  // "onSet" here would mask onSetEntityStatus. Only add prefixes that are
+  // unambiguously cosmetic.
+  const UI_HOUSEKEEPING_PREFIXES = [
+    "onClosePanel", "onClosePalette", "onCloseWheel", "onCloseAtlasLayers",
+    "onCloseEventsLedger", "onCloseQuestLog", "onCloseTangleCanvas",
+    "onCloseOnboardingAnswers", "onCloseExtractionModal", "onCloseSpeedReader",
+    "onCancel", "onBack", "onZoom", "onAtlasZoom", "onAtlasFitView",
+    "onAtlasSearch", "onAtlasPan", "onAtlasLayer", "onAtlasGrid",
+    "onActivateTab", "onExpand", "onCollapse", "onTogglePanel",
+    "onClearPanelFilter", "onClearAtlasContext", "onClearAtlasFocus",
+    "onSortPanel", "onFilterPanel", "onSearchPanel",
+    "onMinimise", "onPin", "onBringPanel", "onReorder",
+    "onHover", "onFocusField", "onScroll", "onMove",
+    "onResize", "onDragOver", "onDragEnter", "onDragLeave",
+    "onPreview", "onChangeWorkspaceLayout", "onChangeWritingLayout",
+    "onShowAtlasLayer", "onHideAtlasLayer",
+  ];
 
   const handlers = {};
   function registerHandler(name, fn) {
