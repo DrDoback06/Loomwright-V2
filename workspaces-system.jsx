@@ -269,9 +269,18 @@ const OnboardingJsonPanel = ({ answers, onCopyJson, onPasteJson, onValidateJson,
             <Icon name="paper" size={11}/> Paste from clipboard
           </button>
           <button className="fws-topbar__exit" data-callback="onValidateOnboardingJson"
-            onClick={() => {
-              try { JSON.parse(text); setStatus({ ok: true, message: "Valid JSON." }); }
-              catch (e) { setStatus({ ok: false, message: "Invalid JSON: " + (e.message || "parse error") }); }
+            onClick={async () => {
+              let parsed;
+              try { parsed = JSON.parse(text); }
+              catch (e) { setStatus({ ok: false, message: "Invalid JSON: " + (e.message || "parse error") }); return; }
+              if (window.OnboardingService) {
+                const result = await window.OnboardingService.validate(parsed);
+                setStatus(result.valid
+                  ? { ok: true, message: "Valid onboarding JSON." }
+                  : { ok: false, message: "Unknown fields: " + result.errors.join("; ") });
+              } else {
+                setStatus({ ok: true, message: "Valid JSON." });
+              }
               onValidateJson && onValidateJson(text);
             }}>
             <Icon name="check" size={11}/> Validate
