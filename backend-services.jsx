@@ -751,6 +751,76 @@
     },
   };
 
+  // -------------------------------------------------------------------
+  // rewriteEntityRefs — when two entities are merged, rewrite every
+  // reference to the source ID across the live store to point at the
+  // target ID. Covers: occurrences, other entities' data fields, review
+  // queue items, composition payload, references' linkedEntityIds, and
+  // trash metadata. ManuscriptChapterService stores chapter-level
+  // entity occurrences elsewhere (OccurrenceService is the canonical
+  // store), so no chapter rewrite is needed beyond the occurrence rebind.
+  // -------------------------------------------------------------------
+  function deepReplaceIds(value, fromId, toId) {
+    if (value == null) return value;
+    if (typeof value === "string") return value === fromId ? toId : value;
+    if (Array.isArray(value)) return value.map((v) => deepReplaceIds(v, fromId, toId));
+    if (typeof value === "object") {
+      const out = {};
+      for (const [k, v] of Object.entries(value)) out[k] = deepReplaceIds(v, fromId, toId);
+      return out;
+    }
+    return value;
+  }
+
+  async function rewriteEntityRefs(fromId, toId) {
+    if (!fromId || !toId || fromId === toId) return;
+    // 1. Occurrences (canonical manuscript-to-entity link).
+    await OccurrenceService.rebindEntity(fromId, toId);
+    // 2. Other entities' data fields.
+    const all = EntityService.listAllSync();
+    for (const [type, byId] of Object.entries(all)) {
+      for (const e of Object.values(byId || {})) {
+        if (!e.data) continue;
+        const next = deepReplaceIds(e.data, fromId, toId);
+        if (JSON.stringify(next) !== JSON.stringify(e.data)) {
+          await EntityService.update(type, e.id, { data: next });
+        }
+      }
+    }
+    // 3. Review queue items.
+    const queue = await StorageService.get(KEYS.reviewQueue, []);
+    const queueNext = queue.map((item) => deepReplaceIds(item, fromId, toId));
+    if (JSON.stringify(queueNext) !== JSON.stringify(queue)) {
+      await StorageService.set(KEYS.reviewQueue, queueNext);
+    }
+    // 4. Composition payload.
+    const comp = await StorageService.get(KEYS.composition, null);
+    if (comp) {
+      const compNext = deepReplaceIds(comp, fromId, toId);
+      if (JSON.stringify(compNext) !== JSON.stringify(comp)) {
+        await StorageService.set(KEYS.composition, compNext);
+      }
+    }
+    // 5. References' linkedEntityIds and any embedded refs.
+    const refs = await StorageService.get(KEYS.references, []);
+    const refsNext = refs.map((r) => deepReplaceIds(r, fromId, toId));
+    if (JSON.stringify(refsNext) !== JSON.stringify(refs)) {
+      await StorageService.set(KEYS.references, refsNext);
+    }
+    // 6. Trash metadata.
+    const trash = await StorageService.get(KEYS.trash, []);
+    const trashNext = trash.map((t) => deepReplaceIds(t, fromId, toId));
+    if (JSON.stringify(trashNext) !== JSON.stringify(trash)) {
+      await StorageService.set(KEYS.trash, trashNext);
+    }
+    // 7. Project intelligence (entity summaries indexed by id).
+    const pi = ProjectIntelService.loadSync({});
+    const piNext = deepReplaceIds(pi, fromId, toId);
+    if (JSON.stringify(piNext) !== JSON.stringify(pi)) {
+      await ProjectIntelService.save(piNext);
+    }
+  }
+
   const LinkService = {
     async patchEntity(entityId, entityType, patch) {
       return EntityService.update(entityType, entityId, patch);
@@ -798,9 +868,11 @@
         if (!sid || sid === targetId) continue;
         const src = EntityService.getSync(sid, targetType);
         if (src) {
-          // Re-point any occurrences referencing the source to the merge target
-          // so manuscript double-click keeps working after the source is gone.
-          await OccurrenceService.rebindEntity(sid, targetId);
+          // Global reference rewrite — every place sid is referenced now
+          // points at targetId. Includes occurrences, other entities' data
+          // links, review queue items, composition payload, references'
+          // linkedEntityIds, and trash metadata.
+          await rewriteEntityRefs(sid, targetId);
           await EntityService.delete(targetType, sid);
         }
       }
