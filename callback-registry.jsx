@@ -250,7 +250,23 @@
       return;
     }
     if (/^onMerge\w*QueueItem$/.test(name)) {
-      notify("Merge from queue: select target in panel.");
+      const item = ctx.detail || {};
+      // If the merge modal already supplied a chosen alternative id (Confirm
+      // merge button inside the modal), perform the merge now and resolve the
+      // queue item. Otherwise open the modal.
+      const altId = ctx.detail?.altId || ctx.detail?.targetId;
+      if (item && item.id && altId && item.entityType) {
+        await LinkService.mergeEntities(altId, item.entityType, [item.payload?.id].filter(Boolean));
+        if (item.payload && item.payload.id && item.payload.id !== altId) {
+          // Source candidate has an entity record — already deleted by mergeEntities.
+        }
+        await ReviewService.resolve(item.id, "merged");
+        window.dispatchEvent(new CustomEvent("lw:close-merge-modal"));
+        window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+        notify("Merged.");
+        return;
+      }
+      window.dispatchEvent(new CustomEvent("lw:open-merge-modal", { detail: { item, sourceId: id, type } }));
       return;
     }
     if (/^onOpenSource\w*Mention$/.test(name) || name === "onOpenSourceMention") {
@@ -288,8 +304,19 @@
       notify("Moved to trash.");
       return;
     }
-    if (name === "onMergeItem" || name === "onMergeEntity" || name === "onMergeLocation") {
-      notify("Merge: choose target entity in the merge dialog.");
+    if (name === "onMergeItem" || name === "onMergeEntity" || name === "onMergeLocation" || /^onMerge[A-Z][a-z]+$/.test(name)) {
+      const targetType = type || (name === "onMergeLocation" ? "locations" : name === "onMergeItem" ? "items" : null);
+      if (!id || !targetType) {
+        notify("Select an entity to merge first.");
+        return;
+      }
+      window.dispatchEvent(new CustomEvent("lw:open-merge-modal", {
+        detail: {
+          item: { id: null, entityType: targetType, candidate: { name: entity?.name }, mention: entity?.summary || "", payload: entity },
+          sourceId: id,
+          type: targetType,
+        },
+      }));
       return;
     }
 
