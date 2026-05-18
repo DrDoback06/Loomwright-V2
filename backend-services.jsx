@@ -955,6 +955,8 @@
     window.addEventListener("lw:ai-handoff-save", (e) => HandoffService.savePack(e.detail?.pack));
     window.addEventListener("lw:ai-handoff-import", (e) => HandoffService.importResult(e.detail));
     window.addEventListener("lw:ai-handoff-save-reference", (e) => HandoffService.importResult({ ...(e.detail || {}), mode: "saveReference" }));
+    window.addEventListener("lw:ai-handoff-create-review-items", (e) => HandoffService.importResult({ ...(e.detail || {}), mode: "review" }));
+    window.addEventListener("lw:ai-handoff-update-entities", (e) => HandoffService.importResult({ ...(e.detail || {}), mode: "updateEntities" }));
 
     window.addEventListener("lw:settings-update", (e) => {
       const d = e.detail || {};
