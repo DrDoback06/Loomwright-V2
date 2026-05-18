@@ -30,7 +30,31 @@
     manuscriptChapters: "manuscript_chapters",
     speedReader: "speed_reader",
     extractionSession: "extraction_session",
+    sampleLoaded: "sample_project_loaded",
+    occurrences: "entity_occurrences",
   };
+
+  // Synchronously read the sample-loaded flag from localStorage BEFORE any
+  // panel renders. Upgrade modules (loaded earlier) have already seeded
+  // window.ENTITY_SAMPLES; if the user has not opted into the sample project,
+  // wipe those seeds now so fresh projects render empty states instead of
+  // silently presenting demo data as live content. The captured seeds are
+  // moved to __LW_SAMPLE_SOURCES__ so SampleProjectService.loadSample can
+  // still restore them on explicit user action.
+  window.__LW_SAMPLE_SOURCES__ = {
+    ENTITY_SAMPLES: { ...(window.ENTITY_SAMPLES || {}) },
+    CAST_SAMPLE: Array.isArray(window.CAST_SAMPLE) ? window.CAST_SAMPLE.slice() : [],
+  };
+  try {
+    const raw = window.localStorage && window.localStorage.getItem(PREFIX + KEYS.sampleLoaded);
+    window.__LW_SAMPLE_LOADED__ = raw === "true" || raw === "1";
+  } catch (_) {
+    window.__LW_SAMPLE_LOADED__ = false;
+  }
+  if (!window.__LW_SAMPLE_LOADED__) {
+    window.ENTITY_SAMPLES = {};
+    window.CAST_SAMPLE = [];
+  }
 
   const nowIso = () => new Date().toISOString();
   const uuid = (prefix = "lw") => (
@@ -215,8 +239,10 @@
         };
       });
     };
-    if (window.CAST_SAMPLE) add("cast", window.CAST_SAMPLE);
-    Object.entries(window.ENTITY_SAMPLES || {}).forEach(([type, rows]) => add(type, rows));
+    const seedCast = (window.CAST_SAMPLE && window.CAST_SAMPLE.length) ? window.CAST_SAMPLE : (window.__LW_SAMPLE_SOURCES__?.CAST_SAMPLE || []);
+    const seedSamples = (window.ENTITY_SAMPLES && Object.keys(window.ENTITY_SAMPLES).length) ? window.ENTITY_SAMPLES : (window.__LW_SAMPLE_SOURCES__?.ENTITY_SAMPLES || {});
+    if (seedCast.length) add("cast", seedCast);
+    Object.entries(seedSamples).forEach(([type, rows]) => add(type, rows));
     return out;
   }
 
@@ -865,9 +891,19 @@
         });
       }
       window.PROJECT_INTELLIGENCE = await ProjectIntelService.save(ProjectIntelService.defaultIntel());
+      await StorageService.set(KEYS.sampleLoaded, true);
+      window.__LW_SAMPLE_LOADED__ = true;
       window.dispatchEvent(new CustomEvent("lw:project-imported", { detail: { sample: true } }));
       notify("Sample project loaded.");
       return true;
+    },
+    async clearSample() {
+      await StorageService.set(KEYS.sampleLoaded, false);
+      window.__LW_SAMPLE_LOADED__ = false;
+      clearDemoGlobals();
+      await StorageService.set(KEYS.entities, {});
+      applyEntityGlobals({});
+      window.dispatchEvent(new CustomEvent("lw:project-imported", { detail: { cleared: true } }));
     },
   };
 
@@ -1065,8 +1101,18 @@
     });
   }
 
+  function clearDemoGlobals() {
+    // Wipe demo seeds so empty panels don't silently render sample data.
+    // applyEntityGlobals will re-populate with live entities (sample or user).
+    window.ENTITY_SAMPLES = {};
+    window.CAST_SAMPLE = [];
+  }
+
   async function initialise() {
     await StorageService.ready();
+    const sampleLoaded = !!StorageService.getSync(KEYS.sampleLoaded, false);
+    window.__LW_SAMPLE_LOADED__ = sampleLoaded;
+    if (!sampleLoaded) clearDemoGlobals();
     await EntityService.hydrateFromStorage();
     await ReferencesService.hydrateFromStorage();
     const onb = await OnboardingService.load(window.ONBOARDING_ANSWERS || {});
