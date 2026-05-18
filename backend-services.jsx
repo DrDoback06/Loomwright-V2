@@ -32,6 +32,7 @@
     extractionSession: "extraction_session",
     sampleLoaded: "sample_project_loaded",
     occurrences: "entity_occurrences",
+    tangle: "tangle_canvas",
   };
 
   // Synchronously read the sample-loaded flag from localStorage BEFORE any
@@ -620,6 +621,46 @@
       const next = { ...clone(state), updatedAt: nowIso() };
       await StorageService.set(KEYS.composition, next);
       return next;
+    },
+  };
+
+  // -------------------------------------------------------------------
+  // TangleService — lightweight persistence for the Tangle mind-map.
+  // Stores nodes and groups under KEYS.tangle. The canvas itself is
+  // React-rendered; this service just keeps the data alive across reload
+  // and provides the wiring for "send suggestion to tangle" and the
+  // create/edit/delete tangle node callbacks.
+  // -------------------------------------------------------------------
+  const TangleService = {
+    defaultState() {
+      return { nodes: [], groups: [], updatedAt: nowIso() };
+    },
+    loadSync() {
+      return StorageService.getSync(KEYS.tangle, this.defaultState());
+    },
+    async save(state) {
+      const next = { ...this.loadSync(), ...clone(state), updatedAt: nowIso() };
+      await StorageService.set(KEYS.tangle, next);
+      window.dispatchEvent(new CustomEvent("lw:tangle-updated", { detail: next }));
+      return next;
+    },
+    async addNode(node) {
+      const state = this.loadSync();
+      const row = { ...clone(node), id: node.id || uuid("tn"), createdAt: node.createdAt || nowIso() };
+      return this.save({ ...state, nodes: [...(state.nodes || []), row] });
+    },
+    async updateNode(id, patch) {
+      const state = this.loadSync();
+      return this.save({ ...state, nodes: (state.nodes || []).map((n) => n.id === id ? { ...n, ...patch, updatedAt: nowIso() } : n) });
+    },
+    async removeNode(id) {
+      const state = this.loadSync();
+      return this.save({ ...state, nodes: (state.nodes || []).filter((n) => n.id !== id) });
+    },
+    async addGroup(group) {
+      const state = this.loadSync();
+      const row = { ...clone(group), id: group.id || uuid("tg"), createdAt: group.createdAt || nowIso() };
+      return this.save({ ...state, groups: [...(state.groups || []), row] });
     },
   };
 
@@ -1326,6 +1367,7 @@
     CompositionService,
     HandoffService,
     TrashService,
+    TangleService,
     LinkService,
     AIService,
     ExtractionService,

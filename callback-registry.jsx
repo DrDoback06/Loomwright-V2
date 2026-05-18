@@ -661,6 +661,37 @@
       return;
     }
 
+    // —— Tangle nodes (TangleService — local canvas state) ——
+    if (name === "onCreateTangleNode" || name === "onCreateTangleGroup") {
+      const TS = B().TangleService;
+      if (!TS) { notify("Tangle service unavailable."); return; }
+      const payload = ctx.detail || {};
+      if (name === "onCreateTangleNode") {
+        await TS.addNode({ kind: payload.kind || "note", title: payload.title || "New node", body: payload.body || "" });
+        notify("Tangle node added.");
+      } else {
+        await TS.addGroup({ title: payload.title || "Group" });
+        notify("Tangle group added.");
+      }
+      return;
+    }
+    if (name === "onEditTangleNode") {
+      const TS = B().TangleService;
+      const nodeId = ctx.detail?.id || id;
+      if (!TS || !nodeId) { notify("Open the tangle node first."); return; }
+      await TS.updateNode(nodeId, ctx.detail?.patch || ctx.detail || {});
+      notify("Tangle node updated.");
+      return;
+    }
+    if (name === "onDeleteTangleNodeRequest") {
+      const TS = B().TangleService;
+      const nodeId = ctx.detail?.id || id;
+      if (!TS || !nodeId) { notify("Open the tangle node first."); return; }
+      await TS.removeNode(nodeId);
+      notify("Tangle node removed.");
+      return;
+    }
+
     // —— Explicit Bucket A handlers (non-generic) ——
 
     // Generic + Create (no type given) — open editor with panel kind.
