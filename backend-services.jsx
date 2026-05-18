@@ -724,6 +724,22 @@
       if (targetType) data[field + "Type"] = targetType;
       return EntityService.update(entityType, entityId, { data });
     },
+    async appendField(entityId, entityType, field, value) {
+      // Generic field-append for onAdd<Field> callbacks. Pushes a value
+      // onto entity.data[field] (creating it if absent). Avoids duplicates
+      // when the value is a primitive equal to an existing entry.
+      if (entityId == null || !field || value == null || value === "") return null;
+      const entity = EntityService.getSync(entityId, entityType);
+      if (!entity) return null;
+      const data = { ...(entity.data || {}) };
+      const list = Array.isArray(data[field]) ? [...data[field]] : [];
+      const exists = (typeof value === "string" || typeof value === "number")
+        ? list.includes(value)
+        : list.some((row) => row && typeof row === "object" && row.id && value && row.id === value.id);
+      if (!exists) list.push(value);
+      data[field] = list;
+      return EntityService.update(entityType, entityId, { data });
+    },
     async setStatus(entityId, entityType, status) {
       return EntityService.update(entityType, entityId, { status });
     },
@@ -1317,6 +1333,8 @@
     SampleProjectService,
     exportProject,
     importProject,
+    downloadJson,
+    pickJsonFile,
     initialise,
   };
 

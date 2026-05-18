@@ -58,10 +58,13 @@ for (const m of body.matchAll(/"(on[A-Za-z0-9]+)"/g)) literalMatches.add(m[1]);
 
 const regexPatterns = [];
 // Capture both /^on...$/ (anchored) and /^on.../ (prefix) regex literals.
-for (const m of body.matchAll(/\/\^(on[A-Za-z0-9_\\\[\]+*?()|.]+?)(\$)?\/(?=\.)/g)) {
+// Character class must include `-` so ranges like [A-Z] inside the source
+// are captured intact. We stop at the unescaped closing `/` of the regex
+// literal by matching everything except an unescaped slash.
+for (const m of body.matchAll(/\/\^(on(?:\\\/|[^\/])+?)\/(?=\.)/g)) {
   try {
-    let src = "^" + m[1].replace(/\\w/g, "[A-Za-z0-9_]");
-    if (m[2]) src += "$";
+    let src = m[1].replace(/\\w/g, "[A-Za-z0-9_]");
+    if (!src.startsWith("^")) src = "^" + src;
     regexPatterns.push(new RegExp(src));
   } catch (_) {}
 }
@@ -89,11 +92,10 @@ for (const fn of ["parseCreateType", "parseEditType", "parseDeleteType"]) {
   // Only count the helper if dispatchCallback actually calls it AND uses
   // its return value to dispatch (openEditor / EntityService.delete).
   if (!body.includes(fn + "(name)")) continue;
-  for (const rm of m[1].matchAll(/name\.match\(\/\^(on[A-Za-z]+)\\\(/g)) {
-    helperPrefixes.push(rm[1]);
-  }
-  // Also support an explicit second-arg form.
-  for (const rm of m[1].matchAll(/\/\^(on[A-Za-z]+)\(\[A-Za-z\]\+\)/g)) {
+  // Look for `/^onX(...)` somewhere in the helper body. The actual capture
+  // group syntax inside the helper may be `(...)`, `([A-Za-z]+)`,
+  // `([A-Za-z]+?)`, or wrapped in alternation — the prefix is what matters.
+  for (const rm of m[1].matchAll(/\/\^(on[A-Za-z]+)\(/g)) {
     if (!helperPrefixes.includes(rm[1])) helperPrefixes.push(rm[1]);
   }
 }

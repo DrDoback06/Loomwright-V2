@@ -13,8 +13,15 @@
   const TYPE_FROM_CREATE = {
     Location: "locations", Item: "items", Class: "classes", Race: "races",
     Stat: "stats", Skill: "skills", Quest: "quests", Event: "events",
-    Creature: "bestiary", Faction: "factions", Reference: "references",
-    Cast: "cast", Character: "cast", Entity: "locations",
+    Creature: "bestiary", BestiaryEntry: "bestiary",
+    Faction: "factions", Reference: "references",
+    Cast: "cast", Character: "cast", CharacterSeed: "cast",
+    Entity: "locations",
+    CanonFact: "lore", TimelineEvent: "events", SkillTree: "skills",
+    ChildLocation: "locations", AtlasLocation: "locations",
+    EventConsequence: "events", EventFromQuestStep: "events",
+    EventFromRelationship: "events", EventFromTangle: "events",
+    QuestFromTangle: "quests", RelationshipChangeFromEvent: "events",
   };
 
   function hasReactClick(el) {
@@ -79,6 +86,118 @@
     }));
   }
 
+  // -------------------------------------------------------------------
+  // Generic copy/import/export resolvers used by the regex branches in
+  // dispatchCallback. They read from / write to the live project store
+  // via the existing backend services.
+  // -------------------------------------------------------------------
+  async function resolveCopyTarget(name, ctx) {
+    const explicit = ctx.detail?.text || ctx.detail?.prompt || ctx.detail?.json || ctx.detail?.content;
+    if (explicit) return explicit;
+    const backend = B();
+    switch (name) {
+      case "onCopyIntelFile":
+      case "onCopyToProjectIntelligenceFile":
+        return backend.ProjectIntelService.loadSync({});
+      case "onCopyEntityFillPrompt": {
+        const ent = ctx.entity || (ctx.entityId && backend.EntityService.getSync(ctx.entityId, ctx.entityType));
+        const schema = ent ? { ...ent, name: ent.name || "", summary: ent.summary || "" } : { name: "", summary: "" };
+        return [
+          "Fill the following entity record. Return JSON matching this shape.",
+          "Schema:", JSON.stringify(schema, null, 2),
+        ].join("\n");
+      }
+      case "onCopyStepJsonPrompt":
+        return [
+          "You are filling a Loomwright onboarding step. Return JSON only.",
+          "Step:", ctx.detail?.section || "projectFoundation",
+        ].join("\n");
+      case "onCopyHelperPrompt":
+        return ctx.detail?.label
+          ? `Helper prompt for "${ctx.detail.label}".`
+          : "Helper prompt.";
+      case "onCopyGeneratedText":
+        return window.__LW_LAST_GENERATED_DRAFT__ || null;
+      default:
+        return null;
+    }
+  }
+
+  async function importEntityCollection(target, data) {
+    const backend = B();
+    const normalised = String(target).toLowerCase();
+    if (normalised === "settingsprofile" || normalised === "settings") {
+      const sections = (data && typeof data === "object") ? data : {};
+      for (const [section, value] of Object.entries(sections)) {
+        if (section && value && typeof value === "object") {
+          await backend.SettingsService.saveSection(section, value);
+        }
+      }
+      return;
+    }
+    if (normalised === "plotjson" || normalised === "plot") {
+      await backend.OnboardingService.save({ ...(backend.OnboardingService.loadSync({}) || {}), plotStructure: data });
+      return;
+    }
+    if (normalised === "externalresearchnotes" || normalised === "researchnotes") {
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        if (!item) continue;
+        await backend.ReferencesService.save({
+          kind: "research",
+          title: item.title || "Research note",
+          content: typeof item === "string" ? item : (item.content || JSON.stringify(item, null, 2)),
+        });
+      }
+      return;
+    }
+    if (normalised === "charactersfromtext") {
+      const text = typeof data === "string" ? data : (data?.text || "");
+      const names = text ? Array.from(new Set(text.match(/\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b/g) || [])) : [];
+      for (const candidate of names) {
+        await backend.ReviewService.add({
+          id: backend.uuid("rq"),
+          entityType: "cast",
+          name: candidate,
+          action: "Import",
+          level: "suggestion",
+          value: 60,
+          reason: "Imported from pasted text",
+          payload: { name: candidate, type: "cast" },
+          status: "pending",
+        });
+      }
+      return;
+    }
+    // Default: treat data as an entity (or array of entities) of <target> type.
+    const entityType = backend.EntityService.normaliseType(normalised);
+    const rows = Array.isArray(data) ? data : [data];
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      await backend.EntityService.save(entityType, row, { status: row.status || "active" });
+    }
+  }
+
+  function resolveExportTarget(name, ctx) {
+    const backend = B();
+    switch (name) {
+      case "onExportAIHandoffPack":
+        return ctx.detail?.pack || { kind: "ai-handoff", createdAt: backend.nowIso(), entities: backend.EntityService.listAllSync() };
+      case "onExportIntelFile":
+        return backend.ProjectIntelService.loadSync({});
+      case "onExportCanonSourcePack":
+        return backend.ReferencesService.listSync().filter((r) => r.kind === "canon" || r.isCanonSource);
+      case "onExportStyleInfluencePack":
+        return backend.ReferencesService.listSync().filter((r) => r.kind === "style" || r.isStyleInfluence);
+      case "onExportPrivacyProfile":
+        return backend.SettingsService.getSectionSync("privacy", {});
+      case "onExportProfile":
+        return backend.SettingsService.getAllSync();
+      default:
+        return ctx.detail || {};
+    }
+  }
+
   async function acceptQueueItem(ctx, item) {
     const id = item?.id || ctx.detail?.id;
     const queue = B().ReviewService.listSync();
@@ -117,6 +236,16 @@
     const m = name.match(/^onEdit([A-Za-z]+)$/);
     if (!m) return null;
     return TYPE_FROM_CREATE[m[1]] || B().EntityService.normaliseType(m[1].toLowerCase());
+  }
+
+  function parseDeleteType(name) {
+    // Match onDelete<Type>, onDelete<Type>Request, onDelete<Type>Forever.
+    // Plural <Type>s collapses to single (onDeleteEntities → entity → cast/etc).
+    const m = name.match(/^onDelete([A-Za-z]+?)(Forever|Request|s)?$/);
+    if (!m) return null;
+    const stem = m[1];
+    if (!stem || stem === "Trash" || stem === "TrashItem") return null;
+    return TYPE_FROM_CREATE[stem] || B().EntityService.normaliseType(stem.toLowerCase());
   }
 
   const BACKEND_HANDLED = new Set([
@@ -239,6 +368,18 @@
     const editType = parseEditType(name);
     if (editType || name === "onEditEntity") {
       openEditor(editType || type, entity || { id }, "full");
+      return;
+    }
+    const deleteType = parseDeleteType(name);
+    if (deleteType) {
+      const targetId = ctx.detail?.id || id;
+      if (!targetId) {
+        notify("Select an entity to delete first.");
+        return;
+      }
+      await EntityService.delete(deleteType, targetId);
+      notify("Moved to trash.");
+      window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
       return;
     }
 
@@ -594,6 +735,65 @@
         });
         notify("Speed Reader session saved.");
       }
+      return;
+    }
+
+    // —— Generic onAdd<Field> — append to current entity's data field ——
+    // Strict guard so we never write undefined/empty values or run without
+    // a valid target. Specific onAdd* branches (onAddReferenceSource,
+    // onAddCanonRule, etc.) appear earlier and take precedence.
+    if (/^onAdd[A-Z][A-Za-z]+$/.test(name)) {
+      const field = name.replace(/^onAdd/, "").replace(/^[A-Z]/, (c) => c.toLowerCase());
+      const rawValue = ctx.detail?.value != null ? ctx.detail.value
+        : ctx.detail?.text != null ? ctx.detail.text
+        : (ctx.detail && typeof ctx.detail === "object" && !ctx.detail.target) ? ctx.detail
+        : null;
+      const value = typeof rawValue === "string" ? rawValue.trim() : rawValue;
+      const valueIsEmpty = value == null || value === ""
+        || (typeof value === "object" && Object.keys(value || {}).length === 0);
+      if (!id || !type || valueIsEmpty) {
+        if (id && type) openEditor(type, ctx.entity || { id }, "full");
+        else notify(`Open the target first, then add a ${field}.`);
+        return;
+      }
+      await LinkService.appendField(id, type, field, value);
+      notify(`Added to ${field}.`);
+      return;
+    }
+
+    // —— Generic onCopy* — clipboard write ——
+    if (/^onCopy[A-Z][A-Za-z]+(Prompt|Json|File|Text)$/.test(name)) {
+      const text = await resolveCopyTarget(name, ctx);
+      if (text == null) {
+        notify("Nothing to copy.");
+        return;
+      }
+      try {
+        await navigator.clipboard?.writeText(typeof text === "string" ? text : JSON.stringify(text, null, 2));
+        notify("Copied to clipboard.");
+      } catch (e) {
+        notify("Clipboard unavailable.");
+      }
+      return;
+    }
+
+    // —— Generic onImport<Type> — JSON file picker ——
+    if (/^onImport[A-Z][A-Za-z]+$/.test(name)) {
+      const target = name.replace(/^onImport/, "");
+      const data = ctx.detail?.json || ctx.detail?.data || await B().pickJsonFile?.();
+      if (!data) return;
+      await importEntityCollection(target, data);
+      notify("Import complete.");
+      window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      return;
+    }
+
+    // —— Generic onExport*Pack / onExport*File / onExport*Profile — download ——
+    if (/^onExport[A-Z][A-Za-z]+(Pack|File|Profile)$/.test(name)) {
+      const data = resolveExportTarget(name, ctx);
+      const slug = name.replace(/^onExport/, "").replace(/([A-Z])/g, "-$1").toLowerCase().replace(/^-/, "");
+      await B().downloadJson?.(`loomwright-${slug}.json`, data);
+      notify("Export downloaded.");
       return;
     }
 
