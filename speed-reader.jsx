@@ -146,20 +146,69 @@ function srSplitWord(word) {
 
 // ---------------------------------------------------------------------
 // useSpeedReader — the shared engine. Both surfaces consume this.
+//
+// Persistence: when a source is a persisted SpeedReaderService session
+// (sourceId begins with "sr-"), every state change is mirrored back to
+// the service. On mount we hydrate from `getActiveSessionSync()` if
+// available, so reload restores progress/WPM/bookmarks/notes.
 // ---------------------------------------------------------------------
+function _sr_backend() {
+  return (typeof window !== "undefined") ? window.LoomwrightBackend : null;
+}
+function _sr_isPersistedSession(id) {
+  return typeof id === "string" && id.startsWith("sr-");
+}
+function _sr_buildSourceFromSession(s) {
+  return {
+    id: s.id,
+    label: s.name || s.sourceTitle || "Reading session",
+    kind: s.sourceType || "paste",
+    text: s.rawText || "",
+    sessionId: s.id,
+  };
+}
+
 function useSpeedReader(initialSourceId = "ch7") {
-  const [sources, setSources] = _sr_us(SR_SAMPLE_SOURCES);
-  const [sourceId, setSourceId] = _sr_us(initialSourceId);
-  const [idx, setIdx] = _sr_us(0);
+  // Hydrate persisted sessions + sample fallbacks once on mount.
+  const persistedAtMount = _sr_um(() => {
+    const B = _sr_backend();
+    if (!B?.SpeedReaderService) return { sessions: [], activeId: null };
+    return {
+      sessions: B.SpeedReaderService.listSessionsSync(),
+      activeId: B.SpeedReaderService.loadSync().activeId,
+    };
+  }, []);
+
+  const initialSources = _sr_um(() => {
+    const live = (persistedAtMount.sessions || []).map(_sr_buildSourceFromSession);
+    // When the user has live sessions, drop the sample sources so the
+    // reader doesn't quietly mix demo and real content.
+    return live.length ? live : SR_SAMPLE_SOURCES;
+  }, [persistedAtMount.sessions]);
+
+  const activeSessionAtMount = _sr_um(() =>
+    (persistedAtMount.sessions || []).find((s) => s.id === persistedAtMount.activeId) || null,
+  [persistedAtMount.activeId, persistedAtMount.sessions]);
+
+  const initialIdx = activeSessionAtMount ? (activeSessionAtMount.currentWordIndex | 0) : 0;
+  const initialWpm = activeSessionAtMount?.wpm || SR_DEFAULTS.wpm;
+  const initialFont = activeSessionAtMount?.fontSize || SR_DEFAULTS.fontSize;
+  const initialResolvedSourceId =
+    persistedAtMount.activeId
+    || (initialSources[0] ? initialSources[0].id : initialSourceId);
+
+  const [sources, setSources] = _sr_us(initialSources);
+  const [sourceId, setSourceId] = _sr_us(initialResolvedSourceId);
+  const [idx, setIdx] = _sr_us(initialIdx);
   const [playing, setPlaying] = _sr_us(false);
-  const [wpm, setWpm] = _sr_us(SR_DEFAULTS.wpm);
-  const [fontSize, setFontSize] = _sr_us(SR_DEFAULTS.fontSize);
-  const [punctuationPause, setPunctuationPause] = _sr_us(SR_DEFAULTS.punctuationPause);
-  const [sentencePause, setSentencePause] = _sr_us(SR_DEFAULTS.sentencePause);
-  const [longWordSlow, setLongWordSlow] = _sr_us(SR_DEFAULTS.longWordSlow);
-  const [focusMode, setFocusMode] = _sr_us(SR_DEFAULTS.focusMode);
-  const [bookmarks, setBookmarks] = _sr_us([]);
-  const [notes, setNotes] = _sr_us([]);
+  const [wpm, setWpm] = _sr_us(initialWpm);
+  const [fontSize, setFontSize] = _sr_us(initialFont);
+  const [punctuationPause, setPunctuationPause] = _sr_us(activeSessionAtMount?.punctuationPause ?? SR_DEFAULTS.punctuationPause);
+  const [sentencePause, setSentencePause] = _sr_us(activeSessionAtMount?.sentencePause ?? SR_DEFAULTS.sentencePause);
+  const [longWordSlow, setLongWordSlow] = _sr_us(activeSessionAtMount?.longWordSlow ?? SR_DEFAULTS.longWordSlow);
+  const [focusMode, setFocusMode] = _sr_us(activeSessionAtMount?.focusMode ?? SR_DEFAULTS.focusMode);
+  const [bookmarks, setBookmarks] = _sr_us(activeSessionAtMount?.bookmarks || []);
+  const [notes, setNotes] = _sr_us(activeSessionAtMount?.notes || []);
   const [session, setSession] = _sr_us({ startedAt: null, wordsRead: 0, pauses: 0 });
 
   const source = _sr_um(() => sources.find((s) => s.id === sourceId) || sources[0], [sources, sourceId]);
@@ -167,8 +216,46 @@ function useSpeedReader(initialSourceId = "ch7") {
   const beat   = beats[Math.min(idx, beats.length - 1)];
   const fraction = beats.length ? (idx + 1) / beats.length : 0;
 
-  // Reset to start when source changes.
-  _sr_ue(() => { setIdx(0); }, [sourceId]);
+  // Reset to start when source changes — unless the new source is a
+  // persisted session, in which case hydrate from it.
+  _sr_ue(() => {
+    if (_sr_isPersistedSession(sourceId)) {
+      const B = _sr_backend();
+      const sess = B?.SpeedReaderService?.getSessionSync(sourceId);
+      if (sess) {
+        setIdx(sess.currentWordIndex | 0);
+        setWpm(sess.wpm || SR_DEFAULTS.wpm);
+        setFontSize(sess.fontSize || SR_DEFAULTS.fontSize);
+        setPunctuationPause(sess.punctuationPause !== false);
+        setSentencePause(sess.sentencePause !== false);
+        setLongWordSlow(sess.longWordSlow !== false);
+        setFocusMode(!!sess.focusMode);
+        setBookmarks(sess.bookmarks || []);
+        setNotes(sess.notes || []);
+        B.SpeedReaderService.setActiveSession(sess.id).catch(() => {});
+        return;
+      }
+    }
+    setIdx(0);
+  }, [sourceId]);
+
+  // Persist progress + settings whenever they change for a persisted session.
+  // Coalesce with a short timeout so the RSVP loop doesn't write on every word.
+  _sr_ue(() => {
+    if (!_sr_isPersistedSession(sourceId)) return;
+    const B = _sr_backend();
+    if (!B?.SpeedReaderService) return;
+    const t = setTimeout(() => {
+      B.SpeedReaderService.updateSession(sourceId, {
+        currentWordIndex: idx,
+        wpm, fontSize,
+        punctuationPause, sentencePause, longWordSlow, focusMode,
+        bookmarks, notes,
+        stats: { ...(session || {}), lastReadAt: new Date().toISOString() },
+      }).catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [sourceId, idx, wpm, fontSize, punctuationPause, sentencePause, longWordSlow, focusMode, bookmarks, notes, session]);
 
   // RSVP timing loop.
   _sr_ue(() => {
@@ -255,14 +342,83 @@ function useSpeedReader(initialSourceId = "ch7") {
     return note;
   }, [idx, beats, sourceId]);
 
-  // ----- Add a pasted source
+  // ----- Add a pasted source (persisted via SpeedReaderService when available)
   const addPastedSource = _sr_uc((text, label) => {
+    const B = _sr_backend();
+    if (B?.SpeedReaderService && text && text.trim()) {
+      // Fire-and-forget; we still update local state synchronously so
+      // the UI can switch immediately.
+      const create = B.SpeedReaderService.createSession({
+        sourceType: "paste",
+        rawText: text,
+        name: label || "Pasted text",
+        sourceTitle: label || "Pasted text",
+        wpm, fontSize, punctuationPause, sentencePause, longWordSlow, focusMode,
+      });
+      // Promise resolves with the session — but we want immediate UI feedback.
+      Promise.resolve(create).then((s) => {
+        if (!s) return;
+        setSources((arr) => [_sr_buildSourceFromSession(s), ...arr.filter((x) => x.id !== s.id)]);
+        setSourceId(s.id);
+      }).catch(() => {});
+      // Provisional local source so the UI does not stall.
+      const provisionalId = "paste-" + Date.now();
+      const provisional = { id: provisionalId, label: label || "Pasted text", kind: "paste", text };
+      setSources((arr) => [provisional, ...arr]);
+      setSourceId(provisionalId);
+      return provisional;
+    }
     const id = "paste-" + Date.now();
     const s = { id, label: label || "Pasted text", kind: "paste", text };
     setSources((arr) => [s, ...arr]);
     setSourceId(id);
     return s;
+  }, [wpm, fontSize, punctuationPause, sentencePause, longWordSlow, focusMode]);
+
+  // ----- Read current Writer's Room chapter
+  const readCurrentChapter = _sr_uc(async () => {
+    const B = _sr_backend();
+    if (!B?.SpeedReaderService) return null;
+    try {
+      const s = await B.SpeedReaderService.createSession({ sourceType: "chapter" });
+      setSources((arr) => [_sr_buildSourceFromSession(s), ...arr.filter((x) => x.id !== s.id)]);
+      setSourceId(s.id);
+      return s;
+    } catch (_) { return null; }
   }, []);
+
+  // ----- Read a reference by id
+  const readReference = _sr_uc(async (referenceId) => {
+    const B = _sr_backend();
+    if (!B?.SpeedReaderService || !referenceId) return null;
+    try {
+      const s = await B.SpeedReaderService.createSession({ sourceType: "reference", sourceId: referenceId });
+      setSources((arr) => [_sr_buildSourceFromSession(s), ...arr.filter((x) => x.id !== s.id)]);
+      setSourceId(s.id);
+      return s;
+    } catch (_) { return null; }
+  }, []);
+
+  // ----- Delete a persisted session
+  const deletePersistedSession = _sr_uc(async (sessionId) => {
+    const B = _sr_backend();
+    if (!B?.SpeedReaderService || !sessionId) return;
+    await B.SpeedReaderService.deleteSession(sessionId);
+    setSources((arr) => arr.filter((x) => x.id !== sessionId));
+    if (sourceId === sessionId) {
+      const next = sources.find((x) => x.id !== sessionId);
+      setSourceId(next ? next.id : (SR_SAMPLE_SOURCES[0]?.id || ""));
+    }
+  }, [sourceId, sources]);
+
+  // ----- Reset progress on the active persisted session
+  const resetPersistedProgress = _sr_uc(async () => {
+    const B = _sr_backend();
+    if (!_sr_isPersistedSession(sourceId)) { setIdx(0); return; }
+    if (!B?.SpeedReaderService) return;
+    await B.SpeedReaderService.resetProgress(sourceId);
+    setIdx(0);
+  }, [sourceId]);
 
   return {
     // state
@@ -275,6 +431,7 @@ function useSpeedReader(initialSourceId = "ch7") {
     // actions
     seek, previousWord, nextWord, previousSentence, nextSentence, restart,
     bookmark, noteCurrentSentence, addPastedSource,
+    readCurrentChapter, readReference, deletePersistedSession, resetPersistedProgress,
   };
 }
 
@@ -389,6 +546,9 @@ const SpeedReaderPanelBody = ({ panel }) => {
       <div className="sr-panel__actions">
         <button className="sr-panel__btn" onClick={() => sr.bookmark()} data-callback="onSpeedReaderBookmark">
           <Icon name="bookmark" size={11}/> Bookmark
+        </button>
+        <button className="sr-panel__btn" onClick={() => sr.readCurrentChapter()} data-callback="onReadCurrentChapter">
+          <Icon name="paper" size={11}/> Read chapter
         </button>
         <button className="sr-panel__btn" onClick={onAddSource} data-callback="onSpeedReaderAddSource">
           <Icon name="plus" size={11}/> Add source
@@ -508,6 +668,9 @@ const SpeedReaderWorkspaceFull = ({ workspace, onExit, onRequest, dragTargetVisi
                 <span style={{ fontSize: 9, color: "var(--ink-4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{s.kind}</span>
               </button>
             ))}
+            <button className="fws-settings-nav__row" onClick={() => sr.readCurrentChapter()} data-callback="onReadCurrentChapter">
+              <Icon name="paper" size={11}/> Read current chapter
+            </button>
             <button className="fws-settings-nav__row" onClick={() => setPasteOpen(true)} data-callback="onSpeedReaderAddSource">
               <Icon name="plus" size={11}/> Add reading source…
             </button>

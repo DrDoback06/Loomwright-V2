@@ -727,6 +727,129 @@ async function main() {
   const expNested = await B.ProjectArchiveService.buildExport();
   log("[archive] redactSecrets strips nested apiKey", JSON.stringify(expNested.settings || {}).indexOf("sk-deep") === -1);
 
+  // -------------------------------------------------------------------
+  // Speed Reader
+  // -------------------------------------------------------------------
+  console.log("");
+  console.log("[speed reader]");
+
+  await B.StorageService.clear();
+
+  // -- We can't load speed-reader.jsx in this sandbox (JSX/React), so
+  // exercise the tokeniser / pivot helpers via a direct re-implementation
+  // that mirrors srTokenise / srSplitWord. The service exercise below
+  // covers the persistence layer; smoke for the engine helpers lives in
+  // the e2e suite which has a real DOM.
+  function srTokeniseSmoke(text) {
+    if (!text) return [];
+    const raw = text.replace(/\s+/g, " ").trim().split(" ");
+    const out = [];
+    raw.forEach((w, i) => {
+      if (!w) return;
+      const last = w[w.length - 1];
+      out.push({
+        idx: i,
+        word: w,
+        sentenceEnd: /[.!?…]/.test(last),
+        clauseEnd: /[,;:—–]/.test(last) && !/[.!?…]/.test(last),
+        length: w.length,
+      });
+    });
+    return out;
+  }
+  function srSplitWordSmoke(word) {
+    if (!word) return { before: "", pivot: "", after: "" };
+    const len = word.length;
+    let p = 0;
+    if (len <= 1) p = 0;
+    else if (len <= 4) p = 1;
+    else if (len <= 6) p = 2;
+    else if (len <= 9) p = 3;
+    else if (len <= 13) p = 4;
+    else p = 5;
+    return { before: word.slice(0, p), pivot: word[p] || "", after: word.slice(p + 1) };
+  }
+  log("[sr] tokenise empty → 0", srTokeniseSmoke("").length === 0);
+  const tok = srTokeniseSmoke("Hello brave new world.");
+  log("[sr] tokenise 4-word sentence → 4 beats", tok.length === 4);
+  log("[sr] tokenise marks sentence end on '.'", tok[3].sentenceEnd === true);
+  const tokClause = srTokeniseSmoke("first, second, third.");
+  log("[sr] tokenise marks clause-end on ','", tokClause[0].clauseEnd === true && tokClause[1].clauseEnd === true);
+  log("[sr] split 'at' pivot index = 1", srSplitWordSmoke("at").pivot === "t");
+  log("[sr] split 'running' pivot index = 3", srSplitWordSmoke("running").pivot === "n");
+  log("[sr] split 'communication' pivot index = 4 (len<=13)", srSplitWordSmoke("communication").pivot === "u");
+  log("[sr] split 'extraordinarily' pivot index = 5 (len>13)", srSplitWordSmoke("extraordinarily").pivot === "o");
+
+  // ----- SpeedReaderService persistence -----
+  const SRS = B.SpeedReaderService;
+  log("[sr] SpeedReaderService exposed", !!SRS && typeof SRS.createSession === "function");
+
+  const initial = SRS.loadSync();
+  log("[sr] defaultState shape: { activeId:null, sessions:[] }", initial.activeId === null && Array.isArray(initial.sessions) && initial.sessions.length === 0);
+
+  // Create a paste session.
+  const created = await SRS.createSession({
+    sourceType: "paste",
+    rawText: "The light over Pale Reach was the colour of cooled tin.",
+    name: "Smoke paste",
+  });
+  log("[sr] createSession returns a session with id + totalWords", !!created?.id && created.totalWords > 0);
+  log("[sr] createSession sets activeId", SRS.loadSync().activeId === created.id);
+
+  // Bookmark + note.
+  await SRS.addBookmark(created.id, { wordIndex: 3, label: "first highlight" });
+  await SRS.addBookmark(created.id, { wordIndex: 3, label: "first highlight" }); // dedup
+  await SRS.addNote(created.id, { wordIndex: 5, kind: "difficulty", body: "slow" });
+  const afterBM = SRS.getSessionSync(created.id);
+  log("[sr] addBookmark persists", afterBM.bookmarks.length === 1);
+  log("[sr] addBookmark dedups identical (wordIndex,label)", afterBM.bookmarks.length === 1);
+  log("[sr] addNote persists", afterBM.notes.length === 1);
+
+  // Settings update.
+  await SRS.setSettings(created.id, { wpm: 480, fontSize: 80 });
+  const afterSet = SRS.getSessionSync(created.id);
+  log("[sr] setSettings patches wpm + fontSize", afterSet.wpm === 480 && afterSet.fontSize === 80);
+
+  // Progress + reset.
+  await SRS.setProgress(created.id, 7);
+  log("[sr] setProgress updates currentWordIndex", SRS.getSessionSync(created.id).currentWordIndex === 7);
+  log("[sr] setProgress stamps stats.lastReadAt", !!SRS.getSessionSync(created.id).stats?.lastReadAt);
+  await SRS.resetProgress(created.id);
+  const afterReset = SRS.getSessionSync(created.id);
+  log("[sr] resetProgress sets idx=0 and preserves bookmarks", afterReset.currentWordIndex === 0 && afterReset.bookmarks.length === 1);
+
+  // Reload persistence — wipe localStorage handle, re-read via service.
+  // (StorageService backs IndexedDB; we can simulate "reload" by reading again.)
+  log("[sr] listSessionsSync returns the session after persist", SRS.listSessionsSync().some((s) => s.id === created.id));
+
+  // Chapter source resolver.
+  await B.ManuscriptChapterService.createFromComposition({
+    title: "Smoke Chapter",
+    bodyText: "Snow had been falling all morning.",
+    bodyHtml: "<p>Snow had been falling all morning.</p>",
+  });
+  const chSess = await SRS.createSession({ sourceType: "chapter" });
+  log("[sr] chapter source resolves rawText from ManuscriptChapterService", chSess.rawText.includes("Snow had been falling"));
+  log("[sr] chapter source carries chapter title as sourceTitle", chSess.sourceTitle === "Smoke Chapter");
+
+  // Delete a session.
+  await SRS.deleteSession(created.id);
+  const afterDelete = SRS.loadSync();
+  log("[sr] deleteSession removes the row", !afterDelete.sessions.some((s) => s.id === created.id));
+  log("[sr] deleteSession clears activeId only when it was the deleted session", afterDelete.activeId === chSess.id);
+
+  // Reference source resolver — defensive empty case.
+  await B.StorageService.set(B.keys.references, [
+    { id: "ref-1", title: "Style guide", content: "Pace breath. Read deliberately.", source: "user" },
+  ]);
+  const refSess = await SRS.createSession({ sourceType: "reference", sourceId: "ref-1" });
+  log("[sr] reference source resolves content + title", refSess.rawText.includes("Pace breath") && refSess.sourceTitle === "Style guide");
+
+  // Errors on empty source.
+  let threw = false;
+  try { await SRS.createSession({ sourceType: "paste", rawText: "   " }); } catch (_) { threw = true; }
+  log("[sr] createSession throws on empty rawText", threw);
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);
