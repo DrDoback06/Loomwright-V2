@@ -303,6 +303,11 @@
     "onSave", "onSaveAndExtract", "onSaveAndDeepExtract",
     "onCopyProjectContextPack", "onCopyStyleProfilePack", "onCopyCanonRulesPack",
     "onCopyCharacterBiblePack",
+    // Project import/export (ProjectArchiveService)
+    "onDownloadProjectExport", "onCreateProjectBackup",
+    "onPreviewProjectImport", "onConfirmProjectImport",
+    "onValidateProjectImport",
+    "onDownloadEntityLibrary", "onCopyProjectExportJson",
   ]);
 
   async function dispatchCallback(name, ctx) {

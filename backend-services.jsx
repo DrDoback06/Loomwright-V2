@@ -2263,22 +2263,509 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     });
   }
 
-  async function exportProject() {
-    const data = await StorageService.getAll();
-    data.schema = "loomwright/project-export/v2";
-    data.exportedAt = nowIso();
-    await downloadJson("loomwright-project-export.json", data);
-    return data;
+  // -------------------------------------------------------------------
+  // ProjectArchiveService — full-project export, import, preview,
+  // backup-before-replace, and entity-library selective export/import.
+  // Replaces the earlier exportProject() / importProject() which leaked
+  // the encrypted API-key blob on every export and offered no merge
+  // mode or backup.
+  // -------------------------------------------------------------------
+  const PROJECT_SCHEMA = "loomwright-project-v1";
+  const LIBRARY_SCHEMA = "loomwright-library-v1";
+  const LEGACY_PROJECT_SCHEMAS = new Set([
+    "loomwright/project-export/v2",
+    "loomwright/project-export/v1",
+  ]);
+
+  // Fields that must never appear in an export (encrypted or not).
+  const SECRET_FIELDS = new Set(["apiKey", "secret", "token", "password", "bearer", "credential"]);
+
+  function redactSecrets(obj) {
+    if (obj == null || typeof obj !== "object") return obj;
+    if (Array.isArray(obj)) return obj.map(redactSecrets);
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (SECRET_FIELDS.has(k)) out[k] = "[redacted]";
+      else out[k] = redactSecrets(v);
+    }
+    return out;
+  }
+
+  const ProjectArchiveService = {
+    /**
+     * Build a project export payload. Returns the JSON-shaped object
+     * (the caller decides whether to download or just inspect it).
+     *
+     * Options (all default to the safe choice):
+     *   includeTrash:       false
+     *   includeReviewQueue: true
+     *   includeSampleData:  true   — included if `__LW_SAMPLE_LOADED__` is true; pass false to strip sample-tagged records
+     *   includeSettings:    true
+     *   includeApiSecrets:  false  — v1 always false. The encrypted
+     *                                api_keys_encrypted blob is never
+     *                                written into the file.
+     */
+    async buildExport(options = {}) {
+      const opts = {
+        includeTrash:       options.includeTrash       === true,
+        includeReviewQueue: options.includeReviewQueue !== false,
+        includeSampleData:  options.includeSampleData  !== false,
+        includeSettings:    options.includeSettings    !== false,
+        includeApiSecrets:  false, // v1: hard-coded false
+      };
+
+      // Entity store — grouped, optionally filtered to non-sample.
+      const allEntities = EntityService.listAllSync();
+      const entities = {};
+      let createdAtBound = null, updatedAtBound = null;
+      const countsByType = {};
+      for (const [type, byId] of Object.entries(allEntities)) {
+        const rows = Object.values(byId || {}).filter((e) => opts.includeSampleData || e?.source !== "sample");
+        if (rows.length) {
+          entities[type] = rows.map((r) => clone(r));
+          countsByType[type] = rows.length;
+          for (const r of rows) {
+            if (r.createdAt && (!createdAtBound || r.createdAt < createdAtBound)) createdAtBound = r.createdAt;
+            if (r.updatedAt && (!updatedAtBound || r.updatedAt > updatedAtBound)) updatedAtBound = r.updatedAt;
+          }
+        }
+      }
+
+      const chapters = await StorageService.get(KEYS.manuscriptChapters, ManuscriptChapterService.defaultState());
+      const manuscript = await StorageService.get(KEYS.manuscript, null);
+      const composition = await StorageService.get(KEYS.composition, null);
+      const projectIntelligence = await StorageService.get(KEYS.projectIntelligence, null);
+      const onboardingAnswers = await StorageService.get(KEYS.onboarding, null);
+      const occurrences = await StorageService.get(KEYS.occurrences, []);
+      const referencesCollection = await StorageService.get(KEYS.references, []);
+      const filteredRefs = opts.includeSampleData ? referencesCollection : referencesCollection.filter((r) => r?.source !== "sample");
+      const reviewQueueAll = await StorageService.get(KEYS.reviewQueue, []);
+      const trashAll = await StorageService.get(KEYS.trash, []);
+      const handoffLog = opts.includeReviewQueue ? await StorageService.get(KEYS.handoffLog, []) : [];
+      const skillTrees = await StorageService.get(KEYS.skillTrees, SkillTreeService.defaultState());
+      const tangle = await StorageService.get(KEYS.tangle, TangleService.defaultState());
+      const speedReader = await StorageService.get(KEYS.speedReader, null);
+      const extractionSession = await StorageService.get(KEYS.extractionSession, null);
+
+      // Atlas state is derived: locations whose data.placed===true.
+      const atlasPlaced = (entities.locations || []).filter((l) => l?.data?.placed === true).map((l) => ({
+        id: l.id, name: l.name, coords: l.data?.coords, atlasMap: l.data?.atlasMap, routes: l.data?.routes || [],
+      }));
+
+      // Settings — redacted always; the raw blob never leaks.
+      const settingsRaw = opts.includeSettings ? await StorageService.get(KEYS.settings, null) : null;
+      const settings = settingsRaw ? redactSecrets(settingsRaw) : null;
+      const aiProviderSettingsRaw = opts.includeSettings ? await StorageService.get(KEYS.providerSettings, null) : null;
+      const aiProviderSettings = aiProviderSettingsRaw ? redactSecrets(aiProviderSettingsRaw) : null;
+
+      const payload = {
+        schemaVersion: PROJECT_SCHEMA,
+        appName: "loomwright-v2",
+        appVersion: "v1",
+        exportedAt: nowIso(),
+        project: {
+          id: "default",
+          name: (settingsRaw && (settingsRaw.project?.name || settingsRaw.brandName)) || "Loomwright project",
+          createdAt: createdAtBound || nowIso(),
+          updatedAt: updatedAtBound || nowIso(),
+        },
+        options: opts,
+        settings,
+        aiProviderSettings,
+        chapters,
+        manuscript,
+        entities,
+        skillTrees,
+        atlas: { placed: atlasPlaced },
+        tangle,
+        occurrences,
+        reviewQueue: opts.includeReviewQueue ? reviewQueueAll : [],
+        handoffLog,
+        references: filteredRefs,
+        onboardingAnswers,
+        projectIntelligence,
+        composition,
+        trash: opts.includeTrash ? trashAll : [],
+        speedReader,
+        extractionSession,
+        metadata: {
+          countsByType,
+          chapterCount: (chapters?.chapters || []).length,
+          occurrenceCount: occurrences.length,
+          referenceCount: filteredRefs.length,
+          reviewQueueCount: opts.includeReviewQueue ? reviewQueueAll.length : 0,
+          trashCount: opts.includeTrash ? trashAll.length : 0,
+          includesSampleData: !!opts.includeSampleData,
+          includesTrash: opts.includeTrash,
+          includesReviewQueue: opts.includeReviewQueue,
+          apiKeysIncluded: false,
+        },
+      };
+      return payload;
+    },
+
+    /** Build + download a project export. Defaults match buildExport. */
+    async downloadProjectExport(options = {}) {
+      const payload = await this.buildExport(options);
+      const slug = "loomwright-project-export";
+      const stamp = (payload.exportedAt || nowIso()).replace(/[:.]/g, "-");
+      await downloadJson(`${slug}-${stamp}.json`, payload);
+      return payload;
+    },
+
+    /** Create a recovery backup before a destructive replace. */
+    async createBackupBeforeReplace() {
+      const payload = await this.buildExport({
+        includeTrash: true,
+        includeReviewQueue: true,
+        includeSampleData: true,
+        includeSettings: true,
+      });
+      const stamp = (payload.exportedAt || nowIso()).replace(/[:.]/g, "-");
+      await downloadJson(`loomwright-backup-${stamp}.json`, payload);
+      return payload;
+    },
+
+    /** Validate an external payload. Returns {valid, schemaVersion, warnings, counts}. */
+    validateExportPayload(payload) {
+      const warnings = [];
+      if (!payload || typeof payload !== "object") {
+        return { valid: false, schemaVersion: "unknown", warnings: ["Payload is not an object."], counts: {} };
+      }
+      const claimed = payload.schemaVersion || payload.schema || "unknown";
+      let schemaVersion = "unknown";
+      if (claimed === PROJECT_SCHEMA) schemaVersion = PROJECT_SCHEMA;
+      else if (LEGACY_PROJECT_SCHEMAS.has(claimed)) {
+        schemaVersion = claimed;
+        warnings.push(`Legacy schema (${claimed}). Importing through compatibility shim.`);
+      } else {
+        warnings.push(`Unknown schema version: ${claimed}. Best-effort import only.`);
+      }
+      if (payload?.metadata?.apiKeysIncluded) warnings.push("Payload claims to include API keys — refusing to import secrets in v1.");
+      if (payload?.metadata?.includesSampleData) warnings.push("Payload includes sample-tagged records.");
+      if (payload?.metadata?.includesTrash) warnings.push("Payload includes Trash records.");
+      const counts = {
+        entities: payload.entities ? Object.values(payload.entities).reduce((s, arr) => s + (Array.isArray(arr) ? arr.length : 0), 0) : 0,
+        chapters: payload.chapters?.chapters?.length || 0,
+        references: Array.isArray(payload.references) ? payload.references.length : 0,
+        occurrences: Array.isArray(payload.occurrences) ? payload.occurrences.length : 0,
+        reviewQueue: Array.isArray(payload.reviewQueue) ? payload.reviewQueue.length : 0,
+        trash: Array.isArray(payload.trash) ? payload.trash.length : 0,
+      };
+      const valid = schemaVersion !== "unknown" || !!payload.entities;
+      return { valid, schemaVersion, warnings, counts };
+    },
+
+    /** Summarise an export payload for the import-preview UI. */
+    summarizeExportPayload(payload) {
+      const v = this.validateExportPayload(payload);
+      return {
+        valid: v.valid,
+        schemaVersion: v.schemaVersion,
+        warnings: v.warnings,
+        projectName: payload?.project?.name || "Loomwright project",
+        exportedAt: payload?.exportedAt || null,
+        counts: v.counts,
+        countsByType: payload?.metadata?.countsByType || {},
+        includesSettings: !!payload?.settings,
+        includesSampleData: !!payload?.metadata?.includesSampleData,
+        includesTrash: !!payload?.metadata?.includesTrash,
+        includesReviewQueue: !!payload?.metadata?.includesReviewQueue,
+        apiKeysIncluded: !!payload?.metadata?.apiKeysIncluded,
+      };
+    },
+
+    /**
+     * Apply an import payload to the current store.
+     *
+     * mode: "merge" (default) — adds records; existing wins on id
+     *                           conflict unless overwriteOnConflict.
+     *       "replace"          — wipes current store first. Caller MUST
+     *                           have invoked createBackupBeforeReplace
+     *                           — this method does NOT make the backup
+     *                           itself, to keep the destructive path
+     *                           ergonomically explicit.
+     */
+    async applyImport(payload, opts = {}) {
+      const mode = opts.mode === "replace" ? "replace" : "merge";
+      const overwrite = mode === "replace" ? true : !!opts.overwriteOnConflict;
+      const v = this.validateExportPayload(payload);
+      if (!v.valid) throw new Error("Invalid project payload: " + v.warnings.join(" / "));
+
+      if (mode === "replace") {
+        await StorageService.clear();
+      }
+
+      // Entities — merge by type and id.
+      const currentEntities = await StorageService.get(KEYS.entities, {});
+      const nextEntities = mode === "replace" ? {} : { ...currentEntities };
+      for (const [type, rows] of Object.entries(payload.entities || {})) {
+        if (!Array.isArray(rows)) continue;
+        nextEntities[type] = nextEntities[type] || {};
+        for (const row of rows) {
+          if (!row || !row.id) continue;
+          const has = nextEntities[type][row.id];
+          if (has && !overwrite) continue;
+          nextEntities[type][row.id] = clone(row);
+        }
+      }
+      await StorageService.set(KEYS.entities, nextEntities);
+
+      // Chapters — id-based merge.
+      const currentChapters = await StorageService.get(KEYS.manuscriptChapters, ManuscriptChapterService.defaultState());
+      const incomingChapters = payload.chapters || {};
+      if (mode === "replace") {
+        await StorageService.set(KEYS.manuscriptChapters, { ...ManuscriptChapterService.defaultState(), ...incomingChapters });
+      } else if (incomingChapters && Array.isArray(incomingChapters.chapters)) {
+        const chMap = new Map((currentChapters.chapters || []).map((c) => [c.id, c]));
+        for (const c of incomingChapters.chapters) {
+          if (!c || !c.id) continue;
+          if (chMap.has(c.id) && !overwrite) continue;
+          chMap.set(c.id, c);
+        }
+        await StorageService.set(KEYS.manuscriptChapters, {
+          ...currentChapters,
+          chapters: [...chMap.values()],
+          manuscripts: { ...(currentChapters.manuscripts || {}), ...(incomingChapters.manuscripts || {}) },
+          activeChapterId: incomingChapters.activeChapterId || currentChapters.activeChapterId,
+          authors: incomingChapters.authors?.length ? incomingChapters.authors : currentChapters.authors,
+        });
+      }
+
+      // References collection — id-based merge.
+      const currentRefs = await StorageService.get(KEYS.references, []);
+      const incomingRefs = Array.isArray(payload.references) ? payload.references : [];
+      if (mode === "replace") {
+        await StorageService.set(KEYS.references, incomingRefs);
+      } else {
+        const refMap = new Map(currentRefs.map((r) => [r.id, r]));
+        for (const r of incomingRefs) {
+          if (!r || !r.id) continue;
+          if (refMap.has(r.id) && !overwrite) continue;
+          refMap.set(r.id, r);
+        }
+        await StorageService.set(KEYS.references, [...refMap.values()]);
+      }
+
+      // Occurrences — dedup by (entityId, chapterId, startOffset, endOffset).
+      const currentOcc = await StorageService.get(KEYS.occurrences, []);
+      const incomingOcc = Array.isArray(payload.occurrences) ? payload.occurrences : [];
+      if (mode === "replace") {
+        await StorageService.set(KEYS.occurrences, incomingOcc);
+      } else {
+        const key = (o) => `${o.entityId || ""}|${o.chapterId || ""}|${o.startOffset ?? ""}|${o.endOffset ?? ""}`;
+        const seen = new Set(currentOcc.map(key));
+        const next = currentOcc.slice();
+        for (const o of incomingOcc) {
+          if (seen.has(key(o))) continue;
+          seen.add(key(o));
+          next.push(o);
+        }
+        await StorageService.set(KEYS.occurrences, next);
+      }
+
+      // Review queue — append on merge.
+      const currentQueue = await StorageService.get(KEYS.reviewQueue, []);
+      const incomingQueue = Array.isArray(payload.reviewQueue) ? payload.reviewQueue : [];
+      if (mode === "replace") {
+        await StorageService.set(KEYS.reviewQueue, incomingQueue);
+      } else if (incomingQueue.length) {
+        const seenIds = new Set(currentQueue.map((q) => q.id));
+        const next = currentQueue.slice();
+        for (const q of incomingQueue) {
+          if (q.id && seenIds.has(q.id) && !overwrite) continue;
+          next.push(q);
+        }
+        await StorageService.set(KEYS.reviewQueue, next);
+      }
+
+      // Onboarding + Project Intelligence — shallow merge with current
+      // winning on conflict on merge mode.
+      if (payload.onboardingAnswers) {
+        if (mode === "replace") await StorageService.set(KEYS.onboarding, payload.onboardingAnswers);
+        else {
+          const cur = await StorageService.get(KEYS.onboarding, {});
+          await StorageService.set(KEYS.onboarding, { ...(payload.onboardingAnswers || {}), ...(cur || {}) });
+        }
+      }
+      if (payload.projectIntelligence) {
+        if (mode === "replace") await StorageService.set(KEYS.projectIntelligence, payload.projectIntelligence);
+        else {
+          const cur = await StorageService.get(KEYS.projectIntelligence, {});
+          await StorageService.set(KEYS.projectIntelligence, { ...(payload.projectIntelligence || {}), ...(cur || {}) });
+        }
+      }
+
+      // Skill trees — id-based merge.
+      if (payload.skillTrees) {
+        if (mode === "replace") await StorageService.set(KEYS.skillTrees, payload.skillTrees);
+        else {
+          const cur = await StorageService.get(KEYS.skillTrees, SkillTreeService.defaultState());
+          const map = new Map((cur.trees || []).map((t) => [t.id, t]));
+          for (const t of payload.skillTrees.trees || []) {
+            if (map.has(t.id) && !overwrite) continue;
+            map.set(t.id, t);
+          }
+          await StorageService.set(KEYS.skillTrees, { ...cur, trees: [...map.values()] });
+        }
+      }
+
+      // Tangle — id-based merge.
+      if (payload.tangle) {
+        if (mode === "replace") await StorageService.set(KEYS.tangle, payload.tangle);
+        else {
+          const cur = await StorageService.get(KEYS.tangle, TangleService.defaultState());
+          const nodeMap = new Map((cur.nodes || []).map((n) => [n.id, n]));
+          for (const n of (payload.tangle.nodes || [])) {
+            if (nodeMap.has(n.id) && !overwrite) continue;
+            nodeMap.set(n.id, n);
+          }
+          const groupMap = new Map((cur.groups || []).map((g) => [g.id, g]));
+          for (const g of (payload.tangle.groups || [])) {
+            if (groupMap.has(g.id) && !overwrite) continue;
+            groupMap.set(g.id, g);
+          }
+          await StorageService.set(KEYS.tangle, { ...cur, nodes: [...nodeMap.values()], groups: [...groupMap.values()] });
+        }
+      }
+
+      // Composition — overwrite-on-replace, leave-current-on-merge.
+      if (payload.composition && mode === "replace") {
+        await StorageService.set(KEYS.composition, payload.composition);
+      }
+
+      // Settings — overwrite on replace; never overwrite on merge to
+      // protect the user's local provider config.
+      if (payload.settings && mode === "replace") {
+        await StorageService.set(KEYS.settings, payload.settings);
+      }
+      if (payload.aiProviderSettings && mode === "replace") {
+        await StorageService.set(KEYS.providerSettings, payload.aiProviderSettings);
+      }
+
+      // Trash — append-only on merge; replace on replace.
+      if (payload.trash) {
+        if (mode === "replace") await StorageService.set(KEYS.trash, payload.trash);
+        else {
+          const cur = await StorageService.get(KEYS.trash, []);
+          await StorageService.set(KEYS.trash, [...cur, ...payload.trash]);
+        }
+      }
+
+      applyEntityGlobals();
+      window.dispatchEvent(new CustomEvent("lw:project-imported", {
+        detail: { mode, schemaVersion: v.schemaVersion, counts: v.counts },
+      }));
+      return { mode, applied: true, counts: v.counts };
+    },
+
+    /**
+     * Entity library — selective export of a subset of entity types
+     * (plus optional references / occurrences) so the user can move a
+     * reusable set between projects.
+     */
+    async buildEntityLibrary(options = {}) {
+      const types = Array.isArray(options.types) && options.types.length
+        ? options.types
+        : ["cast", "items", "locations", "quests", "events", "stats", "bestiary", "skills", "classes", "races", "factions", "lore", "relationships", "timeline"];
+      const includeReferences  = options.includeReferences  !== false;
+      const includeOccurrences = options.includeOccurrences !== false;
+      const includeSampleData  = options.includeSampleData  === true;
+      const allEntities = EntityService.listAllSync();
+      const entities = {};
+      const countsByType = {};
+      for (const type of types) {
+        const rows = Object.values(allEntities[type] || {}).filter((e) => includeSampleData || e?.source !== "sample");
+        if (rows.length) {
+          entities[type] = rows.map(clone);
+          countsByType[type] = rows.length;
+        }
+      }
+      const refsAll = await StorageService.get(KEYS.references, []);
+      const occAll = await StorageService.get(KEYS.occurrences, []);
+      const includedEntityIds = new Set();
+      for (const rows of Object.values(entities)) for (const r of rows) includedEntityIds.add(r.id);
+      return {
+        schemaVersion: LIBRARY_SCHEMA,
+        exportedAt: nowIso(),
+        types,
+        entities,
+        references: includeReferences ? refsAll.filter((r) => includeSampleData || r?.source !== "sample") : [],
+        occurrences: includeOccurrences ? occAll.filter((o) => includedEntityIds.has(o.entityId)) : [],
+        metadata: { countsByType, includesSampleData: !!includeSampleData },
+      };
+    },
+
+    async downloadEntityLibrary(options = {}) {
+      const payload = await this.buildEntityLibrary(options);
+      const stamp = (payload.exportedAt || nowIso()).replace(/[:.]/g, "-");
+      await downloadJson(`loomwright-library-${stamp}.json`, payload);
+      return payload;
+    },
+
+    /** Apply an entity-library payload. Merge-only by default. */
+    async applyEntityLibrary(payload, opts = {}) {
+      if (!payload || payload.schemaVersion !== LIBRARY_SCHEMA) {
+        throw new Error("Not a Loomwright entity library payload.");
+      }
+      const overwrite = !!opts.overwriteOnConflict;
+      const includeSampleData = !!opts.includeSampleData;
+      const all = await StorageService.get(KEYS.entities, {});
+      for (const [type, rows] of Object.entries(payload.entities || {})) {
+        all[type] = all[type] || {};
+        for (const row of rows) {
+          if (!row?.id) continue;
+          if (!includeSampleData && row.source === "sample") continue;
+          if (all[type][row.id] && !overwrite) continue;
+          all[type][row.id] = clone(row);
+        }
+      }
+      await StorageService.set(KEYS.entities, all);
+      // References from the library — merge by id.
+      if (Array.isArray(payload.references) && payload.references.length) {
+        const cur = await StorageService.get(KEYS.references, []);
+        const map = new Map(cur.map((r) => [r.id, r]));
+        for (const r of payload.references) {
+          if (!r?.id) continue;
+          if (!includeSampleData && r.source === "sample") continue;
+          if (map.has(r.id) && !overwrite) continue;
+          map.set(r.id, r);
+        }
+        await StorageService.set(KEYS.references, [...map.values()]);
+      }
+      // Occurrences — dedup by composite key.
+      if (Array.isArray(payload.occurrences) && payload.occurrences.length) {
+        const cur = await StorageService.get(KEYS.occurrences, []);
+        const key = (o) => `${o.entityId || ""}|${o.chapterId || ""}|${o.startOffset ?? ""}|${o.endOffset ?? ""}`;
+        const seen = new Set(cur.map(key));
+        const next = cur.slice();
+        for (const o of payload.occurrences) {
+          if (seen.has(key(o))) continue;
+          seen.add(key(o));
+          next.push(o);
+        }
+        await StorageService.set(KEYS.occurrences, next);
+      }
+      applyEntityGlobals();
+      window.dispatchEvent(new CustomEvent("lw:project-imported", { detail: { mode: "library", schemaVersion: LIBRARY_SCHEMA } }));
+      return { applied: true, types: payload.types || [], counts: payload.metadata?.countsByType || {} };
+    },
+  };
+
+  // Back-compat thin wrappers for the older function names callers
+  // (registry delegate listeners, callback registry) still reference.
+  async function exportProject(options) {
+    return ProjectArchiveService.downloadProjectExport(options);
   }
 
   async function importProject(data) {
     if (!data) data = await pickJsonFile();
     if (!data) return null;
-    const payload = data.schema ? Object.fromEntries(Object.entries(data).filter(([k]) => Object.values(KEYS).includes(k))) : data;
-    await StorageService.setAll(payload);
-    await initialise();
-    window.dispatchEvent(new CustomEvent("lw:project-imported", { detail: payload }));
-    return payload;
+    // Heuristic: library payloads have schemaVersion = LIBRARY_SCHEMA.
+    if (data.schemaVersion === LIBRARY_SCHEMA) {
+      return ProjectArchiveService.applyEntityLibrary(data, { overwriteOnConflict: false });
+    }
+    return ProjectArchiveService.applyImport(data, { mode: "merge" });
   }
 
   function notify(message) {
@@ -2312,27 +2799,98 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       if (!el) return;
       const cb = el.getAttribute("data-callback");
       try {
-        if (cb === "onExportProjectData" || cb === "onBackupNow") {
+        if (cb === "onExportProjectData" || cb === "onDownloadProjectExport") {
           e.preventDefault();
-          await exportProject();
+          await ProjectArchiveService.downloadProjectExport();
           notify("Project export downloaded.");
+        }
+        if (cb === "onBackupNow" || cb === "onCreateProjectBackup") {
+          e.preventDefault();
+          await ProjectArchiveService.createBackupBeforeReplace();
+          notify("Project backup downloaded.");
         }
         if (cb === "onImportProjectData") {
           e.preventDefault();
-          await importProject();
+          const data = await pickJsonFile();
+          if (!data) return;
+          // Heuristic: library payload goes to entity library; project
+          // payload goes through validate + confirm.
+          if (data.schemaVersion === LIBRARY_SCHEMA) {
+            await ProjectArchiveService.applyEntityLibrary(data, { overwriteOnConflict: false });
+            notify("Entity library merged.");
+            return;
+          }
+          const summary = ProjectArchiveService.summarizeExportPayload(data);
+          if (!summary.valid) {
+            notify("Import rejected: " + (summary.warnings[0] || "invalid payload"));
+            return;
+          }
+          // Merge by default; require double-confirm to switch to replace.
+          let mode = "merge";
+          if (window.confirm && window.confirm(
+            "Import as REPLACE? This wipes your current project.\n\nOK = REPLACE (backup will be saved first).\nCancel = MERGE (safe, additive)."
+          )) {
+            if (!window.confirm("Final confirm: REPLACE will overwrite your current project. A backup will be downloaded first. Continue?")) {
+              mode = "merge";
+            } else {
+              await ProjectArchiveService.createBackupBeforeReplace();
+              mode = "replace";
+            }
+          }
+          await ProjectArchiveService.applyImport(data, { mode });
+          notify(`Project imported (${mode}).`);
+        }
+        if (cb === "onPreviewProjectImport" || cb === "onValidateProjectImport") {
+          e.preventDefault();
+          const data = await pickJsonFile();
+          if (!data) return;
+          const summary = ProjectArchiveService.summarizeExportPayload(data);
+          window.dispatchEvent(new CustomEvent("lw:project-import-preview", { detail: { summary, payload: data } }));
+          notify(summary.valid
+            ? `Preview: ${summary.projectName} · ${summary.counts.entities} entities · ${summary.counts.chapters} chapters`
+            : ("Invalid: " + (summary.warnings[0] || "unknown payload")));
+        }
+        if (cb === "onConfirmProjectImport") {
+          // Caller dispatches with the payload + mode already chosen.
+          e.preventDefault();
+          const detail = el && el.dataset ? (el.dataset.importPayload ? JSON.parse(el.dataset.importPayload) : null) : null;
+          if (!detail) {
+            notify("No import payload supplied.");
+            return;
+          }
+          await ProjectArchiveService.applyImport(detail.payload, { mode: detail.mode || "merge" });
           notify("Project import applied.");
         }
-        if (cb === "onExportEntityLibrary") {
+        if (cb === "onExportEntityLibrary" || cb === "onDownloadEntityLibrary") {
           e.preventDefault();
-          await downloadJson("loomwright-entities.json", { schema: "loomwright/entities/v2", entities: EntityService.listAllSync(), exportedAt: nowIso() });
+          // Default: every entity type, no sample data, with refs + occurrences.
+          await ProjectArchiveService.downloadEntityLibrary({});
+          notify("Entity library downloaded.");
         }
         if (cb === "onImportEntityLibrary") {
           e.preventDefault();
           const data = await pickJsonFile();
-          if (data?.entities) {
-            await StorageService.set(KEYS.entities, data.entities);
-            applyEntityGlobals(data.entities);
+          if (!data) return;
+          if (data.schemaVersion !== LIBRARY_SCHEMA) {
+            // Some users may try to import an old projects-as-library file. Try the project import shim instead.
+            if (data.schemaVersion === PROJECT_SCHEMA || LEGACY_PROJECT_SCHEMAS.has(data.schema || "")) {
+              await ProjectArchiveService.applyImport(data, { mode: "merge" });
+              notify("Detected project file — merged.");
+              return;
+            }
+            notify("Not a Loomwright entity library file.");
+            return;
           }
+          await ProjectArchiveService.applyEntityLibrary(data, { overwriteOnConflict: false });
+          notify("Entity library merged.");
+        }
+        if (cb === "onCopyProjectExportJson") {
+          e.preventDefault();
+          const payload = await ProjectArchiveService.buildExport();
+          try {
+            await (navigator.clipboard?.writeText(JSON.stringify(payload, null, 2)));
+            notify("Project export JSON copied to clipboard.");
+          } catch (_) { notify("Clipboard unavailable."); }
         }
         if (cb === "onExportSettingsProfile") {
           e.preventDefault();
@@ -2430,6 +2988,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     TangleService,
     AtlasService,
     SkillTreeService,
+    ProjectArchiveService,
     LinkService,
     AIService,
     ExtractionService,

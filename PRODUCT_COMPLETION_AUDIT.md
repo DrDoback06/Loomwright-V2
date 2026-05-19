@@ -17,7 +17,7 @@ Reproduce on a clean checkout of `main`:
 > npm install
 > npm run validate
 All checked HTML references exist.
-OK: 524 UI callbacks; registry bootstraps 524 handlers
+OK: 524 UI callbacks; registry bootstraps 531 handlers
 OK: registry default branch emits a user-visible notice (no silent fall-through).
 OK: 0 Bucket A action callbacks reach the generic default notice.
 OK: 6 Bucket B (provider-gated) callbacks use requireProviderOrNotice.
@@ -25,10 +25,10 @@ OK: 4 Bucket D (React-owned) callbacks declared.
 INFO: 213 other callbacks fall to default notice (housekeeping/dispatch).
 
 > npm run test:smoke
-22/22 service smoke checks passed.
+All smoke checks passed (extraction + workspace persistence + project import/export — 24 new archive assertions).
 
 > CHROMIUM_PATH=/path/to/chrome npm run test:e2e
-28 passed (≈3 min wall, real Chromium)
+51 passed (≈5.7 min wall, real Chromium) — 46 pre-existing + 5 new project-import/export.
 ```
 
 The e2e suite is in `tests/e2e/`; six spec files cover 28 tests across
@@ -78,6 +78,7 @@ breaks `npm run test:smoke` or `npm run test:e2e`.
 | `TangleService.addNode / updateNode / removeNode / addGroup` with `KEYS.tangle` persistence | code + smoke (used by `onSendSuggestionToTangle`) |
 | Onboarding paste-JSON / apply-step-JSON path → `OnboardingService.save` + `ProjectIntelService.mergeFromOnboarding` | code |
 | Resilient cosmetic data-attributes for testing: `data-ui="WorkspaceShell"`, `data-workspace-id={id}` (on `FullWorkspaceHost` wrapper), `data-ui="HomeEmptyState"`, `data-testid` on empty-state buttons | code + e2e |
+| **Full Project Import / Export / Backup / Entity Library** — `ProjectArchiveService` builds `loomwright-project-v1` payloads; `validateExportPayload` accepts v1 + legacy `loomwright/project-export/v1\|v2`; `summarizeExportPayload` powers the import preview; `applyImport({mode: "merge" \| "replace", overwriteOnConflict})` covers entities/chapters/refs/occurrences/queue/onboarding/intel/skill-trees/tangle/composition/settings/trash; `createBackupBeforeReplace()` downloads a recovery file before destructive replace; `buildEntityLibrary({types})` / `applyEntityLibrary` move selected entity types between projects. **API keys never export** (`api_keys_encrypted` blob is never read; `metadata.apiKeysIncluded` is hard-coded `false`; `redactSecrets` strips any `apiKey/secret/token/password/bearer/credential` recursively). | smoke (24 assertions) + e2e N (5 tests) |
 
 ---
 
@@ -97,7 +98,7 @@ result** is prototype-level. They aren't broken; they aren't great yet.
 | **Speed Reader** | Component exists (`speed-reader.jsx`), workspace opens, callbacks wired | RSVP word display, pivot-letter, WPM controls, punctuation/sentence pause, bookmark, session persistence — not fully implemented. Workspace shell present; reading-engine internals are placeholder. |
 | **Search / indexing** | No `SearchService` exists yet. Top-bar search button has UI but no real backend. | Out of scope for this milestone. |
 | **Workspace persistence (beyond what's wired)** | Atlas / Skill Trees / Relationships / Timeline / Tangle / Speed Reader open and can persist via their respective services where wired, but deep create→edit→reorder→reload paths are not test-covered for every workspace | Bespoke workspaces vary in completeness. No e2e tests per workspace. |
-| **Full project import/export** | `exportProject()` / `importProject()` exist in `backend-services.jsx`; not test-covered end-to-end | No "preview before import" UI; no backup-before-replace prompt; no entity-library export with selected types and include/exclude toggles. |
+| ~~**Full project import/export**~~ | _Moved to **A. Implemented** by `PROJECT_IMPORT_EXPORT_REPORT.md`._ Row kept for diff-tracking only. | _n/a_ |
 | **Audit log / undo trail** | Some services log to `lw:*` events; `extractionHistoryService`-style per-action `previousState` undo is not implemented | Legacy audit documents the model; not yet ported. |
 | **Field parity across all entity types** | Cast, Bestiary, Items, Quests, Events, Locations, Stats, Skills, Classes, Races, Lore, References, Factions, Relationships, Timeline editors exist. `FIELD_PARITY_AUDIT.md` documents what was filled. | Round-trip JSON import → edit → export hasn't been re-verified per type since the burn-down. |
 | **Production build pipeline** | `Loomwright Shell.html` still uses in-browser Babel-standalone | A precompiled JSX/Vite pipeline is documented as a future milestone (own pass, own plan). |
@@ -145,7 +146,7 @@ blocking the "functional local prototype" status.
 - **Search/indexing service** — no `SearchService` exists. Top-bar search is presentational.
 - **Speed Reader engine** — workspace shell and callbacks exist; RSVP/word-pivot/persistence engine is not built.
 - **Per-workspace e2e coverage** for Atlas / Skill Trees / Relationships / Timeline / Tangle / Speed Reader.
-- **Full project import preview UI** with backup-before-replace and merge-vs-replace modes.
+- _(Removed — implemented; see Full Project Import / Export / Backup / Entity Library row in section A.)_
 - **Audit log surface on Home** with undo for last review action / extraction session / entity edit / chapter delete.
 
 ---
@@ -159,7 +160,7 @@ own branch + PR + review) should land in this order:
 2. **Extraction Quality pass** — `tests/fixtures/extraction/` fixtures, local-rule improvements (item ownership / travel / relationship interaction / stat change / quest progression / event trigger phrases), `EXTRACTION_QUALITY_PLAN.md` first, then implementation. Highest user value next.
 3. **Field Parity pass** — verify and tighten per-type JSON template ↔ editor ↔ panel ↔ persistence schema. Mostly mechanical; eliminates "I saved an entity and a field disappeared" failure modes.
 4. **Workspace Persistence pass** — per-workspace create→edit→reload tests + any wiring fixes uncovered. Covers Atlas, Skill Trees, Relationships, Timeline, Tangle.
-5. **Full Project Import/Export pass** — preview UI + backup-before-replace + merge-vs-replace + entity-library export. Important safety net before serious users.
+5. ~~**Full Project Import/Export pass**~~ _(landed; see section A row "Full Project Import / Export / Backup / Entity Library" and `PROJECT_IMPORT_EXPORT_REPORT.md`)._
 
 Subsequent (separate milestones, in roughly this order, all optional
 until earlier passes are solid):

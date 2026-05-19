@@ -624,6 +624,109 @@ async function main() {
   const tRemoved = B.TangleService.loadSync();
   log("[tangle] removeNode removes", !tRemoved.nodes.some((n) => n.id === tnRow.id));
 
+  // -------------------------------------------------------------------
+  // Project import / export
+  // -------------------------------------------------------------------
+  console.log("");
+  console.log("[project import/export]");
+
+  await B.StorageService.clear();
+  // Seed a small project: 2 cast, 1 location, 1 chapter, 1 reference, 1 settings blob with a fake apiKey.
+  const seedCast1 = await B.EntityService.save("cast", { name: "Hess Vaela" });
+  const seedCast2 = await B.EntityService.save("cast", { name: "Sara Lin" });
+  const seedLoc = await B.EntityService.save("locations", { name: "Ash Hollow", data: { placed: true, coords: { x: 10, y: 20 } } });
+  await B.ManuscriptChapterService.createFromComposition({ title: "Chapter One", bodyText: "First page.", bodyHtml: "<p>First page.</p>" });
+  await B.StorageService.set(B.keys.references, [
+    { id: "ref-1", title: "Style guide", kind: "style", source: "user" },
+  ]);
+  await B.StorageService.set(B.keys.settings, {
+    brandName: "Loomwright",
+    aiProviderSettings: { provider: "anthropic", apiKey: "sk-ant-leak-me", model: "claude-opus-4-7" },
+  });
+  // The encrypted-keys blob lives on its own key and MUST never leak.
+  await B.StorageService.set(B.keys.apiKeys || "api_keys_encrypted", { ciphertext: "should-never-export", iv: "x" });
+
+  // --- buildExport ---
+  const exp = await B.ProjectArchiveService.buildExport();
+  log("[archive] buildExport schemaVersion = loomwright-project-v1", exp.schemaVersion === "loomwright-project-v1");
+  log("[archive] buildExport metadata.apiKeysIncluded = false", exp.metadata.apiKeysIncluded === false);
+  log("[archive] buildExport never includes api_keys_encrypted", JSON.stringify(exp).indexOf("should-never-export") === -1);
+  log("[archive] buildExport redacts settings.aiProviderSettings.apiKey", exp.settings?.aiProviderSettings?.apiKey === "[redacted]" || JSON.stringify(exp.settings || {}).indexOf("sk-ant-leak-me") === -1);
+  log("[archive] buildExport entities.cast count = 2", (exp.entities.cast || []).length === 2);
+  log("[archive] buildExport entities.locations count = 1", (exp.entities.locations || []).length === 1);
+  log("[archive] buildExport metadata.chapterCount >= 1", (exp.metadata.chapterCount || 0) >= 1);
+
+  // includeSampleData=false should not drop user-source records.
+  const expNoSample = await B.ProjectArchiveService.buildExport({ includeSampleData: false });
+  log("[archive] buildExport includeSampleData=false keeps user records", (expNoSample.entities.cast || []).length === 2);
+
+  // includeTrash default false.
+  log("[archive] buildExport excludes trash by default", expNoSample.metadata.includesTrash === false && expNoSample.trash.length === 0);
+
+  // --- validateExportPayload ---
+  const v1Valid = B.ProjectArchiveService.validateExportPayload(exp);
+  log("[archive] validate v1 payload valid", v1Valid.valid && v1Valid.schemaVersion === "loomwright-project-v1");
+
+  const v2Legacy = B.ProjectArchiveService.validateExportPayload({ schemaVersion: "loomwright/project-export/v2", entities: {} });
+  log("[archive] validate legacy v2 valid with warning", v2Legacy.valid && v2Legacy.warnings.some((w) => /Legacy/.test(w)));
+
+  const vBad = B.ProjectArchiveService.validateExportPayload("nope");
+  log("[archive] validate non-object payload invalid", vBad.valid === false);
+
+  // --- summarizeExportPayload ---
+  const summ = B.ProjectArchiveService.summarizeExportPayload(exp);
+  log("[archive] summarize counts.entities >= 3", (summ.counts.entities || 0) >= 3);
+  log("[archive] summarize apiKeysIncluded false", summ.apiKeysIncluded === false);
+
+  // --- applyImport merge — preserves existing, adds new ---
+  // Create a separate payload that has 1 new cast + the same Hess Vaela.
+  const importPayload = JSON.parse(JSON.stringify(exp));
+  importPayload.entities.cast.push({
+    id: "cast-new-via-import",
+    type: "cast",
+    name: "Edrun Pell",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  // Mutate the existing Hess Vaela so we can verify merge does NOT overwrite by default.
+  importPayload.entities.cast[0] = { ...importPayload.entities.cast[0], name: "Hess CHANGED" };
+
+  await B.ProjectArchiveService.applyImport(importPayload, { mode: "merge" });
+  const afterMerge = B.EntityService.listSync("cast");
+  log("[archive] merge adds new entity", afterMerge.some((c) => c.id === "cast-new-via-import"));
+  const hessAfterMerge = afterMerge.find((c) => c.id === seedCast1.id);
+  log("[archive] merge does not overwrite existing on conflict", hessAfterMerge && hessAfterMerge.name === "Hess Vaela");
+
+  // --- applyImport merge with overwriteOnConflict ---
+  await B.ProjectArchiveService.applyImport(importPayload, { mode: "merge", overwriteOnConflict: true });
+  const afterOverwrite = B.EntityService.listSync("cast").find((c) => c.id === seedCast1.id);
+  log("[archive] merge overwriteOnConflict updates existing", afterOverwrite && afterOverwrite.name === "Hess CHANGED");
+
+  // --- applyImport replace — wipes store then loads payload (no preserved entities) ---
+  // Use the original exp (which still has the original Hess Vaela), then check the new "Edrun Pell" that we added in importPayload is gone.
+  await B.ProjectArchiveService.applyImport(exp, { mode: "replace" });
+  const afterReplace = B.EntityService.listSync("cast");
+  log("[archive] replace wipes-and-loads payload entities", afterReplace.length === 2 && !afterReplace.some((c) => c.id === "cast-new-via-import"));
+
+  // --- Entity library export/import ---
+  const lib = await B.ProjectArchiveService.buildEntityLibrary({ types: ["cast"], includeReferences: false, includeOccurrences: false });
+  log("[archive] library schemaVersion = loomwright-library-v1", lib.schemaVersion === "loomwright-library-v1");
+  log("[archive] library contains only requested types", Object.keys(lib.entities).length === 1 && !!lib.entities.cast);
+  log("[archive] library cast count = 2", lib.entities.cast.length === 2);
+
+  // Reset, apply library — only cast lands.
+  await B.StorageService.clear();
+  await B.ProjectArchiveService.applyEntityLibrary(lib);
+  const libCast = B.EntityService.listSync("cast");
+  const libLoc = B.EntityService.listSync("locations");
+  log("[archive] applyEntityLibrary imports selected type", libCast.length === 2);
+  log("[archive] applyEntityLibrary does not import unselected types", libLoc.length === 0);
+
+  // --- Defensive: redactSecrets recursively strips nested apiKey ---
+  await B.StorageService.set(B.keys.settings, { nested: { deep: { apiKey: "sk-deep", model: "ok" } } });
+  const expNested = await B.ProjectArchiveService.buildExport();
+  log("[archive] redactSecrets strips nested apiKey", JSON.stringify(expNested.settings || {}).indexOf("sk-deep") === -1);
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);
