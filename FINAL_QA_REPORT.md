@@ -1,12 +1,29 @@
 # Loomwright v2 — Final QA Report
 
-_Last run: 2026-05-19 (Round 2 — Final Local Test + Bug Fix Pass)._
+_Last run: 2026-05-19 (Extraction Quality Pass 1)._
 
-> **2026-05-19 note.** PR #3 (this report) is merged on `main`. The
-> current product status — what's implemented, prototype/thin,
-> provider-gated, future scope — is in `PRODUCT_COMPLETION_AUDIT.md`.
-> Re-run on `main` (post-merge): `npm run validate` ✓, `npm run
-> test:smoke` 22/22 ✓, `npm run test:e2e` 28/28 ✓.
+## Extraction Quality Pass 1 (2026-05-19)
+
+```
+npm run validate        → 524 callbacks; Bucket A = 0
+npm run test:smoke      → 70 checks pass (22 service + 48 fixture)
+npm run test:e2e        → 31 pass (28 prior + 3 new K. extraction)
+```
+
+12 extraction fixtures live under `tests/fixtures/extraction/` (simple
+mention, alias/nickname, char+loc co-occurrence, item ownership change,
+travel, quest progression, event creation, relationship interaction,
+stat change, lore/canon, false-positive trap, long-chapter chunking).
+8 local phrase detectors landed in `backend-services.jsx`. See
+`EXTRACTION_QUALITY_REPORT.md` for the full per-detector breakdown.
+
+## PR #3 baseline (Round 2 — Final Local Test + Bug Fix Pass)
+
+> **2026-05-19 note.** PR #3 is merged on `main`. The current product
+> status — what's implemented, prototype/thin, provider-gated, future
+> scope — is in `PRODUCT_COMPLETION_AUDIT.md`. Re-run on `main`
+> (post-merge): `npm run validate` ✓, `npm run test:smoke` 22/22 ✓,
+> `npm run test:e2e` 28/28 ✓.
 
 ## Round 2 — Final Local Test + Bug Fix Pass headline
 

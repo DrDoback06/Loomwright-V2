@@ -230,10 +230,24 @@
     const row = queue.find((q) => q.id === id) || item;
     if (!row) return;
     let saved = null;
-    if (row.payload && row.entityId) {
-      saved = await B().EntityService.update(row.entityType, row.entityId, row.payload);
-    } else if (row.payload?.name) {
-      saved = await B().EntityService.save(row.entityType || "references", row.payload, { status: "active" });
+    // Prefer the standardised candidate shape: when the candidate carries
+    // `suggestedChanges` and an `existingEntityId`, apply only that diff
+    // to entity.data instead of replacing the whole payload.
+    const existingId = row.existingEntityId || row.targetEntityId || row.entityId;
+    if (existingId && row.suggestedChanges && Object.keys(row.suggestedChanges).length) {
+      const existing = B().EntityService.getSync(existingId, row.entityType);
+      if (existing) {
+        const nextData = { ...(existing.data || {}), ...(row.suggestedChanges || {}) };
+        saved = await B().EntityService.update(row.entityType, existingId, { data: nextData });
+      }
+    } else if (row.payload && existingId) {
+      saved = await B().EntityService.update(row.entityType, existingId, row.payload);
+    } else if (row.payload?.name || row.name) {
+      // For "new" candidates, save with the most informative shape we
+      // have. Prefer the candidate's payload if present (AI shape); fall
+      // back to fields drawn from the candidate itself.
+      const fields = row.payload && row.payload.name ? row.payload : { name: row.name, summary: row.summary };
+      saved = await B().EntityService.save(row.entityType || "references", fields, { status: "active" });
     }
     // Backfill any pending occurrences that were recorded against this
     // candidate during extraction so manuscript double-click can resolve
