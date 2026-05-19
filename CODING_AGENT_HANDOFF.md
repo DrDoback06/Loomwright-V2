@@ -1,5 +1,14 @@
 # Coding Agent Handoff
 
+> **2026-05-18 update.** Subsequent wiring pass closed seven runtime gaps
+> (merge modal, composition handlers, AI handoff listeners, trash, sample
+> gating, panel action props, persisted EntityOccurrence). See
+> `IMPLEMENTATION_STATUS.md` for the up-to-date state. Key changes:
+> Writer's Room manuscript double-click now resolves entities by real ID
+> via `OccurrenceService` first; fuzzy label matching remains as a
+> legacy/demo fallback only. Fresh projects start empty — sample data
+> only loads when the user clicks "Load sample project" in Settings.
+
 ## Source-of-Truth Files
 
 - Entry: `Loomwright Shell.html`

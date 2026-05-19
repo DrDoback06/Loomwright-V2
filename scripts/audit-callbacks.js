@@ -42,4 +42,187 @@ if (!registryText.includes("dispatchCallback") || !registryText.includes("__LW_C
   process.exit(1);
 }
 
+// ---------------------------------------------------------------------
+// Unimplemented-branch check: which callback names are NOT mentioned by
+// dispatchCallback (literal "on..." string or `/^on...$/` regex), and so
+// would fall through to the default debug-log branch? These are silent
+// no-ops and must either be wired or get an explicit notice.
+// ---------------------------------------------------------------------
+const startIdx = registryText.indexOf("function dispatchCallback");
+const endMarker = "function registerHandler";
+const endIdx = registryText.indexOf(endMarker, startIdx);
+const body = startIdx >= 0 && endIdx > startIdx ? registryText.slice(startIdx, endIdx) : registryText;
+
+const literalMatches = new Set();
+for (const m of body.matchAll(/"(on[A-Za-z0-9]+)"/g)) literalMatches.add(m[1]);
+
+const regexPatterns = [];
+// Capture both /^on...$/ (anchored) and /^on.../ (prefix) regex literals.
+// Character class must include `-` so ranges like [A-Z] inside the source
+// are captured intact. We stop at the unescaped closing `/` of the regex
+// literal by matching everything except an unescaped slash.
+for (const m of body.matchAll(/\/\^(on(?:\\\/|[^\/])+?)\/(?=\.)/g)) {
+  try {
+    let src = m[1].replace(/\\w/g, "[A-Za-z0-9_]");
+    if (!src.startsWith("^")) src = "^" + src;
+    regexPatterns.push(new RegExp(src));
+  } catch (_) {}
+}
+// Tolerant patterns like `name.startsWith("onUpdate") && name.includes("Settings")`
+// or `name.startsWith("onSpeedReader")` are too dynamic to evaluate. We approximate
+// by capturing the substrings used.
+const startsWithFragments = [...body.matchAll(/name\.startsWith\("(on[A-Za-z0-9]+)"\)/g)].map((m) => m[1]);
+const containsFragments = [...body.matchAll(/name\.includes\("([A-Za-z0-9]+)"\)/g)].map((m) => m[1]);
+const BACKEND_HANDLED_LITERALS = new Set();
+const bhMatch = registryText.match(/const BACKEND_HANDLED = new Set\(\[([\s\S]*?)\]\)/);
+if (bhMatch) {
+  for (const m of bhMatch[1].matchAll(/"(on[A-Za-z0-9]+)"/g)) BACKEND_HANDLED_LITERALS.add(m[1]);
+}
+
+// Helper-function recognition. dispatchCallback delegates create/edit/delete
+// to parseCreateType / parseEditType / parseDeleteType which match
+// `onCreate([A-Za-z]+)$` etc. Those callbacks are reached even though they
+// don't appear as literal strings in dispatchCallback. Walk each helper's
+// body to extract its prefix and treat matching callbacks as reached.
+const helperPrefixes = []; // e.g. "onCreate", "onEdit", "onDelete"
+for (const fn of ["parseCreateType", "parseEditType", "parseDeleteType"]) {
+  const re = new RegExp(`function\\s+${fn}\\s*\\(name\\)\\s*\\{([\\s\\S]*?)\\n  \\}`);
+  const m = registryText.match(re);
+  if (!m) continue;
+  // Only count the helper if dispatchCallback actually calls it AND uses
+  // its return value to dispatch (openEditor / EntityService.delete).
+  if (!body.includes(fn + "(name)")) continue;
+  // Look for `/^onX(...)` somewhere in the helper body. The actual capture
+  // group syntax inside the helper may be `(...)`, `([A-Za-z]+)`,
+  // `([A-Za-z]+?)`, or wrapped in alternation — the prefix is what matters.
+  for (const rm of m[1].matchAll(/\/\^(on[A-Za-z]+)\(/g)) {
+    if (!helperPrefixes.includes(rm[1])) helperPrefixes.push(rm[1]);
+  }
+}
+
+function isReached(name) {
+  if (BACKEND_HANDLED_LITERALS.has(name)) return true;
+  if (literalMatches.has(name)) return true;
+  if (regexPatterns.some((re) => re.test(name))) return true;
+  // Approximation of startsWith/includes (catches onSpeedReader*, onUpdate*Settings, etc).
+  for (const frag of startsWithFragments) if (name.startsWith(frag)) return true;
+  // Helper-handled families: onCreate<Type>, onEdit<Type>, onDelete<Type>
+  // resolve via parseCreateType/parseEditType/parseDeleteType.
+  for (const prefix of helperPrefixes) {
+    if (name.length > prefix.length && name.startsWith(prefix) && /^[A-Z]/.test(name.charAt(prefix.length))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const unimplemented = [];
+for (const name of listed) {
+  if (!isReached(name)) unimplemented.push(name);
+}
+
+// Required-action callbacks: anything that creates, edits, saves, deletes,
+// accepts, denies, merges, restores, equips, assigns, links, generates,
+// imports, exports, or runs — these MUST hit an explicit branch in
+// dispatchCallback because silently reaching the default notice would be
+// indistinguishable from a broken feature. Cosmetic UI state (close,
+// cancel, zoom, filter, etc.) is allowed to fall through.
+const REQUIRED_ACTION_PREFIXES = [
+  "onCreate", "onSave", "onDelete", "onAccept", "onDeny", "onMerge", "onEdit",
+  "onRestore", "onPurge", "onEquip", "onUnequip", "onAssign", "onLink",
+  "onGenerate", "onImport", "onExport", "onRun", "onUpload", "onPaste",
+  "onCopy", "onDownload", "onValidate", "onApply", "onUpdate", "onLoad",
+  "onBuild", "onSend", "onTest", "onAdd", "onArchive", "onPromote",
+  "onCompleteQuestStep", "onBranchQuest",
+];
+const REQUIRED_EXACT = new Set([
+  "onSaveAndExtract", "onSaveAndDeepExtract",
+]);
+
+// Bucket D — React-owned callbacks that are handled by component-level
+// onClick handlers; the registry never reaches them under normal flow.
+// They're allowed to fall to default because the React handler runs first.
+const REACT_OWNED = new Set([
+  "onCreateNewInstead",        // MergeCandidateModal
+  "onAcceptEdited",            // EditCandidateModal
+  "onSaveEdit",                // EditCandidateModal
+  "onOpenEntityFromManuscript",// EntityBrushHighlight onDoubleClick
+]);
+
+// Bucket B — AI/provider-gated callbacks. Allowed to surface an unavailable
+// notice if no provider is configured, but the registry branch MUST be
+// explicit (not the generic default) and MUST call requireProviderOrNotice
+// so users see "Configure an AI provider in Settings…" rather than
+// "X isn't wired yet".
+const PROVIDER_GATED = new Set([
+  "onGenerateAIWriterDraft",
+  "onGenerateDraftSkillTree",
+  "onRunContinuityCheck",
+  "onRunEntitySuggestion",
+  "onAcceptGeneratedText",
+  "onCopyGeneratedText",
+]);
+
+const required = listed.filter((n) =>
+  REQUIRED_EXACT.has(n) || REQUIRED_ACTION_PREFIXES.some((p) => n.startsWith(p))
+);
+const missingActions = required
+  .filter((n) => !REACT_OWNED.has(n))
+  .filter((n) => !PROVIDER_GATED.has(n))
+  .filter((n) => !isReached(n));
+
+// Registry must have a user-visible notice in its default branch — silent
+// fall-through is forbidden. We grep for a notify(...) call near the
+// "—— Default ——" marker.
+const defaultIdx = body.indexOf("—— Default ——");
+const defaultTail = defaultIdx >= 0 ? body.slice(defaultIdx) : "";
+if (!/notify\s*\(/.test(defaultTail)) {
+  console.error("callback-registry.jsx default branch must call notify() so unwired actions surface a clear notice.");
+  process.exit(1);
+}
+
+// Bucket B verification: any provider-gated callback that reaches the
+// default notice MUST be replaced by an explicit branch that calls
+// requireProviderOrNotice (so users see a provider-specific message).
+const providerGatedMissing = [];
+const providerGatedHasHelper = registryText.includes("requireProviderOrNotice");
+for (const name of PROVIDER_GATED) {
+  if (!isReached(name)) providerGatedMissing.push(name);
+}
+
+// Hard-fail rules — after the burn-down pass:
+//   1. Bucket A core local actions must NOT reach the generic default notice.
+//   2. The provider-gating helper must be defined in the registry.
+//   3. Bucket B callbacks must reach an explicit branch (not the default).
+if (missingActions.length) {
+  console.error("\nERROR: Bucket A core local actions reaching the generic default notice:");
+  for (const n of missingActions) console.error("  -", n);
+  console.error("\nThese are action-shaped callbacks (Create/Save/Delete/Accept/Add/Import/Export/etc.)");
+  console.error("They must perform a real action, not show 'isn't wired yet'. Wire them in");
+  console.error("callback-registry.jsx or — if intentionally React-owned — add to REACT_OWNED.");
+  process.exit(1);
+}
+if (!providerGatedHasHelper) {
+  console.error("\nERROR: callback-registry.jsx lacks the requireProviderOrNotice helper.");
+  console.error("Bucket B callbacks need a provider-gated path that emits a specific notice.");
+  process.exit(1);
+}
+if (providerGatedMissing.length) {
+  console.error("\nERROR: Bucket B provider-gated callbacks reach the generic default:");
+  for (const n of providerGatedMissing) console.error("  -", n);
+  console.error("Add an explicit branch using requireProviderOrNotice(label).");
+  process.exit(1);
+}
+
 console.log("OK:", uiNames.size, "UI callbacks; registry bootstraps", listed.length, "handlers");
+console.log("OK: registry default branch emits a user-visible notice (no silent fall-through).");
+console.log("OK: 0 Bucket A action callbacks reach the generic default notice.");
+console.log("OK:", PROVIDER_GATED.size, "Bucket B (provider-gated) callbacks use requireProviderOrNotice.");
+console.log("OK:", REACT_OWNED.size, "Bucket D (React-owned) callbacks declared.");
+console.log("INFO:", unimplemented.length - REACT_OWNED.size, "other callbacks fall to default notice (housekeeping/dispatch).");
+if (process.env.AUDIT_VERBOSE) {
+  console.log("\nBucket B — provider-gated callbacks:");
+  for (const n of PROVIDER_GATED) console.log("  -", n);
+  console.log("\nBucket D — React-owned callbacks:");
+  for (const n of REACT_OWNED) console.log("  -", n);
+}

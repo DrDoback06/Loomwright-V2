@@ -219,69 +219,73 @@ const DockedPanel = ({
       </div>
 
       <div className="panel__body">
-        {panel.id === "p-speedReader" && typeof SpeedReaderPanelBody !== "undefined" ? (
-          <SpeedReaderPanelBody panel={panel}/>
-        ) : panel.entityType === "atlas" && typeof AtlasPanelBody !== "undefined" ? (
-          <AtlasPanelBody panel={panel}/>
-        ) : panel.entityType === "cast" && typeof CastPanelBody !== "undefined" && !["loading","error","empty"].includes(panel.state) ? (
-          <CastPanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : panel.entityType === "skills" && typeof SkillsPanelBody !== "undefined" ? (
-          <SkillsPanelBody panel={panel}/>
-        ) : panel.entityType === "relationships" && typeof RelationshipsPanelBody !== "undefined" ? (
-          <RelationshipsPanelBody panel={panel}/>
-        ) : panel.entityType === "timeline" && typeof TimelinePanelBody !== "undefined" ? (
-          <TimelinePanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : panel.entityType === "lore" && typeof LorePanelBody !== "undefined" ? (
-          <LorePanelBody panel={panel}/>
-        ) : panel.entityType === "references" && typeof ReferencesPanelBody !== "undefined" ? (
-          <ReferencesPanelBody panel={panel}/>
-        ) : panel.entityType === "locations" && typeof LocationsPanelBody !== "undefined" ? (
-          <LocationsPanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : panel.entityType === "items" && typeof ItemsPanelBody !== "undefined" ? (
-          <ItemsPanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : panel.entityType === "quests" && typeof QuestsPanelBody !== "undefined" ? (
-          <QuestsPanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : panel.entityType === "events" && typeof EventsPanelBody !== "undefined" ? (
-          <EventsPanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : panel.entityType === "bestiary" && typeof BestiaryPanelBody !== "undefined" ? (
-          <BestiaryPanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : panel.entityType === "factions" && typeof FactionsPanelBody !== "undefined" ? (
-          <FactionsPanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : panel.entityType === "stats" && typeof StatsPanelBody !== "undefined" ? (
-          <StatsPanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : panel.entityType === "classes" && typeof ClassesPanelBody !== "undefined" ? (
-          <ClassesPanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : panel.entityType === "races" && typeof RacesPanelBody !== "undefined" ? (
-          <RacesPanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : panel.entityType === "abilities" && typeof AbilitiesPanelBody !== "undefined" ? (
-          <AbilitiesPanelBody panel={panel} onSelectEntity={onSelectEntity}/>
-        ) : (typeof FRAMEWORK_ENTITY_TYPES !== "undefined"
+        {(() => {
+          // Bespoke panel bodies historically received only {panel, onSelectEntity}.
+          // We now spread the same panelActions bag the framework body receives so
+          // bespoke bodies can call typed handlers (onCreateEntity, queue actions,
+          // delete request, source-mention open) without prop-drilling. Existing
+          // bodies that ignore the extra props are unaffected.
+          // panelContext gives bodies a consistent snapshot of "where am I and
+          // what's focused" — used by buttons that need projectId / activeChapter
+          // / selectedEntity without re-deriving it from the DOM.
+          const panelContext = {
+            projectId: window.LoomwrightBackend?.projectId || "default",
+            panelKind: panel.entityType || panel.kind || panel.id,
+            panelId: panel.id,
+            selectedEntityId: panel.selected?.id || panel.selectedId || null,
+            focusedEntity: panelFilter || null,
+            activeChapterId: (typeof document !== "undefined" && document.querySelector?.("[data-ui='ManuscriptCanvas']")?.getAttribute("data-chapter-id")) || null,
+            activeWorkspaceId: panel.workspaceId || null,
+          };
+          const bespokeProps = {
+            panel,
+            panelContext,
+            onSelectEntity,
+            onCreateEntity: (opts) => panelActions?.onCreateEntity?.(opts, panel),
+            onEditEntity: (e) => panelActions?.onEditEntity?.(e, panel),
+            onImportEntity: () => panelActions?.onImportEntity?.(panel),
+            onAcceptQueueItem: (item) => window.LoomwrightDispatchCallback?.("onAcceptQueueItem", { detail: item, entityId: item?.entityId, entityType: panel.entityType }),
+            onEditQueueItem: (item) => window.LoomwrightDispatchCallback?.("onEditQueueItem", { detail: item, entityType: panel.entityType }),
+            onMergeQueueItem: (item) => window.LoomwrightDispatchCallback?.("onMergeQueueItem", { detail: item, entityType: panel.entityType }),
+            onDenyQueueItem: (item) => window.LoomwrightDispatchCallback?.("onDenyQueueItem", { detail: item, entityType: panel.entityType }),
+            onDeleteEntityRequest: (e) => window.LoomwrightDispatchCallback?.("onDeleteEntityRequest", { entityId: e?.id, entityType: panel.entityType }),
+            onOpenSourceMention: (m) => window.dispatchEvent(new CustomEvent("lw:open-source-mention", { detail: m })),
+          };
+          if (panel.id === "p-speedReader" && typeof SpeedReaderPanelBody !== "undefined") return <SpeedReaderPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "atlas" && typeof AtlasPanelBody !== "undefined") return <AtlasPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "cast" && typeof CastPanelBody !== "undefined" && !["loading","error","empty"].includes(panel.state)) return <CastPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "skills" && typeof SkillsPanelBody !== "undefined") return <SkillsPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "relationships" && typeof RelationshipsPanelBody !== "undefined") return <RelationshipsPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "timeline" && typeof TimelinePanelBody !== "undefined") return <TimelinePanelBody {...bespokeProps}/>;
+          if (panel.entityType === "lore" && typeof LorePanelBody !== "undefined") return <LorePanelBody {...bespokeProps}/>;
+          if (panel.entityType === "references" && typeof ReferencesPanelBody !== "undefined") return <ReferencesPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "locations" && typeof LocationsPanelBody !== "undefined") return <LocationsPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "items" && typeof ItemsPanelBody !== "undefined") return <ItemsPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "quests" && typeof QuestsPanelBody !== "undefined") return <QuestsPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "events" && typeof EventsPanelBody !== "undefined") return <EventsPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "bestiary" && typeof BestiaryPanelBody !== "undefined") return <BestiaryPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "factions" && typeof FactionsPanelBody !== "undefined") return <FactionsPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "stats" && typeof StatsPanelBody !== "undefined") return <StatsPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "classes" && typeof ClassesPanelBody !== "undefined") return <ClassesPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "races" && typeof RacesPanelBody !== "undefined") return <RacesPanelBody {...bespokeProps}/>;
+          if (panel.entityType === "abilities" && typeof AbilitiesPanelBody !== "undefined") return <AbilitiesPanelBody {...bespokeProps}/>;
+          if (typeof FRAMEWORK_ENTITY_TYPES !== "undefined"
               && FRAMEWORK_ENTITY_TYPES.has(panel.entityType)
-              && typeof EntityFrameworkPanelBody !== "undefined") ? (
-          <EntityFrameworkPanelBody
-            panel={panel}
-            onSelectEntity={onSelectEntity}
-            onCreateEntity={(opts) => panelActions?.onCreateEntity?.(opts, panel)}
-            onEditEntity={(e) => { if (!e || !e.save) panelActions?.onEditEntity?.(e, panel); }}
-            onImportEntity={() => panelActions?.onImportEntity?.(panel)}
-            onAcceptQueueItem={(item) => window.LoomwrightDispatchCallback?.("onAcceptQueueItem", { detail: item, entityId: item?.entityId, entityType: panel.entityType })}
-            onEditQueueItem={(item) => window.LoomwrightDispatchCallback?.("onEditQueueItem", { detail: item, entityType: panel.entityType })}
-            onMergeQueueItem={(item) => window.LoomwrightDispatchCallback?.("onMergeQueueItem", { detail: item, entityType: panel.entityType })}
-            onDenyQueueItem={(item) => window.LoomwrightDispatchCallback?.("onDenyQueueItem", { detail: item, entityType: panel.entityType })}
-            onDeleteEntityRequest={(e) => window.LoomwrightDispatchCallback?.("onDeleteEntityRequest", { entityId: e?.id, entityType: panel.entityType })}
-            onOpenSourceMention={(m) => window.dispatchEvent(new CustomEvent("lw:open-source-mention", { detail: m }))}
-          />
-        ) : (<>
-        {panel.state === "overview"   && <PanelOverview panel={panel} onSelectEntity={onSelectEntity}/>}
-        {panel.state === "selected"   && <PanelSelected panel={panel}/>}
-        {panel.state === "multi"      && <PanelMulti panel={panel}/>}
-        {panel.state === "empty"      && <EmptyState icon={panel.icon || "paper"} title={"No " + panel.title.toLowerCase() + " yet"} body="Create your first entry, or extract from the manuscript." action={<Btn variant="primary" size="sm" icon="plus" data-callback="onCreateEntity">Create</Btn>}/>}
-        {panel.state === "loading"    && <LoadingState title={"Loading " + panel.title.toLowerCase() + "…"} lines={4}/>}
-        {panel.state === "error"      && <ErrorState title="Couldn't load panel" body="Local index unreachable. Your data is safe." onRetry={() => {}}/>}
-        {panel.state === "review"     && <PanelReview panel={panel}/>}
-        {panel.state === "edit"       && <PanelEdit panel={panel}/>}
-        {panel.state === "suggestion" && <PanelSuggestion panel={panel}/>}
-        </>)}
+              && typeof EntityFrameworkPanelBody !== "undefined") {
+            return <EntityFrameworkPanelBody {...bespokeProps} onEditEntity={(e) => { if (!e || !e.save) bespokeProps.onEditEntity(e); }}/>;
+          }
+          return (<>
+            {panel.state === "overview"   && <PanelOverview panel={panel} onSelectEntity={onSelectEntity}/>}
+            {panel.state === "selected"   && <PanelSelected panel={panel}/>}
+            {panel.state === "multi"      && <PanelMulti panel={panel}/>}
+            {panel.state === "empty"      && <EmptyState icon={panel.icon || "paper"} title={"No " + panel.title.toLowerCase() + " yet"} body="Create your first entry, or extract from the manuscript." action={<Btn variant="primary" size="sm" icon="plus" data-callback="onCreateEntity">Create</Btn>}/>}
+            {panel.state === "loading"    && <LoadingState title={"Loading " + panel.title.toLowerCase() + "…"} lines={4}/>}
+            {panel.state === "error"      && <ErrorState title="Couldn't load panel" body="Local index unreachable. Your data is safe." onRetry={() => {}}/>}
+            {panel.state === "review"     && <PanelReview panel={panel}/>}
+            {panel.state === "edit"       && <PanelEdit panel={panel}/>}
+            {panel.state === "suggestion" && <PanelSuggestion panel={panel}/>}
+          </>);
+        })()}
       </div>
     </section>
   );

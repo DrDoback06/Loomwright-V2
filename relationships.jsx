@@ -205,7 +205,9 @@ const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
           return rel && (rel.a === characterId || rel.b === characterId);
         }).slice(0, 4).map((rc) => {
           const rel = RELATIONSHIPS.find((r) => r.id === rc.rel);
+          if (!rel) return null;
           const other = cast[rel.a === characterId ? rel.b : rel.a];
+          if (!other) return null;
           return (
             <div key={rc.id} className="rel-change">
               <div className="rel-change__head">

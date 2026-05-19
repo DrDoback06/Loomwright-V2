@@ -211,9 +211,10 @@ const ChapterNodeStrip = ({
 //                       wrapping ManuscriptParagraph so the user's reading
 //                       flow isn't broken by an accidental word-select.
 // ---------------------------------------------------------------------
-const EntityBrushHighlight = ({ type, id, children, onClick, onDoubleClick, onMouseEnter, onMouseLeave }) => {
+const EntityBrushHighlight = ({ type, id, occurrenceId, children, onClick, onDoubleClick, onMouseEnter, onMouseLeave }) => {
   const t = ENTITY_TYPES[type];
   if (!t) return <span>{children}</span>;
+  const extraAttrs = occurrenceId ? { "data-occurrence-id": occurrenceId, "data-source": "occurrence" } : {};
   return (
     <span
       className="wr-mark"
@@ -222,6 +223,7 @@ const EntityBrushHighlight = ({ type, id, children, onClick, onDoubleClick, onMo
       data-entity={type}
       data-entity-type={type}
       data-entity-id={id}
+      {...extraAttrs}
       style={{ "--ec": t.color, "--es": t.soft, "--ed": t.deep }}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -232,10 +234,74 @@ const EntityBrushHighlight = ({ type, id, children, onClick, onDoubleClick, onMo
 };
 
 // ---------------------------------------------------------------------
+// Occurrence overlay helpers
+//
+// Persisted EntityOccurrence records (from Save & Extract / Accept Queue)
+// are overlaid on plain text within paragraphs. Each occurrence carries a
+// real entityId/entityType/occurrenceId, so double-click resolves by ID.
+//
+// Strategy (per the approved plan):
+//   - Demo marks remain where no persisted occurrence covers the same text.
+//   - Persisted occurrences are preferred over demo marks: if an occurrence's
+//     exactText matches a demo-marked part, the part's `id` is replaced with
+//     the occurrence's entityId (so demo placeholder IDs don't leak through).
+//   - Plain-text parts are split into [text, highlight, text, …] sequences
+//     wherever an occurrence's exactText appears.
+//   - No double-highlight: each character range is owned by exactly one span.
+// ---------------------------------------------------------------------
+function buildOccurrenceLookup(occurrences) {
+  // Group occurrences by lowercased exactText for fast paragraph scanning.
+  const byText = new Map();
+  for (const occ of occurrences || []) {
+    if (!occ || occ.stale) continue;
+    if (!occ.entityId || !occ.exactText) continue;
+    const key = String(occ.exactText).toLowerCase();
+    if (!byText.has(key)) byText.set(key, []);
+    byText.get(key).push(occ);
+  }
+  return byText;
+}
+
+function findFirstOccurrenceMatch(textSlice, lookup) {
+  // Return the earliest occurrence-driven match inside textSlice (case-
+  // insensitive). Returns { start, end, occ } or null.
+  if (!textSlice || !lookup || !lookup.size) return null;
+  const lower = textSlice.toLowerCase();
+  let best = null;
+  for (const [needle, occs] of lookup) {
+    if (needle.length < 2) continue;
+    const idx = lower.indexOf(needle);
+    if (idx < 0) continue;
+    if (!best || idx < best.start) best = { start: idx, end: idx + needle.length, occ: occs[0] };
+  }
+  return best;
+}
+
+function splitByOccurrences(text, lookup) {
+  // Produce a sequence of plain/highlight chunks for a single text run.
+  // Each chunk is either { text } (plain) or { text, occ } (highlight).
+  if (!text || !lookup || !lookup.size) return [{ text }];
+  const out = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    const slice = text.slice(cursor);
+    const hit = findFirstOccurrenceMatch(slice, lookup);
+    if (!hit) {
+      out.push({ text: slice });
+      break;
+    }
+    if (hit.start > 0) out.push({ text: slice.slice(0, hit.start) });
+    out.push({ text: slice.slice(hit.start, hit.end), occ: hit.occ });
+    cursor += hit.end;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------
 // ManuscriptParagraph
 // ---------------------------------------------------------------------
 const ManuscriptParagraph = ({
-  para, onEntityHover, onCommentClick, onEntityDoubleClick,
+  para, occurrenceLookup, onEntityHover, onCommentClick, onEntityDoubleClick,
 }) => {
   if (para.sceneBreak) {
     return (
@@ -246,6 +312,22 @@ const ManuscriptParagraph = ({
       </div>
     );
   }
+  const renderHighlight = (key, type, id, occurrenceId, text) => (
+    <EntityBrushHighlight
+      key={key}
+      type={type}
+      id={id}
+      occurrenceId={occurrenceId}
+      onMouseEnter={(e) => onEntityHover && onEntityHover({ type, id, text, x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => onEntityHover && onEntityHover(null)}
+      onDoubleClick={(e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        try { const s = window.getSelection && window.getSelection(); if (s) s.removeAllRanges(); } catch (_err) {}
+        onEntityDoubleClick && onEntityDoubleClick({ type, id, occurrenceId, label: text });
+        onEntityHover && onEntityHover(null);
+      }}
+    >{text}</EntityBrushHighlight>
+  );
   return (
     <p
       className="wr-p"
@@ -256,31 +338,38 @@ const ManuscriptParagraph = ({
       <span className="wr-p__handle" aria-hidden><Icon name="grip" size={12}/></span>
       {para.parts.map((part, i) => {
         if (part.mark) {
-          return (
-            <EntityBrushHighlight
-              key={i}
-              type={part.mark}
-              id={part.id}
-              onMouseEnter={(e) => onEntityHover && onEntityHover({ type: part.mark, id: part.id, text: part.text, x: e.clientX, y: e.clientY })}
-              onMouseLeave={() => onEntityHover && onEntityHover(null)}
-              onDoubleClick={(e) => {
-                // Suppress browser word-selection so the reader isn't left
-                // with highlighted text after a double-click.
-                if (e && e.preventDefault) e.preventDefault();
-                try { const s = window.getSelection && window.getSelection(); if (s) s.removeAllRanges(); } catch (_err) {}
-                onEntityDoubleClick && onEntityDoubleClick({ type: part.mark, id: part.id, label: part.text });
-                // Clear hover snapshot so it doesn't linger over the new panel.
-                onEntityHover && onEntityHover(null);
-              }}
-            >{part.text}</EntityBrushHighlight>
-          );
+          // Demo mark: prefer a persisted occurrence covering the same text
+          // (occurrence entityId is the canonical record).
+          let occ = null;
+          if (occurrenceLookup) {
+            const hits = occurrenceLookup.get(String(part.text || "").toLowerCase());
+            if (hits && hits.length) occ = hits[0];
+          }
+          const effectiveType = occ?.entityType || part.mark;
+          const effectiveId = occ?.entityId || part.id;
+          const occurrenceId = occ?.occurrenceId || null;
+          return renderHighlight(i, effectiveType, effectiveId, occurrenceId, part.text);
         }
         if (part.cmt) {
           return (
             <span key={i} className="wr-cmt" data-count={part.cmt} onClick={() => onCommentClick && onCommentClick(part.cmt)}>{part.text}</span>
           );
         }
-        return <React.Fragment key={i}>{part.text}</React.Fragment>;
+        // Plain text: scan for any occurrence whose exactText appears here
+        // and split the run into a series of plain + highlight spans.
+        const chunks = splitByOccurrences(part.text || "", occurrenceLookup);
+        if (chunks.length === 1 && !chunks[0].occ) {
+          return <React.Fragment key={i}>{part.text}</React.Fragment>;
+        }
+        return (
+          <React.Fragment key={i}>
+            {chunks.map((c, ci) => (
+              c.occ
+                ? renderHighlight(`${i}-${ci}`, c.occ.entityType, c.occ.entityId, c.occ.occurrenceId, c.text)
+                : <React.Fragment key={`${i}-${ci}`}>{c.text}</React.Fragment>
+            ))}
+          </React.Fragment>
+        );
       })}
       <span className="wr-p__attr" title={para.author}>{para.attr}</span>
     </p>
@@ -664,6 +753,27 @@ const ManuscriptCanvas = ({
   onEntityHover, onCommentClick, onEntityDoubleClick,
   onCreateChapter, onSaveAndExtract,
 }) => {
+  // Load persisted EntityOccurrences for this chapter and rebuild the
+  // lookup whenever the entity store updates (accept queue, merge, etc).
+  const [occurrences, setOccurrences] = React.useState(() => {
+    if (!chapter?.id) return [];
+    return window.LoomwrightBackend?.OccurrenceService?.listByChapterSync?.(chapter.id) || [];
+  });
+  React.useEffect(() => {
+    if (!chapter?.id) { setOccurrences([]); return; }
+    const refresh = () => {
+      const list = window.LoomwrightBackend?.OccurrenceService?.listByChapterSync?.(chapter.id) || [];
+      setOccurrences(list);
+    };
+    refresh();
+    window.addEventListener("lw:entity-store-updated", refresh);
+    window.addEventListener("lw:extraction-updated", refresh);
+    return () => {
+      window.removeEventListener("lw:entity-store-updated", refresh);
+      window.removeEventListener("lw:extraction-updated", refresh);
+    };
+  }, [chapter?.id]);
+  const occurrenceLookup = React.useMemo(() => buildOccurrenceLookup(occurrences), [occurrences]);
   if (!chapter) {
     return (
       <div className="wr-canvas wr-canvas--empty" data-ui="ManuscriptCanvas" data-state="no-chapter">
@@ -722,6 +832,7 @@ const ManuscriptCanvas = ({
           <ManuscriptParagraph
             key={p.id || ("sb" + i)}
             para={p}
+            occurrenceLookup={occurrenceLookup}
             onEntityHover={onEntityHover}
             onCommentClick={onCommentClick}
             onEntityDoubleClick={onEntityDoubleClick}

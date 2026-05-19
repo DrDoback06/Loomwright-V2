@@ -263,6 +263,72 @@ const AppShell = () => {
     window.LoomwrightBackend?.CompositionService?.save(overlay);
   }, [overlay]);
 
+  // ----- Review Queue merge modal -----
+  const [mergeModal, setMergeModal] = _us_a({ open: false, item: null, alternatives: [], sourceId: null, type: null });
+  const closeMergeModal = _uc_a(() => setMergeModal((s) => ({ ...s, open: false })), []);
+  _ue_a(() => {
+    const onOpen = (e) => {
+      const { item, sourceId, type } = e.detail || {};
+      const ES = window.LoomwrightBackend?.EntityService;
+      const candidateType = item?.entityType || type;
+      const all = (ES && candidateType) ? ES.listSync(candidateType) : [];
+      const needle = (item?.candidate?.name || item?.name || "").toLowerCase();
+      const alternatives = all
+        .filter((a) => !sourceId || a.id !== sourceId)
+        .filter((a) => !item?.payload?.id || a.id !== item.payload.id)
+        .map((a) => {
+          const an = (a.name || "").toLowerCase();
+          let confidence = 0;
+          if (needle && an) {
+            if (an === needle) confidence = 100;
+            else if (an.includes(needle) || needle.includes(an)) confidence = 80;
+            else if ((a.aliases || []).some((x) => (x || "").toLowerCase() === needle)) confidence = 95;
+            else {
+              const aw = new Set(an.split(/\s+/));
+              const nw = needle.split(/\s+/).filter(Boolean);
+              const hits = nw.filter((w) => aw.has(w)).length;
+              confidence = nw.length ? Math.round((hits / nw.length) * 60) : 0;
+            }
+          }
+          return { id: a.id, name: a.name, summary: a.summary, aliases: a.aliases || [], confidence };
+        })
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 10);
+      setMergeModal({ open: true, item: item || null, alternatives, sourceId: sourceId || null, type: candidateType || null });
+    };
+    const onClose = () => setMergeModal((s) => ({ ...s, open: false }));
+    window.addEventListener("lw:open-merge-modal", onOpen);
+    window.addEventListener("lw:close-merge-modal", onClose);
+    return () => {
+      window.removeEventListener("lw:open-merge-modal", onOpen);
+      window.removeEventListener("lw:close-merge-modal", onClose);
+    };
+  }, []);
+
+  const confirmMerge = _uc_a(async (altId) => {
+    const { item, sourceId, type } = mergeModal;
+    const targetType = type || item?.entityType;
+    const LS = window.LoomwrightBackend?.LinkService;
+    const RS = window.LoomwrightBackend?.ReviewService;
+    const sources = [sourceId, item?.payload?.id].filter((x) => x && x !== altId);
+    if (LS && altId && targetType) await LS.mergeEntities(altId, targetType, sources);
+    if (RS && item?.id) await RS.resolve(item.id, "merged");
+    setMergeModal((s) => ({ ...s, open: false }));
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+    window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Merged." } }));
+  }, [mergeModal]);
+
+  const createNewInsteadOfMerge = _uc_a(async () => {
+    const { item } = mergeModal;
+    const ES = window.LoomwrightBackend?.EntityService;
+    if (ES && item?.entityType && item?.candidate) {
+      await ES.save(item.entityType, { ...(item.candidate || {}) }, { status: "active" });
+    }
+    if (item?.id) await window.LoomwrightBackend?.ReviewService?.resolve(item.id, "accepted");
+    setMergeModal((s) => ({ ...s, open: false }));
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+  }, [mergeModal]);
+
   const decoratePanelWithLiveData = _uc_a((panel) => (
     window.LoomwrightBackend?.EntityService?.decoratePanel(panel) || panel
   ), []);
@@ -332,6 +398,32 @@ const AppShell = () => {
       // (The Control Centre listens for this event to scroll to the right section.)
       window.dispatchEvent(new CustomEvent("lw:settings-section", { detail: { actionId } }));
     };
+    const onOpenRoute = (e) => {
+      const r = e?.detail?.routeId;
+      if (r) setRouteId(r);
+    };
+    const onInsertDraft = (e) => {
+      const text = e?.detail?.text || e?.detail?.draft || "";
+      if (!text) return;
+      const canvas = document.querySelector("[data-ui='ManuscriptCanvas']");
+      const chapterId = canvas?.getAttribute("data-chapter-id");
+      if (!chapterId) {
+        window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Open a chapter first to insert a draft." } }));
+        return;
+      }
+      const svc = window.LoomwrightBackend?.ManuscriptChapterService;
+      if (!svc) return;
+      const state = svc.loadSync();
+      const prev = (state.manuscripts && state.manuscripts[chapterId]) || { html: "", text: "" };
+      const nextHtml = (prev.html || "") + (prev.html ? "\n\n" : "") + text;
+      const nextText = (prev.text || "") + (prev.text ? "\n\n" : "") + text;
+      svc.setChapterContent(chapterId, { html: nextHtml, text: nextText });
+      window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Draft inserted into current chapter." } }));
+    };
+    const onChapterCreated = () => {
+      setRouteId("writers-room");
+      window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "New chapter created from composition." } }));
+    };
     window.addEventListener("lw:open-entity-editor", onOpenEd);
     window.addEventListener("lw:open-panel", onOpenPan);
     window.addEventListener("lw:drop-to-composition", onDropToComp);
@@ -339,6 +431,9 @@ const AppShell = () => {
     window.addEventListener("lw:exit-panel-workspace", onExitWs);
     window.addEventListener("lw:reference-add", onRefAdd);
     window.addEventListener("lw:settings-add", onSettingsAdd);
+    window.addEventListener("lw:open-route", onOpenRoute);
+    window.addEventListener("lw:composition-insert-draft", onInsertDraft);
+    window.addEventListener("lw:chapter-created", onChapterCreated);
     return () => {
       window.removeEventListener("lw:open-entity-editor", onOpenEd);
       window.removeEventListener("lw:open-panel", onOpenPan);
@@ -347,6 +442,9 @@ const AppShell = () => {
       window.removeEventListener("lw:exit-panel-workspace", onExitWs);
       window.removeEventListener("lw:reference-add", onRefAdd);
       window.removeEventListener("lw:settings-add", onSettingsAdd);
+      window.removeEventListener("lw:open-route", onOpenRoute);
+      window.removeEventListener("lw:composition-insert-draft", onInsertDraft);
+      window.removeEventListener("lw:chapter-created", onChapterCreated);
     };
   }, [openEntityEditor, openPanelWorkspace, exitPanelWorkspace]);
 
@@ -534,6 +632,41 @@ const AppShell = () => {
   //   4. Do NOT open the full workspace; Writer's Room stays anchored.
   const onOpenEntityFromManuscript = _uc_a((detail) => {
     if (!detail || !detail.type) return;
+    // ID-first resolution: if an occurrenceId was provided on the span,
+    // look up the canonical entityId via OccurrenceService. Before
+    // trusting the occurrence's entityId, verify it isn't stale (paragraph
+    // text changed without re-indexing). If stale, fall back to fuzzy
+    // label match and notify the user that the mention may need relinking.
+    const OS = window.LoomwrightBackend?.OccurrenceService;
+    const isStaleFn = window.LoomwrightBackend?.isOccurrenceStale;
+    if (detail.occurrenceId && OS) {
+      const occ = OS.listAllSync().find((o) => o.occurrenceId === detail.occurrenceId);
+      if (occ?.entityId) {
+        const canvas = document.querySelector("[data-ui='ManuscriptCanvas']");
+        const bodyText = canvas?.innerText || "";
+        const stale = isStaleFn ? isStaleFn(occ, bodyText) : false;
+        if (stale) {
+          OS.markStale?.(occ.occurrenceId, "offset-mismatch");
+          window.dispatchEvent(new CustomEvent("lw:backend-notice", {
+            detail: { message: "This mention may need relinking." },
+          }));
+          // Fall through to fuzzy label match below.
+        } else {
+          detail = { ...detail, id: occ.entityId, type: occ.entityType || detail.type };
+        }
+      }
+    }
+    const ES = window.LoomwrightBackend?.EntityService;
+    if (detail.id && ES && !ES.getSync(detail.id, detail.type)) {
+      // The span carries an entityId that isn't in the live store. Continue
+      // into the fuzzy fallback below, but warn the user that the link is
+      // stale so they know why the panel isn't focused on a real record.
+      if (!detail.label) {
+        window.dispatchEvent(new CustomEvent("lw:backend-notice", {
+          detail: { message: "This mention is not linked to an active entity yet." },
+        }));
+      }
+    }
     const panelKind = ENTITY_TYPE_TO_PANEL_KIND[detail.type] || detail.type;
     if (!PANEL_PRESETS[panelKind]) {
       // eslint-disable-next-line no-console
@@ -931,12 +1064,24 @@ const AppShell = () => {
           onSetTone={(v) => setCompositionSetting("tone", v)}
           onSetChapterTarget={(v) => setCompositionSetting("chapterTarget", v)}
           onToggleContext={toggleCompositionContext}
-          onGenerateDraft={() => { /* host-wired AI */ }}
-          onInsertDraft={() => { /* host-wired */ }}
-          onCreateChapter={() => { /* host-wired */ }}
-          onCopyPrompt={() => { /* host-wired */ }}
-          onSavePreset={() => { /* host-wired */ }}
+          onGenerateDraft={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onGenerateCompositionDraft" } }))}
+          onInsertDraft={(text) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onInsertCompositionDraft", detail: { text } } }))}
+          onCreateChapter={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onCreateChapterFromComposition", detail: { title: overlay.settings?.chapterTitle } } }))}
+          onCopyPrompt={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onCopyCompositionPrompt" } }))}
+          onSavePreset={(preset) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onSaveCompositionPreset", detail: preset } }))}
           onClearAll={clearCompositionAll}
+        />
+      )}
+
+      {/* Review queue merge modal */}
+      {mergeModal.open && typeof MergeCandidateModal !== "undefined" && (
+        <MergeCandidateModal
+          open={mergeModal.open}
+          candidate={mergeModal.item || {}}
+          alternatives={mergeModal.alternatives}
+          onConfirmMerge={confirmMerge}
+          onCreateNewInstead={createNewInsteadOfMerge}
+          onCancel={closeMergeModal}
         />
       )}
 

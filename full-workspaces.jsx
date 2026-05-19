@@ -376,14 +376,19 @@ const FullWorkspaceHost = ({
   }
 
   return (
-    <Comp
-      workspace={workspace}
-      onExit={onExit}
-      onRequest={onRequest}
-      dragTargetVisible={dragTargetVisible}
-      toast={toast}
-      onDismissToast={() => setToast(null)}
-    />
+    // data-workspace-id lets tests (and other observers) identify which
+    // workspace is currently open without parsing the inner DOM. Pure
+    // attribute addition; doesn't affect layout, styling, or behaviour.
+    <div data-ui="FullWorkspaceHost" data-workspace-id={workspace.id} style={{ display: "contents" }}>
+      <Comp
+        workspace={workspace}
+        onExit={onExit}
+        onRequest={onRequest}
+        dragTargetVisible={dragTargetVisible}
+        toast={toast}
+        onDismissToast={() => setToast(null)}
+      />
+    </div>
   );
 };
 

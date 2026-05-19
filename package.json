@@ -9,9 +9,18 @@
     "validate": "node scripts/validate-static-site.js && node scripts/audit-callbacks.js",
     "audit-callbacks": "node scripts/export-callback-names.js && node scripts/generate-callback-names-data.js && node scripts/audit-callbacks.js",
     "build": "node scripts/build-static.js",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "test:smoke": "node scripts/smoke-services.js",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "vite": "^8.0.13"
+  },
+  "dependencies": {
+    "@babel/standalone": "^7.29.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   }
 }

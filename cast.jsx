@@ -828,7 +828,7 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
 
   // Local UI state for the panel (selection, multi-select, edit view).
   const [view, setView] = _us_cast(incomingState); // overview | selected | edit | empty | loading | error | review | suggestion | multi
-  const [selectedId, setSelectedId] = _us_cast(panel?.selected?.id || cast.find((c) => c.role === "protagonist")?.id || cast[0]?.id);
+  const [selectedId, setSelectedId] = _us_cast(panel?.selected?.id || cast.find((c) => c.role === "protagonist")?.id || cast[0]?.id || null);
   const [multi, setMulti] = _us_cast(() => new Set());
 
   // If host changes panel.state (e.g. via demo controls), follow.
