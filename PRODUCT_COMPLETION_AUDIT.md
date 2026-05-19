@@ -58,6 +58,10 @@ breaks `npm run test:smoke` or `npm run test:e2e`.
 | `OccurrenceService.save / listByChapterSync / saveMany / rebindEntity / markStale` | smoke |
 | `isOccurrenceStale(occ, bodyText)` staleness detection | smoke + e2e D |
 | Local-pass extraction scanner — records `EntityOccurrence` for known entity names without any AI provider | smoke + e2e D |
+| Local phrase detectors (item transfer/loss, travel, relationship interaction, stat change, quest progression, event creation, lore/canon) — produce candidates with `suggestedChanges` from chapter text without any AI provider | 12 extraction fixtures (smoke) + e2e K (3 tests) |
+| Candidate dedupe across local + AI passes; standardised candidate shape (`candidateId`, `suggestedAction`, `confidence`, `confidenceBand`, `matchType`, `existingEntityId`, `sourceQuote`, `sourceQuotes[]`, `previousState`, `relatedEntityIds`, `suggestedChanges`) | smoke fixtures + e2e K |
+| Accept-on-`suggestedChanges` applies only the diff to `entity.data` (pre-existing fields preserved) | e2e K.3 |
+| Paragraph-aware extraction — `runExtraction({paragraphs})` tags occurrences and AI candidates with `paragraphId` when supplied | code path, not yet exercised by tests |
 | `OccurrenceService` survives reload | e2e D |
 | `EntityOccurrence` records render as Writer's Room highlights on chapter load; demo placeholder IDs get replaced by real entity IDs when an occurrence covers the same text | rendering wired in `writers-room.jsx` (visible after reload — manual verification step in FINAL_QA_REPORT.md) |
 | Writer's Room manuscript double-click resolves by `occurrenceId` → `entityId` → fuzzy fallback; "may need relinking" notice on stale occurrence | code path; smoke covers staleness |
@@ -84,7 +88,7 @@ result** is prototype-level. They aren't broken; they aren't great yet.
 
 | Area | State | Why it's thin |
 |------|-------|---------------|
-| **Extraction quality (local pass)** | Records `EntityOccurrence` for case-insensitive whole-word matches of entity names + aliases | No relationship extraction, no item-ownership/travel/quest-progression phrase rules, no stat-change detection, no canon/lore extraction. Two-pass relationship extraction from the legacy audit is documented but not implemented. |
+| **Extraction quality (local pass)** | Pass 1 detectors landed: item transfer/loss, travel, relationship interaction (single-pass), stat change, quest progression, event creation, lore/canon. Persisted candidates carry `matchType`, `confidence`, `confidenceBand`, `sourceQuote`, `previousState`, `relatedEntityIds`, `suggestedChanges`. Dedupe across local + AI. | Detector confidence values are heuristics (0.62–0.80) — they need real-manuscript evaluation to calibrate. Two-pass relationship extraction (legacy `extractRelationshipsAdvanced`) is still deferred. |
 | **Extraction quality (deep pass / AI)** | Uses the canon 10-category prompt verbatim with `Known characters / Known items / Known locations` injection, chunked at 5000/500 with overlap | No fixture-based prompt tuning yet. No extraction-session undo trail with `previousState`. No two-pass relationship extraction even with AI. |
 | **Project Intelligence derivation** | `ProjectIntelService` persists; `mergeFromOnboarding` writes onboarding answers into the intel record | No automatic derivation from references / entities / lore / manuscript summaries. No preview/diff before applying. No versioning/rollback. |
 | **References ingestion** | Paste-text / URL / manual / kind tagging / `includedInAIContext` flag / linked entities all persist | No file upload pathway with real parsing (markdown/HTML/text only via paste). No reference summarisation by AI. No search across reference content. |
