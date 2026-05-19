@@ -406,6 +406,16 @@
       await StorageService.set(KEYS.reviewQueue, next);
       return next;
     },
+    async resolveMany(ids, status = "done") {
+      // Bulk resolve for the review queue's batch approve/deny actions
+      // (ported from legacy NarrativeReviewQueue's approveAllForChapter).
+      const idSet = new Set(ids || []);
+      if (!idSet.size) return this.listSync();
+      const all = await StorageService.get(KEYS.reviewQueue, []);
+      const next = all.map((item) => idSet.has(item.id) ? { ...item, status, updatedAt: nowIso() } : item);
+      await StorageService.set(KEYS.reviewQueue, next);
+      return next;
+    },
   };
 
   const ReferencesService = {
@@ -978,6 +988,118 @@
     return out;
   }
 
+  // Ported from legacy entityMatchingService.js — standard DP Levenshtein
+  // distance. Used by the alias-aware fuzzy match below. Cheap enough at
+  // chapter scale (O(m*n) per pair). Returns 0 for identical strings.
+  function levenshteinDistance(a, b) {
+    if (a === b) return 0;
+    if (!a) return b.length;
+    if (!b) return a.length;
+    const m = a.length, n = b.length;
+    const prev = new Array(n + 1);
+    const curr = new Array(n + 1);
+    for (let j = 0; j <= n; j++) prev[j] = j;
+    for (let i = 1; i <= m; i++) {
+      curr[0] = i;
+      for (let j = 1; j <= n; j++) {
+        const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+        curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      }
+      for (let j = 0; j <= n; j++) prev[j] = curr[j];
+    }
+    return prev[n];
+  }
+
+  function levenshteinSimilarity(a, b) {
+    if (!a || !b) return 0;
+    const longest = Math.max(a.length, b.length);
+    if (!longest) return 1;
+    return 1 - levenshteinDistance(a.toLowerCase(), b.toLowerCase()) / longest;
+  }
+
+  // Chunk text with overlap so entities mentioned across boundaries
+  // aren't lost. Ported from legacy chapterDataExtractionService.js
+  // (5000 / 500 defaults). Returns [{ index, start, end, text }].
+  function chunkText(text, size = 5000, overlap = 500) {
+    if (!text) return [];
+    if (text.length <= size) return [{ index: 0, start: 0, end: text.length, text }];
+    const out = [];
+    let start = 0;
+    let index = 0;
+    while (start < text.length) {
+      const end = Math.min(start + size, text.length);
+      out.push({ index, start, end, text: text.slice(start, end) });
+      if (end >= text.length) break;
+      start = end - overlap;
+      index++;
+    }
+    return out;
+  }
+
+  // Three-tier match: exact (case-insensitive) → alias → fuzzy
+  // (Levenshtein, threshold ≥ 0.85). Higher than legacy's 0.7 because
+  // we're scanning raw text without an LLM filter; a low threshold
+  // would produce false positives. Returns { entity, type, confidence,
+  // matchType } or null. Used by the enhanced scanner below.
+  function findKnownEntityMention(needle, opts = {}) {
+    if (!needle) return null;
+    const threshold = opts.threshold != null ? opts.threshold : 0.85;
+    const lowerNeedle = String(needle).toLowerCase();
+    const all = EntityService.listAllSync();
+    let best = null;
+    for (const [type, byId] of Object.entries(all)) {
+      for (const entity of Object.values(byId || {})) {
+        if (!entity) continue;
+        const name = String(entity.name || "");
+        if (name.toLowerCase() === lowerNeedle) {
+          return { entity, type, confidence: 1.0, matchType: "exact" };
+        }
+        const aliases = entity.aliases || [];
+        for (const alias of aliases) {
+          if (String(alias).toLowerCase() === lowerNeedle) {
+            return { entity, type, confidence: 0.95, matchType: "nickname" };
+          }
+        }
+        const score = levenshteinSimilarity(needle, name);
+        if (score >= threshold && (!best || score > best.confidence)) {
+          best = { entity, type, confidence: score, matchType: "fuzzy" };
+        }
+      }
+    }
+    return best;
+  }
+
+  // Map a 0–1 confidence to Loomwright's existing four-band scale.
+  function confidenceBand(value) {
+    if (value == null) return "orange";
+    const v = typeof value === "number" ? value : parseFloat(value);
+    if (Number.isNaN(v)) return "orange";
+    if (v >= 0.95) return "blue";
+    if (v >= 0.75) return "green";
+    if (v >= 0.5) return "orange";
+    return "red";
+  }
+
+  // Diff helper for upgrade detection — returns the set of top-level
+  // fields whose value would change when applying patch onto existing.
+  // Ports the spirit of legacy entityMatchingService.detectUpgrade.
+  function diffEntity(existing, patch) {
+    if (!existing || !patch) return [];
+    const changed = [];
+    for (const [k, v] of Object.entries(patch)) {
+      if (k === "id" || k === "createdAt" || k === "updatedAt") continue;
+      const prev = existing[k];
+      if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+        if (JSON.stringify(prev || {}) !== JSON.stringify(v)) changed.push(k);
+      } else if (Array.isArray(v)) {
+        if (JSON.stringify(prev || []) !== JSON.stringify(v)) changed.push(k);
+      } else if (prev !== v) {
+        changed.push(k);
+      }
+    }
+    return changed;
+  }
+
   function scanTextForKnownEntities(text, chapterId, sessionId) {
     if (!text) return [];
     const all = EntityService.listAllSync();
@@ -1119,40 +1241,130 @@
       // pass alone produces useful occurrences without leaking text.
       const aiAvailable = !!(await AIService.getProviderConfig().catch(() => null))?.apiKey;
       if (aiAvailable) {
-        const prompt = deep
-          ? `Extract RPG/world entities from this manuscript chapter as JSON array with objects {type,name,summary,confidence}. Text:\n\n${text}`
-          : `List notable named entities (characters, locations, items, quests, events) from this text as JSON array {type,name,summary}:\n\n${text}`;
-        try {
-          const raw = await AIService.complete({
-            prompt,
-            system: "Return valid JSON only. No markdown fences.",
-            maxTokens: deep ? 2500 : 1200,
-          });
+        // Chunk with overlap so entities mentioned across boundaries
+        // aren't lost (ported from legacy chapterDataExtractionService).
+        const chunks = chunkText(text || "", 5000, 500);
+        // Inject "Known characters / Known items" context so the model can
+        // return matched candidates instead of duplicates (ported from
+        // legacy canonExtractionPipeline).
+        const all = EntityService.listAllSync();
+        const known = (type) => Object.values(all[type] || {})
+          .map((e) => e.name)
+          .filter(Boolean)
+          .slice(0, 50)
+          .join(", ");
+        for (const chunk of chunks) {
+          const promptHeader = deep
+            ? `You are a canon extraction system for a long-form story. Analyze this chapter chunk and extract narrative elements across every domain.
+
+Chapter chunk ${chunk.index + 1}/${chunks.length}:
+---
+${chunk.text}
+---
+
+Known characters: ${known("cast") || "None"}
+Known items:      ${known("items") || "None"}
+Known locations:  ${known("locations") || "None"}
+
+Extract into these categories (each item has a confidence 0-1):
+1. characters: [{name, description, isNew, traits, role, confidence}]
+2. items: [{name, description, isNew, type, rarity, owner, confidence}]
+3. skills: [{name, description, isNew, user, action, level, confidence}]
+4. relationships: [{character1, character2, type, change, strength, confidence}]
+5. plots: [{title, description, status, characters, confidence}]
+6. quests: [{title, description, type, status, objectives, confidence}]
+7. timeline: [{event, timestamp, characters, significance, confidence}]
+8. locations: [{name, type, description, significance, confidence}]
+9. factions: [{name, type, members, goals, stance, confidence}]
+10. lore: [{title, category, description, significance, confidence}]
+
+Return valid JSON only.`
+            : `Analyze the following chapter chunk and extract notable named entities.
+
+Chunk ${chunk.index + 1}/${chunks.length}:
+${chunk.text}
+
+Known characters: ${known("cast") || "None"}
+Known items:      ${known("items") || "None"}
+
+Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confidence}]`;
           try {
-            const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim());
-            items = Array.isArray(parsed) ? parsed : parsed.items || parsed.entities || [];
-          } catch (_) {
-            items = [{ type: "references", name: "Extraction result", summary: raw.slice(0, 500) }];
+            const raw = await AIService.complete({
+              prompt: promptHeader,
+              system: "Return valid JSON only. No markdown fences.",
+              maxTokens: deep ? 2500 : 1200,
+            });
+            try {
+              const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim());
+              const chunkItems = Array.isArray(parsed)
+                ? parsed
+                : Object.entries(parsed).flatMap(([category, arr]) => {
+                    if (!Array.isArray(arr)) return [];
+                    const typeMap = { characters: "cast", items: "items", skills: "skills", locations: "locations", quests: "quests", timeline: "events", factions: "factions", lore: "lore", plots: "lore", relationships: "relationships" };
+                    return arr.map((row) => ({ ...row, type: row.type || typeMap[category] || "references" }));
+                  });
+              items.push(...chunkItems.map((it) => ({ ...it, _chunkIndex: chunk.index, _chunkStart: chunk.start })));
+            } catch (_) {
+              // Skip unparseable chunk
+            }
+          } catch (e) {
+            // AI call failed on this chunk — continue with others.
           }
-        } catch (e) {
-          // AI call failed — fall back to local-only results.
-          items = [];
         }
       }
-      const reviewItems = items.map((item) => ({
-        id: uuid("rq"),
-        entityType: normaliseType(item.type || "references"),
-        name: item.name || "Suggestion",
-        action: deep ? "Deep extract" : "Extract",
-        level: "suggestion",
-        value: item.confidence || 70,
-        reason: item.summary || "Extracted from manuscript",
-        payload: item,
-        chapterId,
-        extractionSessionId: sessionId,
-        candidateId: uuid("cand"),
-        status: "pending",
-      }));
+
+      // Enrich each candidate with matchType (exact/nickname/fuzzy/new),
+      // sourceQuote (chapter snippet around the candidate), previousState
+      // (existing entity snapshot when matched), and confidenceBand.
+      // Ports legacy entityMatchingService's three-tier matcher behaviour.
+      const reviewItems = items.map((item) => {
+        const candidateName = item.name || "";
+        const entityType = normaliseType(item.type || "references");
+        const match = findKnownEntityMention(candidateName, { threshold: 0.85 });
+        const matchType = match
+          ? match.matchType
+          : (item.isNew === false ? "ambiguous" : "new");
+        const baseConfidence = typeof item.confidence === "number"
+          ? (item.confidence > 1 ? item.confidence / 100 : item.confidence)
+          : 0.7;
+        const confidence = match ? Math.max(baseConfidence, match.confidence) : baseConfidence;
+        // Locate the source quote: a ~140-char window around the first
+        // text match of the candidate name in the chapter.
+        let sourceQuote = "";
+        if (candidateName) {
+          const ranges = findRanges(text || "", candidateName);
+          if (ranges.length) {
+            const start = Math.max(0, ranges[0].start - 60);
+            const end = Math.min((text || "").length, ranges[0].end + 80);
+            sourceQuote = (text || "").slice(start, end).trim();
+          }
+        }
+        const previousState = match ? { ...match.entity } : null;
+        const suggestedAction = match
+          ? (diffEntity(match.entity, item).length ? "update" : "link")
+          : "create";
+        return {
+          id: uuid("rq"),
+          entityType,
+          name: candidateName || "Suggestion",
+          action: deep ? "Deep extract" : "Extract",
+          level: "suggestion",
+          value: Math.round(confidence * 100),
+          confidence,
+          confidenceBand: confidenceBand(confidence),
+          matchType,
+          suggestedAction,
+          sourceQuote,
+          previousState,
+          reason: item.summary || item.description || "Extracted from manuscript",
+          payload: item,
+          targetEntityId: match?.entity?.id || null,
+          chapterId,
+          extractionSessionId: sessionId,
+          candidateId: uuid("cand"),
+          status: "pending",
+        };
+      });
       await ReviewService.addMany(reviewItems);
       // Tag local-pass occurrences for unknown candidates so accept can
       // backfill the entityId after entity creation.
@@ -1162,7 +1374,7 @@
         const ranges = findRanges(text || "", needle);
         if (!ranges.length) continue;
         await OccurrenceService.saveMany(ranges.map((r) => ({
-          entityId: null,
+          entityId: ri.targetEntityId || null,
           entityType: ri.entityType,
           exactText: text.slice(r.start, r.end),
           chapterId,

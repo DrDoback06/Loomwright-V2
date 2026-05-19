@@ -409,6 +409,40 @@
       await denyQueueItem(ctx, ctx.detail);
       return;
     }
+    // Bulk review-queue actions (ported from legacy NarrativeReviewQueue).
+    // Detail can be either { ids: [...] } or { chapterId } to resolve all
+    // pending items in a chapter.
+    if (name === "onBulkAcceptQueueItems" || name === "onBulkDenyQueueItems") {
+      const detail = ctx.detail || {};
+      const RS = B().ReviewService;
+      let ids = Array.isArray(detail.ids) ? detail.ids : null;
+      if (!ids && detail.chapterId) {
+        ids = RS.listSync().filter((r) => r.chapterId === detail.chapterId && r.status === "pending").map((r) => r.id);
+      }
+      if (!ids || !ids.length) { notify("No items to resolve."); return; }
+      if (name === "onBulkAcceptQueueItems") {
+        for (const id of ids) await acceptQueueItem(ctx, { id });
+        notify(`Accepted ${ids.length} item(s).`);
+      } else {
+        await RS.resolveMany(ids, "denied");
+        notify(`Denied ${ids.length} item(s).`);
+      }
+      window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      return;
+    }
+    if (name === "onBulkMergeQueueItems") {
+      const detail = ctx.detail || {};
+      const ids = Array.isArray(detail.ids) ? detail.ids : [];
+      if (!ids.length) { notify("No items to merge."); return; }
+      // Per-item: open the merge modal sequentially. Each modal close advances.
+      const queue = B().ReviewService.listSync();
+      const first = queue.find((q) => ids.includes(q.id));
+      if (!first) { notify("No queued items found."); return; }
+      window.dispatchEvent(new CustomEvent("lw:open-merge-modal", {
+        detail: { item: first, sourceId: first.targetEntityId, type: first.entityType, bulk: { ids } },
+      }));
+      return;
+    }
     if (/^onEdit\w*QueueItem$/.test(name)) {
       const row = ctx.detail;
       openEditor(row?.entityType || type, row?.payload || row, "full");
