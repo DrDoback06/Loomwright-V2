@@ -327,6 +327,192 @@ async function main() {
     }
   }
 
+  // -------------------------------------------------------------------
+  // Field-parity round-trip tests
+  // -------------------------------------------------------------------
+  console.log("");
+  console.log("[field-parity round-trip]");
+
+  // Re-load editor configs into our shimmed window so the JSON-template
+  // generator works in this Node sandbox.
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, "entity-editor-configs.jsx"), "utf8"), win, { filename: "entity-editor-configs.jsx" });
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, "entity-editor-configs-extended.jsx"), "utf8"), win, { filename: "entity-editor-configs-extended.jsx" });
+  log("entity-editor configs loaded", !!win.ENTITY_EDITOR_CONFIGS);
+
+  // Priority 8: rich-field round-trip per type.
+  const richSamples = {
+    cast: {
+      name: "Saren of Hess", aliases: ["Sar"], role: "Co-protagonist",
+      pronouns: "she/her", ageRange: "adult", age: "31", title: "Courier",
+      species: "human", class: "scout", faction: "Greys", occupation: "courier",
+      portrait: "", physicalDescription: "Tall, sun-dark.", clothing: "Storm cloak.",
+      distinguishingMarks: ["scar at temple"],
+      voiceProfile: "terse", speechStyle: "clipped", verbalTics: ["…"], languages: ["Common"],
+      personality: "Watchful.", goals: ["find the Auger"], fears: ["being followed"],
+      secrets: "She broke her oath.", flaws: ["proud"], strengths: ["quick"], moralCompass: "duty over love",
+      arcSummary: "Falls and rises.", backstory: "Born to a salt house.", currentStatus: "On the road.", presence: "calm",
+      stats: [{ name: "Resolve", value: 7 }],
+      skills: [], abilities: ["Quickstep"], statusEffects: [],
+      inventory: [], equippedItems: [], wealth: "thin",
+      carryingNotes: "Sword on the off hip.",
+      family: [], allies: ["aelinor"], enemies: [], lovers: [], rivals: [], mentors: [],
+      relationshipNotes: "Trusts Aelinor.",
+      currentLocation: "vraska", homeLocation: "hess", travelHistory: [],
+      firstAppearance: "Ch. 1", lastAppearance: "Ch. 7",
+      timelineEvents: [], quests: [],
+      sourceMentions: "Ch. 1: 'Saren ducked under the eaves.'",
+      references: [],
+      writingInstructions: "Keep her terse.", aiInterview: "Why courier?",
+      avoidTropes: ["chosen one"], preferredScenes: ["rooftops"],
+      tags: ["wip"], status: "active", doNotSuggest: false, dormant: false,
+    },
+    items: {
+      name: "Auger of Hess", aliases: ["Auger"], itemType: "tool", customType: "drill",
+      rarity: "Heirloom", summary: "Bone-handled drill.", description: "A bone auger.",
+      icon: "Au", weight: "1.2 lb", value: "priceless", condition: "Worn", durability: "3 / 3",
+      currentOwner: "aelinor", currentLocation: "vraska", status: "carried",
+      slot: "off-hand", carried: true, equipped: false,
+      modifiers: [], affixes: [], passive: [], active: [], triggered: [],
+      restrictions: "House blood only.",
+      compatibleClasses: [], compatibleRaces: [], linkedStats: [], linkedSkills: [],
+      quests: [], events: [], factions: [],
+      foundLocation: "vraska", lostLocation: "", destroyedLocation: "", usedLocations: [],
+      firstChapter: "Ch. 1", lastChapter: "Ch. 7",
+      ownershipHistory: "Hess → Aelinor", tradeTransferHistory: "[]",
+      sourceMentions: "Ch. 1.", tags: ["wip"], notes: "", references: [],
+      entityStatus: "active", doNotSuggest: false, dormant: false,
+    },
+    locations: {
+      name: "Vraska Pass", aliases: ["The Pass"], kind: "pass", customKind: "",
+      parentId: "", summary: "Cold gate.",
+      description: "Wind never stops.", history: "Old.", culture: "Soldiers.", climate: "Cold.",
+      danger: "risky", currentStatus: "Held.",
+      placed: true, coords: { x: 0.3, y: 0.5 }, atlasMap: "Salt-Coast (default)",
+      routes: ["hess", "glass-court"],
+      characters: [], bestiary: [], items: [], quests: [], events: [], factions: [],
+      firstChapter: "Ch. 1", lastChapter: "Ch. 7",
+      sourceMentions: "Ch. 1: 'They crossed Vraska Pass.'",
+      childLocationIds: [],
+      tags: ["wip"], notes: "", references: [],
+      status: "active", doNotSuggest: false, dormant: false, reviewable: true,
+    },
+    quests: {
+      title: "Find the Auger", aliases: ["Auger hunt"], questType: "Main quest",
+      status: "Active", summary: "Recover the Auger.", goal: "Auger returned.",
+      owner: "aelinor", participants: ["aelinor", "saren"], factions: [],
+      steps: [{ id: "s1", title: "Leave Hess", status: "complete" }],
+      branches: [], conditions: ["alive"],
+      outcomes: [], rewards: ["honour"], relatedEvents: [],
+      locations: ["vraska"], items: ["auger"], atlasRoute: "hess → vraska",
+      startChapter: "Ch. 1", completionChapter: "", timelinePosition: "Spring",
+      sourceMentions: "Ch. 1", tags: [], notes: "", references: [],
+      entityStatus: "active", doNotSuggest: false, dormant: false,
+    },
+    events: {
+      title: "Auger Wake", aliases: [], eventType: "Death", summary: "The bell rings.",
+      chapter: "Ch. 4", timelinePosition: "Year 3", location: "hess", atlasPlacement: "Hess",
+      cause: "Long debt.", immediateOutcome: "Town wakes.", longTermConsequence: "Auger lost.",
+      participants: ["aelinor"], factions: [],
+      relationshipChanges: [], characterStateChanges: [], itemStateChanges: [],
+      locationChanges: [], statChanges: [],
+      relatedQuests: ["find-auger"], relatedItems: ["auger"],
+      tags: [], sourceMentions: "Ch. 4", notes: "", references: [],
+      status: "active", doNotSuggest: false, dormant: false,
+    },
+    stats: {
+      name: "Resolve", aliases: ["nerve"], summary: "Refusal to break.",
+      valueType: "number", displayFormat: "N / 10",
+      defaultValue: "5", min: 0, max: 10,
+      appliesTo: ["Cast"],
+      extractionRules: [{ phrase: "resolve hardened", effect: "increase" }],
+      testPhrase: "",
+      relatedSkills: [], relatedItems: [], relatedClasses: [], relatedRaces: [],
+      assignedEntities: ["aelinor"],
+      changeHistory: "[]", sourceMentions: "Ch. 1.",
+      tags: [], notes: "", references: [],
+      status: "active", doNotSuggest: false, dormant: false,
+    },
+    bestiary: {
+      name: "Hess Wolfhound", aliases: ["wolfhound"], speciesType: "beast", category: "Beast",
+      summary: "Big.", description: "Cold-bred.",
+      threatLevel: "moderate", disposition: "wary", challenge: "3", fightOrFlight: "fight",
+      habitat: "moors", regions: ["Hessmark"], encounterLocations: [], activeTimes: ["dusk"],
+      behaviour: "Tracks.", abilities: ["track"], weaknesses: ["fire"], diet: "carnivore", lifecycle: "long",
+      relatedRace: [], relatedFactions: [], relatedLocations: [], relatedQuests: [], relatedEvents: [], lore: [],
+      chapterAppearances: ["Ch. 2"], sourceMentions: "Ch. 2", references: [],
+      status: "active", doNotSuggest: false, dormant: false,
+    },
+    references: {
+      title: "Style sample 01", kind: "style sample", url: "", author: "EM",
+      summary: "Tone reference.", body: "A passage.",
+      useFor: "voice", includeInAI: true,
+      isStyleSample: true, isCanonSource: false, isResearchNote: false, isOnboardingAnswer: false,
+      relatedEntities: [], tags: ["voice"],
+      status: "active", doNotSuggest: false,
+    },
+  };
+
+  // Walk every priority-8 type and round-trip the rich sample.
+  for (const [type, sample] of Object.entries(richSamples)) {
+    await B.StorageService.clear();
+    win.__LW_SAMPLE_LOADED__ = false;
+    win.ENTITY_SAMPLES = {};
+    win.CAST_SAMPLE = [];
+    // Seed entities the rich sample references so related fields don't
+    // dangle. (Aelinor, Vraska, Auger, etc.)
+    for (const seed of [
+      { type: "cast", id: "aelinor", name: "Aelinor" },
+      { type: "cast", id: "saren",   name: "Saren" },
+      { type: "locations", id: "vraska", name: "Vraska Pass" },
+      { type: "locations", id: "hess",   name: "Hess" },
+      { type: "items", id: "auger", name: "Auger of Hess" },
+      { type: "quests", id: "find-auger", name: "Find the Auger" },
+    ]) {
+      await B.EntityService.save(seed.type, { id: seed.id, name: seed.name }, { status: "active" });
+    }
+    const saved = await B.EntityService.save(type, sample, { status: "active" });
+    log(`[parity ${type}] save returns object with id`, !!saved?.id);
+    const reloaded = B.EntityService.getSync(saved.id, type);
+    log(`[parity ${type}] reload finds the entity`, !!reloaded);
+    // Round-trip assert: every key from the rich sample is present on
+    // the reloaded entity (either at top level or under .data).
+    const keys = Object.keys(sample);
+    const missing = keys.filter((k) => {
+      // The shape EntityService uses is: top-level (name, status,
+      // aliases, summary) + everything else under `.data`. Either is
+      // acceptable.
+      return reloaded && reloaded[k] === undefined && (!reloaded.data || reloaded.data[k] === undefined);
+    });
+    log(`[parity ${type}] all ${keys.length} rich fields round-trip`, missing.length === 0, missing.length ? "missing: " + missing.join(",") : "");
+
+    // JSON-template completeness: every key in the sample should appear
+    // in eeJsonTemplate(type).
+    const tpl = win.eeJsonTemplate ? win.eeJsonTemplate(type) : {};
+    const tplMissing = keys.filter((k) => !(k in tpl));
+    log(`[parity ${type}] JSON template covers ${keys.length} fields`, tplMissing.length === 0, tplMissing.length ? "missing: " + tplMissing.join(",") : "");
+  }
+
+  // Unknown-field preservation: save an entity with an `extra.future`
+  // key that no config knows about; reload; assert the key survives.
+  await B.StorageService.clear();
+  const withExtra = await B.EntityService.save("cast", {
+    name: "Future-friend",
+    extra: { future: "this-key-must-survive", schemaVersion: "v3" },
+  }, { status: "active" });
+  const reloadedExtra = B.EntityService.getSync(withExtra.id, "cast");
+  const extra = reloadedExtra?.extra || reloadedExtra?.data?.extra;
+  log("unknown-field preservation: extra.future survives save+reload", extra?.future === "this-key-must-survive");
+  log("unknown-field preservation: extra.schemaVersion survives", extra?.schemaVersion === "v3");
+
+  // Audit-only types: basic round-trip per type.
+  const auditOnlyTypes = ["classes", "races", "skills", "relationships", "timeline", "lore"];
+  for (const type of auditOnlyTypes) {
+    await B.StorageService.clear();
+    const ent = await B.EntityService.save(type, { name: `Test ${type}` }, { status: "active" });
+    const back = B.EntityService.getSync(ent.id, type);
+    log(`[audit-only ${type}] basic round-trip`, !!back && back.name === `Test ${type}`);
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

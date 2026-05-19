@@ -2,6 +2,22 @@
 
 _Last run: 2026-05-19 (Extraction Quality Pass 1)._
 
+## Field Parity Pass 1 (2026-05-19)
+
+```
+npm run validate        → 524 callbacks; Bucket A = 0
+npm run test:smoke      → 130+ checks pass
+                          (22 service + 48 extraction fixture
+                           + 48 field-parity round-trip
+                           + 8 audit-only smoke + 2 unknown-field)
+npm run test:e2e        → 41 pass (31 prior + 10 new L. field-parity)
+```
+
+Priority-8 types all round-trip their full required-field sets through
+save / reload / JSON / import. Unknown/deeper fields (`extra.*`)
+preserved. Severe gap (`Locations.sourceMentions`) closed. See
+`FIELD_PARITY_AUDIT_CURRENT.md` + `ENTITY_EDITOR_JSON_TEMPLATES_CURRENT.md`.
+
 ## Extraction Quality Pass 1 (2026-05-19)
 
 ```

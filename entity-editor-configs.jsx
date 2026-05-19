@@ -113,6 +113,13 @@ const EE_LOCATION = {
       fields: [
         { id: "firstChapter", label: "First seen chapter", kind: "text", placeholder: "Ch. 1, p. 12" },
         { id: "lastChapter",  label: "Last seen chapter",  kind: "text", placeholder: "Ch. 7, p. 188" },
+        // Closes the previously severe-gap: panel/dossier surfaces lean
+        // on source quotes; the editor must accept them.
+        { id: "sourceMentions", label: "Source mentions", kind: "textarea", hint: "Quotes / passages where this location appears.", span: 2 },
+        // Schema-supported aspirational. Hierarchy can be derived from
+        // parentId reverse-lookup, but explicit storage helps Atlas
+        // grouping.
+        { id: "childLocationIds", label: "Child locations", kind: "related-multi", related: "locations" },
         { id: "tags",         label: "Tags",               kind: "chips" },
         { id: "notes",        label: "Notes (private)",    kind: "textarea", span: 2 },
         { id: "references",   label: "References",         kind: "related-multi", related: "references", span: 2 },
@@ -121,6 +128,7 @@ const EE_LOCATION = {
       fields: [
         { id: "status",       label: "Status",           kind: "pills",  options: ["active","important","needs-review","dormant","draft","hidden","archived"] },
         { id: "doNotSuggest", label: "Do not suggest",   kind: "toggle", hint: "Excluded from Today / AI Writer suggestions" },
+        { id: "dormant",      label: "Dormant",          kind: "toggle", hint: "Asleep; not surfaced by Today suggestions." },
         { id: "reviewable",   label: "Allow extraction review", kind: "toggle", defaultValue: true },
       ] },
   ],
@@ -187,15 +195,22 @@ const EE_ITEM = {
         { id: "quests",    label: "Linked quests",  kind: "related-multi", related: "quests" },
         { id: "events",    label: "Linked events",  kind: "related-multi", related: "events" },
         { id: "factions",  label: "Linked factions",kind: "related-multi", related: "factions" },
-        { id: "foundLocation",  label: "Found at",   kind: "related", related: "locations" },
-        { id: "lostLocation",   label: "Lost / destroyed at", kind: "related", related: "locations" },
-        { id: "usedLocations",  label: "Used at",   kind: "related-multi", related: "locations" },
+        { id: "foundLocation",     label: "Found at",   kind: "related", related: "locations" },
+        { id: "lostLocation",      label: "Lost at",    kind: "related", related: "locations" },
+        // Schema-supported aspirational: distinct from `lostLocation`
+        // for items the story explicitly destroys vs. merely loses.
+        { id: "destroyedLocation", label: "Destroyed at", kind: "related", related: "locations" },
+        { id: "usedLocations",     label: "Used at",   kind: "related-multi", related: "locations" },
       ] },
     { id: "tracking", title: "Tracking",
       fields: [
         { id: "firstChapter", label: "First seen chapter", kind: "text" },
         { id: "lastChapter",  label: "Last seen chapter",  kind: "text" },
         { id: "ownershipHistory", label: "Ownership history", kind: "textarea", hint: "Chronological — who's held it." },
+        // Schema-supported aspirational: structured trade/transfer log
+        // separate from the freeform ownershipHistory above. Stores
+        // [{from, to, at, chapterId, sourceMentionId}].
+        { id: "tradeTransferHistory", label: "Trade / transfer log", kind: "textarea", hint: "Structured transfers — JSON array preferred." },
         { id: "sourceMentions",   label: "Source mentions",  kind: "textarea", hint: "Quotes / passages where this item appears.", span: 2 },
         { id: "tags",         label: "Tags",               kind: "chips" },
         { id: "notes",        label: "Notes (private)",    kind: "textarea", span: 2 },
@@ -205,6 +220,7 @@ const EE_ITEM = {
       fields: [
         { id: "entityStatus", label: "Status flag",      kind: "pills", options: ["active","important","needs-review","dormant","draft","hidden","archived"] },
         { id: "doNotSuggest", label: "Do not suggest",   kind: "toggle" },
+        { id: "dormant",      label: "Dormant",          kind: "toggle", hint: "Asleep; not surfaced by Today suggestions." },
       ] },
   ],
 };
@@ -369,9 +385,17 @@ const EE_STAT = {
         { id: "relatedItems",  label: "Related items",   kind: "related-multi", related: "items" },
         { id: "relatedClasses",label: "Related classes", kind: "related-multi", related: "classes" },
         { id: "relatedRaces",  label: "Related races",   kind: "related-multi", related: "races" },
+        // Schema-supported aspirational: explicit list of entities this
+        // stat is currently assigned to (denormalised from per-entity
+        // stats arrays for fast indexing).
+        { id: "assignedEntities", label: "Assigned to", kind: "related-multi", related: "cast" },
       ] },
     { id: "tracking", title: "Tracking",
       fields: [
+        // Schema-supported aspirational: chronological log of changes.
+        // Stores [{chapterId, actorId, delta, at, sourceMentionId}].
+        { id: "changeHistory", label: "Change history", kind: "textarea", hint: "Chronological — when did the stat change and why. JSON array preferred.", span: 2 },
+        { id: "sourceMentions", label: "Source mentions", kind: "textarea", hint: "Quotes / passages where this stat is mentioned.", span: 2 },
         { id: "tags",         label: "Tags",       kind: "chips" },
         { id: "notes",        label: "Notes",      kind: "textarea", span: 2 },
         { id: "references",   label: "References", kind: "related-multi", related: "references", span: 2 },
@@ -380,6 +404,7 @@ const EE_STAT = {
       fields: [
         { id: "status",       label: "Status",         kind: "pills", options: ["active","important","needs-review","dormant","draft","archived"] },
         { id: "doNotSuggest", label: "Do not suggest", kind: "toggle" },
+        { id: "dormant",      label: "Dormant",        kind: "toggle", hint: "Asleep; not surfaced by Today suggestions." },
       ] },
   ],
 };
@@ -442,6 +467,7 @@ const EE_QUEST = {
       fields: [
         { id: "entityStatus", label: "Entity status",  kind: "pills", options: ["active","important","needs-review","unresolved","dormant","draft","archived"] },
         { id: "doNotSuggest", label: "Do not suggest", kind: "toggle" },
+        { id: "dormant",      label: "Dormant",        kind: "toggle", hint: "Asleep; not surfaced by Today suggestions." },
       ] },
   ],
 };
@@ -508,6 +534,7 @@ const EE_EVENT = {
       fields: [
         { id: "status",       label: "Status",         kind: "pills", options: ["active","important","needs-review","contradiction","dormant","draft","archived"] },
         { id: "doNotSuggest", label: "Do not suggest", kind: "toggle" },
+        { id: "dormant",      label: "Dormant",        kind: "toggle", hint: "Asleep; not surfaced by Today suggestions." },
       ] },
   ],
 };
