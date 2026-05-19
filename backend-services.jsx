@@ -1220,6 +1220,456 @@
     return bodyText.slice(occ.startOffset, occ.endOffset) !== occ.exactText;
   }
 
+  // -------------------------------------------------------------------
+  // Extraction support helpers (Pass 1 — fixtures, local rules, candidate
+  // enrichment). All functions are pure / store-aware; they don't mutate
+  // entities themselves. They produce candidate objects in the
+  // standardised shape and pattern-match phrases against known entities.
+  // -------------------------------------------------------------------
+
+  // Standardised candidate shape (see EXTRACTION_QUALITY_PLAN.md §D).
+  // back-compat: legacy keys (`reason`, `targetEntityId`) are populated
+  // alongside the new keys (`summary`, `existingEntityId`) so existing
+  // review-queue consumers keep working.
+  function buildCandidate(input, opts = {}) {
+    const entityType = normaliseType(input.entityType || input.type || "references");
+    const name = String(input.name || input.title || "").trim() || "Suggestion";
+    // Match the candidate against the known store unless caller supplies
+    // existingEntityId or matchType already.
+    let matchType = input.matchType;
+    let existingEntityId = input.existingEntityId != null ? input.existingEntityId : input.targetEntityId || null;
+    let match = null;
+    if (!matchType) {
+      match = findKnownEntityMention(name, { threshold: opts.fuzzyThreshold || 0.85 });
+      if (match && (!existingEntityId || existingEntityId === match.entity.id)) {
+        matchType = match.matchType;
+        existingEntityId = match.entity.id;
+      } else if (input.isNew === false) {
+        matchType = "ambiguous";
+      } else {
+        matchType = "new";
+      }
+    }
+    const previousState = input.previousState
+      || (existingEntityId ? (EntityService.getSync(existingEntityId, entityType) || null) : null);
+    const baseConfidence = typeof input.confidence === "number"
+      ? (input.confidence > 1 ? input.confidence / 100 : input.confidence)
+      : (opts.defaultConfidence != null ? opts.defaultConfidence : 0.7);
+    const confidence = match ? Math.max(baseConfidence, match.confidence) : baseConfidence;
+    const suggestedChanges = input.suggestedChanges || null;
+    const suggestedAction = input.suggestedAction || (
+      existingEntityId
+        ? (suggestedChanges && Object.keys(suggestedChanges).length ? "update"
+            : (previousState && diffEntity(previousState, input.payload || input).length ? "update" : "link"))
+        : "create"
+    );
+    const summary = input.summary || input.description || input.reason || "";
+    const candidateId = input.candidateId || uuid("cand");
+    const sourceQuotes = Array.isArray(input.sourceQuotes) && input.sourceQuotes.length
+      ? input.sourceQuotes.slice(0, 3)
+      : (input.sourceQuote ? [input.sourceQuote] : []);
+    const sourceQuote = sourceQuotes[0] || "";
+    return {
+      id: uuid("rq"),
+      // New canonical shape:
+      candidateId,
+      entityType,
+      name,
+      summary,
+      suggestedAction,
+      confidence,
+      confidenceBand: confidenceBand(confidence),
+      matchType,
+      existingEntityId,
+      sourceQuote,
+      sourceQuotes,
+      chapterId: input.chapterId || null,
+      paragraphId: input.paragraphId || null,
+      startOffset: input.startOffset != null ? input.startOffset : null,
+      endOffset: input.endOffset != null ? input.endOffset : null,
+      previousState,
+      relatedEntityIds: Array.isArray(input.relatedEntityIds) ? input.relatedEntityIds.slice() : [],
+      suggestedChanges,
+      payload: input.payload || input,
+      // Back-compat for existing review-queue UI / handlers:
+      reason: summary || (opts.deep ? "Deep extract" : "Extracted from manuscript"),
+      action: opts.deep ? "Deep extract" : "Extract",
+      level: "suggestion",
+      value: Math.round(confidence * 100),
+      targetEntityId: existingEntityId,
+      extractionSessionId: input.extractionSessionId || opts.extractionSessionId || null,
+      status: "pending",
+    };
+  }
+
+  // Trim leading/trailing whitespace and collapse internal newlines so
+  // review-queue cards render cleanly. Limited to ~140 chars.
+  function makeSourceQuote(text, startOffset, endOffset, before = 60, after = 80) {
+    if (typeof text !== "string" || startOffset == null || endOffset == null) return "";
+    const start = Math.max(0, startOffset - before);
+    const end = Math.min(text.length, endOffset + after);
+    return text.slice(start, end).replace(/\s+/g, " ").trim();
+  }
+
+  // Build a known-entities-by-type lookup. Each entry is
+  // { id, type, name, aliases[], regex } — the regex matches the name
+  // and every alias as word-bounded case-insensitive alternations.
+  function knownEntityIndex() {
+    const all = EntityService.listAllSync();
+    const out = {};
+    for (const [type, byId] of Object.entries(all)) {
+      out[type] = [];
+      for (const e of Object.values(byId || {})) {
+        const names = [e.name, ...(e.aliases || [])].filter((n) => typeof n === "string" && n.trim().length >= 2);
+        if (!names.length) continue;
+        const escaped = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort((a, b) => b.length - a.length);
+        let regex = null;
+        try {
+          regex = new RegExp(`(?<![A-Za-z0-9])(${escaped.join("|")})(?![A-Za-z0-9])`, "gi");
+        } catch (_) { regex = null; }
+        out[type].push({ id: e.id, type, name: e.name, aliases: e.aliases || [], regex });
+      }
+    }
+    return out;
+  }
+
+  // Find the first matching entity in a substring slice. Used by phrase
+  // detectors to bind a verb phrase to specific known entities.
+  function findEntityInSpan(text, span, index, types) {
+    if (!index || !span || span.end <= span.start) return null;
+    const slice = text.slice(span.start, span.end);
+    for (const type of (types || Object.keys(index))) {
+      for (const ent of index[type] || []) {
+        if (!ent.regex) continue;
+        ent.regex.lastIndex = 0;
+        const m = ent.regex.exec(slice);
+        if (m) return { ...ent, matchText: m[0], offset: span.start + m.index };
+      }
+    }
+    return null;
+  }
+
+  // -------------------------------------------------------------------
+  // Phrase detectors. Each takes (text, index, chapterId, sessionId)
+  // and returns an array of candidates in the standardised shape.
+  // Conservative on purpose — they should err on missing real candidates
+  // rather than producing wrong ones.
+  // -------------------------------------------------------------------
+
+  const ITEM_TRANSFER_VERBS = /(gave|handed|tossed|passed|sold|threw|surrendered|delivered)/i;
+  const ITEM_LOSS_VERBS = /(lost|broke|shattered|left behind|dropped|abandoned|destroyed)/i;
+  const TRAVEL_VERBS = /(crossed|entered|left|reached|arrived at|fled|returned to|set out for|came to|travelled to|walked to|rode to|sailed to)/i;
+  const RELATIONSHIP_VERBS = /(whispered to|shouted at|confronted|kissed|embraced|struck|saved|betrayed|abandoned|forgave|comforted|trusted)/i;
+  const STAT_VERBS = /(grew|hardened|weakened|broke|sharpened|dulled|surged|faltered|crumbled|swelled|kindled)/i;
+  const COMMON_STATS = ["resolve", "fear", "hope", "strength", "wit", "grief", "courage", "rage", "doubt"];
+
+  function detectItemTransfers(text, index, chapterId, sessionId) {
+    if (!text || !index) return [];
+    const out = [];
+    // Sliding window: find verb + nearby item + nearby actor(s).
+    const verbRe = new RegExp(`(${ITEM_TRANSFER_VERBS.source.slice(1, -1)})`, "gi");
+    let m;
+    while ((m = verbRe.exec(text)) !== null) {
+      const verbStart = m.index;
+      const verbEnd = m.index + m[0].length;
+      const left = { start: Math.max(0, verbStart - 80), end: verbStart };
+      const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 160) };
+      const giver = findEntityInSpan(text, left, index, ["cast"]);
+      const item = findEntityInSpan(text, right, index, ["items"]);
+      const receiver = findEntityInSpan(text, right, index, ["cast"]);
+      if (!item) continue;
+      const sourceQuote = makeSourceQuote(text, verbStart, verbEnd);
+      const suggestedChanges = {};
+      if (receiver) suggestedChanges.ownerId = receiver.id;
+      out.push(buildCandidate({
+        entityType: "items",
+        name: item.name,
+        existingEntityId: item.id,
+        suggestedAction: "update",
+        suggestedChanges,
+        confidence: 0.78,
+        matchType: "exact",
+        sourceQuote,
+        chapterId,
+        startOffset: item.offset,
+        endOffset: item.offset + item.matchText.length,
+        relatedEntityIds: [giver?.id, receiver?.id].filter(Boolean),
+        summary: `Item ${item.name} transferred${receiver ? " to " + receiver.name : ""}${giver ? " by " + giver.name : ""}.`,
+        extractionSessionId: sessionId,
+      }, { extractionSessionId: sessionId }));
+    }
+    return out;
+  }
+
+  function detectItemLoss(text, index, chapterId, sessionId) {
+    if (!text || !index) return [];
+    const out = [];
+    const verbRe = new RegExp(`(${ITEM_LOSS_VERBS.source.slice(1, -1)})`, "gi");
+    let m;
+    while ((m = verbRe.exec(text)) !== null) {
+      const verbStart = m.index;
+      const verbEnd = verbStart + m[0].length;
+      const verbWord = m[0].toLowerCase();
+      const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 160) };
+      const item = findEntityInSpan(text, right, index, ["items"]);
+      if (!item) continue;
+      const changes = {};
+      if (/lost|left behind|dropped|abandoned/.test(verbWord)) changes.lost = true;
+      if (/broke|shattered|destroyed/.test(verbWord)) changes.destroyed = true;
+      out.push(buildCandidate({
+        entityType: "items",
+        name: item.name,
+        existingEntityId: item.id,
+        suggestedAction: "update",
+        suggestedChanges: changes,
+        confidence: 0.72,
+        matchType: "exact",
+        sourceQuote: makeSourceQuote(text, verbStart, verbEnd),
+        chapterId,
+        startOffset: item.offset,
+        endOffset: item.offset + item.matchText.length,
+        relatedEntityIds: [],
+        summary: `Item ${item.name} ${changes.destroyed ? "destroyed" : "lost"}.`,
+        extractionSessionId: sessionId,
+      }, { extractionSessionId: sessionId }));
+    }
+    return out;
+  }
+
+  function detectTravel(text, index, chapterId, sessionId) {
+    if (!text || !index) return [];
+    const out = [];
+    const verbRe = new RegExp(`(${TRAVEL_VERBS.source.slice(1, -1)})`, "gi");
+    let m;
+    while ((m = verbRe.exec(text)) !== null) {
+      const verbStart = m.index;
+      const verbEnd = verbStart + m[0].length;
+      const left = { start: Math.max(0, verbStart - 80), end: verbStart };
+      const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 160) };
+      const actor = findEntityInSpan(text, left, index, ["cast"]);
+      const place = findEntityInSpan(text, right, index, ["locations"]);
+      if (!actor || !place) continue;
+      out.push(buildCandidate({
+        entityType: "cast",
+        name: actor.name,
+        existingEntityId: actor.id,
+        suggestedAction: "update",
+        suggestedChanges: { location: place.id },
+        confidence: 0.8,
+        matchType: "exact",
+        sourceQuote: makeSourceQuote(text, verbStart, verbEnd),
+        chapterId,
+        startOffset: actor.offset,
+        endOffset: actor.offset + actor.matchText.length,
+        relatedEntityIds: [place.id],
+        summary: `${actor.name} travelled to ${place.name}.`,
+        extractionSessionId: sessionId,
+      }, { extractionSessionId: sessionId }));
+    }
+    return out;
+  }
+
+  function detectRelationships(text, index, chapterId, sessionId) {
+    if (!text || !index) return [];
+    const out = [];
+    const verbRe = new RegExp(`(${RELATIONSHIP_VERBS.source.slice(1, -1)})`, "gi");
+    let m;
+    while ((m = verbRe.exec(text)) !== null) {
+      const verbStart = m.index;
+      const verbEnd = verbStart + m[0].length;
+      const verbWord = m[0].toLowerCase().replace(/\s+/g, "-");
+      const left = { start: Math.max(0, verbStart - 80), end: verbStart };
+      const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 120) };
+      const subject = findEntityInSpan(text, left, index, ["cast"]);
+      const object = findEntityInSpan(text, right, index, ["cast"]);
+      if (!subject || !object || subject.id === object.id) continue;
+      out.push(buildCandidate({
+        entityType: "relationships",
+        name: `${subject.name} → ${object.name}`,
+        suggestedAction: "create",
+        confidence: 0.74,
+        matchType: "new",
+        sourceQuote: makeSourceQuote(text, verbStart, verbEnd),
+        chapterId,
+        startOffset: verbStart,
+        endOffset: verbEnd,
+        relatedEntityIds: [subject.id, object.id],
+        suggestedChanges: { fromId: subject.id, toId: object.id, relationshipType: verbWord },
+        summary: `${subject.name} ${m[0]} ${object.name}.`,
+        extractionSessionId: sessionId,
+      }, { extractionSessionId: sessionId }));
+    }
+    return out;
+  }
+
+  function detectStatChanges(text, index, chapterId, sessionId) {
+    if (!text || !index) return [];
+    const out = [];
+    // Pattern: <actor>'s <stat> <verb>
+    const re = new RegExp(`([A-Z][A-Za-z]+)(?:'s)\\s+(${COMMON_STATS.join("|")})\\s+(${STAT_VERBS.source.slice(1, -1)})`, "gi");
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const actorName = m[1];
+      const statName = m[2].toLowerCase();
+      const verb = m[3].toLowerCase();
+      const actorMatch = findKnownEntityMention(actorName, { threshold: 0.95 });
+      if (!actorMatch) continue;
+      const direction = /(grew|hardened|sharpened|surged|swelled|kindled)/.test(verb) ? "up" : "down";
+      out.push(buildCandidate({
+        entityType: "stats",
+        name: statName,
+        suggestedAction: "create",
+        confidence: 0.7,
+        matchType: "new",
+        sourceQuote: makeSourceQuote(text, m.index, m.index + m[0].length),
+        chapterId,
+        startOffset: m.index,
+        endOffset: m.index + m[0].length,
+        relatedEntityIds: [actorMatch.entity.id],
+        suggestedChanges: { actorId: actorMatch.entity.id, statName, direction, verb },
+        summary: `${actorMatch.entity.name}'s ${statName} ${verb}.`,
+        extractionSessionId: sessionId,
+      }, { extractionSessionId: sessionId }));
+    }
+    return out;
+  }
+
+  function detectQuestProgression(text, index, chapterId, sessionId) {
+    if (!text || !index) return [];
+    const out = [];
+    const re = /(the hunt for|the search for|the journey to|the mission against|the quest for)\s+(the\s+)?([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const subject = m[3];
+      const subjectMatch = findKnownEntityMention(subject, { threshold: 0.85 });
+      const start = m.index;
+      const end = m.index + m[0].length;
+      out.push(buildCandidate({
+        entityType: "quests",
+        name: m[0].replace(/^the\s+/i, "").replace(/^(hunt|search|journey|mission|quest) (for|to|against)\s+(the\s+)?/i, (s, verb) => verb[0].toUpperCase() + verb.slice(1) + " for ").trim(),
+        suggestedAction: "create",
+        confidence: 0.66,
+        matchType: "new",
+        sourceQuote: makeSourceQuote(text, start, end),
+        chapterId,
+        startOffset: start,
+        endOffset: end,
+        relatedEntityIds: subjectMatch ? [subjectMatch.entity.id] : [],
+        suggestedChanges: { subject: subjectMatch?.entity?.id || subject, phase: "in-progress" },
+        summary: `Quest involving ${subject}.`,
+        extractionSessionId: sessionId,
+      }, { extractionSessionId: sessionId }));
+    }
+    return out;
+  }
+
+  function detectEvents(text, index, chapterId, sessionId) {
+    if (!text || !index) return [];
+    const out = [];
+    // Pattern: <Capitalised ProperNoun(s)> <event-verb>
+    const re = /(?:the\s+)?([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,2})\s+(began|started|broke out|came to an end|erupted|ended)/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const eventName = m[1];
+      // Filter common false positives — single common-noun-like words.
+      if (/^(He|She|They|It|We|You|Then|Now)$/.test(eventName)) continue;
+      const start = m.index;
+      const end = m.index + m[0].length;
+      out.push(buildCandidate({
+        entityType: "events",
+        name: eventName,
+        suggestedAction: "create",
+        confidence: 0.7,
+        matchType: "new",
+        sourceQuote: makeSourceQuote(text, start, end),
+        chapterId,
+        startOffset: start,
+        endOffset: end,
+        relatedEntityIds: [],
+        suggestedChanges: { eventType: "named-event", verb: m[2] },
+        summary: `Event "${eventName}" ${m[2]}.`,
+        extractionSessionId: sessionId,
+      }, { extractionSessionId: sessionId }));
+    }
+    return out;
+  }
+
+  function detectLore(text, index, chapterId, sessionId) {
+    if (!text || !index) return [];
+    const out = [];
+    const re = /(it was said(?: that)?|the legend (?:of|said)|centuries ago|long before|once,? long ago)\s+([^.!?\n]{8,200})/gi;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const start = m.index;
+      const end = m.index + m[0].length;
+      const phrase = m[2].trim();
+      out.push(buildCandidate({
+        entityType: "lore",
+        name: phrase.split(/[,;]/)[0].slice(0, 80) || "Lore fragment",
+        suggestedAction: "create",
+        confidence: 0.62,
+        matchType: "new",
+        sourceQuote: makeSourceQuote(text, start, end),
+        chapterId,
+        startOffset: start,
+        endOffset: end,
+        relatedEntityIds: [],
+        suggestedChanges: { scope: /centuries ago|long before|long ago/i.test(m[1]) ? "world-history" : "legend", body: phrase },
+        summary: `Lore: ${phrase.slice(0, 100)}${phrase.length > 100 ? "…" : ""}`,
+        extractionSessionId: sessionId,
+      }, { extractionSessionId: sessionId }));
+    }
+    return out;
+  }
+
+  // Run every detector. Returns a flat array of candidates.
+  function runLocalDetectors(text, chapterId, sessionId) {
+    const index = knownEntityIndex();
+    const all = [];
+    all.push(...detectItemTransfers(text, index, chapterId, sessionId));
+    all.push(...detectItemLoss(text, index, chapterId, sessionId));
+    all.push(...detectTravel(text, index, chapterId, sessionId));
+    all.push(...detectRelationships(text, index, chapterId, sessionId));
+    all.push(...detectStatChanges(text, index, chapterId, sessionId));
+    all.push(...detectQuestProgression(text, index, chapterId, sessionId));
+    all.push(...detectEvents(text, index, chapterId, sessionId));
+    all.push(...detectLore(text, index, chapterId, sessionId));
+    return all;
+  }
+
+  // Dedupe candidates per the rules in EXTRACTION_QUALITY_PLAN.md §C:
+  // same entityType + canonical name + suggestedAction + (if both have
+  // existingEntityId) same id. Up to 3 source quotes aggregated.
+  function dedupeCandidates(candidates) {
+    if (!Array.isArray(candidates) || candidates.length === 0) return [];
+    const byKey = new Map();
+    for (const c of candidates) {
+      const key = [
+        c.entityType,
+        String(c.name || "").toLowerCase().trim(),
+        c.suggestedAction || "",
+        c.existingEntityId || "",
+      ].join("|");
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, { ...c, sourceQuotes: c.sourceQuotes && c.sourceQuotes.length ? c.sourceQuotes.slice(0, 3) : (c.sourceQuote ? [c.sourceQuote] : []) });
+        continue;
+      }
+      // Merge: keep highest confidence; union sourceQuotes (max 3);
+      // union relatedEntityIds; union suggestedChanges.
+      if ((c.confidence || 0) > (existing.confidence || 0)) {
+        existing.confidence = c.confidence;
+        existing.confidenceBand = c.confidenceBand;
+      }
+      const quotes = new Set([...(existing.sourceQuotes || []), ...(c.sourceQuotes || []), c.sourceQuote].filter(Boolean));
+      existing.sourceQuotes = [...quotes].slice(0, 3);
+      existing.sourceQuote = existing.sourceQuotes[0] || existing.sourceQuote;
+      existing.relatedEntityIds = [...new Set([...(existing.relatedEntityIds || []), ...(c.relatedEntityIds || [])])];
+      existing.suggestedChanges = { ...(existing.suggestedChanges || {}), ...(c.suggestedChanges || {}) };
+    }
+    return [...byKey.values()];
+  }
+
   const ExtractionService = {
     loadSessionSync() {
       return StorageService.getSync(KEYS.extractionSession, { status: "idle", items: [] });
@@ -1228,13 +1678,27 @@
       await StorageService.set(KEYS.extractionSession, { ...session, updatedAt: nowIso() });
       window.dispatchEvent(new CustomEvent("lw:extraction-updated", { detail: session }));
     },
-    async runExtraction({ chapterId, text, deep = false }) {
+    async runExtraction({ chapterId, text, deep = false, paragraphs = null }) {
       const sessionId = uuid("ext");
       // Local pass: scan text for mentions of known entities and persist
       // EntityOccurrence records pointing at real entity IDs. This runs
       // regardless of AI configuration so double-click works without BYOK.
       const occurrences = scanTextForKnownEntities(text || "", chapterId, sessionId);
+      if (paragraphs && occurrences.length) {
+        // Annotate each occurrence with the paragraphId whose
+        // [start, end) range covers the occurrence's offset, when the
+        // caller supplied paragraph offsets.
+        for (const occ of occurrences) {
+          const p = paragraphs.find((pr) => pr.start <= occ.startOffset && pr.end >= occ.endOffset);
+          if (p) occ.paragraphId = p.id;
+        }
+      }
       if (occurrences.length) await OccurrenceService.saveMany(occurrences);
+
+      // Local detectors (Pass 1): pattern-based phrase scans for item
+      // transfer/loss, travel, relationships, stat changes, quest
+      // progression, events, and lore. Run unconditionally, with no AI.
+      const localCandidates = runLocalDetectors(text || "", chapterId, sessionId);
 
       let items = [];
       // Only invoke AI when a provider is configured. Otherwise the local
@@ -1313,76 +1777,72 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
         }
       }
 
-      // Enrich each candidate with matchType (exact/nickname/fuzzy/new),
-      // sourceQuote (chapter snippet around the candidate), previousState
-      // (existing entity snapshot when matched), and confidenceBand.
-      // Ports legacy entityMatchingService's three-tier matcher behaviour.
-      const reviewItems = items.map((item) => {
-        const candidateName = item.name || "";
-        const entityType = normaliseType(item.type || "references");
-        const match = findKnownEntityMention(candidateName, { threshold: 0.85 });
-        const matchType = match
-          ? match.matchType
-          : (item.isNew === false ? "ambiguous" : "new");
-        const baseConfidence = typeof item.confidence === "number"
-          ? (item.confidence > 1 ? item.confidence / 100 : item.confidence)
-          : 0.7;
-        const confidence = match ? Math.max(baseConfidence, match.confidence) : baseConfidence;
-        // Locate the source quote: a ~140-char window around the first
-        // text match of the candidate name in the chapter.
+      // Convert AI items (if any) into the standardised candidate shape
+      // via buildCandidate. Then merge with the local detectors' output
+      // and dedupe so the queue isn't flooded with duplicates of the
+      // same name from both passes.
+      const aiCandidates = items.map((item) => {
+        // Locate a source quote for the AI candidate by scanning the
+        // original chapter text for the first whole-word match of the
+        // candidate name (paragraph/offset are best-effort).
         let sourceQuote = "";
-        if (candidateName) {
-          const ranges = findRanges(text || "", candidateName);
+        let startOffset = null, endOffset = null, paragraphId = null;
+        if (item.name) {
+          const ranges = findRanges(text || "", item.name);
           if (ranges.length) {
-            const start = Math.max(0, ranges[0].start - 60);
-            const end = Math.min((text || "").length, ranges[0].end + 80);
-            sourceQuote = (text || "").slice(start, end).trim();
+            startOffset = ranges[0].start;
+            endOffset = ranges[0].end;
+            sourceQuote = makeSourceQuote(text || "", startOffset, endOffset);
+            if (paragraphs) {
+              const p = paragraphs.find((pr) => pr.start <= startOffset && pr.end >= endOffset);
+              if (p) paragraphId = p.id;
+            }
           }
         }
-        const previousState = match ? { ...match.entity } : null;
-        const suggestedAction = match
-          ? (diffEntity(match.entity, item).length ? "update" : "link")
-          : "create";
-        return {
-          id: uuid("rq"),
-          entityType,
-          name: candidateName || "Suggestion",
-          action: deep ? "Deep extract" : "Extract",
-          level: "suggestion",
-          value: Math.round(confidence * 100),
-          confidence,
-          confidenceBand: confidenceBand(confidence),
-          matchType,
-          suggestedAction,
+        return buildCandidate({
+          entityType: item.type || "references",
+          name: item.name,
+          summary: item.summary || item.description,
+          confidence: item.confidence,
+          isNew: item.isNew,
           sourceQuote,
-          previousState,
-          reason: item.summary || item.description || "Extracted from manuscript",
-          payload: item,
-          targetEntityId: match?.entity?.id || null,
           chapterId,
+          paragraphId,
+          startOffset,
+          endOffset,
+          payload: item,
           extractionSessionId: sessionId,
-          candidateId: uuid("cand"),
-          status: "pending",
-        };
+        }, { deep, extractionSessionId: sessionId });
       });
+
+      const reviewItems = dedupeCandidates([...localCandidates, ...aiCandidates]);
       await ReviewService.addMany(reviewItems);
-      // Tag local-pass occurrences for unknown candidates so accept can
-      // backfill the entityId after entity creation.
+      // Tag occurrences for unknown candidates (`matchType: "new"`) so
+      // accept can backfill the entityId after entity creation. Known
+      // entities already have occurrences from `scanTextForKnownEntities`
+      // above. We avoid double-occurring known entities here.
       for (const ri of reviewItems) {
-        const needle = (ri.payload?.name || "").toLowerCase();
-        if (!needle) continue;
+        const needle = String(ri.name || "").toLowerCase();
+        if (!needle || ri.matchType !== "new") continue;
+        // Skip non-named-entity candidate types — these don't map to
+        // mentions in chapter text.
+        if (["relationships", "stats", "lore", "quests", "events"].includes(ri.entityType) && ri.suggestedAction !== "create") continue;
         const ranges = findRanges(text || "", needle);
         if (!ranges.length) continue;
-        await OccurrenceService.saveMany(ranges.map((r) => ({
-          entityId: ri.targetEntityId || null,
-          entityType: ri.entityType,
-          exactText: text.slice(r.start, r.end),
-          chapterId,
-          startOffset: r.start,
-          endOffset: r.end,
-          extractionSessionId: sessionId,
-          candidateId: ri.candidateId,
-        })));
+        await OccurrenceService.saveMany(ranges.map((r) => {
+          const para = paragraphs ? paragraphs.find((pr) => pr.start <= r.start && pr.end >= r.end) : null;
+          return {
+            entityId: ri.existingEntityId || null,
+            entityType: ri.entityType,
+            exactText: text.slice(r.start, r.end),
+            chapterId,
+            paragraphId: para ? para.id : null,
+            startOffset: r.start,
+            endOffset: r.end,
+            extractionSessionId: sessionId,
+            candidateId: ri.candidateId,
+          };
+        }));
       }
       const session = {
         status: "complete",
