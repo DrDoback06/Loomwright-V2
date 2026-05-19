@@ -1,8 +1,28 @@
 # Loomwright v2 — Implementation Status
 
-_Last updated: 2026-05-18 (burn-down pass)._
+_Last updated: 2026-05-19 (post-PR-#3 merged to `main`)._
 
-## Burn-down pass summary (2026-05-18)
+## Post-PR-#3 milestone (2026-05-19)
+
+PR #3 merged. The branch is the "tested functional local prototype"
+checkpoint:
+
+- `npm run validate` passes on `main`. 524 callbacks registered; **0
+  Bucket A reaches the generic default notice**; 6 Bucket B
+  provider-gated; 4 Bucket D React-owned.
+- `npm run test:smoke` passes: 22/22 service checks in <1s, no browser.
+- `npm run test:e2e` passes: 28/28 Playwright tests in real Chromium,
+  ~3 minutes wall.
+
+**For the current per-feature status (implemented / prototype-thin /
+provider-gated / future-scope / needs-next-PR) see
+`PRODUCT_COMPLETION_AUDIT.md`** — that file supersedes the burn-down /
+wiring-pass sections below for current-state queries. The sections
+below remain as a historical record of how the prototype came together.
+
+---
+
+## Burn-down pass summary (2026-05-18) — historical
 
 The seven-gaps pass left **124 action-shaped callbacks reaching a
 "isn't wired yet" default notice**. The user's acceptance bar was:

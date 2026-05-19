@@ -2,6 +2,12 @@
 
 _Last run: 2026-05-19 (Round 2 — Final Local Test + Bug Fix Pass)._
 
+> **2026-05-19 note.** PR #3 (this report) is merged on `main`. The
+> current product status — what's implemented, prototype/thin,
+> provider-gated, future scope — is in `PRODUCT_COMPLETION_AUDIT.md`.
+> Re-run on `main` (post-merge): `npm run validate` ✓, `npm run
+> test:smoke` 22/22 ✓, `npm run test:e2e` 28/28 ✓.
+
 ## Round 2 — Final Local Test + Bug Fix Pass headline
 
 ```

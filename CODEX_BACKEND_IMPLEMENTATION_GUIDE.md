@@ -1,5 +1,15 @@
 # Loomwright v2 Backend Implementation Guide
 
+> **2026-05-19 update.** This guide remains accurate for the
+> service-shape contracts (`StorageService`, `EntityService`,
+> `LinkService`, `OccurrenceService`, `ReviewService`, `KeysService`,
+> `SettingsService`, `AIService`, `HandoffService`, `ExtractionService`,
+> `SampleProjectService`, `ManuscriptChapterService`, `TangleService`).
+> One legacy paragraph below ("Writer's Room: inline script inside
+> Loomwright Shell.html") is no longer true — Writer's Room is now a
+> dedicated `writers-room.jsx` module. For current product status see
+> `PRODUCT_COMPLETION_AUDIT.md`.
+
 ## Source of Truth
 
 Use `Loomwright Shell.html` and the `.jsx` / `.css` files it loads. `index.html` redirects to the shell. Do not edit `Loomwright.bundle.jsx`; it is not part of the shell load path.
