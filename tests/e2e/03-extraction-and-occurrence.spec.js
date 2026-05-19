@@ -21,7 +21,7 @@ test.describe("D. Extraction creates occurrences and they render after reload", 
         deep: false,
       });
     }, { cid: chapterId });
-    expect(result.occurrenceCount).toBeGreaterThanOrEqual(1);
+    expect(result.occurrences?.length || result.occurrenceCount || 0).toBeGreaterThanOrEqual(1);
     const occs = await listOccurrences(page, chapterId);
     const match = occs.find((o) => o.entityId === cast.id);
     expect(match).toBeTruthy();

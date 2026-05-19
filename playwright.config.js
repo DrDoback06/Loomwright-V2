@@ -27,7 +27,31 @@ module.exports = defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        // Honour a host-provided Chrome (e.g. Chrome-for-Testing) when the
+        // Playwright CDN is unreachable. Set CHROMIUM_PATH to the chrome
+        // executable. Args include --no-sandbox for rootless/CI sandboxes.
+        // Loomwright Shell.html loads React/Babel-standalone from
+        // unpkg.com. In a fresh sandbox without a complete CA bundle the
+        // TLS chain fails (ERR_CERT_AUTHORITY_INVALID), so we accept
+        // certificate errors here. Has no effect when run on a normal
+        // dev machine where the cert chain is already trusted.
+        ignoreHTTPSErrors: true,
+        ...(process.env.CHROMIUM_PATH
+          ? {
+              launchOptions: {
+                executablePath: process.env.CHROMIUM_PATH,
+                args: [
+                  "--no-sandbox",
+                  "--disable-dev-shm-usage",
+                  "--disable-gpu",
+                  "--ignore-certificate-errors",
+                ],
+              },
+            }
+          : {}),
+      },
     },
   ],
   webServer: {

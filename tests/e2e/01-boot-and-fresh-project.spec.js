@@ -22,7 +22,7 @@ test.describe("A. App boot", () => {
   test("Settings Control Centre opens", async ({ page }) => {
     await openFreshApp(page);
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onOpenSettings" } })));
-    await expect(page.locator("[data-workspace-id='control-centre'], [data-ui*='Settings']").first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("[data-workspace-id='control-centre']")).toBeVisible({ timeout: 5000 });
   });
 });
 
@@ -42,13 +42,8 @@ test.describe("B. Fresh project empty", () => {
 
   test("Home empty-state card is visible on Home route", async ({ page }) => {
     await openFreshApp(page);
-    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onSetRoute", detail: { routeId: "home" } } })));
-    // Home route is set via app's command-palette path; if direct dispatch
-    // doesn't work, navigate by clicking the home tab if present.
-    await page.evaluate(() => {
-      const tab = document.querySelector("[data-callback='onOpenHome'], [data-route='home']");
-      if (tab) tab.click();
-    });
+    // app.jsx listens for lw:open-route and calls setRouteId(routeId).
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "home" } })));
     await expect(page.locator("[data-ui='HomeEmptyState']")).toBeVisible({ timeout: 5000 });
   });
 

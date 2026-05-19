@@ -5,21 +5,21 @@ const SHELL_PATH = "/Loomwright%20Shell.html";
 async function openFreshApp(page) {
   // Reset the persistent IndexedDB origin before each fresh-project test.
   await page.goto(SHELL_PATH);
-  await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 15000 });
+  await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
   await page.evaluate(async () => {
     try { await window.LoomwrightBackend.StorageService.clear(); } catch (_) {}
     try { window.localStorage.clear(); } catch (_) {}
     try { window.__LW_SAMPLE_LOADED__ = false; } catch (_) {}
   });
   await page.goto(SHELL_PATH);
-  await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 15000 });
+  await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
   // Wait for the backend to finish hydrating.
   await page.waitForFunction(() => window.__LW_BACKEND_DELEGATES__ === true, null, { timeout: 5000 }).catch(() => {});
 }
 
 async function openAppPreserveState(page) {
   await page.goto(SHELL_PATH);
-  await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 15000 });
+  await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
 }
 
 async function getEntityCount(page, type) {

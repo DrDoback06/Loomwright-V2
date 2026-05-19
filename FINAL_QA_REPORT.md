@@ -1,6 +1,104 @@
 # Loomwright v2 — Final QA Report
 
-_Last run: 2026-05-19._
+_Last run: 2026-05-19 (Round 2 — Final Local Test + Bug Fix Pass)._
+
+## Round 2 — Final Local Test + Bug Fix Pass headline
+
+```
+> npm run validate
+All checked HTML references exist.
+OK: 524 UI callbacks; registry bootstraps 524 handlers
+OK: registry default branch emits a user-visible notice (no silent fall-through).
+OK: 0 Bucket A action callbacks reach the generic default notice.
+OK: 6 Bucket B (provider-gated) callbacks use requireProviderOrNotice.
+OK: 4 Bucket D (React-owned) callbacks declared.
+INFO: 213 other callbacks fall to default notice (housekeeping/dispatch).
+
+> npm run test:smoke
+22/22 smoke checks passed.
+
+> npm run test:e2e
+Running 28 tests using 2 workers
+✓ A. App boot (3/3)
+✓ B. Fresh project empty (3/3)
+✓ C. Entity create + persist (6/6)
+✓ D. Extraction creates occurrences and they render after reload (3/3)
+✓ E. Review queue (4/4)
+✓ F. Composition overlay (2/2)
+✓ G. AI Handoff (2/2)
+✓ H. Sample project (opt-in) (2/2)
+✓ I. Trash (1/1)
+✓ J. Settings (2/2)
+28 passed (3.2m)
+```
+
+**28/28 Playwright e2e tests passing. 22/22 smoke checks passing. Bucket A remains 0.**
+
+### Test environment setup
+
+This sandboxed container blocks `cdn.playwright.dev` and apt-installs of Chromium with 404 errors. To run e2e tests here we did the following:
+
+1. Downloaded Google Chrome-for-Testing 138.0.7204.92 from the reachable `storage.googleapis.com/chrome-for-testing-public/` mirror and unpacked to `/tmp/chrome/chrome-linux64/`.
+2. Updated `playwright.config.js` to honour `CHROMIUM_PATH` env var and pass `--no-sandbox --disable-dev-shm-usage --disable-gpu --ignore-certificate-errors`.
+3. Vendored React 18.3.1, ReactDOM 18.3.1, and `@babel/standalone` 7.29.0 under `./vendor/` after discovering the shell's `unpkg.com` dependencies were blocked by sandbox CORS policy (`ERR_BLOCKED_BY_RESPONSE`). Versions are pinned in `package.json` `dependencies`. The original CDN URLs with SRI hashes are preserved in git history.
+
+For a normal dev environment (where Playwright's CDN is reachable):
+
+```bash
+npm install
+npx playwright install chromium
+npm run test:e2e
+```
+
+For sandboxed environments:
+
+```bash
+export CHROMIUM_PATH=/path/to/chrome-linux64/chrome
+npm run test:e2e
+```
+
+### Round 1 — initial run with 5 failures, then fixes
+
+| # | Test | Cause | Fix |
+|---|------|-------|-----|
+| 1 | `A. App boot › Settings Control Centre opens` | Test selector `[data-workspace-id='control-centre']` didn't match anything in the rendered DOM. The `FullWorkspaceHost` dispatcher mounted the right component but had no identifying attribute. | Added a minimal `<div data-ui="FullWorkspaceHost" data-workspace-id={workspace.id} style={{display:'contents'}}>` wrapper in `full-workspaces.jsx`. Pure attribute addition; `display:contents` keeps layout/styling unchanged. |
+| 2 | `B. Fresh project empty › Home empty-state card visible` | Test dispatched `onSetRoute` callback (not actually wired) and clicked `[data-callback='onOpenHome']` (doesn't exist). | Updated test to dispatch `lw:open-route` event directly, which `app.jsx` already listens for and calls `setRouteId(...)`. No app code changed. |
+| 3 | `D. Extraction › local-pass scanner records EntityOccurrence` | Test asserted on `result.occurrenceCount` but `ExtractionService.runExtraction` returned `{session, items, occurrences}` only (occurrenceCount was only inside `session`). | Exposed `occurrenceCount` and `itemCount` on the top-level return for API friendliness; test now reads either field. |
+| 4 | `E. Review queue › merge opens modal with ranked alternatives` | `onMergeQueueItem` handler used `ctx.detail` directly when caller passed only `{id}`. Without `entityType` the modal opened without a type, breaking the alternatives lookup. | Handler now looks up the full queue row via `ReviewService.listSync().find(q => q.id === itemId)` and merges that with the caller's overrides. |
+| 5 | `F. Composition overlay › create chapter from composition` | `parseCreateType("onCreateChapterFromComposition")` returned `"chapterfromcomposition"` (via the fallback `normaliseType`), so the dispatcher opened a phantom editor and never reached the explicit `onCreateChapterFromComposition` branch. | `parseCreateType`/`parseEditType` now use `in TYPE_FROM_CREATE` so `null` sentinel values correctly mean "skip generic editor open, fall through to the explicit handler". Added `null` sentinels for `Chapter`, `ChapterFromComposition`, `EntityFromSelection`, `AuthorProfile`, `FromPanelHeader`, `TangleNode`, `TangleGroup`, `NewInstead`. |
+
+### Round 2 — re-run after fixes
+
+All 28 tests passed. No new failures introduced.
+
+### Bugs found and fixed
+
+| Bug | Severity | Detection | Fix location |
+|-----|----------|-----------|--------------|
+| `parseCreateType` swallowed callback names that should reach explicit handlers (any `onCreate<X>` where `X` wasn't a real entity type) | **High** — broke `onCreateChapter`, `onCreateChapterFromComposition`, `onCreateEntityFromSelection`, `onCreateAuthorProfile`, `onCreateFromPanelHeader`, `onCreateTangleNode`, `onCreateTangleGroup`, `onCreateNewInstead` — all silently no-op'd because they "opened" an editor of nonexistent type | Playwright `F. create chapter from composition` | `callback-registry.jsx` — added `null` sentinels in `TYPE_FROM_CREATE`, updated `parseCreateType`/`parseEditType` to check `in` operator |
+| `onMergeQueueItem` ignored ReviewService lookup, used raw `ctx.detail` | **Medium** — merge modal opened without `entityType`, alternatives unsearchable | Playwright `E. merge opens merge modal` | `callback-registry.jsx` — handler now fetches full queue row by id |
+| `FullWorkspaceHost` had no identifying attribute on its wrapper | **Low** — tests couldn't assert which workspace was open | Playwright `A. Settings Control Centre opens` | `full-workspaces.jsx` — wrapper div with `data-ui` and `data-workspace-id` |
+| `ExtractionService.runExtraction` returned `occurrences[]` but not `occurrenceCount` at top level | **Low** — API inconsistency | Playwright `D. local-pass scanner` | `backend-services.jsx` — top-level return now includes `occurrenceCount` and `itemCount` |
+| Vendored React/Babel were missing in repo — production deps relied on unblockable `unpkg.com` CDN | **High** in sandboxed environments — app couldn't boot at all because Babel-standalone wouldn't load via CORS-restricted CDN | Diagnostic Playwright probe (`ERR_BLOCKED_BY_RESPONSE`) | New `vendor/` directory with pinned UMD bundles, `Loomwright Shell.html` updated to load locally |
+
+### Files touched in this pass
+
+| File | Change |
+|------|--------|
+| `Loomwright Shell.html` | Point to vendored React/ReactDOM/Babel under `./vendor/`. |
+| `package.json` | Add `react`, `react-dom`, `@babel/standalone` as pinned dependencies. |
+| `vendor/react.development.js`, `vendor/react-dom.development.js`, `vendor/babel.min.js`, `vendor/babel.min.js.map` | New vendored UMD bundles. |
+| `callback-registry.jsx` | `TYPE_FROM_CREATE` null sentinels + `parseCreateType`/`parseEditType` use `in` operator. `onMergeQueueItem` looks up the queue row. |
+| `backend-services.jsx` | Top-level `runExtraction` return includes `occurrenceCount` and `itemCount`. |
+| `full-workspaces.jsx` | `FullWorkspaceHost` wrapper carries `data-workspace-id`. |
+| `playwright.config.js` | Honour `CHROMIUM_PATH` env var; pass `--no-sandbox --disable-dev-shm-usage --disable-gpu --ignore-certificate-errors`. |
+| `tests/e2e/helpers.js` | Bump `waitForFunction` timeout from 15s → 45s for cold-start Babel transforms. |
+| `tests/e2e/01-boot-and-fresh-project.spec.js` | Use `lw:open-route` event for Home navigation; tighten Settings selector. |
+| `tests/e2e/03-extraction-and-occurrence.spec.js` | Read either `result.occurrences.length` or `result.occurrenceCount`. |
+
+---
+
+## Earlier — Legacy Audit + UX Completion + QA Infrastructure pass
 
 ## Summary
 

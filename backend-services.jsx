@@ -1396,7 +1396,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       };
       await this.saveSession(session);
       window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
-      return { session, items, occurrences };
+      return { session, items, occurrences, occurrenceCount: occurrences.length, itemCount: items.length };
     },
   };
 

@@ -22,6 +22,16 @@
     EventConsequence: "events", EventFromQuestStep: "events",
     EventFromRelationship: "events", EventFromTangle: "events",
     QuestFromTangle: "quests", RelationshipChangeFromEvent: "events",
+    // Sentinel: null means "do NOT route through parseCreateType / open
+    // the entity editor". An explicit handler below handles this name.
+    ChapterFromComposition: null,
+    EntityFromSelection: null,
+    Chapter: null,
+    AuthorProfile: null,
+    FromPanelHeader: null,
+    TangleNode: null,
+    TangleGroup: null,
+    NewInstead: null,
   };
 
   function hasReactClick(el) {
@@ -245,13 +255,20 @@
   function parseCreateType(name) {
     const m = name.match(/^onCreate([A-Za-z]+)$/);
     if (!m) return null;
-    return TYPE_FROM_CREATE[m[1]] || B().EntityService.normaliseType(m[1].toLowerCase());
+    const suffix = m[1];
+    // Explicit-handler sentinel: TYPE_FROM_CREATE may map a suffix to
+    // null to signal "skip generic editor open, fall through to the
+    // explicit branch below".
+    if (suffix in TYPE_FROM_CREATE) return TYPE_FROM_CREATE[suffix];
+    return B().EntityService.normaliseType(suffix.toLowerCase());
   }
 
   function parseEditType(name) {
     const m = name.match(/^onEdit([A-Za-z]+)$/);
     if (!m) return null;
-    return TYPE_FROM_CREATE[m[1]] || B().EntityService.normaliseType(m[1].toLowerCase());
+    const suffix = m[1];
+    if (suffix in TYPE_FROM_CREATE) return TYPE_FROM_CREATE[suffix];
+    return B().EntityService.normaliseType(suffix.toLowerCase());
   }
 
   function parseDeleteType(name) {
@@ -449,23 +466,27 @@
       return;
     }
     if (/^onMerge\w*QueueItem$/.test(name)) {
-      const item = ctx.detail || {};
+      // Look up the full queue row by id so we always have entityType /
+      // payload / candidate even when the caller only passed { id }.
+      const detail = ctx.detail || {};
+      const itemId = detail.id;
+      const queueRow = itemId
+        ? (ReviewService.listSync().find((q) => q.id === itemId) || null)
+        : null;
+      const item = queueRow ? { ...queueRow, ...detail } : detail;
       // If the merge modal already supplied a chosen alternative id (Confirm
       // merge button inside the modal), perform the merge now and resolve the
       // queue item. Otherwise open the modal.
-      const altId = ctx.detail?.altId || ctx.detail?.targetId;
+      const altId = detail.altId || detail.targetId;
       if (item && item.id && altId && item.entityType) {
         await LinkService.mergeEntities(altId, item.entityType, [item.payload?.id].filter(Boolean));
-        if (item.payload && item.payload.id && item.payload.id !== altId) {
-          // Source candidate has an entity record — already deleted by mergeEntities.
-        }
         await ReviewService.resolve(item.id, "merged");
         window.dispatchEvent(new CustomEvent("lw:close-merge-modal"));
         window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
         notify("Merged.");
         return;
       }
-      window.dispatchEvent(new CustomEvent("lw:open-merge-modal", { detail: { item, sourceId: id, type } }));
+      window.dispatchEvent(new CustomEvent("lw:open-merge-modal", { detail: { item, sourceId: id, type: item.entityType || type } }));
       return;
     }
     if (/^onOpenSource\w*Mention$/.test(name) || name === "onOpenSourceMention") {
