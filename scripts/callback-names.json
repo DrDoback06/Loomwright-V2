@@ -120,6 +120,7 @@
   "onCreateAuthorProfile",
   "onCreateBestiaryEntry",
   "onCreateCanonFact",
+  "onCreateCast",
   "onCreateChapter",
   "onCreateChapterFromComposition",
   "onCreateChildLocation",

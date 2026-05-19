@@ -138,6 +138,37 @@ const HomeScreen = ({
 
   const totalEntities = HOME_ENTITY_HEALTH.reduce((s, e) => s + e.count, 0);
 
+  // ----- Fresh-project detection -----
+  // When sample data has not been loaded AND the live entity store is
+  // empty, show an explicit empty-state card at the top so the user is
+  // never staring at a fake-but-static "Pale Reach" dashboard. The
+  // demo cards below render as inspiration; the empty-state card is
+  // the actionable surface.
+  const [emptyState, setEmptyState] = _hm_us(() => {
+    const sampleLoaded = !!window.__LW_SAMPLE_LOADED__;
+    const ES = window.LoomwrightBackend?.EntityService;
+    const live = ES ? ES.listAllSync() : {};
+    const hasAny = Object.values(live).some((byId) => byId && Object.keys(byId).length);
+    return !sampleLoaded && !hasAny;
+  });
+  React.useEffect(() => {
+    const recompute = () => {
+      const sampleLoaded = !!window.__LW_SAMPLE_LOADED__;
+      const ES = window.LoomwrightBackend?.EntityService;
+      const live = ES ? ES.listAllSync() : {};
+      const hasAny = Object.values(live).some((byId) => byId && Object.keys(byId).length);
+      setEmptyState(!sampleLoaded && !hasAny);
+    };
+    window.addEventListener("lw:entity-store-updated", recompute);
+    window.addEventListener("lw:project-imported", recompute);
+    window.addEventListener("lw:backend-ready", recompute);
+    return () => {
+      window.removeEventListener("lw:entity-store-updated", recompute);
+      window.removeEventListener("lw:project-imported", recompute);
+      window.removeEventListener("lw:backend-ready", recompute);
+    };
+  }, []);
+
   const handleQuickLaunch = (item) => {
     if (item.kind === "route") onSetRoute && onSetRoute(item.id);
     else onOpenPanel && onOpenPanel(item.id);
@@ -162,6 +193,81 @@ const HomeScreen = ({
   return (
     <div className="home paper-grain" data-ui="HomeScreen" data-route="home">
       <div className="home__inner">
+
+        {/* Empty-state card — shown when no live records exist AND the
+            sample project hasn't been loaded. The dashboard below still
+            renders as design reference, but this card is the actionable
+            surface so a fresh user knows what to do next. */}
+        {emptyState && (
+          <div className="home__empty" data-ui="HomeEmptyState" style={{
+            background: "var(--paper-soft, #f6efe2)",
+            border: "1px solid var(--ink-3, #bba98b)",
+            borderRadius: 12,
+            padding: 24,
+            marginBottom: 24,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+              <Icon name="feather" size={20}/>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>Start your Loomwright project</h2>
+            </div>
+            <p style={{ margin: "0 0 16px 0", color: "var(--ink-2, #6b5a3a)" }}>
+              Your project is empty. Begin by opening Writer&apos;s Room, creating your first character,
+              importing data, or loading the sample project to explore Loomwright with content.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <button
+                className="home__hero-cta"
+                onClick={() => onSetRoute && onSetRoute("writers-room")}
+                data-callback="onOpenWriterRoom"
+                data-testid="home-empty-open-writers-room"
+              >
+                <Icon name="feather" size={12}/>
+                Open Writer&apos;s Room
+              </button>
+              <button
+                className="home__hero-cta home__hero-cta--ghost"
+                onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "cast" } }))}
+                data-callback="onCreateCast"
+                data-testid="home-empty-create-character"
+              >
+                <Icon name="plus" size={12}/>
+                Create first character
+              </button>
+              <button
+                className="home__hero-cta home__hero-cta--ghost"
+                onClick={onOpenImportFlow}
+                data-callback="onImportProjectData"
+                data-testid="home-empty-import"
+              >
+                <Icon name="upload" size={12}/>
+                Import JSON
+              </button>
+              <button
+                className="home__hero-cta home__hero-cta--ghost"
+                onClick={() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "references" } }))}
+                data-callback="onOpenReferences"
+                data-testid="home-empty-add-references"
+              >
+                <Icon name="book" size={12}/>
+                Add references
+              </button>
+              <button
+                className="home__hero-cta home__hero-cta--ghost"
+                onClick={() => {
+                  if (!window.confirm) return;
+                  if (window.confirm("Load the Pale Reach sample project? Sample records will be added; your existing work is preserved.")) {
+                    window.LoomwrightBackend?.SampleProjectService?.loadSample();
+                  }
+                }}
+                data-callback="onLoadSampleProject"
+                data-testid="home-empty-load-sample"
+              >
+                <Icon name="sparkle" size={12}/>
+                Load sample project
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Top: project header */}
         <header className="home__hero">

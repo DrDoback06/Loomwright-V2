@@ -27,10 +27,83 @@ const EntityFrameworkPanelBody = ({ panel, onSelectEntity, ...frameworkCallbacks
   const [reviewMode, setReviewMode] = _useState_efh(false);
   const [mergeOpen, setMergeOpen]   = _useState_efh(false);
 
-  const entities    = panel.entities    || (window.ENTITY_SAMPLES?.[entityType])            || [];
-  const reviewItems = panel.reviewItems || (window.ENTITY_REVIEW_SAMPLES?.[entityType])     || [];
-  const suggestions = panel.suggestions || (window.ENTITY_SUGGESTION_SAMPLES?.[entityType]) || [];
+  const entities    = panel.entities    || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_SAMPLES?.[entityType] : null) || [];
+  const reviewItems = panel.reviewItems || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_REVIEW_SAMPLES?.[entityType] : null) || [];
+  const suggestions = panel.suggestions || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_SUGGESTION_SAMPLES?.[entityType] : null) || [];
   const queueCount  = panel.queueCount ?? reviewItems.length;
+
+  // Per-panel polished empty state — when the live store is empty AND the
+  // sample project hasn't been loaded, surface clear actions instead of
+  // an empty list. Each panel can override with panel.state === "empty"
+  // to get the default shell empty state.
+  if (entities.length === 0 && !panel.state) {
+    const labels = {
+      bestiary:      { title: "No creatures yet",       hint: "Add the bestiary as you encounter beings." },
+      locations:     { title: "No locations yet",       hint: "Map the world as your story unfolds." },
+      items:         { title: "No items yet",           hint: "Track weapons, equipment, and artefacts." },
+      classes:       { title: "No classes yet",         hint: "Define class archetypes for your cast." },
+      races:         { title: "No races / species yet", hint: "Set up the species and cultures of your world." },
+      stats:         { title: "No stats yet",           hint: "Define the numeric systems used by entities." },
+      abilities:     { title: "No abilities yet",       hint: "Catalogue special powers and techniques." },
+      skills:        { title: "No skills yet",          hint: "Track learned techniques and trained abilities." },
+      quests:        { title: "No quests yet",          hint: "Outline goals and the steps to reach them." },
+      events:        { title: "No events yet",          hint: "Mark key moments on the story timeline." },
+      factions:      { title: "No factions yet",        hint: "Group your world into allegiances and rivalries." },
+      lore:          { title: "No canon yet",           hint: "Lock in world facts that your story must honour." },
+      relationships: { title: "No relationships yet",   hint: "Capture bonds, rivalries, and dynamics." },
+      timeline:      { title: "Timeline empty",         hint: "Place events to build the chronology." },
+      references:    { title: "No references yet",      hint: "Add notes, uploads, URLs, or style samples." },
+    };
+    const lbl = labels[entityType] || { title: "Nothing here yet", hint: "Add your first record to get started." };
+    return (
+      <div data-ui="EntityFrameworkPanelBody" data-state="empty" style={{ padding: 24 }}>
+        <div style={{ textAlign: "center", padding: "48px 24px" }}>
+          <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>{lbl.title}</div>
+          <div style={{ color: "var(--ink-2, #6b5a3a)", marginBottom: 20 }}>{lbl.hint}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+            <button
+              className="rpg-btn rpg-btn--primary"
+              onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: entityType } }))}
+              data-callback="onCreateEntity"
+              data-testid={"empty-create-" + entityType}
+            >
+              + Create
+            </button>
+            <button
+              className="rpg-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: entityType, mode: "json" } }))}
+              data-callback="onImportEntity"
+              data-testid={"empty-import-" + entityType}
+            >
+              Import JSON
+            </button>
+            {(entityType === "cast" || entityType === "locations" || entityType === "items" || entityType === "quests" || entityType === "events" || entityType === "bestiary") && (
+              <button
+                className="rpg-btn"
+                onClick={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onSaveAndExtract" } }))}
+                data-testid={"empty-extract-" + entityType}
+              >
+                Run extraction
+              </button>
+            )}
+            <button
+              className="rpg-btn"
+              onClick={() => {
+                if (!window.confirm) return;
+                if (window.confirm("Load the Pale Reach sample project? Sample records will be added; your existing work is preserved.")) {
+                  window.LoomwrightBackend?.SampleProjectService?.loadSample();
+                }
+              }}
+              data-callback="onLoadSampleProject"
+              data-testid={"empty-sample-" + entityType}
+            >
+              Load sample project
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const filtered = _useMemo_efh(() => {
     if (!search) return entities;

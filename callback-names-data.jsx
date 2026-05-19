@@ -121,6 +121,7 @@ window.__LW_CALLBACK_NAMES = [
   "onCreateAuthorProfile",
   "onCreateBestiaryEntry",
   "onCreateCanonFact",
+  "onCreateCast",
   "onCreateChapter",
   "onCreateChapterFromComposition",
   "onCreateChildLocation",
