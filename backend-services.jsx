@@ -1403,15 +1403,31 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
   const SampleProjectService = {
     async loadSample() {
       const demo = window.WR_DEMO_PROJECT || {};
-      const entities = collectDefaultEntities();
-      await StorageService.set(KEYS.entities, entities);
-      applyEntityGlobals(entities);
-      const refs = (window.REFERENCES || []).map((r) => ({
+      // Merge sample entities into the live store rather than replacing —
+      // preserves user-created records. User entities win on id conflict.
+      const sampleEntities = collectDefaultEntities();
+      const existing = await StorageService.get(KEYS.entities, {});
+      const merged = { ...existing };
+      for (const [type, byId] of Object.entries(sampleEntities)) {
+        merged[type] = merged[type] || {};
+        for (const [id, sampleRow] of Object.entries(byId || {})) {
+          if (!merged[type][id]) merged[type][id] = sampleRow;
+        }
+      }
+      await StorageService.set(KEYS.entities, merged);
+      applyEntityGlobals(merged);
+      // References: also merge by id, sample-tag each.
+      const existingRefs = await StorageService.get(KEYS.references, []);
+      const sampleRefs = (window.REFERENCES || []).map((r) => ({
         ...clone(r),
         id: r.id || uuid("ref"),
+        source: "sample",
         createdAt: r.createdAt || nowIso(),
         updatedAt: r.updatedAt || nowIso(),
       }));
+      const refIndex = new Map(existingRefs.map((r) => [r.id, r]));
+      for (const r of sampleRefs) if (!refIndex.has(r.id)) refIndex.set(r.id, r);
+      const refs = [...refIndex.values()];
       await StorageService.set(KEYS.references, refs);
       window.REFERENCES = refs;
       if (demo.chapters) {
