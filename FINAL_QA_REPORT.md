@@ -2,6 +2,19 @@
 
 _Last run: 2026-05-19 (Extraction Quality Pass 1)._
 
+## Workspace Persistence Pass 1 (2026-05-19)
+
+```
+npm run validate        → 524 callbacks; Bucket A = 0
+npm run test:smoke      → ~156 checks pass
+                          (130 prior + 26 new workspace-persistence)
+npm run test:e2e        → 46 pass (41 prior + 5 new M. workspace persistence)
+```
+
+Atlas / Skill Trees / Relationships / Timeline / Tangle all round-trip
+meaningful edits through reload via their respective services. See
+`WORKSPACE_PERSISTENCE_REPORT.md` for the full per-service breakdown.
+
 ## Field Parity Pass 1 (2026-05-19)
 
 ```
