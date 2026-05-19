@@ -513,6 +513,117 @@ async function main() {
     log(`[audit-only ${type}] basic round-trip`, !!back && back.name === `Test ${type}`);
   }
 
+  // -------------------------------------------------------------------
+  // Workspace persistence
+  // -------------------------------------------------------------------
+  console.log("");
+  console.log("[workspace persistence]");
+
+  // -- Atlas --
+  await B.StorageService.clear();
+  const vraska = await B.EntityService.save("locations", { name: "Vraska Pass" }, { status: "active" });
+  const hess = await B.EntityService.save("locations", { name: "Hess" }, { status: "active" });
+  await B.AtlasService.placeLocation(vraska.id, { x: 0.3, y: 0.5 }, { atlasMap: "Salt-Coast (default)" });
+  const placed = B.AtlasService.listPlacedSync();
+  log("[atlas] placeLocation persists coords + placed flag", placed.some((l) => l.id === vraska.id && l.data?.coords?.x === 0.3));
+  log("[atlas] placeLocation sets atlasMap", placed.find((l) => l.id === vraska.id)?.data?.atlasMap === "Salt-Coast (default)");
+  await B.AtlasService.updatePlacement(vraska.id, { coords: { x: 0.6, y: 0.4 } });
+  const moved = B.EntityService.getSync(vraska.id, "locations");
+  log("[atlas] updatePlacement merges coords", moved.data.coords.x === 0.6 && moved.data.atlasMap === "Salt-Coast (default)");
+  await B.AtlasService.setRoute(vraska.id, hess.id, "road");
+  let withRoute = B.EntityService.getSync(vraska.id, "locations");
+  log("[atlas] setRoute pushes onto data.routes", (withRoute.data.routes || []).some((r) => r.to === hess.id && r.kind === "road"));
+  await B.AtlasService.setRoute(vraska.id, hess.id, "ferry");
+  withRoute = B.EntityService.getSync(vraska.id, "locations");
+  const matching = (withRoute.data.routes || []).filter((r) => r.to === hess.id);
+  log("[atlas] setRoute deduplicates (single entry per dest)", matching.length === 1 && matching[0].kind === "ferry");
+  await B.AtlasService.removeRoute(vraska.id, hess.id);
+  withRoute = B.EntityService.getSync(vraska.id, "locations");
+  log("[atlas] removeRoute strips the destination", !(withRoute.data.routes || []).some((r) => r.to === hess.id));
+  const atlasCast = await B.EntityService.save("cast", { name: "Aelinor" }, { status: "active" });
+  await B.AtlasService.linkEntityToLocation(atlasCast.id, "cast", vraska.id);
+  const linkedCast = B.EntityService.getSync(atlasCast.id, "cast");
+  const linkedLoc = B.EntityService.getSync(vraska.id, "locations");
+  log("[atlas] linkEntityToLocation sets entity.data.locationId", linkedCast.data.locationId === vraska.id);
+  log("[atlas] linkEntityToLocation pushes onto location.data.characters", (linkedLoc.data.characters || []).includes(atlasCast.id));
+
+  // -- Skill Trees --
+  await B.StorageService.clear();
+  const skillA = await B.EntityService.save("skills", { name: "Quickstep" }, { status: "active" });
+  const skillB = await B.EntityService.save("skills", { name: "Sidestep" }, { status: "active" });
+  const tree = await B.SkillTreeService.addTree({ name: "Footwork", description: "Movement skills." });
+  const treeId = tree.trees[tree.trees.length - 1].id;
+  log("[skill-trees] addTree persists", !!treeId);
+  await B.SkillTreeService.addNode(treeId, skillA.id, { x: 100, y: 200 });
+  await B.SkillTreeService.addNode(treeId, skillB.id, { x: 200, y: 200 });
+  let state = B.SkillTreeService.loadSync();
+  let t0 = state.trees.find((t) => t.id === treeId);
+  log("[skill-trees] addNode updates nodeIds + layout", t0.nodeIds.includes(skillA.id) && t0.layout[skillA.id]?.x === 100);
+  await B.SkillTreeService.updateNodePosition(treeId, skillA.id, { x: 150, y: 250 });
+  state = B.SkillTreeService.loadSync();
+  t0 = state.trees.find((t) => t.id === treeId);
+  log("[skill-trees] updateNodePosition updates layout", t0.layout[skillA.id]?.x === 150 && t0.layout[skillA.id]?.y === 250);
+  await B.SkillTreeService.connectNodes(treeId, skillA.id, skillB.id);
+  state = B.SkillTreeService.loadSync();
+  t0 = state.trees.find((t) => t.id === treeId);
+  log("[skill-trees] connectNodes writes edge", (t0.edges || []).some((e) => e.from === skillA.id && e.to === skillB.id));
+  await B.SkillTreeService.connectNodes(treeId, skillA.id, skillB.id);
+  state = B.SkillTreeService.loadSync();
+  t0 = state.trees.find((t) => t.id === treeId);
+  log("[skill-trees] connectNodes dedupes (no duplicate edge)", (t0.edges || []).filter((e) => e.from === skillA.id && e.to === skillB.id).length === 1);
+  await B.SkillTreeService.disconnectNodes(treeId, skillA.id, skillB.id);
+  state = B.SkillTreeService.loadSync();
+  t0 = state.trees.find((t) => t.id === treeId);
+  log("[skill-trees] disconnectNodes removes the edge", !(t0.edges || []).some((e) => e.from === skillA.id && e.to === skillB.id));
+  await B.StorageService.remove(B.keys.skillTrees);
+  const empty = B.SkillTreeService.loadSync();
+  log("[skill-trees] loadSync returns default state after clear", Array.isArray(empty.trees) && empty.trees.length === 0);
+
+  // -- Relationships (via existing EntityService) --
+  await B.StorageService.clear();
+  const rel = await B.EntityService.save("relationships", {
+    name: "Aelinor → Saren", fromId: "aelinor", toId: "saren",
+    relationshipType: "ally", strength: 60,
+  }, { status: "active" });
+  const relReloaded = B.EntityService.getSync(rel.id, "relationships");
+  log("[relationships] save → reload survives", relReloaded?.fromId === "aelinor" && relReloaded?.toId === "saren");
+  await B.EntityService.update("relationships", rel.id, { strength: 75 });
+  const relStronger = B.EntityService.getSync(rel.id, "relationships");
+  log("[relationships] edit → reload survives", relStronger.strength === 75);
+  await B.LinkService.appendField(rel.id, "relationships", "evidence", "Ch. 3: knife wound");
+  const relWithEv = B.EntityService.getSync(rel.id, "relationships");
+  log("[relationships] LinkService.appendField evidence persists", (relWithEv.data?.evidence || []).includes("Ch. 3: knife wound"));
+
+  // -- Timeline (via existing EntityService) --
+  await B.StorageService.clear();
+  const tl = await B.EntityService.save("timeline", {
+    name: "Auger Wake", track: "main", isMilestone: true, dateLabel: "Year 3",
+  }, { status: "active" });
+  const tlBack = B.EntityService.getSync(tl.id, "timeline");
+  log("[timeline] save → reload survives", tlBack?.name === "Auger Wake" && tlBack?.isMilestone === true);
+  await B.EntityService.update("timeline", tl.id, { dateLabel: "Year 4" });
+  const tlEdited = B.EntityService.getSync(tl.id, "timeline");
+  log("[timeline] edit → reload survives", tlEdited.dateLabel === "Year 4");
+  await B.LinkService.appendField(tl.id, "timeline", "characters", "aelinor");
+  const tlLinked = B.EntityService.getSync(tl.id, "timeline");
+  log("[timeline] LinkService.appendField characters persists", (tlLinked.data?.characters || []).includes("aelinor"));
+
+  // -- Tangle --
+  await B.StorageService.clear();
+  const tNode = await B.TangleService.addNode({ title: "Idea: Aelinor's secret", body: "Tied to Hess." });
+  const tnRow = tNode.nodes[tNode.nodes.length - 1];
+  log("[tangle] addNode persists", !!tnRow?.id);
+  await B.TangleService.updateNode(tnRow.id, { position: { x: 240, y: 320 } });
+  const tStateAfter = B.TangleService.loadSync();
+  const tnUpdated = tStateAfter.nodes.find((n) => n.id === tnRow.id);
+  log("[tangle] updateNode patches position", tnUpdated?.position?.x === 240 && tnUpdated?.position?.y === 320);
+  await B.TangleService.addGroup({ title: "Hess motifs" });
+  const tGroup = B.TangleService.loadSync().groups;
+  log("[tangle] addGroup persists", tGroup.length === 1 && tGroup[0].title === "Hess motifs");
+  await B.TangleService.removeNode(tnRow.id);
+  const tRemoved = B.TangleService.loadSync();
+  log("[tangle] removeNode removes", !tRemoved.nodes.some((n) => n.id === tnRow.id));
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

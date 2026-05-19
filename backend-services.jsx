@@ -33,6 +33,7 @@
     sampleLoaded: "sample_project_loaded",
     occurrences: "entity_occurrences",
     tangle: "tangle_canvas",
+    skillTrees: "skill_trees",
   };
 
   // Synchronously read the sample-loaded flag from localStorage BEFORE any
@@ -642,9 +643,233 @@
   // and provides the wiring for "send suggestion to tangle" and the
   // create/edit/delete tangle node callbacks.
   // -------------------------------------------------------------------
+
+  // -------------------------------------------------------------------
+  // AtlasService — thin facade over EntityService for location
+  // placement, route edges, and entity-on-map links. The atlas
+  // workspace edits placement and routes via these methods so the
+  // edits persist across reload. Locations are still the canonical
+  // entity type; AtlasService never owns them — it just patches their
+  // .data fields (placed/coords/atlasMap/routes).
+  // -------------------------------------------------------------------
+  const AtlasService = {
+    listPlacedSync() {
+      const locs = EntityService.listSync("locations");
+      return locs.filter((l) => l?.data?.placed === true);
+    },
+    listAllSync() {
+      return EntityService.listSync("locations");
+    },
+    async placeLocation(id, coords, opts = {}) {
+      const existing = EntityService.getSync(id, "locations");
+      if (!existing) return null;
+      const data = {
+        ...(existing.data || {}),
+        placed: true,
+        coords: { x: Number(coords?.x) || 0, y: Number(coords?.y) || 0 },
+        ...(opts.atlasMap ? { atlasMap: opts.atlasMap } : {}),
+      };
+      return EntityService.update("locations", id, { data });
+    },
+    async unplaceLocation(id) {
+      const existing = EntityService.getSync(id, "locations");
+      if (!existing) return null;
+      return EntityService.update("locations", id, {
+        data: { ...(existing.data || {}), placed: false },
+      });
+    },
+    async updatePlacement(id, patch = {}) {
+      const existing = EntityService.getSync(id, "locations");
+      if (!existing) return null;
+      const data = { ...(existing.data || {}) };
+      if ("placed" in patch) data.placed = !!patch.placed;
+      if (patch.coords) data.coords = { x: Number(patch.coords.x) || 0, y: Number(patch.coords.y) || 0 };
+      if (patch.atlasMap) data.atlasMap = patch.atlasMap;
+      if (Array.isArray(patch.routes)) data.routes = patch.routes.slice();
+      return EntityService.update("locations", id, { data });
+    },
+    async setRoute(fromId, toId, kind = "road") {
+      if (!fromId || !toId || fromId === toId) return null;
+      const existing = EntityService.getSync(fromId, "locations");
+      if (!existing) return null;
+      const routes = Array.isArray(existing.data?.routes) ? existing.data.routes.slice() : [];
+      const idx = routes.findIndex((r) => (typeof r === "string" ? r === toId : r?.to === toId));
+      const next = { to: toId, kind };
+      if (idx >= 0) routes[idx] = next;
+      else routes.push(next);
+      return EntityService.update("locations", fromId, {
+        data: { ...(existing.data || {}), routes },
+      });
+    },
+    async removeRoute(fromId, toId) {
+      const existing = EntityService.getSync(fromId, "locations");
+      if (!existing) return null;
+      const routes = Array.isArray(existing.data?.routes) ? existing.data.routes : [];
+      const filtered = routes.filter((r) => (typeof r === "string" ? r !== toId : r?.to !== toId));
+      return EntityService.update("locations", fromId, {
+        data: { ...(existing.data || {}), routes: filtered },
+      });
+    },
+    async linkEntityToLocation(entityId, entityType, locationId) {
+      // Atlas-driven binding: pin an entity (cast / item / event / etc.)
+      // to a location. Stored as data.locationId on the entity AND
+      // pushed onto location.data[<entityType>] for fast lookup.
+      const entity = EntityService.getSync(entityId, entityType);
+      if (!entity) return null;
+      await EntityService.update(entityType, entityId, {
+        data: { ...(entity.data || {}), locationId },
+      });
+      const loc = EntityService.getSync(locationId, "locations");
+      if (loc) {
+        const field = entityType === "cast" ? "characters" : entityType;
+        const list = Array.isArray(loc.data?.[field]) ? loc.data[field].slice() : [];
+        if (!list.includes(entityId)) list.push(entityId);
+        await EntityService.update("locations", locationId, {
+          data: { ...(loc.data || {}), [field]: list },
+        });
+      }
+      return entity;
+    },
+  };
+
+  // -------------------------------------------------------------------
+  // SkillTreeService — persists tree-level state (which skill entities
+  // form a tree, how they're connected, where they sit on the canvas,
+  // which classes/cast they're assigned to). Individual skill records
+  // still live in EntityService("skills", …). The tree object is small
+  // and reference-only; we never duplicate the skill data inside it.
+  // -------------------------------------------------------------------
+  const SkillTreeService = {
+    defaultState() {
+      return { trees: [], updatedAt: nowIso() };
+    },
+    loadSync() {
+      return StorageService.getSync(KEYS.skillTrees, this.defaultState());
+    },
+    async save(state) {
+      const next = { ...this.loadSync(), ...clone(state), updatedAt: nowIso() };
+      await StorageService.set(KEYS.skillTrees, next);
+      window.dispatchEvent(new CustomEvent("lw:skill-trees-updated", { detail: next }));
+      return next;
+    },
+    async addTree(tree) {
+      const state = this.loadSync();
+      const row = {
+        id: tree.id || uuid("st"),
+        name: tree.name || "New skill tree",
+        description: tree.description || "",
+        nodeIds: Array.isArray(tree.nodeIds) ? tree.nodeIds.slice() : [],
+        edges: Array.isArray(tree.edges) ? tree.edges.slice() : [],
+        layout: tree.layout || {},
+        assignedClasses: Array.isArray(tree.assignedClasses) ? tree.assignedClasses.slice() : [],
+        assignedCast: Array.isArray(tree.assignedCast) ? tree.assignedCast.slice() : [],
+        createdAt: tree.createdAt || nowIso(),
+      };
+      return this.save({ ...state, trees: [...(state.trees || []), row] });
+    },
+    async updateTree(id, patch) {
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => t.id === id ? { ...t, ...patch, updatedAt: nowIso() } : t),
+      });
+    },
+    async removeTree(id) {
+      const state = this.loadSync();
+      return this.save({ ...state, trees: (state.trees || []).filter((t) => t.id !== id) });
+    },
+    async addNode(treeId, skillEntityId, position = { x: 0, y: 0 }) {
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => {
+          if (t.id !== treeId) return t;
+          const nodeIds = t.nodeIds.includes(skillEntityId) ? t.nodeIds : [...t.nodeIds, skillEntityId];
+          const layout = { ...(t.layout || {}), [skillEntityId]: { x: Number(position.x) || 0, y: Number(position.y) || 0 } };
+          return { ...t, nodeIds, layout, updatedAt: nowIso() };
+        }),
+      });
+    },
+    async updateNodePosition(treeId, skillEntityId, position) {
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => {
+          if (t.id !== treeId) return t;
+          const layout = { ...(t.layout || {}), [skillEntityId]: { x: Number(position?.x) || 0, y: Number(position?.y) || 0 } };
+          return { ...t, layout, updatedAt: nowIso() };
+        }),
+      });
+    },
+    async removeNode(treeId, skillEntityId) {
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => {
+          if (t.id !== treeId) return t;
+          const nodeIds = t.nodeIds.filter((n) => n !== skillEntityId);
+          const layout = { ...(t.layout || {}) };
+          delete layout[skillEntityId];
+          const edges = t.edges.filter((e) => e.from !== skillEntityId && e.to !== skillEntityId);
+          return { ...t, nodeIds, layout, edges, updatedAt: nowIso() };
+        }),
+      });
+    },
+    async connectNodes(treeId, fromSkillId, toSkillId, kind = "leads-to") {
+      if (!fromSkillId || !toSkillId || fromSkillId === toSkillId) return null;
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => {
+          if (t.id !== treeId) return t;
+          const edges = (t.edges || []).slice();
+          if (!edges.some((e) => e.from === fromSkillId && e.to === toSkillId)) {
+            edges.push({ from: fromSkillId, to: toSkillId, kind });
+          }
+          return { ...t, edges, updatedAt: nowIso() };
+        }),
+      });
+    },
+    async disconnectNodes(treeId, fromSkillId, toSkillId) {
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => {
+          if (t.id !== treeId) return t;
+          const edges = (t.edges || []).filter((e) => !(e.from === fromSkillId && e.to === toSkillId));
+          return { ...t, edges, updatedAt: nowIso() };
+        }),
+      });
+    },
+    async assignClass(treeId, classEntityId) {
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => {
+          if (t.id !== treeId) return t;
+          const set = new Set(t.assignedClasses || []);
+          set.add(classEntityId);
+          return { ...t, assignedClasses: [...set], updatedAt: nowIso() };
+        }),
+      });
+    },
+    async assignCast(treeId, castEntityId) {
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => {
+          if (t.id !== treeId) return t;
+          const set = new Set(t.assignedCast || []);
+          set.add(castEntityId);
+          return { ...t, assignedCast: [...set], updatedAt: nowIso() };
+        }),
+      });
+    },
+  };
+
   const TangleService = {
     defaultState() {
-      return { nodes: [], groups: [], updatedAt: nowIso() };
+      return { nodes: [], groups: [], edges: [], updatedAt: nowIso() };
     },
     loadSync() {
       return StorageService.getSync(KEYS.tangle, this.defaultState());
@@ -2203,6 +2428,8 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     HandoffService,
     TrashService,
     TangleService,
+    AtlasService,
+    SkillTreeService,
     LinkService,
     AIService,
     ExtractionService,
