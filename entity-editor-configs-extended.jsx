@@ -179,11 +179,14 @@ const EE_BESTIARY = {
       { id: "lifecycle",   label: "Lifecycle",   kind: "textarea" },
     ]},
     { id: "links", title: "Story links", fields: [
-      { id: "relatedRace",     label: "Related race / species", kind: "related-multi", related: "races" },
-      { id: "relatedFactions", label: "Related factions",       kind: "related-multi", related: "factions" },
-      { id: "relatedQuests",   label: "Related quests",         kind: "related-multi", related: "quests" },
-      { id: "relatedEvents",   label: "Related events",         kind: "related-multi", related: "events" },
-      { id: "lore",            label: "Lore / canon facts",     kind: "related-multi", related: "lore" },
+      { id: "relatedRace",      label: "Related race / species", kind: "related-multi", related: "races" },
+      { id: "relatedFactions",  label: "Related factions",       kind: "related-multi", related: "factions" },
+      // Distinct from `encounterLocations` (Habitat) — these are
+      // lore-tied places (ancestral grounds, places of power, etc).
+      { id: "relatedLocations", label: "Related locations",      kind: "related-multi", related: "locations" },
+      { id: "relatedQuests",    label: "Related quests",         kind: "related-multi", related: "quests" },
+      { id: "relatedEvents",    label: "Related events",         kind: "related-multi", related: "events" },
+      { id: "lore",             label: "Lore / canon facts",     kind: "related-multi", related: "lore" },
     ]},
     { id: "tracking", title: "Tracking", fields: [
       { id: "chapterAppearances", label: "Chapter appearances", kind: "chips", placeholder: "Ch. 2 · Ch. 7 · Ch. 9" },
@@ -261,6 +264,7 @@ const EE_REFERENCE = {
       { id: "includeInAI",     label: "Include in AI context", kind: "toggle" },
       { id: "isStyleSample",   label: "Style sample",     kind: "toggle" },
       { id: "isCanonSource",   label: "Canon source",     kind: "toggle" },
+      { id: "isResearchNote",  label: "Research note",    kind: "toggle", hint: "Source the manuscript draws on but doesn't have to obey." },
       { id: "isOnboardingAnswer", label: "Onboarding answer", kind: "toggle" },
     ]},
     { id: "links", title: "Links", fields: [
