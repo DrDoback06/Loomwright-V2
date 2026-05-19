@@ -1,5 +1,12 @@
 # Loomwright — Final Repair Pass — Verification Report
 
+> **HISTORICAL (2026-05-17).** This document captures the panel-dispatcher
+> repair pass that happened BEFORE the runtime/backend layer was added. It
+> remains accurate for the work that landed on 2026-05-17 but predates the
+> wiring, burn-down, occurrence rendering, sample gating, and QA-suite
+> passes. For the current product status see `PRODUCT_COMPLETION_AUDIT.md`.
+> For the current QA result see `FINAL_QA_REPORT.md`.
+
 Date: 2026-05-17
 
 ## Summary

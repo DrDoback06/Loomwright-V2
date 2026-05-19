@@ -1,5 +1,12 @@
 # Extraction Review — Hook-up Notes
 
+> **2026-05-19 status update.** Review-queue Accept / Deny / Edit / Merge /
+> Bulk-Accept / Bulk-Deny are implemented and test-covered. Merge opens
+> `MergeCandidateModal` with ranked alternatives and rewrites references
+> globally via `LinkService.mergeEntities`. For current product status
+> see `PRODUCT_COMPLETION_AUDIT.md`. The contracts below remain accurate
+> as the canonical hookup spec.
+
 ## Purpose
 Every entity tab in this pass has its own review queue that surfaces
 extraction candidates from the manuscript. The user accepts, edits,

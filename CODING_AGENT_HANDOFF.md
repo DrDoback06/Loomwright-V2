@@ -1,5 +1,13 @@
 # Coding Agent Handoff
 
+> **2026-05-19 update.** The "tested functional local prototype" milestone
+> has landed on `main` via PR #3. For the current source of truth on what
+> is implemented vs prototype/thin vs provider-gated vs future scope, see
+> `PRODUCT_COMPLETION_AUDIT.md`. For the current QA result (28/28 e2e,
+> 22/22 smoke, audit OK) see `FINAL_QA_REPORT.md`. The notes below remain
+> useful as a snapshot of how the wiring layer was put in place but should
+> not be read as the current status.
+
 > **2026-05-18 update.** Subsequent wiring pass closed seven runtime gaps
 > (merge modal, composition handlers, AI handoff listeners, trash, sample
 > gating, panel action props, persisted EntityOccurrence). See

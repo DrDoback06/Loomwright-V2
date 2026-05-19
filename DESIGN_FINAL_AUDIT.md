@@ -1,5 +1,11 @@
 # Design Final Audit
 
+> **2026-05-19 update.** The "Verified Design Boundaries" section below
+> is still accurate (no UI redesign occurred). The "Known limitations /
+> followups" section below predates the wiring/burn-down/occurrence/QA
+> passes — items it lists as "design-only" or "mocked NLP" have since
+> been implemented. Authoritative current status: `PRODUCT_COMPLETION_AUDIT.md`.
+
 ## Verified Design Boundaries
 
 - No UI redesign was performed.

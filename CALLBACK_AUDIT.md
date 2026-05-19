@@ -1,5 +1,14 @@
 # Callback Audit
 
+> **2026-05-19 status update.** Wiring is complete. The static audit
+> (`scripts/audit-callbacks.js`) enforces: 524 registered callbacks, 0
+> Bucket A action callbacks reach the generic default notice, 6 Bucket B
+> provider-gated callbacks use `requireProviderOrNotice`, 4 Bucket D
+> callbacks are declared React-owned. The catalogue below remains useful
+> as the design-intent enumeration. For per-callback resolution
+> (Bucket A / B / C / D) see `FEATURE_PENDING_CALLBACKS.md` and for the
+> top-level product status see `PRODUCT_COMPLETION_AUDIT.md`.
+
 ## Scope
 Every `data-callback="onX"` attribute in the project is enumerated here
 so the follow-up coding agent can wire each to backend behaviour.

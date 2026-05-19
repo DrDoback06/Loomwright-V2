@@ -2,6 +2,13 @@
 
 _Last updated: 2026-05-18 (burn-down pass)._
 
+> **2026-05-19 note.** This file is a time-fixed snapshot from the
+> burn-down pass that resolved the original 124 feature-pending
+> callbacks. It is not a live status doc — for live status see
+> `PRODUCT_COMPLETION_AUDIT.md`. The audit script
+> (`scripts/audit-callbacks.js`) is the live truth: 524 callbacks
+> registered, 0 Bucket A reach the generic default.
+
 This document is the catalogue of every callback that the previous audit
 counted as "feature-pending", paired with its final classification and
 resolution after the burn-down pass.

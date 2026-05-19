@@ -1,5 +1,16 @@
 # Loomwright — Extraction & Review Hook-up Notes
 
+> **2026-05-19 status update.** The hookups documented below are now
+> implemented in `backend-services.jsx` (`ExtractionService`,
+> `ReviewService`, `OccurrenceService`) and `callback-registry.jsx`. The
+> demo `extraction-data.jsx` `_mock:true` rows no longer leak into the
+> runtime — sample data is opt-in via `SampleProjectService.loadSample`.
+> Local-pass scanning records `EntityOccurrence` records without any AI.
+> Deep extract uses the legacy canon-pipeline prompt with `Known
+> characters / items / locations` injection and chunk+overlap, only when
+> a BYOK provider is configured. For current product status see
+> `PRODUCT_COMPLETION_AUDIT.md`.
+
 This document maps the presentational React surface to the backend events and
 mutations Claude Code needs to wire up. All components are presentational —
 state lives outside; every interactive element exposes a `data-callback` and a
