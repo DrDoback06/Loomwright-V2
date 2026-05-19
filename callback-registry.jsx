@@ -308,6 +308,10 @@
     "onPreviewProjectImport", "onConfirmProjectImport",
     "onValidateProjectImport",
     "onDownloadEntityLibrary", "onCopyProjectExportJson",
+    // Speed Reader (SpeedReaderService)
+    "onCreateSpeedReaderSession", "onReadCurrentChapter",
+    "onReadReference", "onDeleteSpeedReaderSession",
+    "onResetSpeedReaderProgress",
   ]);
 
   async function dispatchCallback(name, ctx) {

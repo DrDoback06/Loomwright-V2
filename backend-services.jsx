@@ -900,6 +900,214 @@
     },
   };
 
+  // -------------------------------------------------------------------
+  // SpeedReaderService — persistent RSVP sessions backed by
+  // KEYS.speedReader. Owns session create / update / delete /
+  // progress / bookmarks / notes / settings. Resolves chapter and
+  // reference sources via ManuscriptChapterService / ReferencesService
+  // at session-create time so a session is self-contained from then on.
+  // -------------------------------------------------------------------
+  const SpeedReaderService = {
+    defaultState() {
+      return { activeId: null, sessions: [], updatedAt: nowIso() };
+    },
+    loadSync() {
+      const raw = StorageService.getSync(KEYS.speedReader, null);
+      if (!raw || typeof raw !== "object" || !Array.isArray(raw.sessions)) {
+        return this.defaultState();
+      }
+      return raw;
+    },
+    async save(state) {
+      const next = { ...this.loadSync(), ...clone(state), updatedAt: nowIso() };
+      await StorageService.set(KEYS.speedReader, next);
+      window.dispatchEvent(new CustomEvent("lw:speed-reader-updated", { detail: next }));
+      return next;
+    },
+    listSessionsSync() {
+      return this.loadSync().sessions || [];
+    },
+    getSessionSync(id) {
+      if (!id) return null;
+      return (this.loadSync().sessions || []).find((s) => s.id === id) || null;
+    },
+    getActiveSessionSync() {
+      const state = this.loadSync();
+      if (!state.activeId) return null;
+      return (state.sessions || []).find((s) => s.id === state.activeId) || null;
+    },
+    /**
+     * Resolve raw text for a `{ sourceType, sourceId }` pair. Returns
+     * `{ rawText, sourceTitle }`. Empty string when unresolvable.
+     */
+    resolveSource(input = {}) {
+      const sourceType = input.sourceType || "paste";
+      if (sourceType === "paste" || sourceType === "passage") {
+        return {
+          rawText: input.rawText || input.text || "",
+          sourceTitle: input.sourceTitle || input.name || (sourceType === "passage" ? "Selected passage" : "Pasted text"),
+        };
+      }
+      if (sourceType === "chapter") {
+        const mcs = ManuscriptChapterService.loadSync();
+        const id = input.sourceId || mcs.activeChapterId;
+        const chapter = (mcs.chapters || []).find((c) => c.id === id);
+        const text = chapter?.bodyText
+          || (chapter?.bodyHtml || "").replace(/<[^>]+>/g, "")
+          || mcs.manuscripts?.[id]?.text
+          || "";
+        return {
+          rawText: text,
+          sourceTitle: chapter?.title || `Chapter ${chapter?.slotNumber || ""}`.trim() || "Current chapter",
+        };
+      }
+      if (sourceType === "reference") {
+        const refs = StorageService.getSync(KEYS.references, []);
+        const ref = refs.find((r) => r.id === input.sourceId);
+        const text = ref?.content || ref?.body || ref?.summary || ref?.notes || "";
+        return {
+          rawText: text,
+          sourceTitle: ref?.title || ref?.label || "Reference",
+        };
+      }
+      return { rawText: input.rawText || "", sourceTitle: input.sourceTitle || "Reading source" };
+    },
+    /**
+     * Create a new session. Required input: `sourceType`. Source text
+     * is resolved at create time so the session is self-contained.
+     */
+    async createSession(input = {}) {
+      const resolved = this.resolveSource(input);
+      if (!resolved.rawText || !resolved.rawText.trim()) {
+        throw new Error("Speed Reader: source has no text to read.");
+      }
+      const id = input.id || uuid("sr");
+      const totalWords = resolved.rawText.replace(/\s+/g, " ").trim().split(" ").filter(Boolean).length;
+      const session = {
+        id,
+        name: input.name || resolved.sourceTitle,
+        sourceType: input.sourceType || "paste",
+        sourceId: input.sourceId || null,
+        sourceTitle: resolved.sourceTitle,
+        rawText: resolved.rawText,
+        currentWordIndex: 0,
+        totalWords,
+        wpm: input.wpm || 360,
+        fontSize: input.fontSize || 64,
+        punctuationPause: input.punctuationPause !== false,
+        sentencePause: input.sentencePause !== false,
+        longWordSlow: input.longWordSlow !== false,
+        focusMode: !!input.focusMode,
+        bookmarks: [],
+        notes: [],
+        stats: { wordsRead: 0, pauses: 0, startedAt: null, lastReadAt: null, elapsedMs: 0 },
+        completedAt: null,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      const state = this.loadSync();
+      await this.save({ ...state, activeId: id, sessions: [...(state.sessions || []), session] });
+      return session;
+    },
+    async updateSession(id, patch) {
+      const state = this.loadSync();
+      const sessions = (state.sessions || []).map((s) =>
+        s.id === id ? { ...s, ...clone(patch), updatedAt: nowIso() } : s
+      );
+      await this.save({ ...state, sessions });
+      return sessions.find((s) => s.id === id) || null;
+    },
+    async setActiveSession(id) {
+      const state = this.loadSync();
+      if (id && !(state.sessions || []).some((s) => s.id === id)) return null;
+      await this.save({ ...state, activeId: id || null });
+      return this.getActiveSessionSync();
+    },
+    async deleteSession(id) {
+      const state = this.loadSync();
+      const sessions = (state.sessions || []).filter((s) => s.id !== id);
+      const activeId = state.activeId === id ? null : state.activeId;
+      await this.save({ ...state, sessions, activeId });
+      return { id, deleted: true };
+    },
+    async setProgress(id, currentWordIndex, extras = {}) {
+      const sess = this.getSessionSync(id);
+      if (!sess) return null;
+      const stats = {
+        ...(sess.stats || {}),
+        ...(extras.stats || {}),
+        lastReadAt: nowIso(),
+      };
+      return this.updateSession(id, {
+        currentWordIndex: Math.max(0, Math.min(sess.totalWords || 0, currentWordIndex | 0)),
+        stats,
+      });
+    },
+    async setSettings(id, settings = {}) {
+      const allowed = ["wpm", "fontSize", "punctuationPause", "sentencePause", "longWordSlow", "focusMode"];
+      const patch = {};
+      for (const k of allowed) if (k in settings) patch[k] = settings[k];
+      if (!Object.keys(patch).length) return this.getSessionSync(id);
+      return this.updateSession(id, patch);
+    },
+    async addBookmark(id, bookmark = {}) {
+      const sess = this.getSessionSync(id);
+      if (!sess) return null;
+      const item = {
+        id: bookmark.id || uuid("bm"),
+        wordIndex: bookmark.wordIndex | 0,
+        label: bookmark.label || "",
+        sentence: bookmark.sentence || 0,
+        note: bookmark.note || "",
+        createdAt: nowIso(),
+      };
+      const exists = (sess.bookmarks || []).some(
+        (b) => b.wordIndex === item.wordIndex && (b.label || "") === (item.label || "")
+      );
+      const bookmarks = exists ? sess.bookmarks : [item, ...(sess.bookmarks || [])];
+      return this.updateSession(id, { bookmarks });
+    },
+    async removeBookmark(id, bookmarkId) {
+      const sess = this.getSessionSync(id);
+      if (!sess) return null;
+      return this.updateSession(id, {
+        bookmarks: (sess.bookmarks || []).filter((b) => b.id !== bookmarkId),
+      });
+    },
+    async addNote(id, note = {}) {
+      const sess = this.getSessionSync(id);
+      if (!sess) return null;
+      const item = {
+        id: note.id || uuid("nt"),
+        wordIndex: note.wordIndex | 0,
+        kind: note.kind || "difficulty",
+        body: note.body || "",
+        sentence: note.sentence || "",
+        createdAt: nowIso(),
+      };
+      return this.updateSession(id, { notes: [item, ...(sess.notes || [])] });
+    },
+    async removeNote(id, noteId) {
+      const sess = this.getSessionSync(id);
+      if (!sess) return null;
+      return this.updateSession(id, {
+        notes: (sess.notes || []).filter((n) => n.id !== noteId),
+      });
+    },
+    async resetProgress(id) {
+      const sess = this.getSessionSync(id);
+      if (!sess) return null;
+      return this.updateSession(id, {
+        currentWordIndex: 0,
+        completedAt: null,
+        stats: { wordsRead: 0, pauses: 0, startedAt: null, lastReadAt: null, elapsedMs: 0 },
+      });
+    },
+    async markComplete(id) {
+      return this.updateSession(id, { completedAt: nowIso() });
+    },
+  };
+
   const TrashService = {
     listSync() {
       return StorageService.getSync(KEYS.trash, []);
@@ -2930,6 +3138,59 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
         if (cb === "onSave" || cb === "onSaveAndExtract" || cb === "onSaveAndDeepExtract") {
           await ManuscriptService.saveCurrentDom();
         }
+        // -------- Speed Reader (real persistence-side actions) --------
+        if (cb === "onCreateSpeedReaderSession") {
+          e.preventDefault();
+          const detail = (el?.dataset && el.dataset.payload) ? (function () { try { return JSON.parse(el.dataset.payload); } catch (_) { return {}; } })() : {};
+          try {
+            const session = await SpeedReaderService.createSession(detail);
+            notify(`Speed Reader: started "${session.sourceTitle}".`);
+          } catch (err) {
+            notify(err.message || "Speed Reader: could not start session.");
+          }
+        }
+        if (cb === "onReadCurrentChapter") {
+          e.preventDefault();
+          try {
+            const session = await SpeedReaderService.createSession({ sourceType: "chapter" });
+            notify(`Speed Reader: reading "${session.sourceTitle}".`);
+          } catch (err) {
+            notify(err.message || "No active chapter to read.");
+          }
+        }
+        if (cb === "onReadReference") {
+          e.preventDefault();
+          const detail = (el?.dataset && el.dataset.payload) ? (function () { try { return JSON.parse(el.dataset.payload); } catch (_) { return {}; } })() : {};
+          const sourceId = detail.referenceId || detail.id || el.getAttribute("data-reference-id");
+          if (!sourceId) {
+            notify("Select a reference first.");
+            return;
+          }
+          try {
+            const session = await SpeedReaderService.createSession({ sourceType: "reference", sourceId });
+            notify(`Speed Reader: reading "${session.sourceTitle}".`);
+          } catch (err) {
+            notify(err.message || "Reference has no readable content.");
+          }
+        }
+        if (cb === "onDeleteSpeedReaderSession") {
+          e.preventDefault();
+          const detail = (el?.dataset && el.dataset.payload) ? (function () { try { return JSON.parse(el.dataset.payload); } catch (_) { return {}; } })() : {};
+          const sid = detail.sessionId || detail.id || el.getAttribute("data-session-id");
+          if (sid) {
+            await SpeedReaderService.deleteSession(sid);
+            notify("Speed Reader session deleted.");
+          }
+        }
+        if (cb === "onResetSpeedReaderProgress") {
+          e.preventDefault();
+          const detail = (el?.dataset && el.dataset.payload) ? (function () { try { return JSON.parse(el.dataset.payload); } catch (_) { return {}; } })() : {};
+          const sid = detail.sessionId || detail.id || SpeedReaderService.loadSync().activeId;
+          if (sid) {
+            await SpeedReaderService.resetProgress(sid);
+            notify("Speed Reader progress reset.");
+          }
+        }
         if (cb === "onCopyProjectContextPack" || cb === "onCopyStyleProfilePack" || cb === "onCopyCanonRulesPack" || cb === "onCopyCharacterBiblePack") {
           e.preventDefault();
           const intel = ProjectIntelService.loadSync();
@@ -2988,6 +3249,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     TangleService,
     AtlasService,
     SkillTreeService,
+    SpeedReaderService,
     ProjectArchiveService,
     LinkService,
     AIService,

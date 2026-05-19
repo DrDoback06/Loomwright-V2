@@ -1,6 +1,32 @@
 # Loomwright v2 — Final QA Report
 
-_Last run: 2026-05-19 (Full Project Import/Export Pass)._
+_Last run: 2026-05-19 (Speed Reader Completion Pass)._
+
+## Speed Reader Completion Pass (2026-05-19)
+
+```
+npm run validate        → 525 callbacks; registry bootstraps 536 handlers; Bucket A = 0
+npm run test:smoke      → all smoke checks pass
+                          (204 prior + 26 new [speed reader] assertions)
+npm run test:e2e        → 56 pass (51 prior + 5 new O. speed reader)
+```
+
+Adds `SpeedReaderService` under existing `KEYS.speedReader`:
+`createSession / updateSession / setActiveSession / deleteSession /
+setProgress / setSettings / addBookmark / removeBookmark / addNote /
+removeNote / resetProgress / markComplete / resolveSource /
+listSessionsSync / getActiveSessionSync`. Source resolvers cover
+current chapter (via `ManuscriptChapterService`), pasted text, and
+reference content (via `KEYS.references`). `useSpeedReader` hydrates
+on mount and debounces persistence back through the service while
+the active source is a persisted session. Five new callbacks
+registered (`onCreateSpeedReaderSession`, `onReadCurrentChapter`,
+`onReadReference`, `onDeleteSpeedReaderSession`,
+`onResetSpeedReaderProgress`). Incidental fix: `Array.isArray` guard
+on `paragraphs` in `writers-room.jsx` (surfaced by Speed Reader e2e
+when `ManuscriptChapterService.createFromComposition` stored
+`{html, text}` instead of an array of paragraphs).
+See `SPEED_READER_COMPLETION_REPORT.md` for the full breakdown.
 
 ## Full Project Import / Export Pass (2026-05-19)
 

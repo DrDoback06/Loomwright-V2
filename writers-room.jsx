@@ -888,7 +888,7 @@ const WritersRoomScreen = ({
   // Manuscript state
   const [canvasState, setCanvasState] = _wrUS("writing"); // writing | empty | loading | error | saving | saved | offline
   const paragraphs = activeChapter && !activeChapter.reserved
-    ? (manuscriptsByChapter[activeId] || [])
+    ? (Array.isArray(manuscriptsByChapter[activeId]) ? manuscriptsByChapter[activeId] : [])
     : [];
 
   // Authors
