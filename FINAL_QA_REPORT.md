@@ -1,6 +1,28 @@
 # Loomwright v2 — Final QA Report
 
-_Last run: 2026-05-19 (Extraction Quality Pass 1)._
+_Last run: 2026-05-19 (Full Project Import/Export Pass)._
+
+## Full Project Import / Export Pass (2026-05-19)
+
+```
+npm run validate        → 524 callbacks; registry bootstraps 531 handlers; Bucket A = 0
+npm run test:smoke      → all smoke checks pass
+                          (180 prior + 24 new [project import/export] assertions)
+npm run test:e2e        → 51 pass (46 prior + 5 new N. project import/export)
+```
+
+Adds `ProjectArchiveService` (`buildExport / downloadProjectExport /
+createBackupBeforeReplace / validateExportPayload /
+summarizeExportPayload / applyImport({mode}) / buildEntityLibrary /
+applyEntityLibrary`) with a versioned `loomwright-project-v1` schema
+and a `loomwright-library-v1` selective-types subset. Merge mode
+preserves user records; replace mode requires a pre-backup invocation
+and wipes-and-loads. **API keys never export** — the encrypted
+`api_keys_encrypted` storage blob is never read, `metadata.apiKeysIncluded`
+is hard-coded `false`, and a recursive `redactSecrets` helper strips
+any `apiKey/secret/token/password/bearer/credential` field at any
+depth. 7 new callback names added to the registry; Bucket A still 0.
+See `PROJECT_IMPORT_EXPORT_REPORT.md` for the full breakdown.
 
 ## Workspace Persistence Pass 1 (2026-05-19)
 
