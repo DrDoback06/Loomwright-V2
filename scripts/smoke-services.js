@@ -260,6 +260,73 @@ async function main() {
   log("clearSample removes only source: 'sample'", !Object.values(B.EntityService.listAllSync().cast || {}).some((c) => c.source === "sample"));
   log("clearSample preserves user entities", !!B.EntityService.getSync(cast.id, "cast"));
 
+  // -------------------------------------------------------------------
+  // Extraction fixtures (Pass 1)
+  // -------------------------------------------------------------------
+  console.log("");
+  console.log("[extraction fixtures]");
+  const fixturesDir = path.join(ROOT, "tests", "fixtures", "extraction");
+  const fixtureFiles = fs.existsSync(fixturesDir)
+    ? fs.readdirSync(fixturesDir).filter((f) => f.endsWith(".fixture.js")).sort()
+    : [];
+  log("fixtures directory exists", fixtureFiles.length > 0);
+
+  for (const file of fixtureFiles) {
+    const fixture = require(path.join(fixturesDir, file));
+    // Reset the persistent store before each fixture so seeded entities
+    // start from a clean slate.
+    await B.StorageService.clear();
+    // Re-seed window globals our backend expects.
+    win.ENTITY_SAMPLES = {};
+    win.CAST_SAMPLE = [];
+    win.__LW_SAMPLE_LOADED__ = false;
+    // Seed entities for this fixture.
+    for (const [type, rows] of Object.entries(fixture.seed || {})) {
+      for (const row of rows) {
+        await B.EntityService.save(type, row, { status: "active" });
+      }
+    }
+    // Run extraction (no AI provider configured, so local-only).
+    const res = await B.ExtractionService.runExtraction({
+      chapterId: fixture.chapterId,
+      text: fixture.text,
+      deep: false,
+      paragraphs: fixture.paragraphs,
+    });
+    const tag = `[${fixture.name}]`;
+    const allOcc = B.OccurrenceService.listByChapterSync(fixture.chapterId);
+    const allCand = B.StorageService.getSync(B.keys.reviewQueue, []).filter((q) => q.chapterId === fixture.chapterId);
+
+    // Occurrence count bounds.
+    if (fixture.minOccurrences != null) {
+      log(`${tag} occurrences >= ${fixture.minOccurrences}`, allOcc.length >= fixture.minOccurrences, `got ${allOcc.length}`);
+    }
+    if (fixture.maxOccurrences != null) {
+      log(`${tag} occurrences <= ${fixture.maxOccurrences}`, allOcc.length <= fixture.maxOccurrences, `got ${allOcc.length}`);
+    }
+    // Expected occurrences (subset check).
+    for (const exp of fixture.expectedOccurrences || []) {
+      const hit = allOcc.some((o) => o.entityId === exp.entityId && (!exp.exactText || o.exactText === exp.exactText));
+      log(`${tag} occurrence ${exp.entityId}${exp.exactText ? ` "${exp.exactText}"` : ""}`, hit);
+    }
+    // Forbidden occurrences (must NOT appear).
+    for (const exp of fixture.forbiddenOccurrences || []) {
+      const hit = allOcc.some((o) => o.entityId === exp.entityId);
+      log(`${tag} forbidden occurrence ${exp.entityId} absent`, !hit);
+    }
+    // Expected candidates (subset check).
+    for (const exp of fixture.expectedCandidates || []) {
+      const hit = allCand.some((c) =>
+        c.entityType === exp.entityType
+        && c.suggestedAction === exp.suggestedAction
+        && (!exp.matchType || c.matchType === exp.matchType)
+        && (!exp.existingEntityId || c.existingEntityId === exp.existingEntityId)
+        && (!exp.suggestedChanges || Object.entries(exp.suggestedChanges).every(([k, v]) => c.suggestedChanges && c.suggestedChanges[k] === v))
+      );
+      log(`${tag} candidate ${exp.entityType}/${exp.suggestedAction}${exp.suggestedChanges ? " +changes" : ""}`, hit);
+    }
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

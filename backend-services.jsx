@@ -1537,16 +1537,19 @@
   function detectQuestProgression(text, index, chapterId, sessionId) {
     if (!text || !index) return [];
     const out = [];
-    const re = /(the hunt for|the search for|the journey to|the mission against|the quest for)\s+(the\s+)?([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)/g;
+    // Case-insensitive lead phrase; proper-noun stays case-sensitive so
+    // we don't capture "the hunt for the rabbit" as a candidate.
+    const re = /[Tt]he\s+(?:hunt|search|journey|mission|quest)\s+(?:for|to|against)\s+(?:the\s+)?([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,3})/g;
     let m;
     while ((m = re.exec(text)) !== null) {
-      const subject = m[3];
+      // Updated regex captures only the proper noun in group 1.
+      const subject = m[1];
       const subjectMatch = findKnownEntityMention(subject, { threshold: 0.85 });
       const start = m.index;
       const end = m.index + m[0].length;
       out.push(buildCandidate({
         entityType: "quests",
-        name: m[0].replace(/^the\s+/i, "").replace(/^(hunt|search|journey|mission|quest) (for|to|against)\s+(the\s+)?/i, (s, verb) => verb[0].toUpperCase() + verb.slice(1) + " for ").trim(),
+        name: m[0].replace(/^[Tt]he\s+/, "").replace(/^(hunt|search|journey|mission|quest) (for|to|against)\s+(the\s+)?/i, (s, verb) => verb[0].toUpperCase() + verb.slice(1) + " for ").trim(),
         suggestedAction: "create",
         confidence: 0.66,
         matchType: "new",
