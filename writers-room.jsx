@@ -780,6 +780,97 @@ const RightMargin = ({
 };
 
 // ---------------------------------------------------------------------
+// CurrentChapterContext (UAT #22) — live, chapter-scoped context surface:
+// entities mentioned in this chapter (from occurrences), references linked
+// to them, and pending review items. Self-contained: reads the live store
+// and refreshes on store events / chapter change.
+// ---------------------------------------------------------------------
+const CurrentChapterContext = ({ chapterId, onOpenEntity, onOpenPanel, onOpenReviewQueue }) => {
+  const [data, setData] = _wrUS({ entities: [], references: [], reviews: [] });
+  const compute = _wrUC(() => {
+    const B = window.LoomwrightBackend;
+    if (!B || !chapterId) { setData({ entities: [], references: [], reviews: [] }); return; }
+    let occ = [];
+    try { occ = B.OccurrenceService?.listByChapterSync?.(chapterId) || []; } catch (_e) {}
+    const seen = new Set();
+    const entities = [];
+    for (const o of occ) {
+      if (!o.entityId || seen.has(o.entityId)) continue;
+      seen.add(o.entityId);
+      let ent = null;
+      try { ent = B.EntityService?.getSync?.(o.entityId, o.entityType); } catch (_e) {}
+      entities.push({
+        id: o.entityId, type: o.entityType,
+        name: (ent && ent.name) || o.exactText || "Unknown",
+        count: occ.filter((x) => x.entityId === o.entityId).length,
+      });
+    }
+    let references = [];
+    try {
+      references = (B.ReferencesService?.listSync?.() || []).filter((r) =>
+        Array.isArray(r.linkedEntities) && r.linkedEntities.some((id) => seen.has(id)));
+    } catch (_e) {}
+    let reviews = [];
+    try {
+      reviews = (B.ReviewService?.listSync?.() || []).filter((q) =>
+        q.status === "pending" && (q.chapterId === chapterId || (seen.size && seen.has(q.entityId))));
+    } catch (_e) {}
+    setData({ entities, references, reviews });
+  }, [chapterId]);
+  _wrUE(() => {
+    compute();
+    const evs = ["lw:entity-store-updated", "lw:extraction-updated", "lw:references-updated", "lw:review-queue-updated", "lw:manuscript-chapters-updated"];
+    evs.forEach((e) => window.addEventListener(e, compute));
+    return () => evs.forEach((e) => window.removeEventListener(e, compute));
+  }, [compute]);
+  const { entities, references, reviews } = data;
+  const empty = !entities.length && !references.length && !reviews.length;
+  return (
+    <section className="wr-ctx" data-ui="CurrentChapterContext" data-testid="wr-current-context" aria-label="Current chapter context">
+      <div className="wr-ctx__head"><Icon name="book" size={12}/> Current Chapter Context</div>
+      {empty ? (
+        <div className="wr-ctx__empty" data-testid="wr-ctx-empty">Entities mentioned in this chapter, their linked references, and pending review items appear here after you write and run Save &amp; Extract.</div>
+      ) : (
+        <>
+          {entities.length > 0 && (
+            <div className="wr-ctx__group">
+              <div className="wr-ctx__group-title">Entities mentioned ({entities.length})</div>
+              {entities.map((e) => (
+                <button key={e.id} type="button" className="wr-ctx__row" data-testid={"wr-ctx-entity-" + e.id} onClick={() => onOpenEntity && onOpenEntity(e)} title="Open entity">
+                  <EntityTypeBadge type={e.type} size="xs" showLabel={false}/>
+                  <span className="wr-ctx__row-name">{e.name}</span>
+                  <span className="wr-ctx__row-meta">{e.count}×</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {references.length > 0 && (
+            <div className="wr-ctx__group">
+              <div className="wr-ctx__group-title">Linked references ({references.length})</div>
+              {references.map((r) => (
+                <button key={r.id} type="button" className="wr-ctx__row" data-testid={"wr-ctx-ref-" + r.id} onClick={() => onOpenPanel && onOpenPanel("references")} title="Open in References">
+                  <Icon name="bookmark" size={11}/>
+                  <span className="wr-ctx__row-name">{r.title || r.name || "Reference"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {reviews.length > 0 && (
+            <div className="wr-ctx__group">
+              <div className="wr-ctx__group-title">Pending review ({reviews.length})</div>
+              <button type="button" className="wr-ctx__row" data-testid="wr-ctx-open-review" onClick={() => onOpenReviewQueue && onOpenReviewQueue()} title="Open review queue">
+                <Icon name="bell" size={11}/>
+                <span className="wr-ctx__row-name">{reviews.length} item{reviews.length === 1 ? "" : "s"} to review</span>
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+};
+
+// ---------------------------------------------------------------------
 // ChapterDeleteConfirmModal
 // ---------------------------------------------------------------------
 const ChapterDeleteConfirmModal = ({ open, chapter, onCancel, onConfirm }) => {
@@ -1811,6 +1902,12 @@ const WritersRoomScreen = ({
         )}
         {rightMarginVisible && <div className="wr-stage__col wr-stage__col--right">
           <MarginResizer side="right" value={L.rightMarginWidth} min={LAYOUT_CONSTRAINTS.rightMarginMin} max={LAYOUT_CONSTRAINTS.rightMarginMax} onChange={(v) => setL({ rightMarginWidth: v })}/>
+          <CurrentChapterContext
+            chapterId={activeId}
+            onOpenEntity={(e) => handleEntityDoubleClick({ type: e.type, id: e.id, label: e.name })}
+            onOpenPanel={onOpenPanel}
+            onOpenReviewQueue={onOpenReviewQueue}
+          />
           <RightMargin
           extractions={extractions}
           selectedId={selectedExtId}
