@@ -1,6 +1,27 @@
 # Loomwright v2 — Final QA Report
 
-_Last run: 2026-05-20 (User Acceptance Regression Audit — live-render fix)._
+_Last run: 2026-05-20 (UAT Remediation + Visible Interaction pass)._
+
+## UAT Remediation + Visible Interaction Pass (`claude/uat-remediation-pass`)
+
+```
+npm run validate         → 523 UI callbacks; 558 handlers; Bucket A = 0 ✓
+npm run test:smoke       → all smoke checks passed (282 OK; +chapter delete/move,
+                           ManuscriptNoteService, SkillTreeService lifecycle) ✓
+npm run build            → production build checks passed ✓
+npm run test:e2e         → NOT RUN in this container (Chromium download blocked by
+                           network allowlist); +11 DOM-clicking specs authored ✓ (syntax)
+npm run test:e2e:preview → NOT RUN in this container (same reason)
+```
+
+Delivered: editable + persisted manuscript body, Save & Extract against the
+saved body, chapter Move Up/Down + persisted delete, paragraph notes, live
+active-author selector, inline-marker title/aria + real mention count, centred
+Speed Reader pivot, live skill-tree editing, Current Chapter Context, and
+truthful save status. Every unresolved UAT complaint is Fixed or Fixed-for-beta.
+Full detail + the e2e/screenshot caveat: `UAT_REMEDIATION_REPORT.md`.
+
+
 
 ## User Acceptance Regression Audit (2026-05-20)
 

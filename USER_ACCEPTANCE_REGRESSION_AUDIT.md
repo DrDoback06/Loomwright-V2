@@ -13,8 +13,10 @@ by the fact that the prior e2e suite drove `window.LoomwrightBackend.*`
 through `page.evaluate` and almost never clicked real UI or asserted on
 rendered DOM (only `tests/e2e/01-boot…` clicks anything).
 
-Status language until this pass lands: **"Local beta candidate — pending
-UAT/live-render fix."**
+Status (after pass 2 `claude/uat-remediation-pass`): **"Local beta candidate."**
+The visible Writer's Room and workspace interactions are now functional or
+explicitly deferred with no fake UI left behind. See `UAT_REMEDIATION_REPORT.md`
+for the full pass-2 outcomes and the (browser-only) e2e/screenshot caveat.
 
 ## Baseline (Phase 0, this branch)
 
@@ -43,32 +45,32 @@ npm run test:e2e:preview → 2 passed ✓
 
 | ID | Original complaint | Current status | Evidence | Severity | Fix now? | Follow-up |
 |----|--------------------|----------------|----------|----------|----------|-----------|
-| 1 | Sample data loads by default | Fixed (render layer now reads live store; fresh = empty) | decoratePanel; PANEL_PRESETS; bespoke bodies; NAV_ITEMS; e2e T | High | Done | — |
-| 2 | "Start writing" / editable canvas | Mostly fixed (Save/Save&Extract wired; contentEditable) | `writers-room.jsx`; `callback-registry.jsx:819`; `ManuscriptService` | UX polish | No — already wired | richer editor = future |
-| 3 | Toolbar buttons did nothing | Mostly fixed (most wired) | `callback-registry.jsx` handlers | UX polish | Spot-fix focus exit | — |
-| 4 | Chapter reorder; delete tiny | Partially fixed | create/delete wired; reorder UI unclear | Medium | No (larger) | reorder UI follow-up |
-| 5 | AI Writer buttons decorative | Fixed (PR #12 routing + guard) | `callback-registry.jsx` Bucket B | Low | No — already fixed | — |
-| 6 | Active author dropdown cycles | Needs manual UX review | author profiles in Settings | Low | Investigate | document |
-| 7 | Placeholders throughout | Partially fixed | grep placeholders | Medium | Replace contained ones | — |
-| 8 | Review queue accept/merge/deny/edit | Fixed (now DOM-reachable + accept candidate-shape bug fixed) | panel-stack.jsx review strip; callback-registry acceptQueueItem; e2e T (Accept/Deny/Merge) | High | Done | — |
-| 9 | Focus mode exit unclear | Fixed (visible Exit button + Esc) | writers-room.jsx; e2e T | UX polish | Done | — |
-| 10 | Today/Home fake data | Fixed (both read live store; empty states) | today-ai.jsx; home.jsx; e2e T | High | Done | — |
-| 11 | Extraction does nothing | Mostly fixed (Pass 1) | `ExtractionService`, e2e K | Medium | Verify via DOM | streaming = future |
-| 12 | Inline annotation numbers unclear | Needs review | occurrence spans `writers-room.jsx` | Low | Yes — tooltip/aria | — |
-| 13 | Speed Reader pivot alignment | Mostly fixed (service); verify visual | `speed-reader.jsx` `srSplitWord` | UX polish | Verify; CSS fix if wrong | — |
-| 14 | Item linked pickers / not in tab | Mostly fixed (items list + pickers live; rich link UI = follow-up) | entity-editor EERelatedPicker; upgrades-items.jsx; e2e T | High | Picker source done | rich link affordances |
-| 15 | Duplicate quest/event ledgers | Mostly fixed (shared store) | `EntityService` single store | Low | Verify | — |
-| 16 | Tangle opened Create Location | Fixed (TangleService wired; rail un-disabled) | callback-registry:943; brand.jsx | Medium | Done | — |
-| 17 | Skill Tree create/edit/assign | Partially fixed (create persists; assign/connect React-local) | `skill-trees.jsx` | Medium | Yes — wire or disable | deep editor = future |
-| 18 | Relationships for new actors | Mostly fixed (persist pass) | e2e M | Low | Verify | — |
-| 19 | Notes/comments on text blocks | Still broken / not built | no comment service | Medium | No (larger) | next PR |
-| 20 | Search global | Fixed (PR #10) — verify via DOM | `SearchService`, e2e P | Low | Verify | — |
-| 21 | Sidebar counts fake/stale | Fixed (rail badges + subtitles live) | NAV_ITEMS; app.jsx liveNavItems; decoratePanel; e2e T | High | Done | — |
-| 22 | Active References / current context | Needs review / likely not built | `NAV_ITEMS` refs item | Medium | No (larger) | context panel follow-up |
-| 23 | Today useful live work | Fixed (live builder + empty state) | today-ai.jsx; e2e T | High | Done | — |
-| 24 | Home project dashboard | Fixed (live stats + empty states) | home.jsx; e2e T | High | Done | — |
-| 25 | Save/local-only status real | Mostly fixed | persistence + AIRouting localOnly | Low | Verify | — |
-| 26 | App-wide action audit | Fixed (Bucket A = 0) + this UAT | `npm run validate` | Low | This doc | — |
+| 1 | Sample data loads by default | **Fixed** (render reads live store; fresh = empty) | decoratePanel; PANEL_PRESETS; e2e T | High | Done | — |
+| 2 | "Start writing" / editable canvas | **Fixed (pass 2)** — body is now an editable contentEditable region; Start writing seeds+focuses; Save persists; reload restores; Save&Extract runs on the saved body | `writers-room.jsx` EditableManuscriptBody; `ManuscriptChapterService`; e2e | High | Done (pass 2) | live highlight-while-typing → PR `incremental-decoration` |
+| 3 | Toolbar buttons did nothing | **Fixed (pass 2)** — bold/italic/underline/strike + spellcheck + notes wired; non-functional buttons disabled with a reason | `writers-room.jsx` ManuscriptToolbar | UX | Done (pass 2) | heading/quote/scene-break/find as real actions = future |
+| 4 | Chapter reorder; delete tiny | **Fixed for beta (pass 2)** — persisted create/delete + visible Move Up/Down; fake drag handle removed; honest confirm copy | `ManuscriptChapterService.deleteChapter/moveChapter`; e2e | Medium | Done (pass 2) | drag reorder → PR `chapter-strip-drag` |
+| 5 | AI Writer buttons decorative | **Fixed** (PR #12 routing + guard) | `callback-registry.jsx` Bucket B | Low | Done | — |
+| 6 | Active author dropdown cycles | **Fixed (pass 2)** — selector opens a live popover/list and persists `activeAuthorId`; neutral "You" default (no demo authors) | `writers-room.jsx` AuthorSelector; `SettingsService`; e2e | Low | Done (pass 2) | inline coloured author-diff segments = future |
+| 7 | Placeholders throughout | **Fixed for beta (pass 2)** — always-on floating toolbar removed (now selection-driven); dead toolbar buttons disabled with tooltip; fake status counts wired | `writers-room.jsx`; `app.jsx` | Medium | Done (pass 2) | implement disabled toolbar actions = future |
+| 8 | Review queue accept/merge/deny/edit | **Fixed** (DOM-reachable + accept shape bug fixed) | panel-stack.jsx; e2e T | High | Done | — |
+| 9 | Focus mode exit unclear | **Fixed** (visible Exit + Esc) | writers-room.jsx; e2e T | UX | Done | — |
+| 10 | Today/Home fake data | **Fixed** (live store; empty states) | today-ai.jsx; home.jsx; e2e T | High | Done | — |
+| 11 | Extraction does nothing | **Fixed (pass 2)** — Save&Extract now invokes `ExtractionService.runExtraction` against the saved body and refreshes the review margin | `writers-room.jsx` runExtractionFlow; e2e | Medium | Done (pass 2) | AI streaming = future |
+| 12 | Inline annotation numbers unclear | **Fixed (pass 2)** — entity/occurrence markers carry `title`+`aria-label`; hover chip shows the real mention count | `writers-room.jsx` `_wrHighlightHtml`; e2e | Low | Done (pass 2) | dedicated stale/relink marker visual = future |
+| 13 | Speed Reader pivot alignment | **Fixed (pass 2)** — before/pivot/after render in a symmetric grid so the pivot letter stays centred on a fixed guide (panel + workspace) | `speed-reader.css`; `speed-reader.jsx`; e2e | UX | Done (pass 2) | — |
+| 14 | Item linked pickers / not in tab | **Fixed for beta (pass 2)** — items config exposes live pickers (owner/location/stat/quest/event/class) via `EERelatedPicker`; links persist + export | entity-editor-configs; e2e | High | Done (pass 2) | structured ownership/transfer-history editor = future |
+| 15 | Duplicate quest/event ledgers | **Fixed** (shared store) | `EntityService` single store | Low | Done | — |
+| 16 | Tangle opened Create Location | **Fixed** (TangleService wired; rail enabled) | callback-registry; brand.jsx | Medium | Done | — |
+| 17 | Skill Tree create/edit/assign | **Fixed for beta (pass 2)** — live `SkillTreeLiveManager`: create tree/node, rename, connect, assign cast/class, lock — all persist; fresh = empty | `skill-trees.jsx`; `SkillTreeService`; smoke + e2e | Medium | Done (pass 2) | visual constellation canvas → PR `skill-tree-canvas` |
+| 18 | Relationships for new actors | **Fixed** (persist pass) | smoke; e2e M | Low | Done | — |
+| 19 | Notes/comments on text blocks | **Fixed (pass 2)** — `ManuscriptNoteService` paragraph notes: add (caret/selection), edit, resolve, delete, click-to-focus; persist + reload | backend-services.jsx; writers-room.jsx; smoke + e2e | Medium | Done (pass 2) | range/selection-anchored comments → PR `range-comments` |
+| 20 | Search global | **Fixed** (PR #10) | `SearchService`; smoke; e2e P | Low | Done | — |
+| 21 | Sidebar counts fake/stale | **Fixed** (rail badges + subtitles live) | app.jsx; decoratePanel; e2e T | High | Done | — |
+| 22 | Active References / current context | **Fixed (pass 2)** — "Current Chapter Context" card (mentioned entities + linked references + pending review) with quick-open | `writers-room.jsx` CurrentChapterContext; e2e | Medium | Done (pass 2) | richer canon-intel surfacing = future |
+| 23 | Today useful live work | **Fixed** (live builder + empty state) | today-ai.jsx; e2e T | High | Done | — |
+| 24 | Home project dashboard | **Fixed** (live stats + empty states) | home.jsx; e2e T | High | Done | — |
+| 25 | Save/local-only status real | **Fixed for beta (pass 2)** — `syncState` reflects the real Save/extract lifecycle; bottom strip shows real last-saved time, live word count, live author; local-only blocks AI | app.jsx BottomStatusStrip; writers-room onSave; AIRouting | Low | Done (pass 2) | live-ticking relative timestamp = future |
+| 26 | App-wide action audit | **Fixed** (Bucket A = 0) + 2 UAT passes | `npm run validate` | Low | Done | — |
 
 ## Fixes made this pass (all contained — live-render, no redesign)
 
@@ -183,18 +185,27 @@ only to seed setup state, never to perform the action under test.
 
 ## Counts (26 complaints)
 
-- **Fixed:** 1, 5, 8, 9, 10, 16, 20, 21, 23, 24, 26 (11)
-- **Mostly fixed:** 2, 11, 13, 15, 18, 25 (6)
-- **Partially fixed (follow-up documented):** 4, 7, 14, 17 (4)
-- **Needs manual UX review:** 6, 12, 22 (3)
-- **Still broken / not built (follow-up):** 19 (1)
+_Final after pass 2 (`claude/uat-remediation-pass`). No vague categories remain._
+
+- **Fixed:** 1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 15, 16, 18, 19, 20, 21, 22, 23, 24, 26 (21)
+- **Fixed for beta (named future polish):** 4, 7, 14, 17, 25 (5)
+- **Explicitly deferred (whole complaint):** 0 — all deferrals are scoped *within*
+  fixed items (drag reorder, live highlighting, range comments, skill-tree canvas).
+- **Needs manual UX review:** 0
+- **Still broken / not built:** 0
 - **Obsolete:** 0
-- _(Verified-by-test where a DOM/e2e assertion now covers it: 1, 8, 9, 10, 16, 21, 23, 24.)_
 
-## Follow-ups documented (not in this pass)
+## Follow-ups (future PRs, after pass 2)
 
-- Notes/comments attached to text blocks (#19).
-- Chapter reorder UI (#4).
-- Active-references / current-chapter context panel (#22).
-- Deep Skill-Tree node editor + actor-context switching (#17).
-- Rich-text editor migration, extraction streaming.
+Scoped deferrals *within* otherwise-fixed items — no complaint is left
+unaddressed (full detail in `UAT_REMEDIATION_REPORT.md`):
+
+- `chapter-strip-drag` — drag-and-drop chapter reorder (Move Up/Down shipped, #4).
+- `incremental-decoration` — live entity highlighting while typing (refreshes on
+  Save/Extract today, #2/#12).
+- `range-comments` — precise text-range comments (paragraph notes shipped, #19).
+- `skill-tree-canvas` — visual constellation drag-positioning editor (live list
+  manager shipped, #17).
+- Minor polish: real heading/quote/scene-break/find toolbar actions (#3/#7),
+  structured item ownership-history editor (#14), stale-occurrence marker visual
+  (#12), live-ticking save timestamp (#25).

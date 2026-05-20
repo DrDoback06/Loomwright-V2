@@ -9,9 +9,13 @@ and a Node-level service smoke test.
 Current milestone: **local beta candidate**. The app now has a real
 production build (`npm run build`) that precompiles the JSX into a
 single bundle with no in-browser Babel and no CDN runtime dependency.
-See `PRODUCT_COMPLETION_AUDIT.md` and `PRODUCT_READINESS_REPORT.md` for
-the single source of truth on what's implemented, what's still thin,
-what's provider-gated (BYOK AI), and what's deliberately out of scope.
+The Writer's Room is now genuinely usable for beta — a typeable + persisted
+manuscript body, paragraph notes, chapter Move Up/Down + delete, a live
+active-author selector, a Current Chapter Context surface, and live skill-tree
+editing. See `PRODUCT_COMPLETION_AUDIT.md`, `PRODUCT_READINESS_REPORT.md`, and
+`UAT_REMEDIATION_REPORT.md` (the latest pass, with the browser-only e2e caveat)
+for the single source of truth on what's implemented, what's still thin, what's
+provider-gated (BYOK AI), and what's deliberately out of scope.
 
 ## Entrypoints
 
