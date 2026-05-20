@@ -476,9 +476,9 @@ const SpeedReaderPanelBody = ({ panel }) => {
       </div>
 
       <div className={"sr-panel__stage " + (sr.focusMode ? "is-focus" : "")}>
-        <div className="sr-panel__word" style={{ fontSize: Math.min(sr.fontSize, 44) }}>
+        <div className="sr-panel__word" data-ui="SpeedReaderWord" data-testid="sr-word" style={{ fontSize: Math.min(sr.fontSize, 44) }}>
           <span className="sr-panel__word-side">{split.before}</span>
-          <span className="sr-panel__word-pivot">{split.pivot}</span>
+          <span className="sr-panel__word-pivot" data-testid="sr-pivot">{split.pivot}</span>
           <span className="sr-panel__word-side">{split.after}</span>
         </div>
         <div className="sr-panel__progress">
@@ -715,9 +715,9 @@ const SpeedReaderWorkspaceFull = ({ workspace, onExit, onRequest, dragTargetVisi
             <div className="sr-context sr-context--before">{ctx.before}</div>
 
             {/* The word */}
-            <div className="fws-reader-word sr-stage-word" style={{ fontSize: sr.fontSize }}>
+            <div className="fws-reader-word sr-stage-word" data-ui="SpeedReaderWord" data-testid="sr-word-stage" style={{ fontSize: sr.fontSize }}>
               <span className="sr-side">{split.before}</span>
-              <span className="fws-reader-word__pivot">{split.pivot}</span>
+              <span className="fws-reader-word__pivot" data-testid="sr-pivot-stage">{split.pivot}</span>
               <span className="sr-side">{split.after}</span>
             </div>
 
