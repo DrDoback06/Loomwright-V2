@@ -429,18 +429,24 @@
       if (!panel || !panel.entityType) return panel;
       const entityType = normaliseType(panel.entityType);
       const entities = this.listSync(entityType);
-      if (!entities.length) return panel;
       const reviewItems = ReviewService.listSync(entityType);
       const queueCount = reviewItems.length + entities.reduce((sum, e) => sum + (e.reviewQueueCount || e.queue || 0), 0);
+      // Always render the LIVE store — including the empty case. Never fall
+      // back to a panel's baked-in demo rows/subtitle, or a fresh project
+      // would show design mock data (Aelinor Vey, "12 entries · 3 in review").
+      const noun = entityType === "cast" ? "entries" : "records";
+      const subtitle = entities.length
+        ? `${entities.length} ${noun}${queueCount ? ` · ${queueCount} in review` : ""}`
+        : "Empty — nothing here yet";
       const next = {
         ...panel,
         rows: entities.map(rowForEntity),
         queueCount,
-        subtitle: panel.subtitle,
+        subtitle,
       };
       if (entityType === "cast") next.cast = entities;
       else next.entities = entities;
-      if (reviewItems.length) next.reviewItems = reviewItems;
+      next.reviewItems = reviewItems;
       return next;
     },
   };

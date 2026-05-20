@@ -657,9 +657,10 @@ const LocationsPanelBody = ({ panel, onSelectEntity }) => {
   const [kindFilter, setKindFilter] = _loc_us("all");
   const [placedFilter, setPlacedFilter] = _loc_us("all"); // all | placed | unplaced
 
-  const data = (window.LOCATIONS_DATA || []);
+  // Live locations only — never the demo LOCATIONS_DATA.
+  const data = (window.LoomwrightBackend?.EntityService?.listSync("locations")) || [];
   const filtered = data.filter((d) => {
-    if (search && !d.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !(d.name || "").toLowerCase().includes(search.toLowerCase())) return false;
     if (kindFilter !== "all" && d.kind !== kindFilter) return false;
     if (placedFilter === "placed"   && !d.placed) return false;
     if (placedFilter === "unplaced" &&  d.placed) return false;
@@ -785,7 +786,6 @@ window.LOCATION_KINDS   = LOCATION_KINDS;
 // Override the framework sample with the rich list so other panels that
 // chip-link to a location can resolve names.
 window.ENTITY_SAMPLES = window.ENTITY_SAMPLES || {};
-window.ENTITY_SAMPLES.locations = LOCATIONS_DATA;
 window.ENTITY_REVIEW_SAMPLES = window.ENTITY_REVIEW_SAMPLES || {};
 window.ENTITY_REVIEW_SAMPLES.locations = LOCATIONS_REVIEW;
 

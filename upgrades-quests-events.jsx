@@ -690,12 +690,13 @@ const EventDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelate
 const QuestsFullScreen = ({ onClose }) => {
   const [activeId, setActiveId] = _qe_us("q1");
   const [filter, setFilter] = _qe_us("all"); // all | active | completed | optional | hidden | review
-  const quests = QUESTS_DATA.filter((q) => {
+  const _qsrc = (window.LoomwrightBackend?.EntityService?.listSync("quests")) || [];
+  const quests = _qsrc.filter((q) => {
     if (filter === "all") return true;
     if (filter === "review") return (q.queue || 0) > 0;
     return q.status === filter;
   });
-  const active = QUESTS_DATA.find((q) => q.id === activeId) || quests[0];
+  const active = _qsrc.find((q) => q.id === activeId) || quests[0] || null;
 
   return (
     <div className="qe-fs" data-ui="QuestsFullScreen" role="dialog" aria-label="Quest log">
@@ -775,8 +776,9 @@ const QuestsFullScreen = ({ onClose }) => {
 const EventsFullScreen = ({ onClose }) => {
   const [activeId, setActiveId] = _qe_us("e1");
   const [typeFilter, setTypeFilter] = _qe_us("all");
-  const events = EVENTS_DATA.filter((e) => typeFilter === "all" ? true : e.eventType === typeFilter);
-  const active = EVENTS_DATA.find((e) => e.id === activeId) || events[0];
+  const _esrc = (window.LoomwrightBackend?.EntityService?.listSync("events")) || [];
+  const events = _esrc.filter((e) => typeFilter === "all" ? true : e.eventType === typeFilter);
+  const active = _esrc.find((e) => e.id === activeId) || events[0] || null;
 
   return (
     <div className="qe-fs" data-ui="EventsFullScreen" role="dialog" aria-label="Event ledger">
@@ -852,12 +854,13 @@ const QuestsPanelBody = ({ panel, onSelectEntity }) => {
   const [statusFilter, setStatusFilter] = _qe_us("all");
   const [fullScreen, setFullScreen] = _qe_us(false);
 
-  const filtered = QUESTS_DATA.filter((q) => {
-    if (search && !q.name.toLowerCase().includes(search.toLowerCase())) return false;
+  const _qsrc = (window.LoomwrightBackend?.EntityService?.listSync("quests")) || [];
+  const filtered = _qsrc.filter((q) => {
+    if (search && !(q.name || "").toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== "all" && q.status !== statusFilter) return false;
     return true;
   });
-  const selected = filtered.find((q) => q.id === selectedId) || QUESTS_DATA.find((q) => q.id === selectedId);
+  const selected = filtered.find((q) => q.id === selectedId) || null;
 
   return (
     <div className="loc-body" data-ui="QuestsPanelBody">
@@ -940,12 +943,13 @@ const EventsPanelBody = ({ panel, onSelectEntity }) => {
   const [typeFilter, setTypeFilter] = _qe_us("all");
   const [fullScreen, setFullScreen] = _qe_us(false);
 
-  const filtered = EVENTS_DATA.filter((e) => {
-    if (search && !e.name.toLowerCase().includes(search.toLowerCase())) return false;
+  const _esrc = (window.LoomwrightBackend?.EntityService?.listSync("events")) || [];
+  const filtered = _esrc.filter((e) => {
+    if (search && !(e.name || "").toLowerCase().includes(search.toLowerCase())) return false;
     if (typeFilter !== "all" && e.eventType !== typeFilter) return false;
     return true;
   });
-  const selected = filtered.find((e) => e.id === selectedId) || EVENTS_DATA.find((e) => e.id === selectedId);
+  const selected = filtered.find((e) => e.id === selectedId) || null;
 
   return (
     <div className="loc-body" data-ui="EventsPanelBody">
@@ -1021,8 +1025,6 @@ window.QUESTS_REVIEW = QUESTS_REVIEW;
 window.EVENTS_REVIEW = EVENTS_REVIEW;
 
 window.ENTITY_SAMPLES = window.ENTITY_SAMPLES || {};
-window.ENTITY_SAMPLES.quests = QUESTS_DATA;
-window.ENTITY_SAMPLES.events = EVENTS_DATA;
 window.ENTITY_REVIEW_SAMPLES = window.ENTITY_REVIEW_SAMPLES || {};
 window.ENTITY_REVIEW_SAMPLES.quests = QUESTS_REVIEW;
 window.ENTITY_REVIEW_SAMPLES.events = EVENTS_REVIEW;

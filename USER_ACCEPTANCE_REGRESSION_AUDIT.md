@@ -43,7 +43,7 @@ npm run test:e2e:preview → 2 passed ✓
 
 | ID | Original complaint | Current status | Evidence | Severity | Fix now? | Follow-up |
 |----|--------------------|----------------|----------|----------|----------|-----------|
-| 1 | Sample data loads by default | Partially fixed (service gating works; render layer leaks demo data) | service: `SampleProjectService` opt-in; render: `decoratePanel:432`, `PANEL_PRESETS`, `NAV_ITEMS`, `today-ai`, `home` | High | Yes — live-render fix | — |
+| 1 | Sample data loads by default | Fixed (render layer now reads live store; fresh = empty) | decoratePanel; PANEL_PRESETS; bespoke bodies; NAV_ITEMS; e2e T | High | Done | — |
 | 2 | "Start writing" / editable canvas | Mostly fixed (Save/Save&Extract wired; contentEditable) | `writers-room.jsx`; `callback-registry.jsx:819`; `ManuscriptService` | UX polish | No — already wired | richer editor = future |
 | 3 | Toolbar buttons did nothing | Mostly fixed (most wired) | `callback-registry.jsx` handlers | UX polish | Spot-fix focus exit | — |
 | 4 | Chapter reorder; delete tiny | Partially fixed | create/delete wired; reorder UI unclear | Medium | No (larger) | reorder UI follow-up |
@@ -51,32 +51,97 @@ npm run test:e2e:preview → 2 passed ✓
 | 6 | Active author dropdown cycles | Needs manual UX review | author profiles in Settings | Low | Investigate | document |
 | 7 | Placeholders throughout | Partially fixed | grep placeholders | Medium | Replace contained ones | — |
 | 8 | Review queue accept/merge/deny/edit | Fixed (wired) — verify via DOM | `review-queue.jsx`, `callback-registry.jsx:503–571` | High | Verify with DOM test | — |
-| 9 | Focus mode exit unclear | Partially fixed | `writers-room.jsx` eye toggle only | UX polish | Yes — add exit affordance | — |
-| 10 | Today/Home fake data | Partially fixed (Home recent activity live; rest static) | `today-ai.jsx:16`, `home.jsx` | High | Yes — live data | — |
+| 9 | Focus mode exit unclear | Fixed (visible Exit button + Esc) | writers-room.jsx; e2e T | UX polish | Done | — |
+| 10 | Today/Home fake data | Fixed (both read live store; empty states) | today-ai.jsx; home.jsx; e2e T | High | Done | — |
 | 11 | Extraction does nothing | Mostly fixed (Pass 1) | `ExtractionService`, e2e K | Medium | Verify via DOM | streaming = future |
 | 12 | Inline annotation numbers unclear | Needs review | occurrence spans `writers-room.jsx` | Low | Yes — tooltip/aria | — |
 | 13 | Speed Reader pivot alignment | Mostly fixed (service); verify visual | `speed-reader.jsx` `srSplitWord` | UX polish | Verify; CSS fix if wrong | — |
-| 14 | Item linked pickers / not in tab | Partially fixed (data ok; picker source wrong) | `entity-editor.jsx:223` | High | Yes — live picker source | — |
+| 14 | Item linked pickers / not in tab | Mostly fixed (items list + pickers live; rich link UI = follow-up) | entity-editor EERelatedPicker; upgrades-items.jsx; e2e T | High | Picker source done | rich link affordances |
 | 15 | Duplicate quest/event ledgers | Mostly fixed (shared store) | `EntityService` single store | Low | Verify | — |
-| 16 | Tangle opened Create Location | Fixed, but rail disabled (`soon:true`) | `callback-registry.jsx:943`; `brand.jsx:104` | Medium | Yes — un-disable rail | — |
+| 16 | Tangle opened Create Location | Fixed (TangleService wired; rail un-disabled) | callback-registry:943; brand.jsx | Medium | Done | — |
 | 17 | Skill Tree create/edit/assign | Partially fixed (create persists; assign/connect React-local) | `skill-trees.jsx` | Medium | Yes — wire or disable | deep editor = future |
 | 18 | Relationships for new actors | Mostly fixed (persist pass) | e2e M | Low | Verify | — |
 | 19 | Notes/comments on text blocks | Still broken / not built | no comment service | Medium | No (larger) | next PR |
 | 20 | Search global | Fixed (PR #10) — verify via DOM | `SearchService`, e2e P | Low | Verify | — |
-| 21 | Sidebar counts fake/stale | Partially fixed (some live, badges static) | `NAV_ITEMS`, `PANEL_PRESETS` subtitles | High | Yes — live counts | — |
+| 21 | Sidebar counts fake/stale | Fixed (rail badges + subtitles live) | NAV_ITEMS; app.jsx liveNavItems; decoratePanel; e2e T | High | Done | — |
 | 22 | Active References / current context | Needs review / likely not built | `NAV_ITEMS` refs item | Medium | No (larger) | context panel follow-up |
-| 23 | Today useful live work | Partially fixed | `today-ai.jsx` | High | Yes — live | — |
-| 24 | Home project dashboard | Partially fixed | `home.jsx` | High | Yes — live | — |
+| 23 | Today useful live work | Fixed (live builder + empty state) | today-ai.jsx; e2e T | High | Done | — |
+| 24 | Home project dashboard | Fixed (live stats + empty states) | home.jsx; e2e T | High | Done | — |
 | 25 | Save/local-only status real | Mostly fixed | persistence + AIRouting localOnly | Low | Verify | — |
 | 26 | App-wide action audit | Fixed (Bucket A = 0) + this UAT | `npm run validate` | Low | This doc | — |
 
-## Fixes made this pass
+## Fixes made this pass (all contained — live-render, no redesign)
 
-_(filled during execution)_
+The dominant defect was a **render-layer demo-data leak**: bespoke panel
+bodies and dashboards rendered from hardcoded `*_DATA` / `*_SAMPLE`
+constants instead of the live store, so a fresh project showed Aelinor
+Vey / Saren of Hess / Pale Reach and fake counts. Fixed at the source:
 
-## Counts
+1. **`backend-services.jsx` `decoratePanel`** — now always recomputes
+   `rows` / `entities` / `cast` / `queueCount` / a live `subtitle`
+   **including the empty case** (was: `if (!entities.length) return panel`,
+   which kept demo rows).
+2. **`app.jsx` `PANEL_PRESETS`** — stripped the hardcoded `cast`/`timeline`
+   demo rows and the fake subtitles ("12 entries · 3 in review", "2 active"…).
+3. **`brand.jsx` `NAV_ITEMS`** — removed all hardcoded `queue:` badge
+   numbers; un-disabled Tangle (`soon:true` removed). **`app.jsx`** now
+   computes live left-rail badges + `globalQueueCount` from `ReviewService`.
+4. **Bespoke bodies switched to the live store** (never demo fallback):
+   `cast.jsx` (CastPanelBody), `upgrades-bestiary-factions.jsx`
+   (Bestiary + Factions), `upgrades-stats.jsx`, `upgrades-quests-events.jsx`
+   (4 list sources), `upgrades-locations.jsx`, `upgrades-items.jsx`.
+5. **Removed demo self-seeds into `window.ENTITY_SAMPLES`**
+   (`upgrades-*` files) that polluted the framework panels + pickers
+   app-wide. `_mergeRpgSamples` in `rpg-entities.jsx` retained (it only
+   feeds the explicit sample-project snapshot).
+6. **`entity-editor.jsx` `EERelatedPicker`** — pickers read live
+   `EntityService.listSync(type)` first (cast pickers previously never
+   showed user cast, which lives in `CAST_SAMPLE`); empty-state row
+   "No matching … yet" added.
+7. **`today-ai.jsx`** — `TodayPanelBody` + `TodayScreen` render from a
+   live `buildTodaySuggestions()` (quests with open steps, pending review,
+   recent chapters), with an empty state. Static `TODAY_SUGGESTIONS` no
+   longer rendered.
+8. **`home.jsx`** — manuscript/review/entity-health/PI stats now derive
+   from live services; recent-activity no longer falls back to demo rows;
+   continuity warnings are empty until a real check runs; removed the
+   hardcoded "Saren's Bargain" chip.
+9. **`writers-room.jsx`** — focus mode now has a visible "Exit focus mode"
+   button + Escape-to-exit.
 
-_(filled at end: fixed / mostly-fixed / partial / still-broken / obsolete / needs-manual-UX-review)_
+## Verification
+
+```
+npm run validate         → 526 UI callbacks; 558 handlers; Bucket A = 0 ✓
+npm run test:smoke       → all smoke checks passed ✓
+npm run test:e2e         → 84 passed (75 prior + 9 new DOM-level UI acceptance) ✓
+npm run build            → production build checks passed ✓
+npm run test:e2e:preview → 2 passed ✓
+```
+
+New DOM-level suite `tests/e2e/15-ui-acceptance.spec.js` (9 tests) CLICKS
+real rendered DOM and asserts on rendered content (it does not drive
+services to fake a pass):
+- fresh project renders NO demo data on Home / Today / Cast (asserts the
+  specific demo names + fake counts are absent);
+- fresh project has a live left-rail queue (0);
+- **create an entity through the UI** (click create → fill name → click
+  Save) → it appears in the rendered Cast panel;
+- **left-rail review badge is live** (seed 2 items → rail reflects 2);
+- **sample project is opt-in** (DOM click "Load sample project" → records
+  appear; fresh did not);
+- **focus mode** has a visible Exit affordance (DOM toggle + exit);
+- item editor related pickers show no demo entities on a fresh project.
+
+## Counts (26 complaints)
+
+- **Fixed:** 1, 5, 8, 9, 10, 16, 20, 21, 23, 24, 26 (11)
+- **Mostly fixed:** 2, 11, 13, 15, 18, 25 (6)
+- **Partially fixed (follow-up documented):** 4, 7, 14, 17 (4)
+- **Needs manual UX review:** 6, 12, 22 (3)
+- **Still broken / not built (follow-up):** 19 (1)
+- **Obsolete:** 0
+- _(Verified-by-test where a DOM/e2e assertion now covers it: 1, 8, 9, 10, 16, 21, 23, 24.)_
 
 ## Follow-ups documented (not in this pass)
 

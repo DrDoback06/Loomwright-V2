@@ -823,7 +823,12 @@ const CastEmpty = ({ onCreate, onExtract }) => (
 // switch when entityType === "cast".
 // ---------------------------------------------------------------------
 const CastPanelBody = ({ panel, onSelectEntity }) => {
-  const cast = (panel && panel.cast) || CAST_SAMPLE;
+  // Live cast only — never fall back to demo CAST_SAMPLE, or a fresh
+  // project shows Aelinor Vey / Saren of Hess. decoratePanel sets
+  // panel.cast from the live store (empty array when empty).
+  const cast = (panel && Array.isArray(panel.cast))
+    ? panel.cast
+    : (window.LoomwrightBackend?.EntityService?.listSync("cast") || []);
   const incomingState = panel?.state || "overview";
 
   // Local UI state for the panel (selection, multi-select, edit view).

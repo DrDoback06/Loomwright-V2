@@ -220,7 +220,19 @@ const EEMultiSelect = ({ field, value, onChange, lbl }) => {
 // ----- Related entity picker -----
 const EERelatedPicker = ({ field, value, onChange, lbl, multi, ctx, relatedOverride }) => {
   const related = relatedOverride || field.related;
-  const samples = (window.ENTITY_SAMPLES && window.ENTITY_SAMPLES[related]) || [];
+  // Read the LIVE entity store first so pickers show user-created entities
+  // (and nothing on a fresh project). Cast lives in CAST_SAMPLE, not
+  // ENTITY_SAMPLES.cast, so the backend list is the only reliable source.
+  const samples = (() => {
+    const ES = (typeof window !== "undefined") && window.LoomwrightBackend?.EntityService;
+    if (ES) {
+      try {
+        const live = ES.listSync(related);
+        if (Array.isArray(live)) return live;
+      } catch (_) {}
+    }
+    return (window.ENTITY_SAMPLES && window.ENTITY_SAMPLES[related]) || [];
+  })();
   const [q, setQ] = _ee_us("");
   const [openPop, setOpenPop] = _ee_us(false);
   const filtered = _ee_um(() => {
@@ -271,8 +283,13 @@ const EERelatedPicker = ({ field, value, onChange, lbl, multi, ctx, relatedOverr
             ))}
           </div>
         )}
-        {openPop && filtered.length > 0 && (
+        {openPop && (
           <div className="ee-relpicker__pop">
+            {filtered.length === 0 && (
+              <div className="ee-relpicker__pop-row" style={{ color: "var(--ink-4)", fontStyle: "italic", cursor: "default" }}>
+                No matching {related} yet
+              </div>
+            )}
             {filtered.map((s) => (
               <div key={s.id} className="ee-relpicker__pop-row" onClick={() => addOne(s)}>
                 <EntityTypeBadge type={related} size="xs" showLabel={false}/>

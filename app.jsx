@@ -2,7 +2,7 @@
 // app.jsx — AppShell + main App, wires all parts together
 // =====================================================================
 
-const { useState: _us_a, useEffect: _ue_a, useCallback: _uc_a, useRef: _ur_a } = React;
+const { useState: _us_a, useEffect: _ue_a, useCallback: _uc_a, useRef: _ur_a, useMemo: _um_a } = React;
 
 // ---------------------------------------------------------------------
 // Tweaks defaults — persisted via __edit_mode_set_keys (host rewrites file)
@@ -48,32 +48,22 @@ const PANEL_PRESETS = {
   // Entity panels — render through CastPanelBody / AtlasPanelBody /
   // EntityFrameworkPanelBody depending on entityType. Each picks up its
   // bespoke detail renderer from window.RPG_DETAIL_RENDERERS automatically.
-  cast:          { id: "p-cast",          kind: "entity", entityType: "cast",          title: "Cast",          subtitle: "12 entries · 3 in review",  state: "overview", rows: [
-    { id: "c1", label: "Aelinor Vey",   meta: "Ch.1–7", selected: true },
-    { id: "c2", label: "Saren of Hess", meta: "Ch.3–7", queue: 1 },
-    { id: "c3", label: "Captain Brec",  meta: "Ch.2–5" },
-    { id: "c4", label: "The Auger",     meta: "Ch.7" },
-    { id: "c5", label: "Mara of Hess",  meta: "Ch.4" },
-    { id: "c6", label: "Dav the Quiet", meta: "Ch.6", queue: 1 },
-  ], selected: { label: "Aelinor Vey" } },
-  atlas:         { id: "p-atlas",         kind: "entity", entityType: "atlas",         title: "Atlas",         subtitle: "Live tracker · 11 places",  state: "overview", expanded: true },
-  bestiary:      { id: "p-bestiary",      kind: "entity", entityType: "bestiary",      title: "Bestiary",      subtitle: "3 creatures",                state: "overview" },
-  locations:     { id: "p-locations",     kind: "entity", entityType: "locations",     title: "Locations",     subtitle: "Atlas index",                state: "overview" },
-  items:         { id: "p-items",         kind: "entity", entityType: "items",         title: "Items",         subtitle: "4 catalogued · 1 in review", state: "overview" },
-  classes:       { id: "p-classes",       kind: "entity", entityType: "classes",       title: "Classes",       subtitle: "3 defined",                  state: "overview" },
-  races:         { id: "p-races",         kind: "entity", entityType: "races",         title: "Races",         subtitle: "2 defined",                  state: "overview" },
-  stats:         { id: "p-stats",         kind: "entity", entityType: "stats",         title: "Stats",         subtitle: "4 stats · rules wired",      state: "overview" },
-  abilities:     { id: "p-abilities",     kind: "entity", entityType: "abilities",     title: "Abilities",     subtitle: "3 defined · 1 in review",    state: "overview" },
-  skillTrees:    { id: "p-skillTrees",    kind: "entity", entityType: "skills",        title: "Skill Trees",   subtitle: "2 trees",                    state: "overview" },
-  relationships: { id: "p-relationships", kind: "entity", entityType: "relationships", title: "Relationships", subtitle: "2 active",                   state: "overview" },
-  quests:        { id: "p-quests",        kind: "entity", entityType: "quests",        title: "Quests",        subtitle: "2 active",                   state: "overview" },
-  events:        { id: "p-events",        kind: "entity", entityType: "events",        title: "Events",        subtitle: "2 logged",                   state: "overview" },
-  timeline:      { id: "p-timeline",      kind: "entity", entityType: "timeline",      title: "Timeline",      subtitle: "Days, eras, hours",          state: "overview", rows: [
-    { id: "t1", label: "The Auger Wake", meta: "Last week" },
-    { id: "t2", label: "Brec's letter",  meta: "3 nights ago" },
-  ]},
-  lore:          { id: "p-lore",          kind: "entity", entityType: "lore",          title: "Lore / Canon",  subtitle: "2 entries",                  state: "overview" },
-  references:    { id: "p-references",    kind: "entity", entityType: "references",    title: "References",    subtitle: "2 sources",                  state: "overview" },
+  cast:          { id: "p-cast",          kind: "entity", entityType: "cast",          title: "Cast",          subtitle: "",  state: "overview" },
+  atlas:         { id: "p-atlas",         kind: "entity", entityType: "atlas",         title: "Atlas",         subtitle: "Live tracker",  state: "overview", expanded: true },
+  bestiary:      { id: "p-bestiary",      kind: "entity", entityType: "bestiary",      title: "Bestiary",      subtitle: "",                state: "overview" },
+  locations:     { id: "p-locations",     kind: "entity", entityType: "locations",     title: "Locations",     subtitle: "",                state: "overview" },
+  items:         { id: "p-items",         kind: "entity", entityType: "items",         title: "Items",         subtitle: "", state: "overview" },
+  classes:       { id: "p-classes",       kind: "entity", entityType: "classes",       title: "Classes",       subtitle: "",                  state: "overview" },
+  races:         { id: "p-races",         kind: "entity", entityType: "races",         title: "Races",         subtitle: "",                  state: "overview" },
+  stats:         { id: "p-stats",         kind: "entity", entityType: "stats",         title: "Stats",         subtitle: "",      state: "overview" },
+  abilities:     { id: "p-abilities",     kind: "entity", entityType: "abilities",     title: "Abilities",     subtitle: "",    state: "overview" },
+  skillTrees:    { id: "p-skillTrees",    kind: "entity", entityType: "skills",        title: "Skill Trees",   subtitle: "",                    state: "overview" },
+  relationships: { id: "p-relationships", kind: "entity", entityType: "relationships", title: "Relationships", subtitle: "",                   state: "overview" },
+  quests:        { id: "p-quests",        kind: "entity", entityType: "quests",        title: "Quests",        subtitle: "",                   state: "overview" },
+  events:        { id: "p-events",        kind: "entity", entityType: "events",        title: "Events",        subtitle: "",                   state: "overview" },
+  timeline:      { id: "p-timeline",      kind: "entity", entityType: "timeline",      title: "Timeline",      subtitle: "",          state: "overview" },
+  lore:          { id: "p-lore",          kind: "entity", entityType: "lore",          title: "Lore / Canon",  subtitle: "",                  state: "overview" },
+  references:    { id: "p-references",    kind: "entity", entityType: "references",    title: "References",    subtitle: "",                  state: "overview" },
 
   // Workspace demo placeholder (used by Workspace's "Open demo panel" cta).
   demo:          { id: "p-demo",          kind: "entity", entityType: "locations",     title: "Locations",     subtitle: "Demo panel from workspace",  state: "loading" },
@@ -888,7 +878,24 @@ const AppShell = () => {
   // Drop-target glow is wired up via dropTargetId; no demo cycle.
 
   // Compute global queue count
-  const globalQueueCount = NAV_ITEMS.reduce((acc, n) => acc + (n.queue || 0), 0);
+  // Live left-rail badges: per-item review-queue count from the store,
+  // never hardcoded. `dataVersion` bumps on every store mutation so these
+  // recompute. A fresh project shows zero badges.
+  const liveNavItems = _um_a(() => {
+    void dataVersion;
+    const RS = window.LoomwrightBackend?.ReviewService;
+    if (!RS) return NAV_ITEMS;
+    return NAV_ITEMS.map((n) => {
+      if (!n.entity) return n;
+      const count = RS.listSync(n.entity).length;
+      return count ? { ...n, queue: count } : n;
+    });
+  }, [dataVersion]);
+  const globalQueueCount = (() => {
+    const RS = window.LoomwrightBackend?.ReviewService;
+    void dataVersion;
+    return RS ? RS.listSync().filter((q) => q.status !== "done").length : 0;
+  })();
 
   const livePanels = panels.map((p) => decoratePanelWithLiveData(p));
 
@@ -932,7 +939,7 @@ const AppShell = () => {
 
         <div className="app-left">
           <LeftRail
-            items={NAV_ITEMS}
+            items={liveNavItems}
             activeRouteId={routeId}
             expanded={leftExpanded}
             dropTargetId={dropTargetId}

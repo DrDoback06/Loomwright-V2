@@ -157,9 +157,86 @@ const HomeScreen = ({
   onOpenProjectIntelligence, onOpenContinuityWarning,
   onOpenRecentEntity, onOpenImportFlow,
 }) => {
-  const ms = HOME_MANUSCRIPT;
-  const PI = HOME_PI;
-  const RQ = HOME_REVIEW;
+  // Live project stats — recomputed on every store mutation. A fresh
+  // project yields zeros, never the static demo numbers.
+  const [statsTick, setStatsTick] = React.useState(0);
+  React.useEffect(() => {
+    const bump = () => setStatsTick((t) => t + 1);
+    window.addEventListener("lw:entity-store-updated", bump);
+    window.addEventListener("lw:review-queue-updated", bump);
+    window.addEventListener("lw:manuscript-chapters-updated", bump);
+    window.addEventListener("lw:project-imported", bump);
+    window.addEventListener("lw:backend-ready", bump);
+    return () => {
+      window.removeEventListener("lw:entity-store-updated", bump);
+      window.removeEventListener("lw:review-queue-updated", bump);
+      window.removeEventListener("lw:manuscript-chapters-updated", bump);
+      window.removeEventListener("lw:project-imported", bump);
+      window.removeEventListener("lw:backend-ready", bump);
+    };
+  }, []);
+  const live = React.useMemo(() => {
+    void statsTick;
+    const B = window.LoomwrightBackend;
+    if (!B?.EntityService) return null;
+    const chapters = B.ManuscriptChapterService?.loadSync()?.chapters || [];
+    const words = chapters.reduce((sum, c) => sum + ((c.bodyText || (c.bodyHtml || "").replace(/<[^>]+>/g, "")).trim().split(/\s+/).filter(Boolean).length), 0);
+    const queue = (B.ReviewService?.listSync() || []).filter((q) => q.status !== "done");
+    const band = (b) => queue.filter((q) => (q.level || q.confidenceBand) === b).length;
+    const intel = B.ProjectIntelService?.loadSync?.() || {};
+    const refs = B.ReferencesService?.listSync?.() || [];
+    const types = ["cast", "locations", "items", "quests", "events", "timeline", "lore", "bestiary"];
+    const typeMeta = { cast: "#7a5aa3", locations: "#5b7a4a", items: "#9a7b3a", quests: "#a85a72", events: "#c79545", timeline: "#6a7a8a", lore: "#7a5a3a", bestiary: "#a84a3a" };
+    const entityHealth = types.map((t) => ({
+      id: t, label: t[0].toUpperCase() + t.slice(1), color: typeMeta[t], glyph: t[0].toUpperCase(),
+      count: B.EntityService.listSync(t).length,
+      queue: (B.ReviewService?.listSync(t) || []).length,
+    }));
+    return {
+      ms: {
+        chaptersDrafted: chapters.length,
+        chaptersReserved: chapters.filter((c) => c.reserved).length,
+        wordCount: words,
+        targetWordCount: 90000,
+        lastChapterTitle: chapters[chapters.length - 1]?.title || "—",
+        lastSavedHuman: chapters.length ? "saved locally" : "no chapters yet",
+      },
+      PI: {
+        completion: Math.min(100, Math.round(((Array.isArray(intel.canonRules) ? intel.canonRules.length : 0) + refs.length) * 5)),
+        styleProfile: intel.writingStyleGuide ? "Established" : "Not set",
+        canonRules: Array.isArray(intel.canonRules) ? intel.canonRules.length : 0,
+        references: refs.length,
+        missing: [],
+      },
+      RQ: {
+        total: queue.length, high: band("high"), strong: band("strong"),
+        uncertain: band("uncertain"), weak: band("weak"),
+        autoAccepted: 0, needsDecision: queue.length,
+      },
+      entityHealth,
+    };
+  }, [statsTick]);
+
+  // Continuity warnings are populated by a real continuity check
+  // (lw:continuity-check), not invented. Empty by default.
+  const [warnings, setWarnings] = React.useState([]);
+  React.useEffect(() => {
+    const onCheck = (e) => {
+      const conflicts = e?.detail?.conflicts || [];
+      setWarnings(conflicts.map((c, i) => ({
+        id: "cw-" + i, level: "warn",
+        title: c.claim || c.reference || "Possible contradiction",
+        body: c.evidence || c.claim || "", action: "Open Lore", link: { type: "lore" },
+      })));
+    };
+    window.addEventListener("lw:continuity-check", onCheck);
+    return () => window.removeEventListener("lw:continuity-check", onCheck);
+  }, []);
+
+  const ms = live?.ms || { chaptersDrafted: 0, chaptersReserved: 0, wordCount: 0, targetWordCount: 90000, lastChapterTitle: "—", lastSavedHuman: "no chapters yet" };
+  const PI = live?.PI || { completion: 0, styleProfile: "Not set", canonRules: 0, references: 0, missing: [] };
+  const RQ = live?.RQ || { total: 0, high: 0, strong: 0, uncertain: 0, weak: 0, autoAccepted: 0, needsDecision: 0 };
+  const entityHealth = live?.entityHealth || [];
 
   // Live recent activity from AuditService — re-reads on every audit
   // event. Falls back to sample rows only when log is genuinely empty.
@@ -189,9 +266,11 @@ const HomeScreen = ({
       _event: e,
     }));
   }, [auditTick]);
-  const activityRows = (liveActivity && liveActivity.length > 0) ? liveActivity : HOME_RECENT_ACTIVITY;
+  // Live audit activity only — never fall back to demo rows (fresh
+  // project shows an empty activity list, not "Created Saren of Hess").
+  const activityRows = liveActivity || [];
 
-  const totalEntities = HOME_ENTITY_HEALTH.reduce((s, e) => s + e.count, 0);
+  const totalEntities = entityHealth.reduce((s, e) => s + e.count, 0);
 
   // ----- Fresh-project detection -----
   // When sample data has not been loaded AND the live entity store is
@@ -391,7 +470,7 @@ const HomeScreen = ({
             action={<span className="home-card__action-sub">{totalEntities} entries</span>}
           >
             <div className="home-entity-grid">
-              {HOME_ENTITY_HEALTH.map((e) => (
+              {entityHealth.map((e) => (
                 <button
                   key={e.id}
                   className="home-entity-tile"
@@ -428,22 +507,22 @@ const HomeScreen = ({
               <div className="home-review__bars">
                 <div className="home-review__bar home-review__bar--high">
                   <span className="home-review__bar-lbl">High</span>
-                  <span className="home-review__bar-track"><span className="home-review__bar-fill" style={{ width: (RQ.high / RQ.total * 100) + "%" }}/></span>
+                  <span className="home-review__bar-track"><span className="home-review__bar-fill" style={{ width: (RQ.high / (RQ.total || 1) * 100) + "%" }}/></span>
                   <span className="home-review__bar-num">{RQ.high}</span>
                 </div>
                 <div className="home-review__bar home-review__bar--strong">
                   <span className="home-review__bar-lbl">Strong</span>
-                  <span className="home-review__bar-track"><span className="home-review__bar-fill" style={{ width: (RQ.strong / RQ.total * 100) + "%" }}/></span>
+                  <span className="home-review__bar-track"><span className="home-review__bar-fill" style={{ width: (RQ.strong / (RQ.total || 1) * 100) + "%" }}/></span>
                   <span className="home-review__bar-num">{RQ.strong}</span>
                 </div>
                 <div className="home-review__bar home-review__bar--uncertain">
                   <span className="home-review__bar-lbl">Uncertain</span>
-                  <span className="home-review__bar-track"><span className="home-review__bar-fill" style={{ width: (RQ.uncertain / RQ.total * 100) + "%" }}/></span>
+                  <span className="home-review__bar-track"><span className="home-review__bar-fill" style={{ width: (RQ.uncertain / (RQ.total || 1) * 100) + "%" }}/></span>
                   <span className="home-review__bar-num">{RQ.uncertain}</span>
                 </div>
                 <div className="home-review__bar home-review__bar--weak">
                   <span className="home-review__bar-lbl">Weak</span>
-                  <span className="home-review__bar-track"><span className="home-review__bar-fill" style={{ width: (RQ.weak / RQ.total * 100) + "%" }}/></span>
+                  <span className="home-review__bar-track"><span className="home-review__bar-fill" style={{ width: (RQ.weak / (RQ.total || 1) * 100) + "%" }}/></span>
                   <span className="home-review__bar-num">{RQ.weak}</span>
                 </div>
               </div>
@@ -489,15 +568,23 @@ const HomeScreen = ({
             )}
           </HomeCard>
 
-          {/* Continuity / Warnings */}
+          {/* Continuity / Warnings — live (none until a continuity check runs) */}
           <HomeCard
             className="home-card--warnings"
             eyebrow="Continuity"
-            title={"Warnings · " + HOME_WARNINGS.length}
-            action={<span className="home-card__action-sub">Click to triage</span>}
+            title={"Warnings · " + warnings.length}
+            action={<span className="home-card__action-sub">Run a continuity check</span>}
           >
             <div className="home-warnings">
-              {HOME_WARNINGS.map((w) => (
+              {warnings.length === 0 && (
+                <div className="home-warning home-warning--info" style={{ fontStyle: "italic", opacity: 0.7 }}>
+                  <div className="home-warning__body">
+                    <div className="home-warning__title">No continuity warnings</div>
+                    <div className="home-warning__sub">Run a continuity check in Writer's Room to surface contradictions.</div>
+                  </div>
+                </div>
+              )}
+              {warnings.map((w) => (
                 <button key={w.id} className={"home-warning home-warning--" + w.level} onClick={() => handleWarningClick(w)}
                         data-callback="onOpenContinuityWarning">
                   <span className={"home-warning__dot home-warning__dot--" + w.level}/>
@@ -603,12 +690,7 @@ const HomeScreen = ({
           >
             <div className="home-today-bridge">
               <div className="home-today-bridge__note">
-                Today is a separate action plan: prompts, dormant entities, and dangling threads to address now.
-              </div>
-              <div className="home-today-bridge__preview">
-                <span className="home-today-bridge__chip"><Icon name="feather" size={11}/>Open Ch. 8 in Brec's voice</span>
-                <span className="home-today-bridge__chip"><Icon name="scroll" size={11}/>Saren's Bargain · 2 dangling steps</span>
-                <span className="home-today-bridge__chip"><Icon name="user" size={11}/>Captain Brec · last seen Ch. 7</span>
+                Today is a separate action plan: prompts, dormant entities, and dangling threads — all derived from your live project.
               </div>
             </div>
           </HomeCard>

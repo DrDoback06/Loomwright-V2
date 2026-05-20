@@ -28,7 +28,7 @@ INFO: 213 other callbacks fall to default notice (housekeeping/dispatch).
 All smoke checks passed (… + audit + ai routing — 22 new [ai routing] assertions).
 
 > CHROMIUM_PATH=/path/to/chrome npm run test:e2e
-75 passed (≈5.5 min wall, real Chromium) — workflows A–R against the dev shell.
+84 passed (real Chromium) — workflows A–R + T (DOM-level UI acceptance) against the dev shell.
 
 > npm run build
 Production build complete → dist/   (precompiled bundle, no in-browser Babel)
@@ -38,9 +38,20 @@ Production build checks passed.     (16 self-check assertions)
 2 passed — workflow S, production boot against `vite preview` serving dist/.
 ```
 
-The dev e2e suite is in `tests/e2e/` (workflows A–R); the production
-boot smoke is in `tests/e2e-preview/` (workflow S). Product milestone:
-**local beta candidate** (see `PRODUCT_READINESS_REPORT.md`).
+The dev e2e suite is in `tests/e2e/` (workflows A–R, plus T = DOM-level
+UI acceptance in `15-ui-acceptance.spec.js`); the production boot smoke
+is in `tests/e2e-preview/` (workflow S). Product milestone:
+**local beta candidate** (see `PRODUCT_READINESS_REPORT.md` and
+`USER_ACCEPTANCE_REGRESSION_AUDIT.md`).
+
+> **UAT live-render fix (post-PR #13).** The render layer previously
+> showed design/demo constants (Aelinor Vey, "12 entries · 3 in review")
+> on a fresh project even though the services were correct, because the
+> prior e2e suite drove services via `page.evaluate` and never asserted
+> on rendered DOM. Fixed: panels, dashboards (Home/Today), left-rail
+> badges, subtitles, and entity pickers now read the live store with
+> proper empty states; workflow T clicks real DOM to prove it. See
+> `USER_ACCEPTANCE_REGRESSION_AUDIT.md`.
 
 ## Scope buckets
 
