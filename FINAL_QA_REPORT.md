@@ -1,6 +1,45 @@
 # Loomwright v2 — Final QA Report
 
-_Last run: 2026-05-19 (Speed Reader Completion Pass)._
+_Last run: 2026-05-20 (Search / Indexing Pass)._
+
+## Search / Indexing Pass (2026-05-20)
+
+```
+npm run validate        → 525 callbacks; registry bootstraps 547 handlers; Bucket A = 0
+npm run test:smoke      → all smoke checks pass
+                          (230 prior + 22 new [search] assertions)
+npm run test:e2e        → 63 pass (56 prior + 7 new P. search/indexing)
+```
+
+Adds `SearchService` (`KEYS.searchIndex`): rebuilds a local index
+across entities (14 types), chapters, references, review queue,
+project intelligence, onboarding answers, safe settings sections,
+occurrences, and opt-in trash. Ranking covers title exact / alias
+exact / title prefix / title contains / tag exact / body phrase /
+token overlap with caps and stop-word filtering. Index refreshes
+debounced (~150 ms) on store mutations.
+
+`CommandPalette` (`overlays.jsx`) now reads live results via the
+service, groups them by type, and forwards typed pointers (entityId,
+chapterId, referenceId, settingsSectionId, etc.) through a new
+`lw:open-search-result` dispatcher in `app.jsx` which maps to the
+right open event for every result type.
+
+**Privacy guarantees**: `KEYS.apiKeys` blob is never read;
+`buildSettingsEntries` walks only a whitelist and strips any field
+named `apiKey / secret / token / password / bearer / credential`
+recursively. Two assertions (smoke + e2e) confirm a fake API key set
+in settings produces zero results and never appears in the cached
+index JSON.
+
+Eleven new callbacks registered (`onRunGlobalSearch`,
+`onOpenSearchResult`, `onClearSearch`, `onRebuildSearchIndex`,
+`onOpenEntityFromSearch`, `onOpenChapterFromSearch`,
+`onOpenReferenceFromSearch`, `onOpenSettingsFromSearch`,
+`onOpenReviewItemFromSearch`, `onOpenProjectIntelligenceFromSearch`,
+`onOpenOnboardingFromSearch`). Bucket A still 0.
+
+See `SEARCH_INDEXING_REPORT.md` for the full breakdown.
 
 ## Speed Reader Completion Pass (2026-05-19)
 

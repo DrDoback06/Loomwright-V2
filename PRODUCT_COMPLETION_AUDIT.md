@@ -17,7 +17,7 @@ Reproduce on a clean checkout of `main`:
 > npm install
 > npm run validate
 All checked HTML references exist.
-OK: 525 UI callbacks; registry bootstraps 536 handlers
+OK: 525 UI callbacks; registry bootstraps 547 handlers
 OK: registry default branch emits a user-visible notice (no silent fall-through).
 OK: 0 Bucket A action callbacks reach the generic default notice.
 OK: 6 Bucket B (provider-gated) callbacks use requireProviderOrNotice.
@@ -25,10 +25,10 @@ OK: 4 Bucket D (React-owned) callbacks declared.
 INFO: 213 other callbacks fall to default notice (housekeeping/dispatch).
 
 > npm run test:smoke
-All smoke checks passed (extraction + workspace persistence + project import/export + speed reader — 26 new [speed reader] assertions).
+All smoke checks passed (extraction + workspace persistence + project import/export + speed reader + search — 22 new [search] assertions).
 
 > CHROMIUM_PATH=/path/to/chrome npm run test:e2e
-56 passed (≈6.4 min wall, real Chromium) — 51 pre-existing + 5 new speed reader.
+63 passed (≈7.2 min wall, real Chromium) — 56 pre-existing + 7 new search/indexing.
 ```
 
 The e2e suite is in `tests/e2e/`; six spec files cover 28 tests across
@@ -80,6 +80,7 @@ breaks `npm run test:smoke` or `npm run test:e2e`.
 | Resilient cosmetic data-attributes for testing: `data-ui="WorkspaceShell"`, `data-workspace-id={id}` (on `FullWorkspaceHost` wrapper), `data-ui="HomeEmptyState"`, `data-testid` on empty-state buttons | code + e2e |
 | **Full Project Import / Export / Backup / Entity Library** — `ProjectArchiveService` builds `loomwright-project-v1` payloads; `validateExportPayload` accepts v1 + legacy `loomwright/project-export/v1\|v2`; `summarizeExportPayload` powers the import preview; `applyImport({mode: "merge" \| "replace", overwriteOnConflict})` covers entities/chapters/refs/occurrences/queue/onboarding/intel/skill-trees/tangle/composition/settings/trash; `createBackupBeforeReplace()` downloads a recovery file before destructive replace; `buildEntityLibrary({types})` / `applyEntityLibrary` move selected entity types between projects. **API keys never export** (`api_keys_encrypted` blob is never read; `metadata.apiKeysIncluded` is hard-coded `false`; `redactSecrets` strips any `apiKey/secret/token/password/bearer/credential` recursively). | smoke (24 assertions) + e2e N (5 tests) |
 | **Speed Reader** — `SpeedReaderService` persists per-source RSVP sessions under `KEYS.speedReader`. Source resolvers: current chapter (via `ManuscriptChapterService`), pasted text, references (via `KEYS.references`). Session shape carries `currentWordIndex`, `wpm`, `fontSize`, pause settings, `bookmarks`, `notes`, `stats`. `useSpeedReader` hydrates on mount, debounces persistence (~250 ms) for the active persisted session, and re-hydrates on source switch. Five new callbacks (`onCreateSpeedReaderSession`, `onReadCurrentChapter`, `onReadReference`, `onDeleteSpeedReaderSession`, `onResetSpeedReaderProgress`) wired through the backend delegate. | smoke (26 assertions) + e2e O (5 tests) |
+| **Search / Indexing** — `SearchService` builds a local global index across entities (14 types), chapters, references, review queue, project intelligence, onboarding answers, safe settings sections, occurrences, and (opt-in) trash. Ranking: title exact > alias exact > title prefix > title contains > tag exact > body phrase > token overlap (capped). `CommandPalette` reads live results; result rows carry typed pointers (`entityId`, `chapterId`, `referenceId`, `settingsSectionId`, …) and click dispatches `lw:open-search-result` which maps to the right open event in `app.jsx`. Index refreshes (~150 ms debounced) on every relevant store mutation. **API secrets never indexed** — encrypted `api_keys_encrypted` blob is never read; secret-named fields are stripped recursively inside whitelisted settings sections. 11 new callbacks registered. | smoke (22 assertions) + e2e P (7 tests) |
 
 ---
 
@@ -97,7 +98,7 @@ result** is prototype-level. They aren't broken; they aren't great yet.
 | **Project Intelligence derivation** | `ProjectIntelService` persists; `mergeFromOnboarding` writes onboarding answers into the intel record | No automatic derivation from references / entities / lore / manuscript summaries. No preview/diff before applying. No versioning/rollback. |
 | **References ingestion** | Paste-text / URL / manual / kind tagging / `includedInAIContext` flag / linked entities all persist | No file upload pathway with real parsing (markdown/HTML/text only via paste). No reference summarisation by AI. No search across reference content. |
 | ~~**Speed Reader**~~ | _Moved to **A. Implemented** by `SPEED_READER_COMPLETION_REPORT.md`._ Row kept for diff-tracking only. | _n/a_ |
-| **Search / indexing** | No `SearchService` exists yet. Top-bar search button has UI but no real backend. | Out of scope for this milestone. |
+| ~~**Search / indexing**~~ | _Moved to **A. Implemented** by `SEARCH_INDEXING_REPORT.md`._ Row kept for diff-tracking only. | _n/a_ |
 | **Workspace persistence (beyond what's wired)** | Atlas / Skill Trees / Relationships / Timeline / Tangle / Speed Reader open and can persist via their respective services where wired, but deep create→edit→reorder→reload paths are not test-covered for every workspace | Bespoke workspaces vary in completeness. No e2e tests per workspace. |
 | ~~**Full project import/export**~~ | _Moved to **A. Implemented** by `PROJECT_IMPORT_EXPORT_REPORT.md`._ Row kept for diff-tracking only. | _n/a_ |
 | **Audit log / undo trail** | Some services log to `lw:*` events; `extractionHistoryService`-style per-action `previousState` undo is not implemented | Legacy audit documents the model; not yet ported. |
@@ -144,7 +145,7 @@ blocking the "functional local prototype" status.
 - **Character enhancement** — legacy "Enhance" button that AI-fills stats/equipment/biography for a new cast member. Out of scope.
 - **Cloud sync / external collaboration / shared projects** — none planned.
 - **Production build pipeline** (precompiled JSX, no in-browser Babel, real bundle output, source maps) — own milestone, requires a plan doc and migration path.
-- **Search/indexing service** — no `SearchService` exists. Top-bar search is presentational.
+- _(Removed — implemented in Search/Indexing Pass; see section A row "Search / Indexing".)_
 - _(Removed — implemented in Speed Reader Completion Pass; see section A row "Speed Reader".)_
 - **Per-workspace e2e coverage** for Atlas / Skill Trees / Relationships / Timeline / Tangle / Speed Reader.
 - _(Removed — implemented; see Full Project Import / Export / Backup / Entity Library row in section A.)_
@@ -167,7 +168,7 @@ Subsequent (separate milestones, in roughly this order, all optional
 until earlier passes are solid):
 
 6. ~~**Speed Reader engine**~~ _(landed; see section A row "Speed Reader" and `SPEED_READER_COMPLETION_REPORT.md`)._
-7. **Search / indexing** when there's enough data to justify it.
+7. ~~**Search / indexing**~~ _(landed; see section A row "Search / Indexing" and `SEARCH_INDEXING_REPORT.md`)._
 8. **Audit log + undo** as a single safety-net pass.
 9. **Multi-provider AI routing** when single-provider gating proves limiting.
 10. **Production build pipeline** with `BUILD_PIPELINE_PLAN.md` first and smallest-safe-step implementation.

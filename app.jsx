@@ -424,6 +424,60 @@ const AppShell = () => {
       setRouteId("writers-room");
       window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "New chapter created from composition." } }));
     };
+    const onOpenSearchResult = (e) => {
+      const r = e?.detail || {};
+      setPaletteOpen(false);
+      switch (r.type) {
+        case "entity": {
+          // Map entity type to its panel kind. Default = the entity type name.
+          const kind = r.entityType || r.subtype;
+          if (kind) onOpenPanel(kind);
+          if (r.entityId && r.entityType) {
+            const ent = window.LoomwrightBackend?.EntityService?.getSync?.(r.entityId, r.entityType);
+            if (ent) {
+              window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
+                detail: { entityType: r.entityType, entity: ent, mode: "full" },
+              }));
+            }
+          }
+          break;
+        }
+        case "chapter":
+          setRouteId("writers-room");
+          if (r.chapterId) window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: r.chapterId } }));
+          break;
+        case "reference":
+          onOpenPanel("references");
+          openPanelWorkspace({ workspaceId: "research-library", panelKind: "references", sourcePanel: "p-references" });
+          if (r.referenceId) window.dispatchEvent(new CustomEvent("lw:focus-reference", { detail: { referenceId: r.referenceId } }));
+          break;
+        case "review":
+          onOpenPanel("review");
+          if (r.reviewItemId) window.dispatchEvent(new CustomEvent("lw:focus-review-item", { detail: { reviewItemId: r.reviewItemId } }));
+          break;
+        case "setting":
+          openPanelWorkspace({ workspaceId: "control-centre", panelKind: "settings", sourcePanel: "p-settings" });
+          if (r.settingsSectionId) window.dispatchEvent(new CustomEvent("lw:settings-section", { detail: { actionId: r.settingsSectionId } }));
+          break;
+        case "projectIntelligence":
+          onOpenPanel("references");
+          openPanelWorkspace({ workspaceId: "research-library", panelKind: "references", sourcePanel: "p-references" });
+          if (r.projectIntelSectionId) window.dispatchEvent(new CustomEvent("lw:focus-project-intel", { detail: { sectionId: r.projectIntelSectionId } }));
+          break;
+        case "onboarding":
+          window.dispatchEvent(new CustomEvent("lw:open-onboarding-answers", { detail: { sectionId: r.onboardingSectionId } }));
+          break;
+        case "occurrence":
+          setRouteId("writers-room");
+          if (r.chapterId) window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: r.chapterId, occurrenceId: r.occurrenceId } }));
+          break;
+        case "trash":
+          onOpenPanel("trash");
+          break;
+        default:
+          window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "No handler for that result type yet." } }));
+      }
+    };
     window.addEventListener("lw:open-entity-editor", onOpenEd);
     window.addEventListener("lw:open-panel", onOpenPan);
     window.addEventListener("lw:drop-to-composition", onDropToComp);
@@ -434,6 +488,7 @@ const AppShell = () => {
     window.addEventListener("lw:open-route", onOpenRoute);
     window.addEventListener("lw:composition-insert-draft", onInsertDraft);
     window.addEventListener("lw:chapter-created", onChapterCreated);
+    window.addEventListener("lw:open-search-result", onOpenSearchResult);
     return () => {
       window.removeEventListener("lw:open-entity-editor", onOpenEd);
       window.removeEventListener("lw:open-panel", onOpenPan);
@@ -445,8 +500,9 @@ const AppShell = () => {
       window.removeEventListener("lw:open-route", onOpenRoute);
       window.removeEventListener("lw:composition-insert-draft", onInsertDraft);
       window.removeEventListener("lw:chapter-created", onChapterCreated);
+      window.removeEventListener("lw:open-search-result", onOpenSearchResult);
     };
-  }, [openEntityEditor, openPanelWorkspace, exitPanelWorkspace]);
+  }, [openEntityEditor, openPanelWorkspace, exitPanelWorkspace, onOpenPanel]);
 
   // ----- callbacks -----
   const onToggleLeftRail = _uc_a(() => setLeftExpanded((v) => !v), []);
@@ -1005,6 +1061,11 @@ const AppShell = () => {
         onScopeChange={() => {}}
         onRetry={() => setPaletteState("ready")}
         onRunCommand={(cmd) => {
+          // Live search result (carries typed pointers).
+          if (cmd && cmd._searchResult) {
+            window.dispatchEvent(new CustomEvent("lw:open-search-result", { detail: cmd._searchResult }));
+            return;
+          }
           if (cmd.id === "s3") {
             const r = document.querySelector("[data-ui='Workspace']")?.getBoundingClientRect();
             if (r) onOpenAdaptiveWheel({ x: r.left + r.width / 2, y: r.top + r.height / 2, contextLabel: "Workspace" });

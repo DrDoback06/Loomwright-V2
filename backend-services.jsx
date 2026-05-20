@@ -34,6 +34,7 @@
     occurrences: "entity_occurrences",
     tangle: "tangle_canvas",
     skillTrees: "skill_trees",
+    searchIndex: "search_index",
   };
 
   // Synchronously read the sample-loaded flag from localStorage BEFORE any
@@ -2982,6 +2983,439 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     console.info("[Loomwright]", message);
   }
 
+  // -------------------------------------------------------------------
+  // SearchService — local global index across entities, chapters,
+  // references, review queue, project intelligence, onboarding,
+  // safe settings sections, occurrences, and (opt-in) trash.
+  //
+  // Privacy: API keys and the encrypted keys blob are never read or
+  // indexed. Settings fields whose key matches SECRET_FIELDS are
+  // skipped at index time.
+  // -------------------------------------------------------------------
+  const SR_STOPWORDS = new Set([
+    "the", "a", "an", "of", "and", "to", "in", "on", "is", "it",
+    "for", "with", "by", "at", "as", "or", "but", "this", "that",
+  ]);
+  const SAFE_SETTINGS_SECTIONS = new Set([
+    "general", "editor", "extraction", "aiProviders",
+    "manuscript", "privacy", "appearance", "speedReader",
+  ]);
+
+  function srTokens(input) {
+    if (input == null) return [];
+    const text = (typeof input === "string" ? input : JSON.stringify(input)).toLowerCase();
+    const raw = text.replace(/[^a-z0-9'\-]+/g, " ").split(/\s+/).filter(Boolean);
+    return raw.filter((t) => t.length > 1 && !SR_STOPWORDS.has(t));
+  }
+  function srNormalise(s) {
+    return (s || "").toString().trim().toLowerCase();
+  }
+  function srStripHtml(html) {
+    return (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  function srSnippet(text, query, around = 60) {
+    if (!text || !query) return "";
+    const ix = text.toLowerCase().indexOf(query.toLowerCase());
+    if (ix < 0) return text.slice(0, around * 2);
+    const start = Math.max(0, ix - around);
+    const end = Math.min(text.length, ix + query.length + around);
+    return (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
+  }
+
+  const SearchService = {
+    defaultState() {
+      return { entries: [], builtAt: null };
+    },
+    loadSync() {
+      const raw = StorageService.getSync(KEYS.searchIndex, null);
+      if (!raw || !Array.isArray(raw.entries)) return this.defaultState();
+      return raw;
+    },
+    saveCacheSync(entries) {
+      // best-effort persistence; do not await
+      StorageService.set(KEYS.searchIndex, { entries, builtAt: nowIso() }).catch(() => {});
+    },
+    getIndexStatsSync() {
+      const state = this.loadSync();
+      const byType = {};
+      for (const e of state.entries) byType[e.type] = (byType[e.type] || 0) + 1;
+      return { total: state.entries.length, byType, builtAt: state.builtAt };
+    },
+    async clearIndex() {
+      await StorageService.set(KEYS.searchIndex, this.defaultState());
+    },
+
+    // --------- Index builders (sync, defensive) ---------
+    buildEntityEntries() {
+      const out = [];
+      const all = EntityService.listAllSync();
+      for (const [entityType, byId] of Object.entries(all || {})) {
+        for (const e of Object.values(byId || {})) {
+          if (!e?.id || e.status === "deleted") continue;
+          const data = e.data || {};
+          const summary = data.summary || data.description || data.brief || "";
+          const aliases = Array.isArray(data.aliases) ? data.aliases : [];
+          const tags = Array.isArray(data.tags) ? data.tags : [];
+          const body = [
+            summary,
+            data.background, data.details, data.notes, data.bio,
+            data.role, data.flavor, data.flavour,
+            Array.isArray(data.traits) ? data.traits.join(" ") : "",
+            Array.isArray(data.abilities) ? data.abilities.map((a) => a?.name || a).join(" ") : "",
+            Array.isArray(data.sourceMentions) ? data.sourceMentions.map((m) => m?.quote || m).join(" ") : "",
+          ].filter(Boolean).join(" ");
+          out.push({
+            id: "ent:" + entityType + ":" + e.id,
+            type: "entity",
+            subtype: entityType,
+            title: e.name || data.title || "(unnamed)",
+            subtitle: entityType.charAt(0).toUpperCase() + entityType.slice(1),
+            summary: summary.slice(0, 240),
+            body,
+            tokens: srTokens([e.name, summary, body, aliases.join(" "), tags.join(" ")].join(" ")),
+            aliases,
+            tags,
+            entityType, entityId: e.id,
+            icon: "stack",
+            updatedAt: e.updatedAt || e.createdAt || null,
+            source: e.source || null,
+          });
+        }
+      }
+      return out;
+    },
+    buildChapterEntries() {
+      const state = ManuscriptChapterService.loadSync();
+      const out = [];
+      for (const c of state.chapters || []) {
+        const bodyText = c.bodyText || srStripHtml(c.bodyHtml) || "";
+        out.push({
+          id: "chap:" + c.id,
+          type: "chapter",
+          subtype: "manuscript",
+          title: c.title || ("Chapter " + (c.slotNumber || "")),
+          subtitle: "Chapter" + (c.slotNumber ? " " + c.slotNumber : ""),
+          summary: bodyText.slice(0, 240),
+          body: bodyText,
+          tokens: srTokens([c.title, bodyText].join(" ")),
+          tags: [],
+          chapterId: c.id,
+          icon: "book",
+          updatedAt: c.updatedAt || c.createdAt || null,
+        });
+      }
+      return out;
+    },
+    buildReferenceEntries() {
+      const refs = StorageService.getSync(KEYS.references, []) || [];
+      const out = [];
+      for (const r of refs) {
+        if (!r?.id) continue;
+        const content = r.content || r.body || r.summary || r.notes || "";
+        out.push({
+          id: "ref:" + r.id,
+          type: "reference",
+          subtype: r.kind || r.type || "reference",
+          title: r.title || r.label || "(untitled reference)",
+          subtitle: (r.kind ? r.kind + " · " : "") + "Reference",
+          summary: (r.summary || content || "").slice(0, 240),
+          body: content,
+          tokens: srTokens([r.title, r.summary, content, (r.tags || []).join(" "), r.url].join(" ")),
+          tags: Array.isArray(r.tags) ? r.tags : [],
+          referenceId: r.id,
+          icon: "paper",
+          updatedAt: r.updatedAt || r.createdAt || null,
+          source: r.source || null,
+        });
+      }
+      return out;
+    },
+    buildReviewQueueEntries() {
+      const items = StorageService.getSync(KEYS.reviewQueue, []) || [];
+      const out = [];
+      for (const it of items) {
+        if (!it?.id) continue;
+        const p = it.payload || {};
+        const sourceQuote = p.sourceQuote || it.sourceQuote || "";
+        out.push({
+          id: "rev:" + it.id,
+          type: "review",
+          subtype: it.entityType || it.kind || "review",
+          title: p.name || it.name || it.title || "(review item)",
+          subtitle: "Review · " + (it.entityType || "candidate"),
+          summary: sourceQuote.slice(0, 240),
+          body: [p.summary, sourceQuote, JSON.stringify(p.suggestedChanges || {})].filter(Boolean).join(" "),
+          tokens: srTokens([p.name, p.summary, sourceQuote].join(" ")),
+          tags: [],
+          reviewItemId: it.id,
+          entityType: it.entityType || null,
+          entityId: it.entityId || null,
+          icon: "bell",
+          updatedAt: it.updatedAt || it.createdAt || null,
+        });
+      }
+      return out;
+    },
+    buildProjectIntelEntries() {
+      const intel = ProjectIntelService.loadSync() || {};
+      const out = [];
+      for (const [sectionId, value] of Object.entries(intel)) {
+        if (sectionId === "updatedAt" || value == null) continue;
+        const text = typeof value === "string" ? value : JSON.stringify(value);
+        if (!text || text.length < 2) continue;
+        out.push({
+          id: "intel:" + sectionId,
+          type: "projectIntelligence",
+          subtype: sectionId,
+          title: sectionId.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()),
+          subtitle: "Project Intelligence",
+          summary: text.slice(0, 240),
+          body: text,
+          tokens: srTokens(text),
+          tags: [],
+          projectIntelSectionId: sectionId,
+          icon: "compass",
+          updatedAt: intel.updatedAt || null,
+        });
+      }
+      return out;
+    },
+    buildOnboardingEntries() {
+      const ans = OnboardingService.loadSync() || {};
+      const out = [];
+      for (const [sectionId, value] of Object.entries(ans)) {
+        if (sectionId === "updatedAt" || sectionId === "status" || value == null) continue;
+        const text = typeof value === "string" ? value : JSON.stringify(value);
+        if (!text || text.length < 2) continue;
+        out.push({
+          id: "onb:" + sectionId,
+          type: "onboarding",
+          subtype: sectionId,
+          title: sectionId.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()),
+          subtitle: "Onboarding",
+          summary: text.slice(0, 240),
+          body: text,
+          tokens: srTokens(text),
+          tags: [],
+          onboardingSectionId: sectionId,
+          icon: "compass",
+          updatedAt: ans.updatedAt || null,
+        });
+      }
+      return out;
+    },
+    buildSettingsEntries() {
+      const all = SettingsService.getAllSync() || {};
+      const out = [];
+      for (const [sectionId, section] of Object.entries(all)) {
+        if (!SAFE_SETTINGS_SECTIONS.has(sectionId)) continue;
+        if (!section || typeof section !== "object") continue;
+        // Build a redacted text body — strip any SECRET_FIELDS-named key.
+        const safeText = (function walk(obj) {
+          if (obj == null) return "";
+          if (typeof obj === "string" || typeof obj === "number" || typeof obj === "boolean") return String(obj);
+          if (Array.isArray(obj)) return obj.map(walk).join(" ");
+          const parts = [];
+          for (const [k, v] of Object.entries(obj)) {
+            if (SECRET_FIELDS.has(k)) continue;
+            parts.push(k + " " + walk(v));
+          }
+          return parts.join(" ");
+        })(section);
+        out.push({
+          id: "set:" + sectionId,
+          type: "setting",
+          subtype: sectionId,
+          title: sectionId.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()),
+          subtitle: "Settings",
+          summary: safeText.slice(0, 240),
+          body: safeText,
+          tokens: srTokens(sectionId + " " + safeText),
+          tags: [],
+          settingsSectionId: sectionId,
+          icon: "gear",
+          updatedAt: null,
+        });
+      }
+      return out;
+    },
+    buildOccurrenceEntries() {
+      const occs = (typeof OccurrenceService !== "undefined") ? (OccurrenceService.listAllSync?.() || []) : [];
+      const out = [];
+      for (const o of occs) {
+        if (!o?.id) continue;
+        out.push({
+          id: "occ:" + o.id,
+          type: "occurrence",
+          subtype: o.entityType || "occurrence",
+          title: o.exactText || "(occurrence)",
+          subtitle: "Mention",
+          summary: o.exactText || "",
+          body: o.exactText || "",
+          tokens: srTokens(o.exactText || ""),
+          tags: [],
+          occurrenceId: o.id,
+          entityId: o.entityId || null,
+          entityType: o.entityType || null,
+          chapterId: o.chapterId || null,
+          icon: "mention",
+          updatedAt: o.updatedAt || o.createdAt || null,
+        });
+      }
+      return out;
+    },
+    buildTrashEntries() {
+      const items = TrashService.listSync() || [];
+      const out = [];
+      for (const t of items) {
+        if (!t?.id) continue;
+        out.push({
+          id: "trash:" + t.id,
+          type: "trash",
+          subtype: t.type || "entity",
+          title: t.name || "(deleted)",
+          subtitle: "Trash · " + (t.type || ""),
+          summary: t.data?.summary || "",
+          body: [t.name, t.data?.summary, JSON.stringify(t.data || {})].filter(Boolean).join(" "),
+          tokens: srTokens([t.name, t.data?.summary].join(" ")),
+          tags: [],
+          entityType: t.type || null,
+          entityId: t.id || null,
+          icon: "trash",
+          updatedAt: t.deletedAt || null,
+        });
+      }
+      return out;
+    },
+
+    rebuildIndex(options = {}) {
+      const includeTrash = options.includeTrash === true;
+      const entries = [].concat(
+        this.buildEntityEntries(),
+        this.buildChapterEntries(),
+        this.buildReferenceEntries(),
+        this.buildReviewQueueEntries(),
+        this.buildProjectIntelEntries(),
+        this.buildOnboardingEntries(),
+        this.buildSettingsEntries(),
+        this.buildOccurrenceEntries(),
+        includeTrash ? this.buildTrashEntries() : [],
+      );
+      this.saveCacheSync(entries);
+      window.dispatchEvent(new CustomEvent("lw:search-index-updated", { detail: { total: entries.length } }));
+      return entries;
+    },
+
+    _rebuildTimer: null,
+    rebuildIndexAsync(options = {}) {
+      if (this._rebuildTimer) clearTimeout(this._rebuildTimer);
+      this._rebuildTimer = setTimeout(() => {
+        try { this.rebuildIndex(options); } catch (err) { console.warn("[SearchService] rebuild failed", err); }
+      }, 150);
+    },
+
+    // ----- Ranking + search -----
+    _score(entry, queryRaw, opts) {
+      const q = srNormalise(queryRaw);
+      if (!q) return 0;
+      const title = srNormalise(entry.title);
+      const subtitle = srNormalise(entry.subtitle || "");
+      const body = srNormalise(entry.body || "");
+      let score = 0;
+      let reason = null;
+
+      if (title === q) { score += 100; reason = reason || "title exact"; }
+      for (const a of (entry.aliases || [])) {
+        if (srNormalise(a) === q) { score += 90; reason = reason || "alias exact"; break; }
+      }
+      if (!reason && title.startsWith(q)) { score += 70; reason = "title prefix"; }
+      if (title.includes(q)) score += (reason ? 0 : 60);
+      if (!reason && title.includes(q)) reason = "title contains";
+
+      for (const t of (entry.tags || [])) {
+        if (srNormalise(t) === q) { score += 55; reason = reason || "tag exact"; break; }
+      }
+
+      if (body.includes(q)) { score += 40; reason = reason || "body phrase"; }
+      if (subtitle.includes(q)) { score += 15; reason = reason || "subtitle"; }
+
+      // Token overlap (capped at +25).
+      const qTokens = srTokens(q);
+      if (qTokens.length) {
+        const set = new Set(entry.tokens || []);
+        let overlap = 0;
+        for (const t of qTokens) if (set.has(t)) overlap += 1;
+        if (overlap) {
+          score += Math.min(25, overlap * 5);
+          reason = reason || ("token overlap (" + overlap + "/" + qTokens.length + ")");
+        }
+      }
+
+      // Boosts
+      if (opts.activeChapterId && entry.chapterId === opts.activeChapterId) score += 10;
+      if (entry.updatedAt) {
+        const ms = Date.now() - new Date(entry.updatedAt).getTime();
+        if (Number.isFinite(ms) && ms < 24 * 3600 * 1000) score += 5;
+      }
+      if (entry.type === "review" && opts.includeReviewQueue !== false) score += 5;
+
+      return reason ? { score, reason } : 0;
+    },
+    search(queryRaw, options = {}) {
+      const q = (queryRaw || "").trim();
+      const opts = {
+        types: options.types || null,
+        entityTypes: options.entityTypes || null,
+        includeTrash: options.includeTrash === true,
+        includeReviewQueue: options.includeReviewQueue !== false,
+        includeSettings: options.includeSettings !== false,
+        limit: options.limit || 25,
+        sort: options.sort || "score",
+        activeChapterId: options.activeChapterId || null,
+      };
+
+      const state = this.loadSync();
+      let entries = state.entries.slice();
+
+      // Type filters
+      if (opts.types) entries = entries.filter((e) => opts.types.includes(e.type));
+      if (opts.entityTypes) entries = entries.filter((e) => e.type !== "entity" || opts.entityTypes.includes(e.subtype));
+      if (!opts.includeTrash) entries = entries.filter((e) => e.type !== "trash");
+      if (!opts.includeReviewQueue) entries = entries.filter((e) => e.type !== "review");
+      if (!opts.includeSettings) entries = entries.filter((e) => e.type !== "setting");
+
+      // Short query: return recent/favourites.
+      if (q.length < 2) {
+        return entries
+          .filter((e) => e.updatedAt)
+          .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+          .slice(0, opts.limit)
+          .map((e) => ({ ...e, score: 0, matchReason: "recent", highlights: [] }));
+      }
+
+      // Stop-word-only query — return nothing rather than flood with body matches.
+      const qWords = q.toLowerCase().split(/\s+/).filter(Boolean);
+      if (qWords.length && qWords.every((w) => SR_STOPWORDS.has(w))) {
+        return [];
+      }
+
+      const ranked = [];
+      for (const e of entries) {
+        const r = this._score(e, q, opts);
+        if (!r || r.score <= 0) continue;
+        ranked.push({
+          ...e,
+          score: r.score,
+          matchReason: r.reason,
+          highlights: e.body ? [{ field: "body", snippet: srSnippet(e.body, q) }] : [],
+        });
+      }
+      ranked.sort((a, b) => b.score - a.score);
+      return ranked.slice(0, opts.limit);
+    },
+    searchSync(q, opts) { return this.search(q, opts); },
+  };
+
   function installDelegates() {
     if (window.__LW_BACKEND_DELEGATES__) return;
     window.__LW_BACKEND_DELEGATES__ = true;
@@ -3001,6 +3435,22 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       const current = SettingsService.getSectionSync(d.section, {});
       SettingsService.saveSection(d.section, { ...current, [d.key]: d.value });
     });
+
+    // Keep search index fresh after relevant store mutations. Each
+    // listener is fire-and-forget; rebuildIndexAsync debounces ~150 ms.
+    const refreshIndex = () => SearchService.rebuildIndexAsync();
+    window.addEventListener("lw:entity-store-updated",        refreshIndex);
+    window.addEventListener("lw:manuscript-chapters-updated", refreshIndex);
+    window.addEventListener("lw:references-updated",          refreshIndex);
+    window.addEventListener("lw:review-queue-updated",        refreshIndex);
+    window.addEventListener("lw:project-intel-updated",       refreshIndex);
+    window.addEventListener("lw:onboarding-updated",          refreshIndex);
+    window.addEventListener("lw:settings-updated",            refreshIndex);
+    window.addEventListener("lw:project-imported",            refreshIndex);
+    window.addEventListener("lw:tangle-updated",              refreshIndex);
+    window.addEventListener("lw:occurrence-store-updated",    refreshIndex);
+    window.addEventListener("lw:sample-cleared",              refreshIndex);
+    window.addEventListener("lw:sample-loaded",               refreshIndex);
 
     document.addEventListener("click", async (e) => {
       const el = e.target.closest && e.target.closest("[data-callback]");
@@ -3191,6 +3641,31 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
             notify("Speed Reader progress reset.");
           }
         }
+        // -------- Search / Indexing --------
+        if (cb === "onRebuildSearchIndex") {
+          e.preventDefault();
+          const entries = SearchService.rebuildIndex();
+          notify(`Search index rebuilt (${entries.length} entries).`);
+        }
+        if (cb === "onClearSearch") {
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent("lw:search-clear"));
+        }
+        if (
+          cb === "onOpenSearchResult"
+          || cb === "onOpenEntityFromSearch"
+          || cb === "onOpenChapterFromSearch"
+          || cb === "onOpenReferenceFromSearch"
+          || cb === "onOpenSettingsFromSearch"
+          || cb === "onOpenReviewItemFromSearch"
+          || cb === "onOpenProjectIntelligenceFromSearch"
+          || cb === "onOpenOnboardingFromSearch"
+        ) {
+          e.preventDefault();
+          const detail = (el?.dataset && el.dataset.payload) ? (function () { try { return JSON.parse(el.dataset.payload); } catch (_) { return {}; } })() : {};
+          // Generic dispatcher → the shell decides where to land.
+          window.dispatchEvent(new CustomEvent("lw:open-search-result", { detail }));
+        }
         if (cb === "onCopyProjectContextPack" || cb === "onCopyStyleProfilePack" || cb === "onCopyCanonRulesPack" || cb === "onCopyCharacterBiblePack") {
           e.preventDefault();
           const intel = ProjectIntelService.loadSync();
@@ -3225,6 +3700,8 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     if (onb && Object.keys(onb).length) window.ONBOARDING_ANSWERS = onb;
     window.PROJECT_INTELLIGENCE = ProjectIntelService.loadSync();
     installDelegates();
+    // Build the initial search index once the live store is hydrated.
+    try { SearchService.rebuildIndex(); } catch (err) { console.warn("[SearchService] initial build failed", err); }
     window.dispatchEvent(new CustomEvent("lw:backend-ready"));
     return true;
   }
@@ -3250,6 +3727,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     AtlasService,
     SkillTreeService,
     SpeedReaderService,
+    SearchService,
     ProjectArchiveService,
     LinkService,
     AIService,

@@ -850,6 +850,112 @@ async function main() {
   try { await SRS.createSession({ sourceType: "paste", rawText: "   " }); } catch (_) { threw = true; }
   log("[sr] createSession throws on empty rawText", threw);
 
+  // -------------------------------------------------------------------
+  // Search / Indexing
+  // -------------------------------------------------------------------
+  console.log("");
+  console.log("[search]");
+
+  await B.StorageService.clear();
+  const Search = B.SearchService;
+  log("[search] SearchService exposed", !!Search && typeof Search.rebuildIndex === "function");
+  log("[search] defaultState is empty", Search.loadSync().entries.length === 0);
+
+  // Seed a small project.
+  const hessSR = await B.EntityService.save("cast", { name: "Hess Vaela", data: { aliases: ["Hess", "Vaela"], summary: "Bearer of the Auger.", tags: ["protagonist"] } });
+  const paleSR = await B.EntityService.save("locations", { name: "Pale Reach", data: { summary: "Salt-coast outpost on the edge of the marsh." } });
+  await B.EntityService.save("items", { name: "Auger of Hess", data: { summary: "An ancient turning tool." } });
+  await B.ManuscriptChapterService.createFromComposition({
+    title: "Ch. 7 — Ash & Auger",
+    bodyText: "Snow had been falling all morning. The wind off the salt flats turned each flake into a small, deliberate cut.",
+  });
+  await B.StorageService.set(B.keys.references, [
+    { id: "ref-1", title: "Style guide", content: "Pace breath. Read deliberately. POV: third limited.", tags: ["style", "pov"], kind: "style", source: "user" },
+  ]);
+  await B.StorageService.set(B.keys.reviewQueue, [
+    { id: "q-1", entityType: "cast", payload: { name: "Edrun Pell", sourceQuote: "He bowed once and was gone.", summary: "Bowed and was gone." } },
+  ]);
+  await B.StorageService.set(B.keys.projectIntelligence, { writingStyleGuide: "Short sentences. Concrete nouns.", canonRules: "The Auger turns only at dawn." });
+  await B.StorageService.set(B.keys.onboarding, { plot: "A bearer crosses the salt marsh to deliver the Auger." });
+
+  // Settings with a secret to confirm privacy.
+  await B.StorageService.set(B.keys.settings, {
+    aiProviders: { provider: "anthropic", apiKey: "sk-ant-LEAKSEARCH", model: "claude-opus-4-7" },
+    editor: { theme: "dark", fontFamily: "Inter" },
+    extraction: { localPassDefault: true },
+  });
+  await B.StorageService.set(B.keys.apiKeys, { ciphertext: "must-never-index-this", iv: "x" });
+
+  Search.rebuildIndex();
+  const stats = Search.getIndexStatsSync();
+  log("[search] rebuildIndex populates entries", stats.total >= 7);
+  log("[search] byType includes entity / chapter / reference / review / setting", !!stats.byType.entity && !!stats.byType.chapter && !!stats.byType.reference && !!stats.byType.review && !!stats.byType.setting);
+
+  // Title exact > token overlap.
+  const r1 = Search.search("Pale Reach");
+  log("[search] exact title match returns the right entity at rank 0", r1[0]?.entityId === paleSR.id);
+  log("[search] exact-title result has matchReason = title exact", r1[0]?.matchReason === "title exact");
+
+  // Alias.
+  const r2 = Search.search("Vaela");
+  log("[search] alias exact match returns the right entity", r2[0]?.entityId === hessSR.id && r2[0]?.matchReason === "alias exact");
+
+  // Chapter phrase.
+  const r3 = Search.search("salt flats");
+  log("[search] chapter body phrase returns chapter", r3.some((x) => x.type === "chapter"));
+
+  // Reference tag.
+  const r4 = Search.search("pov");
+  log("[search] reference tag returns reference", r4.some((x) => x.type === "reference" && x.referenceId === "ref-1"));
+
+  // Project Intelligence.
+  const r5 = Search.search("auger");
+  log("[search] project-intelligence is included in results", r5.some((x) => x.type === "projectIntelligence") || r5.some((x) => x.type === "entity" || x.type === "chapter"));
+
+  // Onboarding.
+  const r6 = Search.search("marsh");
+  log("[search] onboarding sections are searchable", r6.some((x) => x.type === "onboarding"));
+
+  // Settings + privacy.
+  const r7 = Search.search("provider");
+  log("[search] safe settings section returns 'aiProviders'", r7.some((x) => x.type === "setting" && x.settingsSectionId === "aiProviders"));
+
+  const r8 = Search.search("sk-ant-LEAKSEARCH");
+  log("[search] API key is NOT indexed (no results for the secret)", r8.length === 0);
+
+  const fullIdx = JSON.stringify(Search.loadSync());
+  log("[search] index never contains the raw apiKey value", fullIdx.indexOf("sk-ant-LEAKSEARCH") === -1);
+  log("[search] index never contains the encrypted blob", fullIdx.indexOf("must-never-index-this") === -1);
+
+  // Refresh path: create new entity → rebuild → finds it.
+  await B.EntityService.save("cast", { name: "Edrun Pell", data: { summary: "Squire to Saren of Hess." } });
+  Search.rebuildIndex();
+  const r9 = Search.search("Edrun");
+  log("[search] new entity is indexed after rebuild", r9.some((x) => x.type === "entity" && x.title === "Edrun Pell"));
+
+  // Delete: send entity to trash → rebuild → hidden by default, present with includeTrash.
+  await B.EntityService.delete("cast", hessSR.id);
+  Search.rebuildIndex({ includeTrash: false });
+  const r10 = Search.search("Hess Vaela", { includeTrash: false });
+  log("[search] deleted entity is hidden by default", !r10.some((x) => x.entityId === hessSR.id));
+  Search.rebuildIndex({ includeTrash: true });
+  const r11 = Search.search("Hess Vaela", { includeTrash: true });
+  log("[search] deleted entity appears as type=trash when includeTrash:true", r11.some((x) => x.type === "trash"));
+
+  // Short query.
+  const r12 = Search.search("a");
+  log("[search] short query (<2 chars) returns recent only (matchReason='recent')", r12.every((x) => x.matchReason === "recent"));
+
+  // Stop-word query — should not flood results.
+  const r13 = Search.search("the");
+  log("[search] stop-word-only query returns nothing", r13.length === 0);
+
+  // clearIndex.
+  await Search.clearIndex();
+  log("[search] clearIndex empties the cache", Search.loadSync().entries.length === 0);
+  Search.rebuildIndex();
+  log("[search] rebuild after clear restores entries", Search.getIndexStatsSync().total > 0);
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);
