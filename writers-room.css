@@ -556,6 +556,40 @@
   20% { background: color-mix(in srgb, var(--accent-soft) 80%, transparent); }
 }
 
+/* Active author popover (UAT #6) */
+.wr-author-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  min-width: 210px;
+  background: var(--surface-1, var(--bg-paper));
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-3, 8px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  padding: 4px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.wr-author-pop__item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  border: none; background: transparent;
+  border-radius: var(--r-2);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--ink-1);
+  text-align: left;
+}
+.wr-author-pop__item:hover { background: var(--bg-paper-2); }
+.wr-author-pop__item.is-active { background: var(--accent-soft); color: var(--accent-deep); }
+.wr-author-pop__hint {
+  font-size: var(--fs-3xs, 10px);
+  color: var(--ink-4);
+  padding: 6px 8px 2px;
+  border-top: 1px dashed var(--line-1);
+  margin-top: 2px;
+}
+
 /* =====================================================================
    Margins (left & right)
    ===================================================================== */

@@ -303,10 +303,10 @@ const SetEditor = () => {
 // AUTHORS
 // =====================================================================
 const SetAuthors = () => {
+  // Neutral default — a single "You" profile, not demo authors, so a fresh
+  // project never seeds fictional author names into the store (UAT #6).
   const [authors, setAuthors] = useLWSettingState("authors", [
-    { id: "em",  name: "E. Marlowe",      initials: "EM", color: "#9a7b3a", role: "Primary author",   style: "Terse / cold / restrained" },
-    { id: "ann", name: "Ann (co-writer)", initials: "AN", color: "#7a6aa3", role: "Co-writer",        style: "Maximalist / lyrical" },
-    { id: "ai",  name: "Loomwright AI",   initials: "LW", color: "#3e6db5", role: "AI",               style: "Match Primary" },
+    { id: "you", name: "You", initials: "Y", color: "#9a7b3a", role: "Primary author", style: "" },
   ]);
   return (
     <SetGroupCard title="Author profiles" hint="Track who wrote what; colour-code attribution in the manuscript."

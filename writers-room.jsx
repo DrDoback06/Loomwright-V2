@@ -382,50 +382,55 @@ const ManuscriptToolbar = ({
   attribution = true, focusMode = false,
   onToggleFocusMode, onToggleAttribution, onToggleSpellcheck, onToggleGrammar, onToggleStyle, onToggleVoice, onToggleRevision,
 }) => {
-  const TB = ({ icon, label, active, onClick, children, className = "" }) => (
+  // disabled buttons stay visible but are clearly non-interactive with a
+  // reason in the tooltip (UAT #7 — no fake controls left clickable).
+  const TB = ({ icon, label, active, onClick, children, className = "", disabled = false, testid }) => (
     <button
       type="button"
       className={"wr-toolbar__btn " + className + (active ? " is-active" : "")}
-      title={label}
+      title={disabled ? label + " — not available in this beta" : label}
       aria-label={label}
+      aria-disabled={disabled || undefined}
       onClick={onClick}
+      disabled={disabled}
+      data-testid={testid}
     >{icon ? <Icon name={icon} size={13}/> : children}</button>
   );
 
   return (
     <div className="wr-toolbar" data-ui="ManuscriptToolbar" role="toolbar" aria-label="Manuscript formatting">
       <div className="wr-toolbar__group">
-        <TB label="Bold (⌘B)"           className="wr-toolbar__btn--text"      onClick={() => onAction("bold")}><b>B</b></TB>
-        <TB label="Italic (⌘I)"         className="wr-toolbar__btn--text wr-toolbar__btn--italic" onClick={() => onAction("italic")}><i>I</i></TB>
-        <TB label="Underline (⌘U)"      className="wr-toolbar__btn--text wr-toolbar__btn--underline" onClick={() => onAction("underline")}>U</TB>
-        <TB label="Strikethrough"       className="wr-toolbar__btn--text wr-toolbar__btn--strike" onClick={() => onAction("strike")}>S</TB>
+        <TB label="Bold (⌘B)"           testid="wr-tb-bold"      className="wr-toolbar__btn--text"      onClick={() => onAction("bold")}><b>B</b></TB>
+        <TB label="Italic (⌘I)"         testid="wr-tb-italic"    className="wr-toolbar__btn--text wr-toolbar__btn--italic" onClick={() => onAction("italic")}><i>I</i></TB>
+        <TB label="Underline (⌘U)"      testid="wr-tb-underline" className="wr-toolbar__btn--text wr-toolbar__btn--underline" onClick={() => onAction("underline")}>U</TB>
+        <TB label="Strikethrough"       testid="wr-tb-strike"    className="wr-toolbar__btn--text wr-toolbar__btn--strike" onClick={() => onAction("strike")}>S</TB>
       </div>
       <div className="wr-toolbar__group">
-        <TB label="Heading"             className="wr-toolbar__btn--text" onClick={() => onAction("heading")}>H</TB>
-        <TB label="Scene break"         icon="bars" onClick={() => onAction("scene-break")}/>
-        <TB label="Quote"               className="wr-toolbar__btn--text" onClick={() => onAction("quote")}>"</TB>
+        <TB label="Heading"             disabled className="wr-toolbar__btn--text">H</TB>
+        <TB label="Scene break"         disabled icon="bars"/>
+        <TB label="Quote"               disabled className="wr-toolbar__btn--text">"</TB>
       </div>
       <div className="wr-toolbar__group">
-        <TB label="Inline note"         icon="paper" onClick={() => onAction("inline-note")}/>
-        <TB label="Comment"             icon="bell" onClick={() => onAction("comment")}/>
-        <TB label="Highlight"           icon="drop" onClick={() => onAction("highlight")}/>
+        <TB label="Add paragraph note"  testid="wr-tb-note" icon="paper" onClick={() => onAction("inline-note")}/>
+        <TB label="Add paragraph note (comment)" icon="bell" onClick={() => onAction("comment")}/>
+        <TB label="Highlight"           disabled icon="drop"/>
       </div>
       <div className="wr-toolbar__group">
         <TB label="Link to entity"      icon="link" onClick={() => onAction("link-entity")}/>
         <TB label="Create entity from selection" icon="plus" onClick={() => onAction("create-entity")}/>
-        <TB label="Insert reference"    icon="bookmark" onClick={() => onAction("insert-ref")}/>
-        <TB label="Insert footnote"     icon="paper" onClick={() => onAction("footnote")}/>
+        <TB label="Insert reference"    disabled icon="bookmark"/>
+        <TB label="Insert footnote"     disabled icon="paper"/>
       </div>
       <div className="wr-toolbar__group">
-        <TB label="Find / replace (⌘F)" icon="search" onClick={() => onAction("find")}/>
+        <TB label="Find / replace"      disabled icon="search"/>
         <TB label="Spellcheck"   active={spellcheck} className="wr-toolbar__btn--small" onClick={onToggleSpellcheck}>SP</TB>
-        <TB label="Grammar"      active={grammar}    className="wr-toolbar__btn--small" onClick={onToggleGrammar}>GR</TB>
-        <TB label="Style"        active={style}      className="wr-toolbar__btn--small" onClick={onToggleStyle}>ST</TB>
-        <TB label="Voice consistency" active={voice} className="wr-toolbar__btn--small" onClick={onToggleVoice}>VO</TB>
+        <TB label="Grammar (preference)"      active={grammar}    className="wr-toolbar__btn--small" onClick={onToggleGrammar}>GR</TB>
+        <TB label="Style (preference)"        active={style}      className="wr-toolbar__btn--small" onClick={onToggleStyle}>ST</TB>
+        <TB label="Voice consistency (preference)" active={voice} className="wr-toolbar__btn--small" onClick={onToggleVoice}>VO</TB>
       </div>
       <div className="wr-toolbar__group">
-        <TB label="Thesaurus"           icon="book" onClick={() => onAction("thesaurus")}/>
-        <TB label="Revision mode"       active={revision}    className="wr-toolbar__btn--small" onClick={onToggleRevision}>REV</TB>
+        <TB label="Thesaurus"           disabled icon="book"/>
+        <TB label="Revision mode (preference)"       active={revision}    className="wr-toolbar__btn--small" onClick={onToggleRevision}>REV</TB>
         <TB label="Author attribution"  active={attribution} className="wr-toolbar__btn--small" onClick={onToggleAttribution}>AUT</TB>
         <TB label="Focus mode"          active={focusMode}   icon="eye" onClick={onToggleFocusMode}/>
       </div>
@@ -471,24 +476,53 @@ const SaveModeControls = ({ onSave, onSaveAndExtract, onSaveAndDeepExtract, sync
 // AuthorSelector
 // ---------------------------------------------------------------------
 const AuthorSelector = ({ authors, activeId, onSelectAuthor }) => {
-  const a = authors.find((x) => x.id === activeId) || authors[0];
+  const list = (authors && authors.length) ? authors : [{ id: "you", name: "You", initials: "Y", color: "var(--accent)" }];
+  const a = list.find((x) => x.id === activeId) || list[0];
+  const [open, setOpen] = _wrUS(false);
+  const ref = _wrUR(null);
+  _wrUE(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const initials = (x) => x.initials || (x.name || "?").slice(0, 2).toUpperCase();
   return (
-    <button
-      className="wr-author-sel"
-      data-ui="AuthorSelector"
-      data-callback="onSelectAuthor"
-      data-testid="wr-author-selector"
-      onClick={() => {
-        const i = authors.findIndex((x) => x.id === activeId);
-        const next = authors[(i + 1) % authors.length];
-        onSelectAuthor && onSelectAuthor(next.id);
-      }}
-      title="Switch active author"
-    >
-      <span className="wr-author-sel__chip" style={{ "--ac": a.color }}>{a.initials}</span>
-      <span>{a.name}</span>
-      <Icon name="chevron-d" size={11}/>
-    </button>
+    <div className="wr-author-sel-wrap" ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        className="wr-author-sel"
+        data-ui="AuthorSelector"
+        data-testid="wr-author-selector"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        title="Active author"
+      >
+        <span className="wr-author-sel__chip" style={{ "--ac": a.color }}>{initials(a)}</span>
+        <span>{a.name}</span>
+        <Icon name="chevron-d" size={11}/>
+      </button>
+      {open && (
+        <div className="wr-author-pop" data-ui="AuthorSelectorPopover" role="listbox">
+          {list.map((x) => (
+            <button
+              key={x.id}
+              type="button"
+              role="option"
+              aria-selected={x.id === a.id}
+              className={"wr-author-pop__item " + (x.id === a.id ? "is-active" : "")}
+              data-testid={"wr-author-option-" + x.id}
+              onClick={() => { onSelectAuthor && onSelectAuthor(x.id); setOpen(false); }}
+            >
+              <span className="wr-author-sel__chip" style={{ "--ac": x.color }}>{initials(x)}</span>
+              <span>{x.name}</span>
+            </button>
+          ))}
+          <div className="wr-author-pop__hint">Manage authors in Settings → Authors.</div>
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -497,13 +531,12 @@ const AuthorSelector = ({ authors, activeId, onSelectAuthor }) => {
 // ---------------------------------------------------------------------
 const FloatingSelectionToolbar = ({ x, y, onAction, onCreateEntityFromSelection, onLinkEntity }) => {
   return (
-    <div className="wr-fst" style={{ left: x, top: y }} data-ui="FloatingSelectionToolbar">
+    <div className="wr-fst" style={{ left: x, top: y, position: "fixed" }} data-ui="FloatingSelectionToolbar" onMouseDown={(e) => e.preventDefault()}>
       <button className="wr-fst__btn" title="Bold" onClick={() => onAction("bold")}><b>B</b></button>
       <button className="wr-fst__btn" title="Italic" onClick={() => onAction("italic")}><i>I</i></button>
       <button className="wr-fst__btn" title="Underline" onClick={() => onAction("underline")}>U</button>
       <span className="wr-fst__sep"/>
-      <button className="wr-fst__btn" title="Highlight" onClick={() => onAction("highlight")}><Icon name="drop" size={13}/></button>
-      <button className="wr-fst__btn" title="Comment" onClick={() => onAction("comment")}><Icon name="bell" size={13}/></button>
+      <button className="wr-fst__btn" title="Add paragraph note" onClick={() => onAction("comment")}><Icon name="bell" size={13}/></button>
       <span className="wr-fst__sep"/>
       <button className="wr-fst__btn" data-callback="onLinkEntity" title="Link to entity" onClick={onLinkEntity}><Icon name="link" size={13}/></button>
       <button className="wr-fst__btn wr-fst__btn--strong" data-callback="onCreateEntityFromSelection" title="Create entity from selection" onClick={onCreateEntityFromSelection}>
@@ -525,7 +558,12 @@ const FloatingEntityChip = ({ entity, x, y, onOpenEntity, onShowMentions, onOpen
         <EntityTypeBadge type={entity.type} size="xs" showLabel={false}/>
         <div className="wr-chip__name">{entity.text}</div>
       </div>
-      <div className="wr-chip__sub">{t?.label} · 7 mentions across 4 chapters</div>
+      <div className="wr-chip__sub">{t?.label}{(() => {
+        try {
+          const n = window.LoomwrightBackend?.OccurrenceService?.listByEntitySync?.(entity.id)?.length;
+          return n ? ` · ${n} mention${n === 1 ? "" : "s"}` : "";
+        } catch (_e) { return ""; }
+      })()}</div>
       <div className="wr-chip__row">
         <Btn variant="outline" size="sm" icon="paper" data-callback="onOpenEntity" onClick={() => onOpenEntity && onOpenEntity(entity)}>Dossier</Btn>
         <Btn variant="ghost" size="sm" icon="search" data-callback="onShowMentions" onClick={() => onShowMentions && onShowMentions(entity)}>Mentions</Btn>
@@ -858,7 +896,7 @@ function _wrSnapshotBody(bodyEl) {
   return { paragraphs: out, text, html: bodyEl.innerHTML, words: _wrCountWords(text) };
 }
 
-const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, onInput, onDoubleClick, onMouseOver, onMouseOut }) => {
+const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, spellCheck, onInput, onDoubleClick, onMouseOver, onMouseOut }) => {
   const localRef = _wrUR(null);
   const htmlRef = _wrUR(html);
   htmlRef.current = html;
@@ -879,6 +917,7 @@ const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, onInput, 
       data-testid="wr-manuscript-body"
       contentEditable
       suppressContentEditableWarning
+      spellCheck={spellCheck !== false}
       role="textbox"
       aria-multiline="true"
       aria-label="Manuscript body — start writing"
@@ -895,7 +934,7 @@ const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, onInput, 
 // ManuscriptCanvas
 // ---------------------------------------------------------------------
 const ManuscriptCanvas = ({
-  chapter, manuscript, state, bodyRef, titleRef, bodyEpoch,
+  chapter, manuscript, state, bodyRef, titleRef, bodyEpoch, spellCheck,
   onBodyInput, onStartWriting,
   onEntityHoverDelegated, onEntityDoubleClickDelegated,
   onCreateChapter, onSaveAndExtract,
@@ -983,6 +1022,7 @@ const ManuscriptCanvas = ({
           chapterId={chapter.id}
           bodyEpoch={bodyEpoch}
           html={bodyHtml}
+          spellCheck={spellCheck}
           onInput={(e) => { setHintDismissed(true); onBodyInput && onBodyInput(e); }}
           onDoubleClick={onEntityDoubleClickDelegated}
           onMouseOver={onEntityHoverDelegated}
@@ -1072,6 +1112,19 @@ const WritersRoomScreen = ({
     } catch (_e) {}
     return (list[0] && list[0].id) || "you";
   });
+  _wrUE(() => {
+    const refresh = () => setAuthorList(loadAuthors());
+    window.addEventListener("lw:settings-saved", refresh);
+    window.addEventListener("lw:settings-updated", refresh);
+    window.addEventListener("lw:backend-ready", refresh);
+    window.addEventListener("lw:project-imported", refresh);
+    return () => {
+      window.removeEventListener("lw:settings-saved", refresh);
+      window.removeEventListener("lw:settings-updated", refresh);
+      window.removeEventListener("lw:backend-ready", refresh);
+      window.removeEventListener("lw:project-imported", refresh);
+    };
+  }, []);
 
   // Toolbar toggles
   const [spellcheck, setSpellcheck] = _wrUS(true);
@@ -1134,9 +1187,9 @@ const WritersRoomScreen = ({
       manuscripts: nextManuscripts ?? manuscriptsByChapter,
       notes: { default: nextNotes ?? notes },
       extractions: { default: nextExtractions ?? extractions },
-      authors: WR_AUTHORS,
+      authors: authorList,
     });
-  }, [activeId, chapters, manuscriptsByChapter, notes, extractions]);
+  }, [activeId, chapters, manuscriptsByChapter, notes, extractions, authorList]);
 
   _wrUE(() => {
     const onReady = () => {
@@ -1193,7 +1246,24 @@ const WritersRoomScreen = ({
 
   // Floating UI
   const [hoverEntity, setHoverEntity] = _wrUS(null);
-  const [selToolbar, setSelToolbar] = _wrUS({ x: 380, y: 220, visible: true }); // demo: visible by default
+  // Floating selection toolbar — hidden until the user actually selects text
+  // inside the editable body (UAT #7: no fake always-on toolbar).
+  const [selToolbar, setSelToolbar] = _wrUS({ x: 0, y: 0, visible: false });
+  _wrUE(() => {
+    const onSel = () => {
+      try {
+        const sel = window.getSelection && window.getSelection();
+        if (sel && !sel.isCollapsed && bodyRef.current && bodyRef.current.contains(sel.anchorNode) && String(sel.toString()).trim()) {
+          const rect = sel.getRangeAt(0).getBoundingClientRect();
+          setSelToolbar({ x: Math.max(8, rect.left), y: Math.max(8, rect.top - 46), visible: true });
+        } else {
+          setSelToolbar((p) => (p.visible ? { ...p, visible: false } : p));
+        }
+      } catch (_e) {}
+    };
+    document.addEventListener("selectionchange", onSel);
+    return () => document.removeEventListener("selectionchange", onSel);
+  }, []);
 
   // Delete confirm modal
   const [deletingChapter, setDeletingChapter] = _wrUS(null);
@@ -1437,12 +1507,28 @@ const WritersRoomScreen = ({
   }, []);
 
   const onToolbarAction = _wrUC((action) => {
-    if (action === "create-entity") onCreateEntityFromSelection();
-    if (action === "link-entity")   onLinkEntity();
-  }, [onCreateEntityFromSelection, onLinkEntity]);
+    if (action === "create-entity") { onCreateEntityFromSelection(); return; }
+    if (action === "link-entity") { onLinkEntity(); return; }
+    if (action === "inline-note" || action === "comment") { onAddNote(); return; }
+    if (action === "bold" || action === "italic" || action === "underline" || action === "strike") {
+      const cmd = action === "strike" ? "strikeThrough" : action;
+      try { if (bodyRef.current) bodyRef.current.focus(); if (document.execCommand) document.execCommand(cmd, false, null); } catch (_e) {}
+      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      return;
+    }
+  }, [onCreateEntityFromSelection, onLinkEntity, onAddNote, canvasState, onSetSyncState]);
 
   const onToggleFocusMode  = _wrUC(() => setL((p) => ({ ...p, writingLayoutMode: p.writingLayoutMode === "clean" ? "full" : "clean" })), [setL]);
-  const onSelectAuthor     = _wrUC((id) => setActiveAuthorId(id), []);
+  const onSelectAuthor     = _wrUC((id) => {
+    setActiveAuthorId(id);
+    try {
+      const svc = window.LoomwrightBackend?.SettingsService;
+      if (svc) {
+        const cur = svc.getSectionSync("writersRoom", {}) || {};
+        svc.saveSection("writersRoom", { ...cur, activeAuthorId: id });
+      }
+    } catch (_e) {}
+  }, []);
 
   // Escape exits focus mode (clear, discoverable exit affordance).
   _wrUE(() => {
@@ -1647,7 +1733,7 @@ const WritersRoomScreen = ({
               <span>Chapter {activeChapter?.num || "—"}</span>
             </div>
             <div className="wr-canvasbar__chips">
-              <AuthorSelector authors={WR_AUTHORS} activeId={activeAuthorId} onSelectAuthor={onSelectAuthor}/>
+              <AuthorSelector authors={authorList} activeId={activeAuthorId} onSelectAuthor={onSelectAuthor}/>
               <Btn variant={compositionOverlayOpen ? "primary" : "outline"} size="sm" icon="sparkle"
                 onClick={onOpenCompositionOverlay}
                 data-callback="onOpenEntityCompositionOverlay"
@@ -1684,6 +1770,7 @@ const WritersRoomScreen = ({
             bodyRef={bodyRef}
             titleRef={titleRef}
             bodyEpoch={bodyEpoch}
+            spellCheck={spellcheck}
             onBodyInput={onManuscriptChange}
             onStartWriting={onStartWriting}
             onEntityHoverDelegated={onEntityHoverDelegated}
