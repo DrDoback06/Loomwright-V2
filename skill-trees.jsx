@@ -735,14 +735,153 @@ const SkillTreeEditor = ({ onExit }) => {
 // ---------------------------------------------------------------------
 // SkillsPanelBody — entry point used by the panel-stack dispatcher
 // ---------------------------------------------------------------------
+// ---------------------------------------------------------------------
+// SkillTreeNodeRow — one live node (a skills entity) inside a tree.
+// ---------------------------------------------------------------------
+const SkillTreeNodeRow = ({ node, connectArmed, onRename, onToggleLock, onConnect, onRemove }) => (
+  <div className="stm-node" data-testid={"st-node-" + node.id} style={{ "--c": node.unlocked ? "var(--accent)" : "var(--line-3)" }}>
+    <input
+      className="stm-node__name"
+      defaultValue={node.name}
+      key={node.id + ":" + node.name}
+      aria-label="Skill node name"
+      data-testid={"st-node-name-" + node.id}
+      onBlur={(e) => onRename(node.id, e.target.value)}
+      onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+    />
+    <button type="button" className={"stm-btn" + (node.unlocked ? " is-on" : "")} data-testid={"st-lock-" + node.id} onClick={() => onToggleLock(node.id)} title={node.unlocked ? "Lock node" : "Unlock node"}>{node.unlocked ? "Unlocked" : "Locked"}</button>
+    <button type="button" className={"stm-btn" + (connectArmed ? " is-arming" : "")} data-testid={"st-connect-" + node.id} onClick={() => onConnect(node.id)} title="Connect to another node">{connectArmed ? "Pick target…" : "Connect"}</button>
+    <button type="button" className="stm-btn stm-btn--danger" data-testid={"st-remove-node-" + node.id} onClick={() => onRemove(node.id)} title="Remove node">×</button>
+  </div>
+);
+
+// ---------------------------------------------------------------------
+// SkillTreeLiveManager — live, persistent skill-tree editing (UAT #17).
+// Backed entirely by SkillTreeService + EntityService("skills"); nodes are
+// skill entities. Create tree/node, connect, assign to cast/class, lock,
+// and rename all persist and survive reload. The visual constellation
+// canvas remains future scope (see notice in SkillsPanelBody).
+// ---------------------------------------------------------------------
+const SkillTreeLiveManager = () => {
+  const B = () => window.LoomwrightBackend;
+  const read = () => (B() && B().SkillTreeService ? (B().SkillTreeService.loadSync().trees || []) : []);
+  const [trees, setTrees] = React.useState(read);
+  const [selId, setSelId] = React.useState(null);
+  const [connectFrom, setConnectFrom] = React.useState(null);
+  const refresh = React.useCallback(() => setTrees(read()), []);
+  React.useEffect(() => {
+    refresh();
+    const evs = ["lw:skill-trees-updated", "lw:entity-store-updated", "lw:backend-ready", "lw:project-imported"];
+    evs.forEach((e) => window.addEventListener(e, refresh));
+    return () => evs.forEach((e) => window.removeEventListener(e, refresh));
+  }, [refresh]);
+  React.useEffect(() => {
+    if (!selId && trees.length) setSelId(trees[0].id);
+  }, [trees, selId]);
+
+  const tree = trees.find((t) => t.id === selId) || null;
+  const skillName = (id) => { try { const e = B().EntityService.getSync(id, "skills"); return (e && e.name) || "Untitled skill"; } catch (_e) { return "Untitled skill"; } };
+  const nodes = tree ? (tree.nodeIds || []).map((id) => ({ id, name: skillName(id), unlocked: !!((tree.layout || {})[id] || {}).unlocked })) : [];
+  const cast = (() => { try { return B().EntityService.listSync("cast") || []; } catch (_e) { return []; } })();
+  const classes = (() => { try { return B().EntityService.listSync("classes") || []; } catch (_e) { return []; } })();
+
+  const createTree = async () => { const s = B() && B().SkillTreeService; if (!s) return; const t = await s.addTree({ name: "New skill tree" }); if (t && t.id) setSelId(t.id); };
+  const removeTree = async () => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.removeTree(tree.id); setSelId(null); };
+  const addNode = async () => {
+    if (!tree) return;
+    const ES = B() && B().EntityService, s = B() && B().SkillTreeService; if (!ES || !s) return;
+    const skill = await ES.save("skills", { name: "New skill" }, { status: "active" });
+    await s.addNode(tree.id, skill.id, { x: 20 + (nodes.length * 13) % 60, y: 30 + (nodes.length * 7) % 40 });
+  };
+  const renameNode = async (id, name) => { const ES = B() && B().EntityService; if (!ES) return; await ES.update("skills", id, { name: (name || "").trim() || "Untitled skill" }); refresh(); };
+  const toggleLock = async (id) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.setNodeUnlocked(tree.id, id, !((tree.layout || {})[id] || {}).unlocked); };
+  const removeNode = async (id) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.removeNode(tree.id, id); };
+  const connect = async (id) => {
+    const s = B() && B().SkillTreeService; if (!s || !tree) return;
+    if (!connectFrom) { setConnectFrom(id); return; }
+    if (connectFrom === id) { setConnectFrom(null); return; }
+    await s.connectNodes(tree.id, connectFrom, id);
+    setConnectFrom(null);
+  };
+  const assignCast = async (cid) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.assignCast(tree.id, cid); };
+  const assignClass = async (clid) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.assignClass(tree.id, clid); };
+
+  return (
+    <div className="stm" data-ui="SkillTreeLiveManager">
+      <div className="stm__trees">
+        <div className="stm__sech">Skill trees</div>
+        <div className="stm__tree-list">
+          {trees.map((t) => (
+            <button key={t.id} type="button" className={"stm__tree" + (t.id === selId ? " is-on" : "")} data-testid={"st-tree-" + t.id} onClick={() => { setSelId(t.id); setConnectFrom(null); }}>
+              <span className="stm__tree-name">{t.name}</span>
+              <span className="stm__tree-meta">{(t.nodeIds || []).length} nodes</span>
+            </button>
+          ))}
+          {trees.length === 0 && <div className="stm__empty" data-testid="st-empty">No skill trees yet. Create one to start adding skill nodes.</div>}
+          <button type="button" className="stm__add" data-testid="st-create-tree" onClick={createTree}><Icon name="plus" size={11}/> Create tree</button>
+        </div>
+      </div>
+
+      {tree ? (
+        <div className="stm__detail" data-testid="st-detail">
+          <div className="stm__detail-head">
+            <span className="stm__detail-name">{tree.name}</span>
+            <button type="button" className="stm-btn" data-testid="st-add-node" onClick={addNode}><Icon name="plus" size={10}/> Add node</button>
+            <button type="button" className="stm-btn stm-btn--danger" data-testid="st-remove-tree" onClick={removeTree} title="Delete this tree">Delete tree</button>
+          </div>
+
+          <div className="stm__sech">Nodes ({nodes.length})</div>
+          <div className="stm__nodes">
+            {nodes.length === 0 && <div className="stm__empty">No nodes yet — “Add node” creates a skill node that persists.</div>}
+            {nodes.map((n) => (
+              <SkillTreeNodeRow key={n.id} node={n} connectArmed={connectFrom === n.id}
+                onRename={renameNode} onToggleLock={toggleLock} onConnect={connect} onRemove={removeNode}/>
+            ))}
+          </div>
+
+          {(tree.edges || []).length > 0 && (
+            <div className="stm__edges">
+              <div className="stm__sech">Connections ({tree.edges.length})</div>
+              {tree.edges.map((e, i) => (
+                <div key={i} className="stm__edge" data-testid="st-edge">{skillName(e.from)} → {skillName(e.to)}</div>
+              ))}
+            </div>
+          )}
+
+          <div className="stm__assign">
+            <div className="stm__sech">Assign to cast</div>
+            <div className="stm__assign-row">
+              {cast.length === 0 && <span className="stm__empty">No cast yet — create cast members to assign this tree.</span>}
+              {cast.map((c) => {
+                const on = (tree.assignedCast || []).includes(c.id);
+                return <button key={c.id} type="button" className={"stm-chip" + (on ? " is-on" : "")} data-testid={"st-assign-cast-" + c.id} onClick={() => assignCast(c.id)}>{c.name}{on ? " ✓" : ""}</button>;
+              })}
+            </div>
+            <div className="stm__sech">Assign to class</div>
+            <div className="stm__assign-row">
+              {classes.length === 0 && <span className="stm__empty">No classes yet.</span>}
+              {classes.map((c) => {
+                const on = (tree.assignedClasses || []).includes(c.id);
+                return <button key={c.id} type="button" className={"stm-chip" + (on ? " is-on" : "")} data-testid={"st-assign-class-" + c.id} onClick={() => assignClass(c.id)}>{c.name}{on ? " ✓" : ""}</button>;
+              })}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="stm__detail stm__detail--empty">Select or create a skill tree to edit its nodes, connections, and assignments.</div>
+      )}
+    </div>
+  );
+};
+
 const SkillsPanelBody = ({ panel }) => {
-  const [fullScreen, setFullScreen] = _st_us(false);
-  // Listen for "Open Skill Tree Editor" from the standardised panel header.
+  const [showCanvasNote, setShowCanvasNote] = _st_us(false);
+  // The standardised panel header can request the (future) full-screen canvas.
   React.useEffect(() => {
     const onOpen = (e) => {
       const d = e?.detail || {};
       if (d.panelKind === "skills" || d.panelKind === "abilities" || d.workspaceId === "skill-tree-editor") {
-        setFullScreen(true);
+        setShowCanvasNote(true);
       }
     };
     window.addEventListener("lw:open-existing-fullscreen", onOpen);
@@ -750,10 +889,15 @@ const SkillsPanelBody = ({ panel }) => {
   }, []);
   return (
     <div className="stp-host">
-      <SkillTreesSidePanel onOpenEditor={() => setFullScreen(true)}/>
-      {fullScreen && (
+      <SkillTreeLiveManager/>
+      {showCanvasNote && (
         <div className="ste-overlay">
-          <SkillTreeEditor onExit={() => setFullScreen(false)}/>
+          <div className="ste-future" data-ui="SkillTreeCanvasFuture">
+            <Icon name="tree" size={28}/>
+            <h2>Visual constellation canvas</h2>
+            <p>The drag-and-drop constellation canvas is a planned enhancement. For now, create and edit skill trees, nodes, connections, lock state, and cast/class assignments in the panel — every change persists and survives reload.</p>
+            <button type="button" className="stm__add" data-callback="onExitSkillTreeEditor" onClick={() => setShowCanvasNote(false)}>Back to skills</button>
+          </div>
         </div>
       )}
     </div>

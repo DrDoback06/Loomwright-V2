@@ -291,6 +291,34 @@ async function main() {
   await MNS.deleteNote(note1.id);
   log("deleteNote removes the note", !MNS.getSync(note1.id));
 
+  // -- SkillTreeService lifecycle (UAT #17) --
+  const STS = B.SkillTreeService;
+  log("SkillTreeService exposed", !!STS);
+  await STS.save({ trees: [] });
+  const stTree = await STS.addTree({ name: "Augur Path" });
+  log("addTree persists a tree", STS.loadSync().trees.some((t) => t.id === stTree.id));
+  const sk1 = await B.EntityService.save("skills", { name: "Spark" }, { status: "active" });
+  const sk2 = await B.EntityService.save("skills", { name: "Flame" }, { status: "active" });
+  await STS.addNode(stTree.id, sk1.id, { x: 10, y: 20 });
+  await STS.addNode(stTree.id, sk2.id, { x: 40, y: 20 });
+  log("addNode persists node ids + layout", (() => { const t = STS.loadSync().trees.find((x) => x.id === stTree.id); return t.nodeIds.includes(sk1.id) && t.nodeIds.includes(sk2.id) && !!t.layout[sk1.id]; })());
+  await STS.connectNodes(stTree.id, sk1.id, sk2.id);
+  log("connectNodes persists an edge", STS.loadSync().trees.find((x) => x.id === stTree.id).edges.some((e) => e.from === sk1.id && e.to === sk2.id));
+  await STS.setNodeUnlocked(stTree.id, sk1.id, true);
+  log("setNodeUnlocked persists in layout", STS.loadSync().trees.find((x) => x.id === stTree.id).layout[sk1.id].unlocked === true);
+  const stCast = await B.EntityService.save("cast", { name: "Mira Augur" }, { status: "active" });
+  await STS.assignCast(stTree.id, stCast.id);
+  log("assignCast persists", STS.loadSync().trees.find((x) => x.id === stTree.id).assignedCast.includes(stCast.id));
+  const stClass = await B.EntityService.save("classes", { name: "Augur" }, { status: "active" });
+  await STS.assignClass(stTree.id, stClass.id);
+  log("assignClass persists", STS.loadSync().trees.find((x) => x.id === stTree.id).assignedClasses.includes(stClass.id));
+  await STS.updateNodePosition(stTree.id, sk1.id, { x: 99, y: 1 });
+  log("updateNodePosition persists", STS.loadSync().trees.find((x) => x.id === stTree.id).layout[sk1.id].x === 99);
+  await STS.removeNode(stTree.id, sk2.id);
+  log("removeNode removes node + its edges", (() => { const t = STS.loadSync().trees.find((x) => x.id === stTree.id); return !t.nodeIds.includes(sk2.id) && !t.edges.some((e) => e.to === sk2.id); })());
+  await STS.removeTree(stTree.id);
+  log("removeTree deletes the tree", !STS.loadSync().trees.some((t) => t.id === stTree.id));
+
   // -- Sample project load / scoped clear --
   win.WR_DEMO_PROJECT = { chapters: [{ id: "demo-ch1", title: "Demo", num: 1 }] };
   win.CAST_SAMPLE = [{ id: "demo-cast", name: "Demo Cast" }];
@@ -598,8 +626,8 @@ async function main() {
   const skillA = await B.EntityService.save("skills", { name: "Quickstep" }, { status: "active" });
   const skillB = await B.EntityService.save("skills", { name: "Sidestep" }, { status: "active" });
   const tree = await B.SkillTreeService.addTree({ name: "Footwork", description: "Movement skills." });
-  const treeId = tree.trees[tree.trees.length - 1].id;
-  log("[skill-trees] addTree persists", !!treeId);
+  const treeId = tree.id;
+  log("[skill-trees] addTree persists + returns the created row", !!treeId && B.SkillTreeService.loadSync().trees.some((t) => t.id === treeId));
   await B.SkillTreeService.addNode(treeId, skillA.id, { x: 100, y: 200 });
   await B.SkillTreeService.addNode(treeId, skillB.id, { x: 200, y: 200 });
   let state = B.SkillTreeService.loadSync();

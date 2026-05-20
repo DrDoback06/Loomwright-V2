@@ -977,7 +977,8 @@
         assignedCast: Array.isArray(tree.assignedCast) ? tree.assignedCast.slice() : [],
         createdAt: tree.createdAt || nowIso(),
       };
-      return this.save({ ...state, trees: [...(state.trees || []), row] });
+      await this.save({ ...state, trees: [...(state.trees || []), row] });
+      return row;
     },
     async updateTree(id, patch) {
       const state = this.loadSync();
@@ -1074,6 +1075,19 @@
           const set = new Set(t.assignedCast || []);
           set.add(castEntityId);
           return { ...t, assignedCast: [...set], updatedAt: nowIso() };
+        }),
+      });
+    },
+    // Persist a node's locked/unlocked state in the tree layout (UAT #17).
+    async setNodeUnlocked(treeId, skillEntityId, unlocked) {
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => {
+          if (t.id !== treeId) return t;
+          const prev = (t.layout || {})[skillEntityId] || {};
+          const layout = { ...(t.layout || {}), [skillEntityId]: { ...prev, unlocked: !!unlocked } };
+          return { ...t, layout, updatedAt: nowIso() };
         }),
       });
     },
