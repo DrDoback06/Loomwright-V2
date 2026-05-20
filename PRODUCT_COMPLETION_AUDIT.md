@@ -17,7 +17,7 @@ Reproduce on a clean checkout of `main`:
 > npm install
 > npm run validate
 All checked HTML references exist.
-OK: 526 UI callbacks; registry bootstraps 552 handlers
+OK: 526 UI callbacks; registry bootstraps 558 handlers
 OK: registry default branch emits a user-visible notice (no silent fall-through).
 OK: 0 Bucket A action callbacks reach the generic default notice.
 OK: 6 Bucket B (provider-gated) callbacks use requireProviderOrNotice.
@@ -25,10 +25,10 @@ OK: 4 Bucket D (React-owned) callbacks declared.
 INFO: 213 other callbacks fall to default notice (housekeeping/dispatch).
 
 > npm run test:smoke
-All smoke checks passed (extraction + workspace persistence + project import/export + speed reader + search + audit — 23 new [audit] assertions).
+All smoke checks passed (… + audit + ai routing — 22 new [ai routing] assertions).
 
 > CHROMIUM_PATH=/path/to/chrome npm run test:e2e
-69 passed (≈6.2 min wall, real Chromium) — 63 pre-existing + 6 new audit/undo.
+75 passed (≈5.5 min wall, real Chromium) — 69 pre-existing + 6 new AI provider routing.
 ```
 
 The e2e suite is in `tests/e2e/`; six spec files cover 28 tests across
@@ -82,6 +82,7 @@ breaks `npm run test:smoke` or `npm run test:e2e`.
 | **Speed Reader** — `SpeedReaderService` persists per-source RSVP sessions under `KEYS.speedReader`. Source resolvers: current chapter (via `ManuscriptChapterService`), pasted text, references (via `KEYS.references`). Session shape carries `currentWordIndex`, `wpm`, `fontSize`, pause settings, `bookmarks`, `notes`, `stats`. `useSpeedReader` hydrates on mount, debounces persistence (~250 ms) for the active persisted session, and re-hydrates on source switch. Five new callbacks (`onCreateSpeedReaderSession`, `onReadCurrentChapter`, `onReadReference`, `onDeleteSpeedReaderSession`, `onResetSpeedReaderProgress`) wired through the backend delegate. | smoke (26 assertions) + e2e O (5 tests) |
 | **Search / Indexing** — `SearchService` builds a local global index across entities (14 types), chapters, references, review queue, project intelligence, onboarding answers, safe settings sections, occurrences, and (opt-in) trash. Ranking: title exact > alias exact > title prefix > title contains > tag exact > body phrase > token overlap (capped). `CommandPalette` reads live results; result rows carry typed pointers (`entityId`, `chapterId`, `referenceId`, `settingsSectionId`, …) and click dispatches `lw:open-search-result` which maps to the right open event in `app.jsx`. Index refreshes (~150 ms debounced) on every relevant store mutation. **API secrets never indexed** — encrypted `api_keys_encrypted` blob is never read; secret-named fields are stripped recursively inside whitelisted settings sections. 11 new callbacks registered. | smoke (22 assertions) + e2e P (7 tests) |
 | **Audit Log / Undo (partial)** — `AuditService` records every meaningful mutation across `EntityService`, `ManuscriptChapterService`, `ReviewService`, `ReferencesService`, `OnboardingService`, `ProjectIntelService`, `SettingsService`, `SampleProjectService`. Each event carries `before/after` snapshots redacted via `redactSecrets`. Reversible actions (`entity.create/update/delete`, `chapter.create/save/delete`, `reference.*`, `onboarding.update`, `intel.update`, `settings.section-update`, `review.accept/deny`, `sample.load`) support `AuditService.undo(eventId)` with an anti-recursion `{skipAudit:true}` flag to prevent cascades. Destructive actions (`project.reset`, `entity.merge`, `project.import`, hard-delete, `library.import`, `review.bulk-*`) are audit-only. Home Recent Activity card reads live from `getRecentSync(10)` with Undo buttons. **API secrets never logged** (redacted on every event). 5 new callbacks registered (`onUndoAuditEvent`, `onOpenAuditLog`, `onClearAuditLog`, `onExportAuditLog`, `onOpenRecentActivityItem`). | smoke (23 assertions) + e2e Q (6 tests) |
+| **Multi-provider AI Routing** — `AIService` adapter pattern (OpenAI-compatible / OpenRouter / Anthropic / Ollama / Custom; Gemini pending) with `complete / completeJson / testConnection / saveProviderConfig / clearProviderKey / buildGuardSummary`. `AIRoutingService` persists per-task routing under `KEYS.aiRouting` (`mode`, `defaultProviderId`, `taskRoutes`, privacy flags); `resolveRoute(task)` returns `{providerId, model}` or null (localOnly blocks). `AIContextBuilder.build()` assembles bounded context (chapter + entities + intel + references). Privacy guard confirms before any manuscript/reference/intel text is sent; local-only mode blocks external calls. The 6 provider-gated callbacks route through routing + guard + adapters and are functional when configured. **Keys never in config/export/audit/search** (encrypted in `KEYS.apiKeys`; stripped from config; `testConnection` sends no manuscript text). 5 new config/routing callbacks registered. | smoke (22 assertions) + e2e R (6 tests) |
 
 ---
 
@@ -114,9 +115,13 @@ result** is prototype-level. They aren't broken; they aren't great yet.
 These actions only run when a BYOK provider key is configured in
 Settings → AI Providers. Without a key they show a **provider-specific**
 notice ("Configure an AI provider in Settings to use X."), not the
-generic "isn't wired yet" message. Configured providers use
-OpenAI-compatible chat-completions; multi-provider routing
-(Anthropic/Gemini/OpenRouter/Ollama) is not yet implemented.
+generic "isn't wired yet" message. In **Local-only mode** they show
+"AI is disabled (Local-only mode)…". Multi-provider routing is now
+**implemented** (`AIService` adapter pattern: OpenAI-compatible /
+OpenRouter / Anthropic / Ollama / Custom; Gemini adapter pending) with
+per-task routing via `AIRoutingService`, a privacy guard before
+manuscript text is sent, and `AIContextBuilder` for bounded context.
+See `AI_PROVIDER_ROUTING_REPORT.md`.
 
 | Callback | Behaviour with no provider | Behaviour with provider |
 |----------|----------------------------|--------------------------|
@@ -140,7 +145,7 @@ Items the design documents call for but that have **not** been
 implemented and are not on the immediate roadmap. None of these are
 blocking the "functional local prototype" status.
 
-- **Multi-provider AI routing** (Anthropic/Claude direct, Gemini direct, OpenRouter, Local/Ollama, custom-endpoint per-task routing, cost/quality modes, privacy guard preview UI).
+- _(Removed — implemented in Multi-provider AI Routing Pass; see section A row "Multi-provider AI Routing". Gemini adapter + cost/quality token tables remain pending.)_
 - **Two-pass relationship extraction** (legacy `extractRelationshipsAdvanced`) — documented in `LEGACY_EXTRACTION_AUDIT.md` but not ported.
 - **Extraction-session undo trail** with per-action `previousState` and `revertSession()` — documented but not ported.
 - **Character enhancement** — legacy "Enhance" button that AI-fills stats/equipment/biography for a new cast member. Out of scope.
@@ -171,7 +176,7 @@ until earlier passes are solid):
 6. ~~**Speed Reader engine**~~ _(landed; see section A row "Speed Reader" and `SPEED_READER_COMPLETION_REPORT.md`)._
 7. ~~**Search / indexing**~~ _(landed; see section A row "Search / Indexing" and `SEARCH_INDEXING_REPORT.md`)._
 8. ~~**Audit log + undo**~~ _(landed; see section A row "Audit Log / Undo (partial)" and `AUDIT_UNDO_REPORT.md`)._
-9. **Multi-provider AI routing** when single-provider gating proves limiting.
+9. ~~**Multi-provider AI routing**~~ _(landed; see section A row "Multi-provider AI Routing" and `AI_PROVIDER_ROUTING_REPORT.md`. Gemini adapter pending.)_
 10. **Production build pipeline** with `BUILD_PIPELINE_PLAN.md` first and smallest-safe-step implementation.
 
 ---

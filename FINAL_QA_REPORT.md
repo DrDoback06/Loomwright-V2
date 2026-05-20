@@ -1,6 +1,47 @@
 # Loomwright v2 — Final QA Report
 
-_Last run: 2026-05-20 (Audit Log / Undo Pass)._
+_Last run: 2026-05-20 (Multi-provider AI Routing Pass)._
+
+## Multi-provider AI Routing Pass (2026-05-20)
+
+```
+npm run validate        → 526 callbacks; registry bootstraps 558 handlers; Bucket A = 0; Bucket B = 6 (provider-gated)
+npm run test:smoke      → all smoke checks pass
+                          (256 total; 22 new [ai routing] assertions)
+npm run test:e2e        → 75 pass (69 prior + 6 new R. AI provider routing)
+```
+
+Generalises the single-provider OpenAI path into an adapter layer.
+`AIService` now supports OpenAI-compatible / OpenRouter / Anthropic /
+Ollama / Custom (Gemini adapter pending) with `complete / completeJson /
+testConnection / saveProviderConfig / clearProviderKey /
+buildGuardSummary`. New `AIRoutingService` (`KEYS.aiRouting`) provides
+per-task routing (`mode`, `defaultProviderId`, `taskRoutes`, privacy
+flags) and `resolveRoute(task)` (null in local-only). New
+`AIContextBuilder.build()` assembles bounded, deterministic context.
+
+A privacy guard (`aiPrivacyGuard`) confirms before any
+manuscript/reference/intel text is sent externally; local-only mode
+blocks calls entirely. The 6 provider-gated callbacks
+(`onGenerateAIWriterDraft`, `onGenerateDraftSkillTree`,
+`onGenerateCompositionDraft`, `onRunContinuityCheck`,
+`onRunEntitySuggestion`, accept/copy) route through routing + guard +
+adapters and are functional when a provider is configured;
+continuity-check and entity-suggestion keep their local path always.
+
+**Privacy guarantees** (re-verified): keys are encrypted in
+`KEYS.apiKeys`, stripped from the config blob, never exported, never
+logged, never indexed; `testConnection` sends no manuscript text.
+Smoke + e2e assert no key substring in export / search / audit.
+
+Five new callbacks (`onSaveAIProviderConfig`, `onClearAIProviderConfig`,
+`onSetAIRoutingMode`, `onSetAITaskRoute`, `onToggleLocalOnlyMode`,
+plus `onConfirmAIPrivacyGuard`). Bucket A still 0.
+
+Smoke shim now wires Node's `crypto.webcrypto` + `TextEncoder/Decoder`
++ `btoa/atob` so `KeysService` AES-GCM encryption runs in-process.
+
+See `AI_PROVIDER_ROUTING_REPORT.md` for the full breakdown.
 
 ## Audit Log / Undo Pass (2026-05-20)
 
