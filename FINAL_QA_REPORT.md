@@ -1,6 +1,52 @@
 # Loomwright v2 — Final QA Report
 
-_Last run: 2026-05-20 (Search / Indexing Pass)._
+_Last run: 2026-05-20 (Audit Log / Undo Pass)._
+
+## Audit Log / Undo Pass (2026-05-20)
+
+```
+npm run validate        → 526 callbacks; registry bootstraps 552 handlers; Bucket A = 0
+npm run test:smoke      → all smoke checks pass
+                          (252 prior + 23 new [audit] assertions)
+npm run test:e2e        → 69 pass (63 prior + 6 new Q. audit/undo)
+```
+
+Adds `AuditService` (`KEYS.auditLog`): records every meaningful local
+mutation across `EntityService`, `ManuscriptChapterService`,
+`ReviewService`, `ReferencesService`, `OnboardingService`,
+`ProjectIntelService`, `SettingsService`, and `SampleProjectService`.
+Reversible actions (`entity.create/update/delete`, `chapter.*`,
+`reference.*`, `onboarding.update`, `intel.update`,
+`settings.section-update`, `review.accept/deny`, `sample.load`) support
+`AuditService.undo(eventId)` with an anti-recursion `{skipAudit:true}`
+flag to prevent cascades. Destructive actions (`project.reset`,
+`entity.merge`, `project.import`, hard-delete, `library.import`,
+`review.bulk-*`) are audit-only.
+
+Home Recent Activity card reads live from `getRecentSync(10)` with
+Undo buttons per row; falls back to the original sample rows only when
+the log is genuinely empty.
+
+**Privacy guarantees**: every event's `before/after/patch/metadata`
+field passes through `redactSecrets` at log time. Smoke + e2e
+assertions confirm an `apiKey` set via `SettingsService.saveSection`
+produces an event with `after.apiKey === "[redacted]"` and never
+appears in either the cached log or `exportSync()` output.
+
+Five new callbacks (`onUndoAuditEvent`, `onOpenAuditLog`,
+`onClearAuditLog`, `onExportAuditLog`, `onOpenRecentActivityItem`).
+Bucket A still 0.
+
+**Incidental fix** (in scope — surfaced by Sample undo test):
+`collectDefaultEntities()` was reading the live `window.CAST_SAMPLE`
+globals (which `applyEntityGlobals` overwrites with user-created
+records), so a sample-load after the user had created any cast would
+include the user's entity in `relatedIds`, and undoing the load would
+erase the user's work. Now prefers the boot-time
+`__LW_SAMPLE_SOURCES__` snapshot and only falls back to live globals
+when that's empty.
+
+See `AUDIT_UNDO_REPORT.md` for the full breakdown.
 
 ## Search / Indexing Pass (2026-05-20)
 
