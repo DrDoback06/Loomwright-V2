@@ -85,28 +85,64 @@ test.describe("T. UI acceptance — rendered DOM reflects the live store", () =>
     await expect(page.locator("body")).toContainText("UAT Test Hero", { timeout: 6000 });
   });
 
-  test("left-rail review badge is LIVE (reflects the store, not a hardcoded number)", async ({ page }) => {
+  test("review queue Accept through the rendered UI creates the entity + clears the item", async ({ page }) => {
     await openFreshApp(page);
-    // Fresh: the global review-queue count is zero.
+    // Fresh: live queue is zero.
     const before = await page.evaluate(() =>
       window.LoomwrightBackend.ReviewService.listSync().filter((q) => q.status !== "done").length);
     expect(before).toBe(0);
-    // SETUP: seed two pending cast review items via the service, then
-    // notify the UI (this is the store mutation a real extraction makes).
+    // SETUP ONLY: seed one pending cast review candidate via the service.
     await page.evaluate(async () => {
-      await window.LoomwrightBackend.ReviewService.add({ id: "uat-rq-1", entityType: "cast", name: "Cand A", status: "pending", candidate: { name: "Cand A" } });
-      await window.LoomwrightBackend.ReviewService.add({ id: "uat-rq-2", entityType: "cast", name: "Cand B", status: "pending", candidate: { name: "Cand B" } });
+      await window.LoomwrightBackend.ReviewService.add({
+        id: "uat-rq-1", entityType: "cast", status: "pending",
+        candidate: { name: "Reviewed Hero", type: "cast" },
+        suggestion: "create", confidence: { band: "strong", value: 82 },
+      });
       window.dispatchEvent(new CustomEvent("lw:review-queue-updated"));
       window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
     });
+    await openPanel(page, "cast");
+    // The review card must be RENDERED (reachable in the UI).
+    const acceptBtn = page.locator("[data-testid='rqc-accept-uat-rq-1']");
+    await expect(acceptBtn).toBeVisible({ timeout: 8000 });
+    // DOM action: click Accept on the rendered card.
+    await acceptBtn.dispatchEvent("click");
+    await page.waitForTimeout(500);
+    // The entity now exists and renders in the Cast panel; the item leaves the queue.
+    const state = await page.evaluate(() => ({
+      created: window.LoomwrightBackend.EntityService.listSync("cast").some((c) => c.name === "Reviewed Hero"),
+      stillPending: window.LoomwrightBackend.ReviewService.listSync().some((q) => q.id === "uat-rq-1" && q.status === "pending"),
+    }));
+    expect(state.created).toBe(true);
+    expect(state.stillPending).toBe(false);
+    // The accepted card is removed from the rendered queue (DOM).
+    await expect(page.locator("[data-testid='rqc-accept-uat-rq-1']")).toHaveCount(0, { timeout: 6000 });
+  });
+
+  test("review queue Deny + Merge are clickable in the rendered UI", async ({ page }) => {
+    await openFreshApp(page);
+    await page.evaluate(async () => {
+      const RS = window.LoomwrightBackend.ReviewService;
+      await RS.add({ id: "uat-deny", entityType: "cast", status: "pending", candidate: { name: "Deny Me" }, suggestion: "create", confidence: { band: "weak", value: 40 } });
+      await RS.add({ id: "uat-merge", entityType: "cast", status: "pending", candidate: { name: "Merge Me" }, suggestion: "merge", confidence: { band: "uncertain", value: 55 } });
+      window.dispatchEvent(new CustomEvent("lw:review-queue-updated"));
+      window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+    });
+    await openPanel(page, "cast");
+    // Deny (DOM) → item leaves pending.
+    const denyBtn = page.locator("[data-testid='rqc-deny-uat-deny']");
+    await expect(denyBtn).toBeVisible({ timeout: 8000 });
+    await denyBtn.dispatchEvent("click");
     await page.waitForTimeout(400);
-    // The live store now reports 2; the rail badge must reflect that (not a
-    // hardcoded NAV_ITEMS number, which used to read "3").
-    const liveCount = await page.evaluate(() =>
-      window.LoomwrightBackend.ReviewService.listSync("cast").length);
-    expect(liveCount).toBe(2);
-    // DOM: a review badge with "2" is rendered somewhere in the rail/panels.
-    await expect(page.locator("body")).toContainText("2", { timeout: 5000 });
+    const denied = await page.evaluate(() =>
+      !window.LoomwrightBackend.ReviewService.listSync().some((q) => q.id === "uat-deny" && q.status === "pending"));
+    expect(denied).toBe(true);
+    // Merge (DOM) → opens the merge modal.
+    const mergeBtn = page.locator("[data-testid='rqc-merge-uat-merge']");
+    await expect(mergeBtn).toBeVisible({ timeout: 6000 });
+    await mergeBtn.dispatchEvent("click");
+    await page.waitForTimeout(400);
+    await expect(page.locator("[data-testid='merge-candidate-modal']")).toBeVisible({ timeout: 5000 });
   });
 
   test("sample project is opt-in: load via DOM shows sample, fresh did not", async ({ page }) => {

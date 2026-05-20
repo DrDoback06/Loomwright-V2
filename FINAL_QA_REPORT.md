@@ -7,7 +7,7 @@ _Last run: 2026-05-20 (User Acceptance Regression Audit — live-render fix)._
 ```
 npm run validate         → 526 callbacks; 558 handlers; Bucket A = 0
 npm run test:smoke       → all smoke checks pass
-npm run test:e2e         → 84 pass (75 prior + 9 new DOM-level UI acceptance, workflow T)
+npm run test:e2e         → 85 pass (75 prior + 10 new DOM-level UI acceptance, workflow T)
 npm run build            → production build checks passed
 npm run test:e2e:preview → 2 pass (production boot)
 ```
@@ -29,11 +29,13 @@ live store; demo self-seeds into `ENTITY_SAMPLES` removed; entity
 pickers read live `EntityService`; Today + Home read live stats with
 empty states; focus mode gained a visible Exit affordance.
 
-New DOM-level suite `tests/e2e/15-ui-acceptance.spec.js` (workflow T, 9
+New DOM-level suite `tests/e2e/15-ui-acceptance.spec.js` (workflow T, 10
 tests) **clicks real rendered DOM and asserts on rendered content** —
 the gap that let this regress. Counts: 11 Fixed, 6 Mostly fixed, 4
 Partial (follow-ups), 3 Needs-manual-UX, 1 Still-broken (notes/comments,
-#19), 0 Obsolete. Loomwright remains a **local beta candidate**.
+#19), 0 Obsolete. Review Accept/Deny/Merge are now reachable + DOM-tested
+(plus an accept candidate-shape bug fixed). Status:
+**Loomwright V2 — local beta candidate, verified with live-render UAT tests.**
 
 ## Production Build Hardening Pass (2026-05-20)
 

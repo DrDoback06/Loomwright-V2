@@ -28,7 +28,7 @@ INFO: 213 other callbacks fall to default notice (housekeeping/dispatch).
 All smoke checks passed (… + audit + ai routing — 22 new [ai routing] assertions).
 
 > CHROMIUM_PATH=/path/to/chrome npm run test:e2e
-84 passed (real Chromium) — workflows A–R + T (DOM-level UI acceptance) against the dev shell.
+85 passed (real Chromium) — workflows A–R + T (DOM-level UI acceptance, incl. review Accept/Deny/Merge) against the dev shell.
 
 > npm run build
 Production build complete → dist/   (precompiled bundle, no in-browser Babel)

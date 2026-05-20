@@ -50,7 +50,7 @@ npm run test:e2e:preview → 2 passed ✓
 | 5 | AI Writer buttons decorative | Fixed (PR #12 routing + guard) | `callback-registry.jsx` Bucket B | Low | No — already fixed | — |
 | 6 | Active author dropdown cycles | Needs manual UX review | author profiles in Settings | Low | Investigate | document |
 | 7 | Placeholders throughout | Partially fixed | grep placeholders | Medium | Replace contained ones | — |
-| 8 | Review queue accept/merge/deny/edit | Fixed (wired) — verify via DOM | `review-queue.jsx`, `callback-registry.jsx:503–571` | High | Verify with DOM test | — |
+| 8 | Review queue accept/merge/deny/edit | Fixed (now DOM-reachable + accept candidate-shape bug fixed) | panel-stack.jsx review strip; callback-registry acceptQueueItem; e2e T (Accept/Deny/Merge) | High | Done | — |
 | 9 | Focus mode exit unclear | Fixed (visible Exit button + Esc) | writers-room.jsx; e2e T | UX polish | Done | — |
 | 10 | Today/Home fake data | Fixed (both read live store; empty states) | today-ai.jsx; home.jsx; e2e T | High | Done | — |
 | 11 | Extraction does nothing | Mostly fixed (Pass 1) | `ExtractionService`, e2e K | Medium | Verify via DOM | streaming = future |
@@ -114,12 +114,22 @@ Vey / Saren of Hess / Pale Reach and fake counts. Fixed at the source:
 ```
 npm run validate         → 526 UI callbacks; 558 handlers; Bucket A = 0 ✓
 npm run test:smoke       → all smoke checks passed ✓
-npm run test:e2e         → 84 passed (75 prior + 9 new DOM-level UI acceptance) ✓
+npm run test:e2e         → 85 passed (75 prior + 10 new DOM-level UI acceptance) ✓
 npm run build            → production build checks passed ✓
 npm run test:e2e:preview → 2 passed ✓
 ```
 
-New DOM-level suite `tests/e2e/15-ui-acceptance.spec.js` (9 tests) CLICKS
+> **Review queue was unreachable in the UI (new finding, now fixed).**
+> The accept/merge/deny LOGIC was wired + service-tested, but no rendered
+> surface exposed the cards — no panel showed a working review affordance.
+> Fix: `panel-stack.jsx` now renders the existing (wired) `EntityReviewQueue`
+> cards at the top of an entity panel whenever that type has pending items,
+> so Accept/Edit/Merge/Deny are clickable in the actual UI. Also fixed a
+> real bug: `acceptQueueItem` only read `payload.name`/`name` and ignored
+> the `candidate` object the card displays, so accepting a candidate
+> created nothing — it now honours `row.candidate`.
+
+New DOM-level suite `tests/e2e/15-ui-acceptance.spec.js` (10 tests) CLICKS
 real rendered DOM and asserts on rendered content (it does not drive
 services to fake a pass):
 - fresh project renders NO demo data on Home / Today / Cast (asserts the
@@ -132,6 +142,44 @@ services to fake a pass):
   appear; fresh did not);
 - **focus mode** has a visible Exit affordance (DOM toggle + exit);
 - item editor related pickers show no demo entities on a fresh project.
+
+## PR #14 verification note (answering the requested checklist)
+
+Each item below is backed by an automated DOM-level test in
+`tests/e2e/15-ui-acceptance.spec.js` (workflow T) unless noted. These
+CLICK rendered DOM and assert rendered content; `page.evaluate` is used
+only to seed setup state, never to perform the action under test.
+
+1. **Fresh project renders no sample/demo data** — ✅ asserts the
+   strings "Aelinor Vey", "Saren of Hess", "Pale Reach",
+   "Saren's Bargain", "Captain Brec" and fake counts ("12 entries",
+   "3 in review") are **absent** on Home, Today, and Cast; empty states
+   shown. (Also re-probed across cast/locations/items/quests/events/
+   bestiary/stats/home → 0 demo strings.)
+2. **UI-created records appear + persist** — ✅ create a Cast member
+   through the rendered editor (click → fill name → click Save) → it
+   appears in the rendered Cast panel; service confirms persistence.
+3. **Entity pickers read the live store** — ✅ a fresh-project item
+   editor's related pickers show no demo names; pickers read
+   `EntityService.listSync` (cast pickers now show user-created cast,
+   which previously lived only in `CAST_SAMPLE`).
+4. **Sample project is truly opt-in** — ✅ fresh store is empty (0); a
+   real DOM click on "Load sample project" populates records; clearing
+   removes sample-tagged records while user-created entities remain
+   (existing smoke + e2e H also cover scoped clear).
+5. **Home and Today are live** — ✅ fresh = empty states; stats/counts
+   derive from live services; no hardcoded dashboard data; the
+   "Saren's Bargain" chip removed.
+6. **Review Queue is DOM-tested** — ✅ **Accept** clicked on the
+   rendered card creates the entity and clears the item; **Deny** clicked
+   removes it from pending; **Merge** clicked opens the merge modal.
+   (Required making the review cards reachable + fixing the accept
+   candidate-shape bug — see note above.)
+7. **Focus mode** — ✅ entering focus mode shows a visible "Exit focus
+   mode" button; clicking it (and Esc) exits.
+8. **Final commands** — ✅ `npm run validate` (Bucket A = 0),
+   `npm run test:smoke`, `npm run test:e2e` (85), `npm run build`,
+   `npm run test:e2e:preview` (2) — all green.
 
 ## Counts (26 complaints)
 
