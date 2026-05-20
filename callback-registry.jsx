@@ -312,6 +312,13 @@
     "onCreateSpeedReaderSession", "onReadCurrentChapter",
     "onReadReference", "onDeleteSpeedReaderSession",
     "onResetSpeedReaderProgress",
+    // Search / Indexing (SearchService)
+    "onRunGlobalSearch", "onOpenSearchResult", "onClearSearch",
+    "onRebuildSearchIndex",
+    "onOpenEntityFromSearch", "onOpenChapterFromSearch",
+    "onOpenReferenceFromSearch", "onOpenSettingsFromSearch",
+    "onOpenReviewItemFromSearch", "onOpenProjectIntelligenceFromSearch",
+    "onOpenOnboardingFromSearch",
   ]);
 
   async function dispatchCallback(name, ctx) {

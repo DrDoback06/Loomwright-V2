@@ -70,9 +70,78 @@ const CommandPalette = ({
 
   _ue_cp(() => { if (open) { setQ(""); setSel(0); setTimeout(() => inputRef.current?.focus(), 50); } }, [open]);
 
+  // Live search via SearchService. When the index is empty (fresh
+  // project), fall back to the static action suggestions so the user
+  // still has somewhere to go.
+  const liveResults = _um_cp(() => {
+    const Search = (typeof window !== "undefined") ? window.LoomwrightBackend?.SearchService : null;
+    if (!Search) return null;
+    const limit = 30;
+    return Search.search(q, { limit, includeReviewQueue: true });
+  }, [q]);
+
+  const liveStats = _um_cp(() => {
+    const Search = (typeof window !== "undefined") ? window.LoomwrightBackend?.SearchService : null;
+    return Search ? Search.getIndexStatsSync() : null;
+  }, [q, liveResults]);
+
   const filtered = _um_cp(() => {
     const ql = q.trim().toLowerCase();
     const filterRows = (rows) => !ql ? rows : rows.filter((r) => r.title.toLowerCase().includes(ql) || (r.sub || "").toLowerCase().includes(ql));
+
+    // Live mode — index has entries, route through SearchService.
+    if (liveResults && (liveResults.length > 0 || (liveStats && liveStats.total > 0))) {
+      const groupRows = { entities: [], chapters: [], references: [], settings: [], review: [], other: [] };
+      for (const r of liveResults) {
+        const row = {
+          id: r.id,
+          icon: r.icon || "stack",
+          entity: r.type === "entity" ? r.subtype : undefined,
+          title: r.title,
+          sub: r.subtitle || r.matchReason,
+          // Carry the typed pointers so the host can dispatch lw:open-search-result.
+          _searchResult: {
+            type: r.type, subtype: r.subtype,
+            entityType: r.entityType, entityId: r.entityId,
+            chapterId: r.chapterId, referenceId: r.referenceId,
+            occurrenceId: r.occurrenceId, reviewItemId: r.reviewItemId,
+            settingsSectionId: r.settingsSectionId,
+            projectIntelSectionId: r.projectIntelSectionId,
+            onboardingSectionId: r.onboardingSectionId,
+            title: r.title,
+          },
+        };
+        const bucket =
+          r.type === "entity"    ? groupRows.entities   :
+          r.type === "chapter"   ? groupRows.chapters   :
+          r.type === "reference" ? groupRows.references :
+          r.type === "setting"   ? groupRows.settings   :
+          r.type === "review"    ? groupRows.review     :
+          groupRows.other;
+        bucket.push(row);
+      }
+      const groups = [
+        { id: "entities",   label: "Entities",      rows: groupRows.entities },
+        { id: "chapters",   label: "Chapters",      rows: groupRows.chapters },
+        { id: "references", label: "References",    rows: groupRows.references },
+        { id: "settings",   label: "Settings",      rows: groupRows.settings },
+        { id: "review",     label: "Review queue",  rows: groupRows.review },
+        { id: "other",      label: "Other",         rows: groupRows.other },
+        { id: "suggested",  label: "Suggested actions", rows: filterRows(PALETTE_DATA.suggested) },
+      ];
+      // Scope filter (live mode reuses the same scope tabs)
+      const byScope = (g) => {
+        if (scope === "all") return true;
+        if (scope === "entities") return g.id === "entities";
+        if (scope === "chapters") return g.id === "chapters";
+        if (scope === "actions")  return g.id === "suggested" || g.id === "settings";
+        return true;
+      };
+      return groups.filter((g) => g.rows.length && byScope(g));
+    }
+
+    // Empty-index fallback: keep the original sample/recent/suggested
+    // structure so the palette still has affordances on a brand-new project.
     const groups = [
       { id: "recent",    label: "Recent",            rows: filterRows(PALETTE_DATA.recent) },
       { id: "suggested", label: "Suggested actions", rows: filterRows(PALETTE_DATA.suggested) },
@@ -89,7 +158,7 @@ const CommandPalette = ({
       return true;
     };
     return groups.filter((g) => g.rows.length && byScope(g));
-  }, [q, scope]);
+  }, [q, scope, liveResults, liveStats]);
 
   const flat = _um_cp(() => filtered.flatMap((g) => g.rows.map((r) => ({ ...r, group: g.id }))), [filtered]);
 
