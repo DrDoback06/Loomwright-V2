@@ -8,10 +8,13 @@
     "start": "npm run dev",
     "validate": "node scripts/validate-static-site.js && node scripts/audit-callbacks.js",
     "audit-callbacks": "node scripts/export-callback-names.js && node scripts/generate-callback-names-data.js && node scripts/audit-callbacks.js",
-    "build": "node scripts/build-static.js",
-    "preview": "vite preview --host 0.0.0.0",
+    "build": "node scripts/build-production.js && node scripts/check-production-build.js",
+    "build:static-legacy": "node scripts/build-static.js",
+    "check:build": "node scripts/check-production-build.js",
+    "preview": "vite preview --host 0.0.0.0 --outDir dist",
     "test:smoke": "node scripts/smoke-services.js",
     "test:e2e": "playwright test",
+    "test:e2e:preview": "playwright test --config playwright.preview.config.js",
     "test:e2e:headed": "playwright test --headed"
   },
   "devDependencies": {
