@@ -250,6 +250,31 @@ async function main() {
   const resolved = all.filter((q) => ids.includes(q.id) && q.status === "denied");
   log("ReviewService.resolveMany batch-resolves", resolved.length === 3);
 
+  // -- ManuscriptChapterService create / move / delete / restore (UAT #4) --
+  const MCS = B.ManuscriptChapterService;
+  log("ManuscriptChapterService exposed", !!MCS);
+  await MCS.save({ chapters: [], activeChapterId: null, manuscripts: {}, trashedChapters: [] });
+  await MCS.save({
+    chapters: [
+      { id: "mc-1", num: 1, title: "One", state: "saved" },
+      { id: "mc-2", num: 2, title: "Two", state: "saved" },
+      { id: "mc-3", num: 3, title: "Three", state: "saved" },
+    ],
+    activeChapterId: "mc-2",
+    manuscripts: { "mc-2": { paragraphs: [{ id: "p1", text: "Body of two." }], text: "Body of two.", words: 3 } },
+  });
+  log("ManuscriptChapterService persists chapters", MCS.loadSync().chapters.length === 3);
+  await MCS.moveChapter("mc-3", "up");
+  const movedOrder = MCS.loadSync().chapters.map((c) => c.id);
+  log("moveChapter('mc-3','up') reorders + renumbers", movedOrder[1] === "mc-3" && MCS.loadSync().chapters[1].num === 2);
+  const del = await MCS.deleteChapter("mc-2");
+  log("deleteChapter returns removed chapter + manuscript", !!del && del.chapter.id === "mc-2" && !!del.manuscript);
+  log("deleteChapter removes it from the live list", !MCS.loadSync().chapters.some((c) => c.id === "mc-2"));
+  log("deleteChapter renumbers remaining chapters", MCS.loadSync().chapters.every((c, i) => c.num === i + 1));
+  log("deleteChapter retains it in trashedChapters", (MCS.loadSync().trashedChapters || []).some((t) => t.chapter && t.chapter.id === "mc-2"));
+  await MCS.restoreChapter("mc-2");
+  log("restoreChapter restores chapter + manuscript", MCS.loadSync().chapters.some((c) => c.id === "mc-2") && !!MCS.loadSync().manuscripts["mc-2"]);
+
   // -- Sample project load / scoped clear --
   win.WR_DEMO_PROJECT = { chapters: [{ id: "demo-ch1", title: "Demo", num: 1 }] };
   win.CAST_SAMPLE = [{ id: "demo-cast", name: "Demo Cast" }];

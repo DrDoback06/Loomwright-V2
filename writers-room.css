@@ -495,6 +495,36 @@
 .wr-empty-card__body { color: var(--ink-3); font-size: var(--fs-sm); line-height: 1.6; }
 .wr-empty-card__actions { display: flex; gap: var(--sp-4); margin-top: var(--sp-4); flex-wrap: wrap; justify-content: center; }
 
+/* Editable manuscript body (UAT remediation: typeable prose). The body is an
+   uncontrolled contentEditable region; React never renders children into it. */
+.wr-canvas__bodywrap { position: relative; }
+.wr-canvas__body.wr-body--editable {
+  min-height: 320px;
+  outline: none;
+  font-family: var(--font-serif);
+  font-size: var(--fs-lg, 17px);
+  line-height: 1.85;
+  color: var(--ink-1);
+  caret-color: var(--accent-deep);
+}
+.wr-canvas__body.wr-body--editable:empty::before {
+  content: attr(data-placeholder);
+  color: var(--ink-4);
+  font-style: italic;
+  pointer-events: none;
+}
+/* Inline empty-state hint overlays the empty editable area without blocking it. */
+.wr-empty-card--inline {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  justify-content: center;
+  pointer-events: none;
+  background: transparent;
+}
+.wr-empty-card--inline .wr-empty-card__actions,
+.wr-empty-card--inline button { pointer-events: auto; }
+
 /* =====================================================================
    Margins (left & right)
    ===================================================================== */

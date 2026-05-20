@@ -119,13 +119,11 @@ const ChapterNode = ({
       tabIndex={reserved ? -1 : 0}
       onClick={() => !reserved && onSelect && onSelect(chapter.id)}
       onContextMenu={handleContext}
-      draggable={!reserved}
     >
       {reserved ? (
         <>
           <div className="wr-node__top">
             <span className="wr-node__num">CH. {String(chapter.num).padStart(2, "0")}</span>
-            <span className="wr-node__grip" aria-hidden><Icon name="grip" size={10}/></span>
           </div>
           <div className="wr-node__reserved-mark">∅</div>
           <div className="wr-node__meta">
@@ -136,7 +134,6 @@ const ChapterNode = ({
         <>
           <div className="wr-node__top">
             <span className="wr-node__num">CH. {String(chapter.num).padStart(2, "0")}</span>
-            <span className="wr-node__grip" aria-hidden><Icon name="grip" size={10}/></span>
           </div>
           <div className="wr-node__title">{chapter.title || "Untitled"}</div>
           <div className="wr-node__meta">
@@ -730,13 +727,13 @@ const ChapterDeleteConfirmModal = ({ open, chapter, onCancel, onConfirm }) => {
       title={"Delete Chapter " + chapter.num + "?"}
       body={
         <>
-          <p>This will move <b>{chapter.title || "this chapter"}</b> to Trash, where it will sit for 30 days before deletion.</p>
+          <p>This removes <b>{chapter.title || "this chapter"}</b> and its text from the manuscript and renumbers the remaining chapters.</p>
           <p style={{ color: "var(--ink-3)", fontSize: "var(--fs-xs)", marginTop: 8 }}>
-            Linked entity mentions stay attached to the manuscript object — restoring the chapter restores them.
+            The deletion is recorded in the project history, and the chapter and its text are retained so it can be restored.
           </p>
         </>
       }
-      confirmLabel="Move to Trash"
+      confirmLabel="Delete chapter"
       cancelLabel="Keep chapter"
       tone="danger"
       onCancel={onCancel}
@@ -746,11 +743,136 @@ const ChapterDeleteConfirmModal = ({ open, chapter, onCancel, onConfirm }) => {
 };
 
 // ---------------------------------------------------------------------
+// Editable manuscript body — helpers + uncontrolled contentEditable
+//
+// The body is an UNCONTROLLED contentEditable region: React never renders
+// children into it (so it never reconciles typed text → no caret jump).
+// innerHTML is written imperatively only when the chapter or `bodyEpoch`
+// changes (chapter switch / after Save & Extract). Save snapshots the DOM.
+// ---------------------------------------------------------------------
+function _wrEscapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+function _wrGenId(prefix) {
+  return (prefix || "p") + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
+}
+function _wrCountWords(t) {
+  const m = String(t || "").match(/\S+/g);
+  return m ? m.length : 0;
+}
+function _wrParagraphText(p) {
+  if (p == null) return "";
+  if (typeof p === "string") return p;
+  if (p.sceneBreak) return "";
+  if (typeof p.text === "string") return p.text;
+  if (Array.isArray(p.parts)) return p.parts.map((part) => (part && part.text != null ? part.text : "")).join("");
+  return "";
+}
+function _wrNormalizeManuscript(m) {
+  if (!m) return { paragraphs: [] };
+  if (Array.isArray(m)) return { paragraphs: m };
+  if (Array.isArray(m.paragraphs)) return { paragraphs: m.paragraphs };
+  if (typeof m.text === "string" && m.text.trim()) {
+    const parts = m.text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
+    return { paragraphs: parts.map((text) => ({ id: _wrGenId("p"), text })) };
+  }
+  if (typeof m.html === "string" && m.html.trim()) return { paragraphs: [], html: m.html };
+  return { paragraphs: [] };
+}
+function _wrHighlightHtml(text, lookup) {
+  const chunks = splitByOccurrences(text || "", lookup);
+  return chunks.map((c) => {
+    if (c.occ) {
+      const occ = c.occ;
+      const t = (typeof ENTITY_TYPES !== "undefined" && ENTITY_TYPES[occ.entityType]) || {};
+      const label = t.label || occ.entityType || "entity";
+      const style = `--ec:${t.color || "#8a7a52"};--es:${t.soft || "#efe9da"};--ed:${t.deep || "#5a4d2e"}`;
+      const title = `${label}: ${occ.exactText || c.text} — double-click to open`;
+      return `<span class="wr-mark" data-ui="EntityBrushHighlight" data-entity="${_wrEscapeHtml(occ.entityType)}" data-entity-type="${_wrEscapeHtml(occ.entityType)}" data-entity-id="${_wrEscapeHtml(occ.entityId)}" data-occurrence-id="${_wrEscapeHtml(occ.occurrenceId || "")}" contenteditable="false" style="${style}" title="${_wrEscapeHtml(title)}" aria-label="${_wrEscapeHtml(title)}">${_wrEscapeHtml(c.text)}</span>`;
+    }
+    return _wrEscapeHtml(c.text);
+  }).join("");
+}
+function _wrBuildBodyHtml(paragraphs, lookup) {
+  if (!paragraphs || !paragraphs.length) return "";
+  return paragraphs.map((p) => {
+    const id = (p && p.id) || _wrGenId("p");
+    if (p && p.sceneBreak) {
+      return `<div class="wr-scene-break" data-kind="scene-break" data-paragraph-id="${_wrEscapeHtml(id)}" contenteditable="false"><span class="wr-scene-break__line"></span><span aria-hidden="true">※   ※   ※</span><span class="wr-scene-break__line"></span></div>`;
+    }
+    const text = _wrParagraphText(p);
+    const inner = _wrHighlightHtml(text, lookup) || "<br>";
+    const author = p && p.author ? ` data-author="${_wrEscapeHtml(p.author)}"` : "";
+    return `<p class="wr-p" data-paragraph-id="${_wrEscapeHtml(id)}"${author}>${inner}</p>`;
+  }).join("");
+}
+// Snapshot the editable DOM into a persistable manuscript object.
+function _wrSnapshotBody(bodyEl) {
+  if (!bodyEl) return { paragraphs: [], text: "", html: "", words: 0 };
+  const out = [];
+  const kids = Array.from(bodyEl.children).filter((el) => el && el.nodeType === 1);
+  if (kids.length) {
+    kids.forEach((el) => {
+      if (el.getAttribute("data-kind") === "scene-break" || el.classList.contains("wr-scene-break")) {
+        out.push({ id: el.getAttribute("data-paragraph-id") || _wrGenId("sb"), sceneBreak: true });
+        return;
+      }
+      let id = el.getAttribute("data-paragraph-id");
+      if (!id) { id = _wrGenId("p"); try { el.setAttribute("data-paragraph-id", id); } catch (_e) {} }
+      const text = (el.textContent || "").replace(/ /g, " ");
+      out.push({ id, text });
+    });
+  } else {
+    const raw = bodyEl.innerText || bodyEl.textContent || "";
+    raw.split(/\n{2,}/).map((s) => s.replace(/ /g, " ").trim()).filter(Boolean)
+      .forEach((text) => out.push({ id: _wrGenId("p"), text }));
+  }
+  const text = out.filter((p) => !p.sceneBreak).map((p) => p.text || "").join("\n\n");
+  return { paragraphs: out, text, html: bodyEl.innerHTML, words: _wrCountWords(text) };
+}
+
+const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, onInput, onDoubleClick, onMouseOver, onMouseOut }) => {
+  const localRef = _wrUR(null);
+  const htmlRef = _wrUR(html);
+  htmlRef.current = html;
+  const assign = (el) => { localRef.current = el; if (bodyRef) bodyRef.current = el; };
+  // Write innerHTML ONLY on chapter switch / explicit epoch bump — never on
+  // keystroke. The JSX has no children, so React never touches typed nodes.
+  _wrUE(() => {
+    const el = localRef.current;
+    if (!el) return;
+    el.innerHTML = htmlRef.current || "";
+    try { if (document.execCommand) document.execCommand("defaultParagraphSeparator", false, "p"); } catch (_e) {}
+  }, [chapterId, bodyEpoch]);
+  return (
+    <div
+      ref={assign}
+      className="wr-canvas__body wr-body--editable"
+      data-ui="ManuscriptBody"
+      data-testid="wr-manuscript-body"
+      contentEditable
+      suppressContentEditableWarning
+      role="textbox"
+      aria-multiline="true"
+      aria-label="Manuscript body — start writing"
+      data-placeholder="Start writing…"
+      onInput={onInput}
+      onDoubleClick={onDoubleClick}
+      onMouseOver={onMouseOver}
+      onMouseOut={onMouseOut}
+    />
+  );
+};
+
+// ---------------------------------------------------------------------
 // ManuscriptCanvas
 // ---------------------------------------------------------------------
 const ManuscriptCanvas = ({
-  chapter, paragraphs, state,
-  onEntityHover, onCommentClick, onEntityDoubleClick,
+  chapter, manuscript, state, bodyRef, titleRef, bodyEpoch,
+  onBodyInput, onStartWriting,
+  onEntityHoverDelegated, onEntityDoubleClickDelegated,
   onCreateChapter, onSaveAndExtract,
 }) => {
   // Load persisted EntityOccurrences for this chapter and rebuild the
@@ -774,6 +896,18 @@ const ManuscriptCanvas = ({
     };
   }, [chapter?.id]);
   const occurrenceLookup = React.useMemo(() => buildOccurrenceLookup(occurrences), [occurrences]);
+  const norm = React.useMemo(() => _wrNormalizeManuscript(manuscript), [manuscript]);
+  const bodyHtml = React.useMemo(() => (
+    (norm.html != null && !(norm.paragraphs && norm.paragraphs.length))
+      ? norm.html
+      : _wrBuildBodyHtml(norm.paragraphs, occurrenceLookup)
+  ), [norm, occurrenceLookup]);
+  const isEmptyBody = !bodyHtml || !bodyHtml.trim();
+  const [hintDismissed, setHintDismissed] = _wrUS(false);
+  _wrUE(() => { setHintDismissed(false); }, [chapter && chapter.id]);
+  _wrUE(() => {
+    if (titleRef && titleRef.current && chapter) titleRef.current.textContent = chapter.title || "Untitled";
+  }, [chapter && chapter.id]);
   if (!chapter) {
     return (
       <div className="wr-canvas wr-canvas--empty" data-ui="ManuscriptCanvas" data-state="no-chapter">
@@ -802,42 +936,44 @@ const ManuscriptCanvas = ({
       </div>
     );
   }
-  if (state === "empty" || !paragraphs || paragraphs.length === 0) {
-    return (
-      <div className="wr-canvas wr-canvas--empty" data-ui="ManuscriptCanvas" data-state="empty">
-        <div className="wr-empty-card">
-          <Icon name="feather" size={28}/>
-          <div className="wr-empty-card__title">Empty page, full ink</div>
-          <div className="wr-empty-card__body">Start writing here. Highlight any name to link it, or run extraction to surface candidates.</div>
-          <div className="wr-empty-card__actions">
-            <Btn variant="primary" size="sm" icon="feather">Start writing</Btn>
-            <Btn variant="outline" size="sm" icon="sparkle" onClick={onSaveAndExtract}>Run extraction</Btn>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  const showHint = !hintDismissed && isEmptyBody;
   return (
     <article className="wr-canvas" data-ui="ManuscriptCanvas" data-state={state} data-chapter-id={chapter.id}>
       <header className="wr-canvas__head">
         <div className="wr-canvas__eyebrow">Chapter {chapter.num}</div>
-        <h1 className="wr-canvas__title" contentEditable suppressContentEditableWarning data-callback="onManuscriptChange">
-          {chapter.title || "Untitled"}
-        </h1>
-        <div className="wr-canvas__sub">{(chapter.words || 0).toLocaleString()} words · drafted {chapter.author === "em" ? "by E. Marlowe" : ""}</div>
+        <h1
+          className="wr-canvas__title"
+          data-ui="ManuscriptTitle"
+          ref={titleRef}
+          contentEditable
+          suppressContentEditableWarning
+          aria-label="Chapter title"
+          onInput={onBodyInput}
+        />
+        <div className="wr-canvas__sub">{(chapter.words || 0).toLocaleString()} words</div>
       </header>
-      <div data-ui="ManuscriptBody" data-callback="onManuscriptChange">
-        {paragraphs.map((p, i) => (
-          <ManuscriptParagraph
-            key={p.id || ("sb" + i)}
-            para={p}
-            occurrenceLookup={occurrenceLookup}
-            onEntityHover={onEntityHover}
-            onCommentClick={onCommentClick}
-            onEntityDoubleClick={onEntityDoubleClick}
-          />
-        ))}
+      <div className="wr-canvas__bodywrap" style={{ position: "relative" }}>
+        <EditableManuscriptBody
+          bodyRef={bodyRef}
+          chapterId={chapter.id}
+          bodyEpoch={bodyEpoch}
+          html={bodyHtml}
+          onInput={(e) => { setHintDismissed(true); onBodyInput && onBodyInput(e); }}
+          onDoubleClick={onEntityDoubleClickDelegated}
+          onMouseOver={onEntityHoverDelegated}
+          onMouseOut={(e) => onEntityHoverDelegated && onEntityHoverDelegated(e, true)}
+        />
+        {showHint && (
+          <div className="wr-empty-card wr-empty-card--inline" data-ui="ManuscriptEmptyHint">
+            <Icon name="feather" size={24}/>
+            <div className="wr-empty-card__title">Empty page, full ink</div>
+            <div className="wr-empty-card__body">Start writing here. Run extraction later to surface entity candidates.</div>
+            <div className="wr-empty-card__actions">
+              <Btn variant="primary" size="sm" icon="feather" data-testid="wr-start-writing" onClick={() => { setHintDismissed(true); onStartWriting && onStartWriting(); }}>Start writing</Btn>
+              <Btn variant="outline" size="sm" icon="sparkle" onClick={onSaveAndExtract}>Run extraction</Btn>
+            </div>
+          </div>
+        )}
       </div>
     </article>
   );
@@ -887,9 +1023,10 @@ const WritersRoomScreen = ({
 
   // Manuscript state
   const [canvasState, setCanvasState] = _wrUS("writing"); // writing | empty | loading | error | saving | saved | offline
-  const paragraphs = activeChapter && !activeChapter.reserved
-    ? (Array.isArray(manuscriptsByChapter[activeId]) ? manuscriptsByChapter[activeId] : [])
-    : [];
+  const bodyRef = _wrUR(null);
+  const titleRef = _wrUR(null);
+  const [bodyEpoch, setBodyEpoch] = _wrUS(0);
+  const activeManuscript = activeChapter && !activeChapter.reserved ? manuscriptsByChapter[activeId] : null;
 
   // Authors
   const [activeAuthorId, setActiveAuthorId] = _wrUS("em");
@@ -1007,44 +1144,95 @@ const WritersRoomScreen = ({
     persistChapters(chapters, manuscriptsByChapter, id);
   }, [chapters, manuscriptsByChapter, persistChapters]);
   const onCreateChapter = _wrUC(() => {
-    const next = chapters.length + 1;
-    setChapters((curr) => [...curr, { id: "c" + next, num: next, title: "New chapter", state: "unsaved", queue: 0, words: 0, author: activeAuthorId }]);
-  }, [chapters.length, activeAuthorId]);
+    const n = chapters.length + 1;
+    const id = _wrGenId("ch");
+    const nextChapters = [...chapters, { id, num: n, title: "New chapter", state: "unsaved", queue: 0, words: 0, author: activeAuthorId }];
+    setChapters(nextChapters);
+    setActiveId(id);
+    persistChapters(nextChapters, manuscriptsByChapter, id);
+  }, [chapters, manuscriptsByChapter, activeAuthorId, persistChapters]);
   const onReserveChapter = _wrUC(() => {
-    const next = chapters.length + 1;
-    setChapters((curr) => [...curr, { id: "c" + next, num: next, title: "", state: "reserved", reserved: true, queue: 0, words: 0 }]);
-  }, [chapters.length]);
+    const n = chapters.length + 1;
+    const id = _wrGenId("ch");
+    const nextChapters = [...chapters, { id, num: n, title: "", state: "reserved", reserved: true, queue: 0, words: 0 }];
+    setChapters(nextChapters);
+    persistChapters(nextChapters, manuscriptsByChapter, activeId);
+  }, [chapters, manuscriptsByChapter, activeId, persistChapters]);
   const onRenameChapter = _wrUC(() => {}, []);
   const onDeleteChapterRequest = _wrUC(() => {
     setDeletingChapter(activeChapter);
   }, [activeChapter]);
-  const onConfirmDeleteChapter = _wrUC(() => {
+  const onConfirmDeleteChapter = _wrUC(async () => {
     if (!deletingChapter) return;
-    setChapters((curr) => curr.filter((c) => c.id !== deletingChapter.id));
+    const svc = window.LoomwrightBackend?.ManuscriptChapterService;
+    if (svc) {
+      await svc.deleteChapter(deletingChapter.id);
+      const s = svc.loadSync();
+      setChapters(s.chapters || []);
+      setActiveId(s.activeChapterId || (s.chapters && s.chapters[0] && s.chapters[0].id) || null);
+      setManuscriptsByChapter(s.manuscripts || {});
+    } else {
+      setChapters((curr) => curr.filter((c) => c.id !== deletingChapter.id));
+    }
     setDeletingChapter(null);
   }, [deletingChapter]);
-  const onReorderChapter = _wrUC(() => {}, []);
+  const onMoveChapter = _wrUC(async (direction) => {
+    if (!activeChapter) return;
+    const svc = window.LoomwrightBackend?.ManuscriptChapterService;
+    if (!svc) return;
+    await svc.moveChapter(activeChapter.id, direction);
+    const s = svc.loadSync();
+    setChapters(s.chapters || []);
+  }, [activeChapter]);
 
   const onSave = _wrUC(async () => {
     setCanvasState("saving");
     onSetSyncState && onSetSyncState("syncing");
-    await window.LoomwrightBackend?.ManuscriptService?.saveCurrentDom();
-    const next = { ...manuscriptsByChapter, [activeId]: paragraphs };
+    const snap = _wrSnapshotBody(bodyRef.current);
+    const title = ((titleRef.current && titleRef.current.innerText) || (activeChapter && activeChapter.title) || "").trim();
+    const next = { ...manuscriptsByChapter, [activeId]: snap };
+    const nextChapters = chapters.map((c) => c.id === activeId ? { ...c, title: title || c.title, words: snap.words, state: "saved" } : c);
     setManuscriptsByChapter(next);
-    persistChapters(chapters, next, activeId);
+    setChapters(nextChapters);
+    persistChapters(nextChapters, next, activeId);
+    try { await window.LoomwrightBackend?.ManuscriptService?.saveCurrentDom(); } catch (_e) {}
     setCanvasState("writing");
     onSetSyncState && onSetSyncState("saved");
-  }, [onSetSyncState, chapters, manuscriptsByChapter, activeId, persistChapters]);
-  const onSaveAndExtract = _wrUC(() => {
+  }, [onSetSyncState, chapters, manuscriptsByChapter, activeId, persistChapters, activeChapter]);
+  const runExtractionFlow = _wrUC(async (deep) => {
+    const snap = _wrSnapshotBody(bodyRef.current);
+    const nextManuscripts = { ...manuscriptsByChapter, [activeId]: snap };
+    const extractingChapters = chapters.map((c) => c.id === activeId ? { ...c, words: snap.words, state: "extracting" } : c);
+    setManuscriptsByChapter(nextManuscripts);
+    setChapters(extractingChapters);
+    persistChapters(extractingChapters, nextManuscripts, activeId);
+    try { await window.LoomwrightBackend?.ManuscriptService?.saveCurrentDom(); } catch (_e) {}
     setExtractionState("running");
-    setProgressMode("quick"); setProgressStage(0); setProgressFailed(false); setProgressOpen(true);
+    setProgressMode(deep ? "deep" : "quick"); setProgressStage(0); setProgressFailed(false); setProgressOpen(true);
     onSetSyncState && onSetSyncState("syncing");
-  }, [onSetSyncState]);
-  const onSaveAndDeepExtract = _wrUC(() => {
-    setExtractionState("running");
-    setProgressMode("deep"); setProgressStage(0); setProgressFailed(false); setProgressOpen(true);
-    onSetSyncState && onSetSyncState("syncing");
-  }, [onSetSyncState]);
+    // Paragraph offset map so each occurrence can be attributed to a paragraph id.
+    const offsets = []; let cursor = 0;
+    (snap.paragraphs || []).forEach((p) => {
+      if (p.sceneBreak) return;
+      const t = p.text || "";
+      offsets.push({ id: p.id, start: cursor, end: cursor + t.length });
+      cursor += t.length + 2;
+    });
+    try {
+      await window.LoomwrightBackend?.ExtractionService?.runExtraction({ chapterId: activeId, text: snap.text, deep, paragraphs: offsets });
+    } catch (_e) {
+      setProgressFailed(true);
+    }
+    setExtractions(loadReviewExtractions());
+    setChapters((curr) => curr.map((c) => c.id === activeId ? { ...c, state: "extracted" } : c));
+    // Ensure the canvas re-pulls occurrences, then force a one-time body
+    // re-highlight from the freshly-saved content (safe: just saved).
+    try { window.dispatchEvent(new CustomEvent("lw:entity-store-updated")); } catch (_e) {}
+    setBodyEpoch((v) => v + 1);
+    onSetSyncState && onSetSyncState("saved");
+  }, [activeId, chapters, manuscriptsByChapter, persistChapters, onSetSyncState]);
+  const onSaveAndExtract = _wrUC(() => runExtractionFlow(false), [runExtractionFlow]);
+  const onSaveAndDeepExtract = _wrUC(() => runExtractionFlow(true), [runExtractionFlow]);
   const onCloseProgress = _wrUC(() => {
     setProgressOpen(false);
     setExtractionState("complete");
@@ -1063,6 +1251,24 @@ const WritersRoomScreen = ({
   const onCloseSessionDrawer = _wrUC(() => setSessionDrawerOpen(false), []);
 
   const onManuscriptChange = _wrUC(() => {
+    if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+  }, [canvasState, onSetSyncState]);
+  const onStartWriting = _wrUC(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    if (!el.textContent || !el.textContent.trim()) {
+      el.innerHTML = '<p class="wr-p" data-paragraph-id="' + _wrGenId("p") + '"><br></p>';
+    }
+    el.focus();
+    try {
+      const sel = window.getSelection();
+      const range = document.createRange();
+      const first = el.querySelector("[data-paragraph-id]") || el;
+      range.selectNodeContents(first);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (_e) {}
     if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
   }, [canvasState, onSetSyncState]);
   const onSelectText = _wrUC(() => {}, []);
@@ -1156,6 +1362,33 @@ const WritersRoomScreen = ({
     onOpenPanel && onOpenPanel(kind);
   }, [onOpenEntityFromManuscript, onOpenPanel]);
 
+  // Delegated handlers for the editable body's atomic occurrence spans
+  // (contenteditable=false). Double-click opens the entity; hover shows the
+  // floating chip. Delegation survives innerHTML rewrites.
+  const onEntityDoubleClickDelegated = _wrUC((e) => {
+    const span = e.target && e.target.closest && e.target.closest("[data-entity-id]");
+    if (!span) return;
+    if (e.preventDefault) e.preventDefault();
+    try { const s = window.getSelection && window.getSelection(); if (s) s.removeAllRanges(); } catch (_e) {}
+    handleEntityDoubleClick({
+      type: span.getAttribute("data-entity-type"),
+      id: span.getAttribute("data-entity-id"),
+      occurrenceId: span.getAttribute("data-occurrence-id") || null,
+      label: span.textContent,
+    });
+  }, [handleEntityDoubleClick]);
+  const onEntityHoverDelegated = _wrUC((e, leaving) => {
+    if (leaving) { setHoverEntity(null); return; }
+    const span = e.target && e.target.closest && e.target.closest("[data-entity-id]");
+    if (!span) return;
+    setHoverEntity({
+      type: span.getAttribute("data-entity-type"),
+      id: span.getAttribute("data-entity-id"),
+      text: span.textContent,
+      x: e.clientX, y: e.clientY,
+    });
+  }, []);
+
   // Optional context menu / long-press for chapter strip handled inside ChapterNode.
   const wrContext = (e) => {
     e.preventDefault();
@@ -1205,7 +1438,6 @@ const WritersRoomScreen = ({
         onSelectChapter={onSelectChapter}
         onCreateChapter={onCreateChapter}
         onReserveChapter={onReserveChapter}
-        onReorderChapter={onReorderChapter}
         onOpenAdaptiveWheel={onOpenAdaptiveWheel}
       />
 
@@ -1306,6 +1538,8 @@ const WritersRoomScreen = ({
                 setL({ workspaceLayoutPreset: presetId === "clear" ? "writing-only" : presetId });
                 if (onApplyWorkspacePreset) onApplyWorkspacePreset(presetId, panelKinds);
               }}/>
+              <Btn variant="ghost" size="sm" icon="chevron-up" data-testid="wr-move-up" onClick={() => onMoveChapter("up")} title="Move chapter earlier" disabled={!activeChapter || activeChapter.num <= 1}/>
+              <Btn variant="ghost" size="sm" icon="chevron-d" data-testid="wr-move-down" onClick={() => onMoveChapter("down")} title="Move chapter later" disabled={!activeChapter || activeChapter.num >= chapters.length}/>
               <Btn variant="ghost" size="sm" icon="trash" onClick={onDeleteChapterRequest} data-callback="onDeleteChapterRequest" title="Delete chapter"/>
               <SaveModeControls
                 onSave={onSave}
@@ -1318,11 +1552,15 @@ const WritersRoomScreen = ({
 
           <ManuscriptCanvas
             chapter={activeChapter}
-            paragraphs={paragraphs}
+            manuscript={activeManuscript}
             state={canvasState}
-            onEntityHover={handleEntityHover}
-            onEntityDoubleClick={handleEntityDoubleClick}
-            onCommentClick={() => {}}
+            bodyRef={bodyRef}
+            titleRef={titleRef}
+            bodyEpoch={bodyEpoch}
+            onBodyInput={onManuscriptChange}
+            onStartWriting={onStartWriting}
+            onEntityHoverDelegated={onEntityHoverDelegated}
+            onEntityDoubleClickDelegated={onEntityDoubleClickDelegated}
             onCreateChapter={onCreateChapter}
             onSaveAndExtract={onSaveAndExtract}
           />

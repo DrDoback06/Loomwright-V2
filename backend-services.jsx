@@ -1354,6 +1354,7 @@
         manuscripts: {},
         notes: {},
         extractions: {},
+        trashedChapters: [],
         updatedAt: nowIso(),
       };
     },
@@ -1434,6 +1435,80 @@
         } catch (_) {}
       }
       return chapter;
+    },
+    // Delete a chapter: removes it + its manuscript, renumbers the rest,
+    // and retains the removed {chapter, manuscript} in `trashedChapters`
+    // so it can be restored (no silent data loss). Logged to the audit
+    // trail. Not marked reversible via the generic undo path because
+    // chapter restore uses restoreChapter() rather than entity undo.
+    async deleteChapter(chapterId, opts = {}) {
+      const state = this.loadSync();
+      const chapter = (state.chapters || []).find((c) => c.id === chapterId) || null;
+      if (!chapter) return null;
+      const manuscript = (state.manuscripts || {})[chapterId] || null;
+      const remaining = (state.chapters || [])
+        .filter((c) => c.id !== chapterId)
+        .map((c, i) => ({ ...c, num: i + 1 }));
+      const manuscripts = { ...(state.manuscripts || {}) };
+      delete manuscripts[chapterId];
+      const trashedChapters = [{ chapter, manuscript, deletedAt: nowIso() }, ...(state.trashedChapters || [])].slice(0, 50);
+      const nextActive = state.activeChapterId === chapterId ? (remaining[0]?.id || null) : state.activeChapterId;
+      await this.save({ ...state, chapters: remaining, manuscripts, trashedChapters, activeChapterId: nextActive }, { skipAudit: true });
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: "chapter.delete",
+            label: `Deleted chapter "${chapter.title || chapterId}"`,
+            targetType: "chapter",
+            targetId: chapterId,
+            targetName: chapter.title || null,
+            before: _auditSummariseChapter(chapter),
+            after: null,
+            source: "ManuscriptChapterService",
+            reversible: false,
+          });
+        } catch (_) {}
+      }
+      return { chapter, manuscript };
+    },
+    async restoreChapter(chapterId, opts = {}) {
+      const state = this.loadSync();
+      const entry = (state.trashedChapters || []).find((t) => t.chapter && t.chapter.id === chapterId);
+      if (!entry) return null;
+      const trashedChapters = (state.trashedChapters || []).filter((t) => !(t.chapter && t.chapter.id === chapterId));
+      const chapters = [...(state.chapters || []), entry.chapter].map((c, i) => ({ ...c, num: i + 1 }));
+      const manuscripts = { ...(state.manuscripts || {}) };
+      if (entry.manuscript) manuscripts[chapterId] = entry.manuscript;
+      return this.save({ ...state, chapters, manuscripts, trashedChapters, activeChapterId: chapterId }, opts);
+    },
+    // Move a chapter one slot up/down and renumber. Drag-and-drop reorder
+    // is deferred; this backs the visible Move Up / Move Down controls.
+    async moveChapter(chapterId, direction, opts = {}) {
+      const state = this.loadSync();
+      const chapters = (state.chapters || []).slice();
+      const idx = chapters.findIndex((c) => c.id === chapterId);
+      if (idx < 0) return state;
+      const swapWith = direction === "up" ? idx - 1 : idx + 1;
+      if (swapWith < 0 || swapWith >= chapters.length) return state;
+      const tmp = chapters[idx];
+      chapters[idx] = chapters[swapWith];
+      chapters[swapWith] = tmp;
+      const renumbered = chapters.map((c, i) => ({ ...c, num: i + 1 }));
+      const result = await this.save({ ...state, chapters: renumbered }, { skipAudit: true });
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: "chapter.reorder",
+            label: `Moved chapter "${tmp.title || chapterId}" ${direction}`,
+            targetType: "chapter",
+            targetId: chapterId,
+            targetName: tmp.title || null,
+            source: "ManuscriptChapterService",
+            reversible: false,
+          });
+        } catch (_) {}
+      }
+      return result;
     },
   };
 
