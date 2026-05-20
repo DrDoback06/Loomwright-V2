@@ -195,13 +195,62 @@
   // the caller short-circuits cleanly. Used by the audit script as a
   // marker that Bucket B branches show a provider-specific message.
   // -------------------------------------------------------------------
-  async function requireProviderOrNotice(featureLabel) {
+  async function requireProviderOrNotice(featureLabel, task) {
+    const backend = B();
+    const routing = backend.AIRoutingService;
+    // Local-only mode hard-blocks external calls.
+    if (routing && routing.isLocalOnly && routing.isLocalOnly()) {
+      notify(`AI is disabled (Local-only mode). Enable a provider in Settings to use ${featureLabel}.`);
+      return null;
+    }
+    // Routed resolution → returns { providerId, model } or null.
+    if (routing && routing.resolveRoute && task) {
+      const route = routing.resolveRoute(task);
+      if (route?.providerId) {
+        try {
+          const cfg = await backend.AIService.getProviderConfig(route.providerId);
+          if (!cfg.needsKey || cfg.apiKey) return { ...cfg, providerId: route.providerId, model: route.model || cfg.model };
+        } catch (_) {}
+      }
+      notify(`Configure an AI provider in Settings to use ${featureLabel}.`);
+      return null;
+    }
+    // Legacy single-provider fallback.
     try {
-      const cfg = await B().AIService.getProviderConfig();
+      const cfg = await backend.AIService.getProviderConfig();
       if (cfg?.apiKey) return cfg;
     } catch (_) {}
     notify(`Configure an AI provider in Settings to use ${featureLabel}.`);
     return null;
+  }
+
+  // Privacy guard: confirm before sending manuscript/reference/intel
+  // text to an external provider. Uses window.confirm (the existing
+  // pattern); also dispatches lw:ai-privacy-guard so a future modal can
+  // replace the confirm without touching call sites. Returns true to
+  // proceed, false to abort.
+  function aiPrivacyGuard({ task, providerId, model, context }) {
+    const backend = B();
+    const routing = backend.AIRoutingService?.loadSync?.() || {};
+    const sendsContent = !!(context?.includesManuscript || context?.includesReferences || context?.includesIntel);
+    if (!sendsContent) return true;
+    const summary = backend.AIService.buildGuardSummary({ task, providerId, model, context });
+    window.dispatchEvent(new CustomEvent("lw:ai-privacy-guard", { detail: summary }));
+    if (routing.confirmBeforeSendingManuscript === false) return true;
+    if (typeof window.confirm !== "function") return true;
+    const lines = [
+      `Send local content to your AI provider?`,
+      ``,
+      `Task: ${summary.task}`,
+      `Provider: ${summary.providerId || "—"}  Model: ${summary.model || "—"}`,
+      `Includes manuscript text: ${summary.includesManuscript ? "yes" : "no"}`,
+      `Includes references: ${summary.includesReferences ? "yes" : "no"}`,
+      `Includes project intelligence: ${summary.includesIntel ? "yes" : "no"}`,
+      `Approx size: ${summary.approxChars} chars`,
+      ``,
+      summary.reminder,
+    ];
+    return window.confirm(lines.join("\n"));
   }
 
   function resolveExportTarget(name, ctx) {
@@ -673,14 +722,23 @@
 
     // —— Composition / AI generate ——
     if (name === "onGenerateCompositionDraft" || name === "onGenerateDraft") {
-      const cfg = await requireProviderOrNotice("composition draft generation");
-      if (!cfg) return;
+      const route = await requireProviderOrNotice("composition draft generation", "writingDraft");
+      if (!route) return;
       const comp = CompositionService.loadSync({});
-      const prompt = comp.instructions || "Write a draft scene from the selected entities.";
+      const selectedEntityIds = (comp.entities || []).map((e) => e.id).filter(Boolean);
+      const built = B().AIContextBuilder.build({ task: "writingDraft", selectedEntityIds, includeReferences: true, includeProjectIntelligence: true });
+      if (!aiPrivacyGuard({ task: "writingDraft", providerId: route.providerId, model: route.model, context: built })) return;
+      const instructions = comp.instructions || "Write a draft scene from the selected entities.";
       try {
-        const text = await AIService.complete({ prompt, system: "You are a literary fiction co-writer." });
+        const text = await AIService.complete({
+          providerId: route.providerId, model: route.model,
+          system: built.systemPrompt + "\nYou are a literary fiction co-writer.",
+          prompt: `${instructions}\n\n${built.userPrompt}`,
+          purpose: "writingDraft",
+        });
         window.__LW_LAST_GENERATED_DRAFT__ = text;
         window.dispatchEvent(new CustomEvent("lw:composition-draft-generated", { detail: { text } }));
+        B().AuditService?.log?.({ action: "ai.writingDraft", label: "Generated composition draft", source: "AIService", metadata: { providerId: route.providerId, model: route.model, status: "ok" }, reversible: false });
         notify("Draft generated.");
       } catch (e) { notify(e.message); }
       return;
@@ -772,27 +830,37 @@
     // —— Bucket B — AI/provider-gated. Show a specific notice if no
     // provider is configured, else perform the AI call.
     if (name === "onGenerateAIWriterDraft") {
-      const cfg = await requireProviderOrNotice("AI Writer draft generation");
-      if (!cfg) return;
-      const prompt = ctx.detail?.prompt || "Write a draft scene.";
+      const route = await requireProviderOrNotice("AI Writer draft generation", "writingDraft");
+      if (!route) return;
+      const activeChapterId = ctx.detail?.chapterId || document.querySelector("[data-ui='ManuscriptCanvas']")?.getAttribute("data-chapter-id") || null;
+      const built = B().AIContextBuilder.build({ task: "writingDraft", chapterId: activeChapterId, includeReferences: true, includeProjectIntelligence: true });
+      if (!aiPrivacyGuard({ task: "writingDraft", providerId: route.providerId, model: route.model, context: built })) return;
+      const prompt = (ctx.detail?.prompt || "Write a draft scene.") + (built.userPrompt ? `\n\n${built.userPrompt}` : "");
       try {
-        const text = await AIService.complete({ prompt, system: "You are a literary fiction co-writer." });
+        const text = await AIService.complete({
+          providerId: route.providerId, model: route.model,
+          system: built.systemPrompt + "\nYou are a literary fiction co-writer.",
+          prompt, purpose: "writingDraft",
+        });
         window.__LW_LAST_GENERATED_DRAFT__ = text;
         window.dispatchEvent(new CustomEvent("lw:composition-draft-generated", { detail: { text } }));
+        B().AuditService?.log?.({ action: "ai.writingDraft", label: "Generated AI Writer draft", source: "AIService", metadata: { providerId: route.providerId, model: route.model, status: "ok" }, reversible: false });
         notify("Draft generated.");
       } catch (e) { notify(e.message); }
       return;
     }
     if (name === "onGenerateDraftSkillTree") {
-      const cfg = await requireProviderOrNotice("Skill Tree draft generation");
-      if (!cfg) return;
+      const route = await requireProviderOrNotice("Skill Tree draft generation", "skillTreeGeneration");
+      if (!route) return;
       const skillId = ctx.detail?.skillId || id;
       const skill = skillId ? EntityService.getSync(skillId, "skills") : null;
       const prompt = `Propose a draft skill tree for "${skill?.name || ctx.detail?.theme || "the selected skill"}" as JSON nodes array.`;
+      // Skill-tree generation does not send manuscript text — no guard needed.
       try {
-        const raw = await AIService.complete({ prompt, system: "Return JSON only." });
+        const raw = await AIService.complete({ providerId: route.providerId, model: route.model, prompt, system: "Return JSON only.", purpose: "skillTreeGeneration" });
         let nodes = [];
         try { nodes = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim()); } catch (_) {}
+        B().AuditService?.log?.({ action: "ai.skillTreeGeneration", label: "Generated draft skill tree", source: "AIService", metadata: { providerId: route.providerId, model: route.model, status: "ok" }, reversible: false });
         if (Array.isArray(nodes) && skillId) {
           const current = EntityService.getSync(skillId, "skills");
           await EntityService.update("skills", skillId, {
@@ -814,26 +882,40 @@
         const negated = claim && text.includes("not " + claim);
         if (negated) conflicts.push({ reference: ref.title, claim });
       }
-      const cfg = await B().AIService.getProviderConfig().catch(() => null);
-      if (cfg?.apiKey) {
-        try {
-          const prompt = `Given the canon rules below and chapter text, list any contradictions as JSON.\nCanon:\n${refs.map((r) => "- " + (r.title || r.content)).join("\n")}\n\nChapter:\n${snap?.bodyText?.slice(0, 4000) || ""}`;
-          const raw = await AIService.complete({ prompt, system: "Return JSON array of {claim,evidence}." });
-          try { conflicts.push(...JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim())); } catch (_) {}
-        } catch (_) {}
+      // AI augmentation only when a provider routes AND not local-only.
+      const routing = B().AIRoutingService;
+      const route = (routing && !routing.isLocalOnly()) ? routing.resolveRoute("continuityCheck") : null;
+      if (route?.providerId) {
+        const built = { includesManuscript: !!snap?.bodyText, approxChars: (snap?.bodyText || "").length };
+        if (aiPrivacyGuard({ task: "continuityCheck", providerId: route.providerId, model: route.model, context: built })) {
+          try {
+            const prompt = `Given the canon rules below and chapter text, list any contradictions as JSON.\nCanon:\n${refs.map((r) => "- " + (r.title || r.content)).join("\n")}\n\nChapter:\n${snap?.bodyText?.slice(0, 4000) || ""}`;
+            const raw = await AIService.complete({ providerId: route.providerId, model: route.model, prompt, system: "Return JSON array of {claim,evidence}.", purpose: "continuityCheck" });
+            try { conflicts.push(...JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim())); } catch (_) {}
+            B().AuditService?.log?.({ action: "ai.continuityCheck", label: "Ran AI continuity check", source: "AIService", metadata: { providerId: route.providerId, model: route.model, status: "ok" }, reversible: false });
+          } catch (_) {}
+        }
       }
       window.dispatchEvent(new CustomEvent("lw:continuity-check", { detail: { conflicts } }));
       notify(conflicts.length ? `${conflicts.length} potential contradiction(s) flagged.` : "No contradictions detected.");
       return;
     }
     if (name === "onRunEntitySuggestion") {
-      // Local extraction always available; AI augmentation when provider set.
+      // Local extraction always available; AI/deep augmentation only when a
+      // provider routes AND local-only mode is off.
       const snap = B().ManuscriptService?.snapshotFromDom?.();
       const text = snap?.bodyText || "";
-      const cfg = await B().AIService.getProviderConfig().catch(() => null);
+      const routing = B().AIRoutingService;
+      const route = (routing && !routing.isLocalOnly()) ? routing.resolveRoute("deepExtraction") : null;
+      let deep = false;
+      if (route?.providerId) {
+        const built = { includesManuscript: !!text, approxChars: text.length };
+        deep = aiPrivacyGuard({ task: "deepExtraction", providerId: route.providerId, model: route.model, context: built });
+      }
       try {
-        await ExtractionService.runExtraction({ chapterId: snap?.chapterId, text, deep: !!cfg?.apiKey });
-        notify(cfg?.apiKey ? "Entity suggestions generated (with AI)." : "Entity suggestions generated (local).");
+        await ExtractionService.runExtraction({ chapterId: snap?.chapterId, text, deep });
+        if (deep) B().AuditService?.log?.({ action: "ai.deepExtraction", label: "Ran AI entity suggestion", source: "AIService", metadata: { providerId: route.providerId, model: route.model, status: "ok" }, reversible: false });
+        notify(deep ? "Entity suggestions generated (with AI)." : "Entity suggestions generated (local).");
       } catch (e) { notify(e.message); }
       return;
     }
@@ -1173,6 +1255,44 @@
     }
     if (name === "onAddAIProvider") {
       window.dispatchEvent(new CustomEvent("lw:settings-section", { detail: { actionId: "ai" } }));
+      return;
+    }
+    // —— AI provider config + routing (BYOK) ——
+    if (name === "onSaveAIProviderConfig") {
+      const cfg = ctx.detail || {};
+      try {
+        await B().AIService.saveProviderConfig(cfg);
+        notify(`Saved provider "${cfg.label || cfg.id || cfg.providerType || "provider"}".`);
+      } catch (e) { notify(e.message || "Could not save provider."); }
+      return;
+    }
+    if (name === "onClearAIProviderConfig") {
+      const pid = ctx.detail?.providerId || ctx.detail?.id;
+      if (!pid) { notify("No provider id supplied."); return; }
+      await B().AIService.clearProviderKey(pid);
+      notify("Provider key cleared.");
+      return;
+    }
+    if (name === "onSetAIRoutingMode" || name === "onToggleLocalOnlyMode") {
+      const mode = name === "onToggleLocalOnlyMode"
+        ? (B().AIRoutingService.isLocalOnly() ? "balanced" : "localOnly")
+        : (ctx.detail?.mode || ctx.detail?.value || "balanced");
+      await B().AIRoutingService.save({ mode });
+      notify(`AI routing mode: ${mode}.`);
+      return;
+    }
+    if (name === "onSetAITaskRoute") {
+      const { task, providerId, model } = ctx.detail || {};
+      if (!task) { notify("No task supplied for routing."); return; }
+      await B().AIRoutingService.save({ taskRoutes: { [task]: { providerId, model } } });
+      notify(`Routed ${task} → ${providerId || "default"}.`);
+      return;
+    }
+    if (name === "onConfirmAIPrivacyGuard") {
+      // The privacy guard resolves inline via window.confirm in this
+      // build; this callback exists so a future modal can resolve a
+      // pending guarded call. No-op acknowledgement here.
+      window.dispatchEvent(new CustomEvent("lw:ai-privacy-guard-confirmed", { detail: ctx.detail }));
       return;
     }
 

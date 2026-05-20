@@ -36,6 +36,7 @@
     skillTrees: "skill_trees",
     searchIndex: "search_index",
     auditLog: "audit_log",
+    aiRouting: "ai_routing",
   };
 
   // Synchronously read the sample-loaded flag from localStorage BEFORE any
@@ -754,9 +755,28 @@
     async saveProvider(providerId, settings = {}) {
       const allSettings = await StorageService.get(KEYS.providerSettings, {});
       const allKeys = await StorageService.get(KEYS.apiKeys, {});
-      const { apiKey, ...safeSettings } = settings || {};
+      // Strip the key out of the config blob — it only ever lives in
+      // KEYS.apiKeys, encrypted. Any field named like a secret is also
+      // dropped defensively so it can never land in providerSettings.
+      const { apiKey, secret, token, password, bearer, credential, ...safeSettings } = settings || {};
       if (apiKey) allKeys[providerId] = await this.encrypt(apiKey);
-      allSettings[providerId] = { ...(allSettings[providerId] || {}), ...safeSettings, hasKey: !!(apiKey || allKeys[providerId]), updatedAt: nowIso() };
+      const prev = allSettings[providerId] || {};
+      allSettings[providerId] = {
+        id: providerId,
+        providerType: safeSettings.providerType || prev.providerType || "openai",
+        label: safeSettings.label || prev.label || providerId,
+        enabled: safeSettings.enabled !== undefined ? !!safeSettings.enabled : (prev.enabled !== false),
+        baseUrl: safeSettings.baseUrl || prev.baseUrl || "",
+        defaultModel: safeSettings.defaultModel || safeSettings.model || prev.defaultModel || prev.model || "",
+        availableModels: Array.isArray(safeSettings.availableModels) ? safeSettings.availableModels : (prev.availableModels || []),
+        useCases: { ...(prev.useCases || {}), ...(safeSettings.useCases || {}) },
+        headers: { ...(prev.headers || {}), ...(safeSettings.headers || {}) },
+        apiKeyRef: providerId,
+        ...safeSettings,
+        hasKey: !!(apiKey || allKeys[providerId]),
+        createdAt: prev.createdAt || nowIso(),
+        updatedAt: nowIso(),
+      };
       await StorageService.set(KEYS.providerSettings, allSettings);
       await StorageService.set(KEYS.apiKeys, allKeys);
       return allSettings[providerId];
@@ -1563,59 +1583,308 @@
     },
   };
 
+  // -------------------------------------------------------------------
+  // Provider defaults per adapter type. baseUrl/model only — never keys.
+  // -------------------------------------------------------------------
+  const PROVIDER_DEFAULTS = {
+    openai:     { baseUrl: "https://api.openai.com/v1", defaultModel: "gpt-4o-mini", needsKey: true },
+    openrouter: { baseUrl: "https://openrouter.ai/api/v1", defaultModel: "openrouter/auto", needsKey: true },
+    anthropic:  { baseUrl: "https://api.anthropic.com", defaultModel: "claude-opus-4-7", needsKey: true },
+    ollama:     { baseUrl: "http://localhost:11434", defaultModel: "llama3", needsKey: false },
+    custom:     { baseUrl: "", defaultModel: "", needsKey: true },
+  };
+
   const AIService = {
+    listProvidersSync() {
+      const all = KeysService.loadAllProviderSettingsSync() || {};
+      // Return shallow config copies, never keys.
+      return Object.values(all).map((p) => ({ ...p }));
+    },
     async getProviderConfig(providerId = "openai") {
       const settings = KeysService.loadProviderSync(providerId) || {};
+      const type = settings.providerType || (providerId in PROVIDER_DEFAULTS ? providerId : "openai");
+      const defaults = PROVIDER_DEFAULTS[type] || PROVIDER_DEFAULTS.openai;
       return {
         providerId,
-        baseUrl: settings.baseUrl || "https://api.openai.com/v1",
-        model: settings.model || "gpt-4o-mini",
+        providerType: type,
+        baseUrl: settings.baseUrl || defaults.baseUrl,
+        model: settings.defaultModel || settings.model || defaults.defaultModel,
+        headers: settings.headers || {},
+        needsKey: defaults.needsKey,
         apiKey: await KeysService.loadKey(providerId),
       };
     },
+    async saveProviderConfig(config = {}) {
+      const id = config.id || config.providerId || config.providerType || "openai";
+      return KeysService.saveProvider(id, config);
+    },
+    async clearProviderKey(providerId) {
+      return KeysService.clearProviderKey(providerId);
+    },
     async testConnection(providerId = "openai") {
       const cfg = await this.getProviderConfig(providerId);
-      if (!cfg.apiKey) {
+      if (cfg.needsKey && !cfg.apiKey) {
         return { ok: false, providerId, message: "No API key stored for this provider." };
       }
+      const base = (cfg.baseUrl || "").replace(/\/$/, "");
       try {
-        const res = await fetch(`${cfg.baseUrl.replace(/\/$/, "")}/models`, {
-          headers: { Authorization: `Bearer ${cfg.apiKey}` },
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          return { ok: false, providerId, message: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+        if (cfg.providerType === "anthropic") {
+          // Anthropic has no /models GET; do a 1-token ping (no manuscript text).
+          const res = await fetch(`${base}/v1/messages`, {
+            method: "POST",
+            headers: { "x-api-key": cfg.apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+            body: JSON.stringify({ model: cfg.model, max_tokens: 1, messages: [{ role: "user", content: "ping" }] }),
+          });
+          if (!res.ok) { const t = await res.text(); return { ok: false, providerId, message: `HTTP ${res.status}: ${t.slice(0, 200)}` }; }
+          return { ok: true, providerId, message: "Connection successful." };
         }
+        if (cfg.providerType === "ollama") {
+          const res = await fetch(`${base}/api/tags`);
+          if (!res.ok) { const t = await res.text(); return { ok: false, providerId, message: `HTTP ${res.status}: ${t.slice(0, 200)}` }; }
+          return { ok: true, providerId, message: "Local Ollama reachable." };
+        }
+        // openai / openrouter / custom — GET /models.
+        const res = await fetch(`${base}/models`, {
+          headers: { Authorization: `Bearer ${cfg.apiKey}`, ...(cfg.headers || {}) },
+        });
+        if (!res.ok) { const t = await res.text(); return { ok: false, providerId, message: `HTTP ${res.status}: ${t.slice(0, 200)}` }; }
         return { ok: true, providerId, message: "Connection successful." };
       } catch (err) {
         return { ok: false, providerId, message: err.message || String(err) };
       }
     },
-    async complete({ prompt, providerId = "openai", system, maxTokens = 1200 }) {
-      const cfg = await this.getProviderConfig(providerId);
-      if (!cfg.apiKey) throw new Error("No API key configured. Add one in Settings → AI Providers.");
+    // ----- adapters -----
+    async _completeOpenAI(cfg, { messages, model, maxTokens, temperature, responseFormat }) {
       const body = {
-        model: cfg.model,
-        max_tokens: maxTokens,
-        messages: [
-          ...(system ? [{ role: "system", content: system }] : []),
-          { role: "user", content: prompt },
-        ],
+        model: model || cfg.model,
+        max_tokens: maxTokens || 1200,
+        messages,
+        ...(temperature != null ? { temperature } : {}),
+        ...(responseFormat ? { response_format: responseFormat } : {}),
       };
-      const res = await fetch(`${cfg.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      const res = await fetch(`${(cfg.baseUrl || "").replace(/\/$/, "")}/chat/completions`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${cfg.apiKey}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${cfg.apiKey}`, "Content-Type": "application/json", ...(cfg.headers || {}) },
         body: JSON.stringify(body),
       });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`AI request failed (${res.status}): ${text.slice(0, 300)}`);
-      }
+      if (!res.ok) { const t = await res.text(); throw new Error(`AI request failed (${res.status}): ${t.slice(0, 300)}`); }
       const json = await res.json();
       return json.choices?.[0]?.message?.content || "";
+    },
+    async _completeAnthropic(cfg, { messages, model, maxTokens, temperature }) {
+      const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
+      const userMsgs = messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
+      const body = {
+        model: model || cfg.model,
+        max_tokens: maxTokens || 1200,
+        ...(system ? { system } : {}),
+        ...(temperature != null ? { temperature } : {}),
+        messages: userMsgs.length ? userMsgs : [{ role: "user", content: "" }],
+      };
+      const res = await fetch(`${(cfg.baseUrl || "").replace(/\/$/, "")}/v1/messages`, {
+        method: "POST",
+        headers: { "x-api-key": cfg.apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json", ...(cfg.headers || {}) },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const t = await res.text(); throw new Error(`AI request failed (${res.status}): ${t.slice(0, 300)}`); }
+      const json = await res.json();
+      return (json.content || []).map((b) => b.text || "").join("") || "";
+    },
+    async _completeOllama(cfg, { messages, model, temperature }) {
+      const body = { model: model || cfg.model, messages, stream: false, ...(temperature != null ? { options: { temperature } } : {}) };
+      const res = await fetch(`${(cfg.baseUrl || "").replace(/\/$/, "")}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(cfg.headers || {}) },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const t = await res.text(); throw new Error(`AI request failed (${res.status}): ${t.slice(0, 300)}`); }
+      const json = await res.json();
+      return json.message?.content || "";
+    },
+    /**
+     * complete — accepts both the legacy { prompt, system } form and the
+     * new { messages } form. Routes to the correct adapter by provider type.
+     */
+    async complete(opts = {}) {
+      const providerId = opts.providerId || "openai";
+      const cfg = await this.getProviderConfig(providerId);
+      if (cfg.needsKey && !cfg.apiKey) throw new Error("No API key configured. Add one in Settings → AI Providers.");
+      const messages = Array.isArray(opts.messages) && opts.messages.length
+        ? opts.messages
+        : [
+            ...(opts.system ? [{ role: "system", content: opts.system }] : []),
+            { role: "user", content: opts.prompt || "" },
+          ];
+      const params = { messages, model: opts.model, maxTokens: opts.maxTokens, temperature: opts.temperature, responseFormat: opts.responseFormat };
+      if (cfg.providerType === "anthropic") return this._completeAnthropic(cfg, params);
+      if (cfg.providerType === "ollama") return this._completeOllama(cfg, params);
+      return this._completeOpenAI(cfg, params);
+    },
+    async completeJson(opts = {}) {
+      const raw = await this.complete({
+        ...opts,
+        responseFormat: opts.responseFormat || { type: "json_object" },
+        system: (opts.system || "") + "\nRespond with valid JSON only.",
+      });
+      const cleaned = (raw || "").replace(/^```json\s*|\s*```$/g, "").trim();
+      try { return JSON.parse(cleaned); } catch (_) { return null; }
+    },
+    /**
+     * Build a structured privacy-guard summary for a pending call.
+     * Pure: does not send anything.
+     */
+    buildGuardSummary({ task, providerId, model, context } = {}) {
+      const c = context || {};
+      return {
+        task: task || "ai-task",
+        providerId: providerId || null,
+        model: model || null,
+        includesManuscript: !!c.includesManuscript,
+        includesReferences: !!c.includesReferences,
+        includesIntel: !!c.includesIntel,
+        approxChars: c.approxChars || 0,
+        reminder: "This sends the listed local content to your configured BYOK provider. No data leaves the app without this action.",
+      };
+    },
+  };
+
+  // -------------------------------------------------------------------
+  // AIRoutingService — task → provider/model routing + privacy flags.
+  // Stored under KEYS.aiRouting. References provider ids + model names
+  // only; never secrets.
+  // -------------------------------------------------------------------
+  const AI_TASKS = [
+    "quickExtraction", "deepExtraction", "writingDraft", "rewritePassage",
+    "continueWriting", "projectIntelligence", "referenceSummary",
+    "continuityCheck", "skillTreeGeneration", "aiHandoffAssist",
+  ];
+  const AIRoutingService = {
+    defaultState() {
+      return {
+        mode: "balanced",
+        defaultProviderId: "openai",
+        taskRoutes: {},
+        maxContextTokens: 8000,
+        preferSummaries: true,
+        confirmBeforeSendingManuscript: true,
+        redactSensitiveFields: true,
+        localFallbackEnabled: true,
+        updatedAt: nowIso(),
+      };
+    },
+    loadSync() {
+      const raw = StorageService.getSync(KEYS.aiRouting, null);
+      if (!raw || typeof raw !== "object") return this.defaultState();
+      return { ...this.defaultState(), ...raw };
+    },
+    async save(patch = {}) {
+      const next = { ...this.loadSync(), ...clone(patch), updatedAt: nowIso() };
+      // taskRoutes merges rather than replaces unless explicitly set.
+      if (patch.taskRoutes) next.taskRoutes = { ...this.loadSync().taskRoutes, ...patch.taskRoutes };
+      await StorageService.set(KEYS.aiRouting, next);
+      window.dispatchEvent(new CustomEvent("lw:ai-routing-updated", { detail: next }));
+      return next;
+    },
+    isLocalOnly() {
+      return this.loadSync().mode === "localOnly";
+    },
+    requiresManuscriptConfirmation() {
+      return this.loadSync().confirmBeforeSendingManuscript !== false;
+    },
+    /**
+     * Resolve a task to { providerId, model } or null when blocked /
+     * unconfigured. Honours localOnly, explicit task routes, and the
+     * default provider.
+     */
+    resolveRoute(task) {
+      const state = this.loadSync();
+      if (state.mode === "localOnly") return null;
+      const route = state.taskRoutes?.[task];
+      if (route?.providerId) {
+        const cfg = KeysService.loadProviderSync(route.providerId);
+        if (cfg && cfg.enabled !== false) return { providerId: route.providerId, model: route.model || cfg.defaultModel || cfg.model };
+      }
+      // Fall back to default provider, then first enabled provider.
+      const all = KeysService.loadAllProviderSettingsSync() || {};
+      const def = state.defaultProviderId && all[state.defaultProviderId];
+      if (def && def.enabled !== false) return { providerId: state.defaultProviderId, model: def.defaultModel || def.model };
+      const firstEnabled = Object.values(all).find((p) => p.enabled !== false && p.hasKey);
+      if (firstEnabled) return { providerId: firstEnabled.id, model: firstEnabled.defaultModel || firstEnabled.model };
+      return null;
+    },
+  };
+
+  // -------------------------------------------------------------------
+  // AIContextBuilder — deterministic, bounded context assembly. Pure
+  // over the live store. Never includes secrets.
+  // -------------------------------------------------------------------
+  const AIContextBuilder = {
+    build({ task, chapterId, selectedEntityIds, includeProjectIntelligence, includeReferences, detailLevel } = {}) {
+      const routing = AIRoutingService.loadSync();
+      const maxChars = Math.max(2000, (routing.maxContextTokens || 8000) * 4);
+      const sections = [];
+      let approxChars = 0;
+      let includesManuscript = false, includesReferences = false, includesIntel = false;
+      const push = (label, text) => {
+        if (!text) return;
+        const slice = String(text).slice(0, Math.max(0, maxChars - approxChars));
+        if (!slice) return;
+        sections.push({ label, text: slice });
+        approxChars += slice.length;
+      };
+
+      // Chapter text.
+      if (chapterId) {
+        const mcs = ManuscriptChapterService.loadSync();
+        const ch = (mcs.chapters || []).find((c) => c.id === chapterId);
+        const body = ch?.bodyText || (ch?.bodyHtml || "").replace(/<[^>]+>/g, "") || mcs.manuscripts?.[chapterId]?.text || "";
+        if (body) { push("Chapter: " + (ch?.title || chapterId), body); includesManuscript = true; }
+      }
+
+      // Selected entities.
+      const selIds = Array.isArray(selectedEntityIds) ? selectedEntityIds : [];
+      if (selIds.length) {
+        const lines = [];
+        for (const id of selIds) {
+          const e = EntityService.getSync(id);
+          if (e) lines.push(`- ${e.name} (${e.type}): ${e.data?.summary || e.data?.description || ""}`);
+        }
+        push("Selected entities", lines.join("\n"));
+      }
+
+      // Project Intelligence (summaries preferred).
+      if (includeProjectIntelligence !== false) {
+        const intel = ProjectIntelService.loadSync();
+        const intelText = [intel.writingStyleGuide && ("Style: " + intel.writingStyleGuide),
+          Array.isArray(intel.canonRules) ? ("Canon: " + intel.canonRules.join("; ")) : (intel.canonRules ? "Canon: " + intel.canonRules : "")]
+          .filter(Boolean).join("\n");
+        if (intelText) { push("Project intelligence", intelText); includesIntel = true; }
+      }
+
+      // References flagged for AI context.
+      if (includeReferences !== false) {
+        const refs = (StorageService.getSync(KEYS.references, []) || []).filter((r) => r.includedInAIContext || r.aiContext);
+        if (refs.length) {
+          const refText = refs.map((r) => `- ${r.title}: ${(r.summary || r.content || "").slice(0, 400)}`).join("\n");
+          push("References", refText);
+          includesReferences = true;
+        }
+      }
+
+      // Known entities by type (names only — cheap grounding for extraction).
+      if (task === "deepExtraction" || task === "quickExtraction") {
+        const all = EntityService.listAllSync();
+        const known = [];
+        for (const [type, byId] of Object.entries(all)) {
+          const names = Object.values(byId || {}).filter((e) => e.status !== "deleted").map((e) => e.name);
+          if (names.length) known.push(`${type}: ${names.slice(0, 40).join(", ")}`);
+        }
+        push("Known entities", known.join("\n"));
+      }
+
+      const systemPrompt = "You are Loomwright's writing and worldbuilding assistant. Use only the provided context.";
+      const userPrompt = sections.map((s) => `## ${s.label}\n${s.text}`).join("\n\n");
+      return { systemPrompt, userPrompt, sections, approxChars, includesManuscript, includesReferences, includesIntel };
     },
   };
 
@@ -4328,6 +4597,8 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     ProjectArchiveService,
     LinkService,
     AIService,
+    AIRoutingService,
+    AIContextBuilder,
     ExtractionService,
     OccurrenceService,
     isOccurrenceStale,

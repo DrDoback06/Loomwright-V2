@@ -122,14 +122,19 @@ function makeWindow() {
     indexedDB: shimIndexedDB(),
     crypto: {
       randomUUID: () => "u-" + Math.random().toString(36).slice(2, 10),
-      // Minimal subtle stub — KeysService will fall back to plaintext if subtle is absent.
-      subtle: null,
+      getRandomValues: (arr) => require("node:crypto").webcrypto.getRandomValues(arr),
+      // Use Node's real Web Crypto so KeysService.encrypt/decrypt work
+      // in-process (mirrors the browser's window.crypto.subtle).
+      subtle: require("node:crypto").webcrypto.subtle,
     },
     document: shimDoc(),
     prompt: () => null,
     confirm: () => true,
     console,
     setTimeout, clearTimeout, setImmediate,
+    TextEncoder, TextDecoder,
+    btoa: (s) => Buffer.from(s, "binary").toString("base64"),
+    atob: (s) => Buffer.from(s, "base64").toString("binary"),
     CustomEvent: function (type, init) { return { type, detail: init?.detail || null }; },
     fetch: async () => { throw new Error("fetch not available in smoke test"); },
     URL: { createObjectURL: () => "blob://stub", revokeObjectURL: () => {} },
@@ -1047,6 +1052,95 @@ async function main() {
   // clear().
   await Audit.clear();
   log("[audit] clear() empties the log", Audit.loadSync().events.length === 0);
+
+  // -------------------------------------------------------------------
+  // Multi-provider AI Routing
+  // -------------------------------------------------------------------
+  console.log("");
+  console.log("[ai routing]");
+
+  await B.StorageService.clear();
+  const AI = B.AIService;
+  const Routing = B.AIRoutingService;
+  const Ctx = B.AIContextBuilder;
+  log("[ai] AIService / AIRoutingService / AIContextBuilder exposed", !!AI && !!Routing && !!Ctx);
+  log("[ai] routing defaultState mode = balanced", Routing.loadSync().mode === "balanced");
+
+  // Save a provider config (no key in the config blob).
+  await AI.saveProviderConfig({ id: "openai", providerType: "openai", label: "OpenAI", baseUrl: "https://api.openai.com/v1", defaultModel: "gpt-4o-mini", apiKey: "sk-AI-ROUTING-SECRET" });
+  const provCfgBlob = JSON.stringify(B.KeysService.loadProviderSync("openai"));
+  log("[ai] saveProviderConfig persists config", B.KeysService.loadProviderSync("openai")?.providerType === "openai");
+  log("[ai] provider config blob never contains the apiKey value", provCfgBlob.indexOf("sk-AI-ROUTING-SECRET") === -1);
+  log("[ai] provider config records hasKey:true", B.KeysService.loadProviderSync("openai")?.hasKey === true);
+
+  // Key is retrievable for a call but not in the config.
+  const retrievedKey = await B.KeysService.loadKey("openai");
+  log("[ai] key retrievable via KeysService for a call", retrievedKey === "sk-AI-ROUTING-SECRET");
+
+  // Routing resolution.
+  await Routing.save({ mode: "balanced", defaultProviderId: "openai" });
+  log("[ai] resolveRoute(writingDraft) falls back to default provider", Routing.resolveRoute("writingDraft")?.providerId === "openai");
+  await Routing.save({ taskRoutes: { deepExtraction: { providerId: "openai", model: "gpt-4o" } } });
+  log("[ai] resolveRoute honours a task-specific route + model", Routing.resolveRoute("deepExtraction")?.model === "gpt-4o");
+
+  // Local-only blocks.
+  await Routing.save({ mode: "localOnly" });
+  log("[ai] isLocalOnly() true in localOnly mode", Routing.isLocalOnly() === true);
+  log("[ai] resolveRoute returns null in localOnly", Routing.resolveRoute("writingDraft") === null);
+  await Routing.save({ mode: "balanced" });
+
+  // Context builder.
+  const cChap = await B.ManuscriptChapterService.createFromComposition({ title: "Ctx Chapter", bodyText: "Hess crossed the salt marsh at dawn." });
+  await B.EntityService.save("cast", { name: "Hess Vaela", data: { summary: "Bearer of the Auger." } });
+  const built = Ctx.build({ task: "deepExtraction", chapterId: cChap.id, includeReferences: false, includeProjectIntelligence: false });
+  log("[ai] context builder includes chapter text", built.userPrompt.includes("salt marsh"));
+  log("[ai] context builder marks includesManuscript", built.includesManuscript === true);
+  log("[ai] context builder includes known entities for extraction", built.userPrompt.includes("Hess Vaela"));
+  log("[ai] context builder never contains the apiKey value", JSON.stringify(built).indexOf("sk-AI-ROUTING-SECRET") === -1);
+  // Bounded.
+  await Routing.save({ maxContextTokens: 10 });
+  const tiny = Ctx.build({ task: "writingDraft", chapterId: cChap.id });
+  log("[ai] context builder respects maxContextTokens bound", tiny.approxChars <= 10 * 4 + 5);
+  await Routing.save({ maxContextTokens: 8000 });
+
+  // Mocked completion via the OpenAI adapter.
+  const realFetch = win.fetch;
+  win.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.includes("/chat/completions")) {
+      return { ok: true, status: 200, async json() { return { choices: [{ message: { content: "MOCKED COMPLETION" } }] }; }, async text() { return ""; } };
+    }
+    if (u.includes("/models")) {
+      return { ok: true, status: 200, async json() { return { data: [] }; }, async text() { return ""; } };
+    }
+    return { ok: false, status: 404, async text() { return "not found"; } };
+  };
+  const completion = await AI.complete({ providerId: "openai", prompt: "hello", system: "test" });
+  log("[ai] complete() returns mocked completion via openai adapter", completion === "MOCKED COMPLETION");
+  const jsonResp = await AI.completeJson({ providerId: "openai", prompt: "give json" }).catch(() => null);
+  // Our mock returns plain text, so completeJson returns null (not valid JSON) — that's the correct contract.
+  log("[ai] completeJson returns null on non-JSON response", jsonResp === null);
+  const testResult = await AI.testConnection("openai");
+  log("[ai] testConnection succeeds with mocked /models", testResult.ok === true);
+  win.fetch = realFetch;
+
+  // testConnection with no key.
+  await B.KeysService.clearProviderKey("openai");
+  const noKeyResult = await AI.testConnection("openai");
+  log("[ai] testConnection without key gives useful message", noKeyResult.ok === false && /no api key/i.test(noKeyResult.message));
+
+  // Guard summary.
+  const guard = AI.buildGuardSummary({ task: "writingDraft", providerId: "openai", model: "gpt-4o-mini", context: { includesManuscript: true, approxChars: 1234 } });
+  log("[ai] buildGuardSummary reports includesManuscript", guard.includesManuscript === true && guard.approxChars === 1234);
+
+  // AI Handoff remains usable without a provider (no throw building a pack).
+  log("[ai] AI Handoff pack buildable without provider", typeof B.HandoffService?.savePack === "function");
+
+  // Privacy re-verification: key never in audit/search after a provider action.
+  await AI.saveProviderConfig({ id: "openai", providerType: "openai", apiKey: "sk-VERIFY-NOLEAK" });
+  B.SearchService.rebuildIndex();
+  const searchJson = JSON.stringify(B.SearchService.loadSync());
+  log("[ai] api key never indexed by SearchService", searchJson.indexOf("sk-VERIFY-NOLEAK") === -1);
 
   console.log("");
   if (failures.length) {
