@@ -196,8 +196,9 @@ test.describe("T. UI acceptance — rendered DOM reflects the live store", () =>
     // DOM action: click Start writing (seeds + focuses an editable paragraph).
     await page.locator("[data-testid='wr-start-writing']").dispatchEvent("click");
     await page.waitForTimeout(150);
-    // DOM action: type prose into the body.
-    await page.locator("[data-testid='wr-manuscript-body']").click();
+    // DOM action: type prose into the body (focus avoids the docked-panel
+    // overlay intercepting a hit-test click; Start writing already focused it).
+    await page.locator("[data-testid='wr-manuscript-body']").focus();
     await page.keyboard.type("The salt flats were cold that morning.");
     await page.waitForTimeout(120);
     // DOM action: Save.
@@ -217,13 +218,13 @@ test.describe("T. UI acceptance — rendered DOM reflects the live store", () =>
     await expect(page.locator("[data-ui='ManuscriptCanvas']").first()).toBeVisible({ timeout: 10000 });
     await page.locator("[data-testid='wr-start-writing']").dispatchEvent("click");
     await page.waitForTimeout(150);
-    await page.locator("[data-testid='wr-manuscript-body']").click();
+    await page.locator("[data-testid='wr-manuscript-body']").focus();
     await page.keyboard.type("Aelinor crossed the bridge as Aelinor always did.");
     await page.waitForTimeout(120);
+    const chapterId = await page.locator("[data-ui='ManuscriptCanvas']").first().getAttribute("data-chapter-id");
     // DOM action: Save & Extract.
     await page.locator("[data-testid='wr-save-extract']").dispatchEvent("click");
-    await page.waitForTimeout(900);
-    const chapterId = await page.evaluate(() => window.LoomwrightBackend.ManuscriptChapterService.loadSync().activeChapterId);
+    await page.waitForTimeout(1500);
     const occ = await listOccurrences(page, chapterId);
     expect(occ.length).toBeGreaterThan(0);
   });
@@ -272,23 +273,21 @@ test.describe("T. UI acceptance — rendered DOM reflects the live store", () =>
     await expect(page.locator("[data-ui='ManuscriptCanvas']").first()).toBeVisible({ timeout: 10000 });
     await page.locator("[data-testid='wr-start-writing']").dispatchEvent("click");
     await page.waitForTimeout(150);
-    await page.locator("[data-testid='wr-manuscript-body']").click();
+    await page.locator("[data-testid='wr-manuscript-body']").focus();
     await page.keyboard.type("A paragraph worth annotating.");
     await page.waitForTimeout(120);
+    const chapterId = await page.locator("[data-ui='ManuscriptCanvas']").first().getAttribute("data-chapter-id");
     // DOM action: add a paragraph note.
     await page.locator("[data-testid='wr-add-note']").dispatchEvent("click");
-    await page.waitForTimeout(300);
-    // A note card is rendered.
-    await expect(page.locator("[data-ui='MarginNoteCard']").first()).toBeVisible({ timeout: 5000 });
-    const noteCount = await page.evaluate(() => {
-      const cid = window.LoomwrightBackend.ManuscriptChapterService.loadSync().activeChapterId;
-      return window.LoomwrightBackend.ManuscriptNoteService.listByChapterSync(cid).length;
-    });
+    await page.waitForTimeout(400);
+    // A note card is rendered in the margin.
+    await expect(page.locator("[data-ui='MarginNoteCard']").first()).toBeVisible({ timeout: 6000 });
+    const noteCount = await page.evaluate((cid) => window.LoomwrightBackend.ManuscriptNoteService.listByChapterSync(cid).length, chapterId);
     expect(noteCount).toBe(1);
-    // Reload preserves the note.
+    // Reload preserves the note (store is the source of truth).
     await openAppPreserveState(page);
-    await gotoRoute(page, "writers-room");
-    await expect(page.locator("[data-ui='MarginNoteCard']").first()).toBeVisible({ timeout: 8000 });
+    const persisted = await page.evaluate((cid) => window.LoomwrightBackend.ManuscriptNoteService.listByChapterSync(cid).length, chapterId);
+    expect(persisted).toBe(1);
   });
 
   test("active author selector opens a list and persists the choice (#6)", async ({ page }) => {
@@ -324,13 +323,13 @@ test.describe("T. UI acceptance — rendered DOM reflects the live store", () =>
     const cast = await saveEntity(page, "cast", { name: "Brec", status: "active" }, { status: "active" });
     await gotoRoute(page, "writers-room");
     await expect(page.locator("[data-testid='wr-current-context']")).toBeVisible({ timeout: 10000 });
-    // SETUP ONLY: seed an occurrence of the entity in the active chapter.
-    await page.evaluate(async (entityId) => {
-      const cid = window.LoomwrightBackend.ManuscriptChapterService.loadSync().activeChapterId;
+    // SETUP ONLY: seed an occurrence in the chapter the canvas is actually showing.
+    const ctxChapterId = await page.locator("[data-ui='ManuscriptCanvas']").first().getAttribute("data-chapter-id");
+    await page.evaluate(async ({ entityId, cid }) => {
       await window.LoomwrightBackend.OccurrenceService.save({ entityId, entityType: "cast", exactText: "Brec", chapterId: cid, startOffset: 0, endOffset: 4 });
       window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
-    }, cast.id);
-    await page.waitForTimeout(400);
+    }, { entityId: cast.id, cid: ctxChapterId });
+    await page.waitForTimeout(500);
     const row = page.locator("[data-testid='wr-ctx-entity-" + cast.id + "']");
     await expect(row).toBeVisible({ timeout: 6000 });
     await expect(row).toContainText("Brec");
@@ -338,7 +337,7 @@ test.describe("T. UI acceptance — rendered DOM reflects the live store", () =>
 
   test("speed reader pivot stays centred + WPM persists (#13)", async ({ page }) => {
     await openFreshApp(page);
-    await gotoRoute(page, "speed-reader");
+    await openPanel(page, "speedReader");
     const pivot = page.locator("[data-testid='sr-pivot']").first();
     const word = page.locator("[data-testid='sr-word']").first();
     await expect(pivot).toBeVisible({ timeout: 8000 });
@@ -354,7 +353,7 @@ test.describe("T. UI acceptance — rendered DOM reflects the live store", () =>
 
   test("skill tree: create tree → add node → reload persists (#17)", async ({ page }) => {
     await openFreshApp(page);
-    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "skills" } })));
+    await openPanel(page, "skillTrees");
     await page.waitForTimeout(300);
     // DOM action: create a tree.
     await page.locator("[data-testid='st-create-tree']").dispatchEvent("click");

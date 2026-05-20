@@ -1073,7 +1073,7 @@ const AppShell = () => {
             isLocal={privacyMode === "local"}
             wordCount={(() => { try { return (window.LoomwrightBackend?.ManuscriptChapterService?.loadSync?.().chapters || []).reduce((n, c) => n + (c.words || 0), 0); } catch (_e) { return 0; } })()}
             reviewQueueCount={globalQueueCount}
-            activeAuthor={(() => { try { const S = window.LoomwrightBackend?.SettingsService; const authors = S?.getSectionSync?.("authors", null); const activeId = S?.getSectionSync?.("writersRoom", {})?.activeAuthorId; const a = Array.isArray(authors) ? (authors.find((x) => x.id === activeId) || authors[0]) : null; return (a && a.name) || "You"; } catch (_e) { return "You"; } })()}
+            activeAuthor={(() => { try { const S = window.LoomwrightBackend?.SettingsService; const authors = S?.getAllSync?.()?.authors; const activeId = S?.getSectionSync?.("writersRoom", {}).activeAuthorId; const a = Array.isArray(authors) ? (authors.find((x) => x.id === activeId) || authors[0]) : null; return (a && a.name) || "You"; } catch (_e) { return "You"; } })()}
             extractionState={syncState === "syncing" ? "running" : "idle"}
             canvasZoom={routeId === "tangle" ? 1 : null}
           />

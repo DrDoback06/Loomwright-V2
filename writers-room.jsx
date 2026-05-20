@@ -1189,7 +1189,9 @@ const WritersRoomScreen = ({
   // demo author names on a fresh project.
   const loadAuthors = () => {
     try {
-      const list = window.LoomwrightBackend?.SettingsService?.getSectionSync?.("authors", null);
+      // NB: read the raw array via getAllSync — getSectionSync object-spreads
+      // its result, which mangles array sections like "authors".
+      const list = window.LoomwrightBackend?.SettingsService?.getAllSync?.()?.authors;
       if (Array.isArray(list) && list.length) return list;
     } catch (_e) {}
     return [{ id: "you", name: "You", initials: "Y", color: "var(--accent)" }];

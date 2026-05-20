@@ -684,7 +684,11 @@
     },
     getSectionSync(section, fallback) {
       const all = this.getAllSync();
-      return all[section] ? { ...clone(fallback || {}), ...all[section] } : clone(fallback);
+      const val = all[section];
+      // Array sections (e.g. "authors") must round-trip as arrays — the
+      // object-spread below would turn them into numeric-keyed objects.
+      if (Array.isArray(val)) return clone(val);
+      return val ? { ...clone(fallback || {}), ...val } : clone(fallback);
     },
     async saveSection(section, value, opts = {}) {
       const all = await StorageService.get(KEYS.settings, {});
