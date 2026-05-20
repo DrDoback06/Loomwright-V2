@@ -275,6 +275,22 @@ async function main() {
   await MCS.restoreChapter("mc-2");
   log("restoreChapter restores chapter + manuscript", MCS.loadSync().chapters.some((c) => c.id === "mc-2") && !!MCS.loadSync().manuscripts["mc-2"]);
 
+  // -- ManuscriptNoteService create / update / resolve / delete (UAT #19) --
+  const MNS = B.ManuscriptNoteService;
+  log("ManuscriptNoteService exposed", !!MNS);
+  const note1 = await MNS.createNote({ chapterId: "mc-1", paragraphId: "p-a", quote: "the cold gate", noteText: "open cold", authorId: "you", source: "selection" });
+  log("createNote persists with id + open status", !!note1.id && note1.status === "open" && !!MNS.getSync(note1.id));
+  log("listByChapterSync returns the note", MNS.listByChapterSync("mc-1").some((n) => n.id === note1.id));
+  log("listByParagraphSync filters by paragraph", MNS.listByParagraphSync("mc-1", "p-a").length === 1 && MNS.listByParagraphSync("mc-1", "p-z").length === 0);
+  await MNS.updateNote(note1.id, { noteText: "tighten the cold imagery" });
+  log("updateNote edits noteText", MNS.getSync(note1.id).noteText === "tighten the cold imagery");
+  await MNS.resolveNote(note1.id);
+  log("resolveNote marks resolved + sets resolvedAt", MNS.getSync(note1.id).status === "resolved" && !!MNS.getSync(note1.id).resolvedAt);
+  await MNS.resolveNote(note1.id, "open");
+  log("resolveNote('open') reopens", MNS.getSync(note1.id).status === "open" && !MNS.getSync(note1.id).resolvedAt);
+  await MNS.deleteNote(note1.id);
+  log("deleteNote removes the note", !MNS.getSync(note1.id));
+
   // -- Sample project load / scoped clear --
   win.WR_DEMO_PROJECT = { chapters: [{ id: "demo-ch1", title: "Demo", num: 1 }] };
   win.CAST_SAMPLE = [{ id: "demo-cast", name: "Demo Cast" }];

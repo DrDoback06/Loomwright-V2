@@ -37,6 +37,7 @@
     searchIndex: "search_index",
     auditLog: "audit_log",
     aiRouting: "ai_routing",
+    manuscriptNotes: "manuscript_notes",
   };
 
   // Synchronously read the sample-loaded flag from localStorage BEFORE any
@@ -1509,6 +1510,113 @@
         } catch (_) {}
       }
       return result;
+    },
+  };
+
+  // ManuscriptNoteService — paragraph-level notes/comments anchored to a
+  // chapter + paragraph id (UAT #19). Range/selection-anchored comments are
+  // future polish; a captured selection is stored as `quote` when available.
+  const ManuscriptNoteService = {
+    defaultState() {
+      return { notes: {}, updatedAt: nowIso() };
+    },
+    loadSync() {
+      return StorageService.getSync(KEYS.manuscriptNotes, this.defaultState());
+    },
+    getSync(id) {
+      const s = this.loadSync();
+      return (s.notes && s.notes[id]) || null;
+    },
+    listByChapterSync(chapterId) {
+      const s = this.loadSync();
+      return Object.values(s.notes || {})
+        .filter((n) => n.chapterId === chapterId)
+        .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    },
+    listByParagraphSync(chapterId, paragraphId) {
+      return this.listByChapterSync(chapterId).filter((n) => n.paragraphId === paragraphId);
+    },
+    async _persist(notes) {
+      const next = { notes, updatedAt: nowIso() };
+      await StorageService.set(KEYS.manuscriptNotes, next);
+      window.dispatchEvent(new CustomEvent("lw:manuscript-notes-updated", { detail: next }));
+      return next;
+    },
+    async createNote(note = {}) {
+      const s = this.loadSync();
+      const id = note.id || uuid("note");
+      const row = {
+        id,
+        projectId: note.projectId || null,
+        chapterId: note.chapterId || null,
+        paragraphId: note.paragraphId || null,
+        startOffset: note.startOffset != null ? note.startOffset : null,
+        endOffset: note.endOffset != null ? note.endOffset : null,
+        quote: note.quote || "",
+        noteText: note.noteText || "",
+        authorId: note.authorId || null,
+        status: note.status === "resolved" ? "resolved" : "open",
+        source: note.source || "manual",
+        createdAt: note.createdAt || nowIso(),
+        updatedAt: nowIso(),
+        resolvedAt: null,
+      };
+      const notes = { ...(s.notes || {}), [id]: row };
+      await this._persist(notes);
+      try {
+        AuditService.log({
+          action: "note.create",
+          label: `Added paragraph note${row.quote ? ` on "${String(row.quote).slice(0, 40)}"` : ""}`,
+          targetType: "note", targetId: id,
+          targetName: row.noteText ? String(row.noteText).slice(0, 40) : null,
+          before: null, after: row, source: "ManuscriptNoteService", reversible: false,
+        });
+      } catch (_) {}
+      return row;
+    },
+    async updateNote(id, patch = {}) {
+      const s = this.loadSync();
+      const prev = s.notes && s.notes[id];
+      if (!prev) return null;
+      const row = { ...prev, ...patch, id, updatedAt: nowIso() };
+      const notes = { ...(s.notes || {}), [id]: row };
+      await this._persist(notes);
+      return row;
+    },
+    async resolveNote(id, status = "resolved") {
+      const s = this.loadSync();
+      const prev = s.notes && s.notes[id];
+      if (!prev) return null;
+      const nextStatus = status === "resolved" ? "resolved" : "open";
+      const row = { ...prev, status: nextStatus, resolvedAt: nextStatus === "resolved" ? nowIso() : null, updatedAt: nowIso() };
+      const notes = { ...(s.notes || {}), [id]: row };
+      await this._persist(notes);
+      try {
+        AuditService.log({
+          action: "note.resolve",
+          label: `${nextStatus === "resolved" ? "Resolved" : "Reopened"} paragraph note`,
+          targetType: "note", targetId: id, before: prev, after: row,
+          source: "ManuscriptNoteService", reversible: false,
+        });
+      } catch (_) {}
+      return row;
+    },
+    async deleteNote(id) {
+      const s = this.loadSync();
+      const prev = s.notes && s.notes[id];
+      if (!prev) return null;
+      const notes = { ...(s.notes || {}) };
+      delete notes[id];
+      await this._persist(notes);
+      try {
+        AuditService.log({
+          action: "note.delete",
+          label: "Deleted paragraph note",
+          targetType: "note", targetId: id, before: prev, after: null,
+          source: "ManuscriptNoteService", reversible: false,
+        });
+      } catch (_) {}
+      return prev;
     },
   };
 
@@ -4666,6 +4774,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     KeysService,
     ManuscriptService,
     ManuscriptChapterService,
+    ManuscriptNoteService,
     CompositionService,
     HandoffService,
     TrashService,

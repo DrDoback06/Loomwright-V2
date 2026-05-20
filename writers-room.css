@@ -525,6 +525,37 @@
 .wr-empty-card--inline .wr-empty-card__actions,
 .wr-empty-card--inline button { pointer-events: auto; }
 
+/* Paragraph notes (UAT #19) */
+.wr-note__quote {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  border-left: 2px solid var(--ac, var(--accent));
+  padding: 2px 0 2px 8px;
+  margin: 4px 0;
+  cursor: pointer;
+}
+.wr-note__edit { display: flex; flex-direction: column; gap: 6px; }
+.wr-note__textarea {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  padding: 6px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+  background: var(--bg-paper);
+  color: var(--ink-1);
+}
+.wr-p--flash { animation: wrPFlash 1.2s ease; border-radius: var(--r-2); }
+@keyframes wrPFlash {
+  0%, 100% { background: transparent; }
+  20% { background: color-mix(in srgb, var(--accent-soft) 80%, transparent); }
+}
+
 /* =====================================================================
    Margins (left & right)
    ===================================================================== */

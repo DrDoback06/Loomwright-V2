@@ -538,26 +538,51 @@ const FloatingEntityChip = ({ entity, x, y, onOpenEntity, onShowMentions, onOpen
 // ---------------------------------------------------------------------
 // MarginNoteCard
 // ---------------------------------------------------------------------
-const MarginNoteCard = ({ note, authors, onResolve, onEdit, onDelete }) => {
-  const a = authors.find((x) => x.id === note.authorId);
-  const [collapsed, setCollapsed] = _wrUS(!!note.collapsed);
+const MarginNoteCard = ({ note, authors, editing, onEdit, onSaveText, onCancelEdit, onResolve, onDelete, onFocus }) => {
+  const a = (authors || []).find((x) => x.id === note.authorId);
+  const [draft, setDraft] = _wrUS(note.noteText || "");
+  _wrUE(() => { setDraft(note.noteText || ""); }, [note.id, editing]);
+  const resolved = note.status === "resolved";
   return (
-    <div className={"wr-note " + (note.resolved ? "is-resolved " : "")} data-ui="MarginNoteCard" style={{ "--ac": a?.color }}>
+    <div className={"wr-note " + (resolved ? "is-resolved " : "")} data-ui="MarginNoteCard" data-testid={"wr-note-" + note.id} style={{ "--ac": a?.color || "var(--accent)" }}>
       <div className="wr-note__head">
-        <span className="wr-note__author">
-          <span className="wr-note__author-dot"/>{a?.name || "Unknown"}
-        </span>
-        <span className="wr-note__type">{note.type}</span>
-        <span className="wr-note__time">{note.ts}</span>
+        <span className="wr-note__author"><span className="wr-note__author-dot"/>{a?.name || "You"}</span>
+        <span className="wr-note__type">{note.source === "selection" ? "Quote note" : "Paragraph note"}</span>
+        {resolved && <span className="wr-note__type">Resolved</span>}
       </div>
-      {note.anchor && <span className="wr-note__anchor">↳ {note.anchor}</span>}
-      <div className={"wr-note__body " + (collapsed ? "wr-note__body--collapsed" : "")}>{note.body}</div>
-      <div className="wr-note__actions">
-        <Btn variant="ghost" size="sm" icon={collapsed ? "chevron-d" : "chevron-up"} onClick={() => setCollapsed((v) => !v)}>{collapsed ? "Expand" : "Collapse"}</Btn>
-        {!note.resolved && <Btn variant="ghost" size="sm" icon="check" onClick={() => onResolve && onResolve(note.id)}>Resolve</Btn>}
-        <Btn variant="ghost" size="sm" icon="more" onClick={() => onEdit && onEdit(note.id)}>Edit</Btn>
-        <Btn variant="ghost" size="sm" icon="trash" onClick={() => onDelete && onDelete(note.id)}/>
-      </div>
+      {note.quote ? (
+        <blockquote className="wr-note__quote" onClick={() => onFocus && onFocus(note)} title="Go to paragraph">“{note.quote}”</blockquote>
+      ) : null}
+      {editing ? (
+        <div className="wr-note__edit">
+          <textarea
+            className="wr-note__textarea"
+            data-testid={"wr-note-text-" + note.id}
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Write a note about this paragraph…"
+          />
+          <div className="wr-note__actions">
+            <Btn variant="primary" size="sm" icon="check" data-testid={"wr-note-save-" + note.id} onClick={() => onSaveText && onSaveText(note.id, draft)}>Save</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => onCancelEdit && onCancelEdit()}>Cancel</Btn>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="wr-note__body" onClick={() => onFocus && onFocus(note)}>
+            {note.noteText ? note.noteText : <span style={{ color: "var(--ink-4)", fontStyle: "italic" }}>Empty note — click Edit to add text.</span>}
+          </div>
+          <div className="wr-note__actions">
+            <Btn variant="ghost" size="sm" icon="search" data-testid={"wr-note-focus-" + note.id} onClick={() => onFocus && onFocus(note)}>Go to ¶</Btn>
+            {!resolved
+              ? <Btn variant="ghost" size="sm" icon="check" data-testid={"wr-note-resolve-" + note.id} onClick={() => onResolve && onResolve(note.id, "resolved")}>Resolve</Btn>
+              : <Btn variant="ghost" size="sm" icon="check" onClick={() => onResolve && onResolve(note.id, "open")}>Reopen</Btn>}
+            <Btn variant="ghost" size="sm" icon="more" data-testid={"wr-note-edit-" + note.id} onClick={() => onEdit && onEdit(note.id)}>Edit</Btn>
+            <Btn variant="ghost" size="sm" icon="trash" data-testid={"wr-note-delete-" + note.id} onClick={() => onDelete && onDelete(note.id)}/>
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -606,24 +631,23 @@ const MarginExtractionCard = ({
 // ---------------------------------------------------------------------
 // LeftMargin
 // ---------------------------------------------------------------------
-const LeftMargin = ({ notes, authors, onResolve, onEdit, onDelete, onCreate, filter, setFilter, pinned, onTogglePin, onCollapse }) => {
-  const visible = notes.filter((n) => {
-    if (filter === "open") return !n.resolved;
-    if (filter === "resolved") return n.resolved;
-    if (filter === "mine") return n.authorId === "em";
+const LeftMargin = ({ notes, authors, editingNoteId, onAdd, onEdit, onSaveText, onCancelEdit, onResolve, onDelete, onFocus, filter, setFilter, pinned, onTogglePin, onCollapse }) => {
+  const visible = (notes || []).filter((n) => {
+    if (filter === "open") return n.status !== "resolved";
+    if (filter === "resolved") return n.status === "resolved";
     return true;
   });
   return (
-    <aside className="wr-margin" data-side="left" data-ui="LeftMargin" aria-label="Author notes & comments">
+    <aside className="wr-margin" data-side="left" data-ui="LeftMargin" aria-label="Paragraph notes & comments">
       <div className="wr-margin__head">
         <span className="wr-margin__head-title">Notes &amp; Comments</span>
         <span className="wr-margin__head-count">{visible.length}</span>
-        <Btn variant="ghost" size="sm" icon="plus" data-callback="onCreate" onClick={onCreate} title="Add note"/>
+        <Btn variant="ghost" size="sm" icon="plus" data-testid="wr-add-note" onClick={onAdd} title="Add a note to the current paragraph">Add paragraph note</Btn>
         <button className={"wr-margin__head__pin " + (pinned ? "is-active" : "")} onClick={onTogglePin} data-callback="onTogglePin" title={pinned ? "Unpin margin" : "Pin margin"}><Icon name="pin-tack" size={11}/></button>
         <button className="wr-margin__head__collapse" onClick={onCollapse} data-callback="onCollapseMargin" title="Collapse to tab"><Icon name="chevron-r" size={11}/></button>
       </div>
       <div className="wr-margin__filters">
-        {[["all", "All"], ["open", "Open"], ["resolved", "Resolved"], ["mine", "Mine"]].map(([k, l]) => (
+        {[["all", "All"], ["open", "Open"], ["resolved", "Resolved"]].map(([k, l]) => (
           <button
             key={k}
             className={"wr-margin__filter " + (filter === k ? "is-active" : "")}
@@ -633,11 +657,12 @@ const LeftMargin = ({ notes, authors, onResolve, onEdit, onDelete, onCreate, fil
       </div>
       <div className="wr-margin__list">
         {visible.length === 0 ? (
-          <EmptyState icon="paper" title="No notes here" body="Highlight a passage and choose Inline Note to drop one."/>
+          <EmptyState icon="paper" title="No notes here" body="Place the cursor in a paragraph (or select text), then choose “Add paragraph note”."/>
         ) : visible.map((n) => (
           <MarginNoteCard
-            key={n.id} note={n} authors={authors}
-            onResolve={onResolve} onEdit={onEdit} onDelete={onDelete}
+            key={n.id} note={n} authors={authors} editing={editingNoteId === n.id}
+            onEdit={onEdit} onSaveText={onSaveText} onCancelEdit={onCancelEdit}
+            onResolve={onResolve} onDelete={onDelete} onFocus={onFocus}
           />
         ))}
       </div>
@@ -1028,8 +1053,25 @@ const WritersRoomScreen = ({
   const [bodyEpoch, setBodyEpoch] = _wrUS(0);
   const activeManuscript = activeChapter && !activeChapter.reserved ? manuscriptsByChapter[activeId] : null;
 
-  // Authors
-  const [activeAuthorId, setActiveAuthorId] = _wrUS("em");
+  // Authors — live profiles from Settings (UAT #6). Falls back to a single
+  // "You" author when none are configured, so notes/attribution never show
+  // demo author names on a fresh project.
+  const loadAuthors = () => {
+    try {
+      const list = window.LoomwrightBackend?.SettingsService?.getSectionSync?.("authors", null);
+      if (Array.isArray(list) && list.length) return list;
+    } catch (_e) {}
+    return [{ id: "you", name: "You", initials: "Y", color: "var(--accent)" }];
+  };
+  const [authorList, setAuthorList] = _wrUS(loadAuthors);
+  const [activeAuthorId, setActiveAuthorId] = _wrUS(() => {
+    const list = loadAuthors();
+    try {
+      const saved = window.LoomwrightBackend?.SettingsService?.getSectionSync?.("writersRoom", {})?.activeAuthorId;
+      if (saved && list.some((a) => a.id === saved)) return saved;
+    } catch (_e) {}
+    return (list[0] && list[0].id) || "you";
+  });
 
   // Toolbar toggles
   const [spellcheck, setSpellcheck] = _wrUS(true);
@@ -1049,6 +1091,7 @@ const WritersRoomScreen = ({
   const [noteFilter, setNoteFilter] = _wrUS("open");
   const [extFilter, setExtFilter] = _wrUS("all");
   const [notes, setNotes] = _wrUS([]);
+  const [editingNoteId, setEditingNoteId] = _wrUS(null);
   const loadReviewExtractions = () => {
     const items = window.LoomwrightBackend?.ReviewService?.listSync() || [];
     return items.filter((i) => i.status === "pending").map((i) => ({
@@ -1063,6 +1106,24 @@ const WritersRoomScreen = ({
   };
   const [extractions, setExtractions] = _wrUS(() => loadReviewExtractions());
   const [selectedExtId, setSelectedExtId] = _wrUS("x5");
+
+  // Paragraph notes (UAT #19) — source of truth is ManuscriptNoteService,
+  // scoped to the active chapter and refreshed on store updates.
+  const refreshNotes = _wrUC(() => {
+    const svc = window.LoomwrightBackend?.ManuscriptNoteService;
+    setNotes(svc && activeId ? svc.listByChapterSync(activeId) : []);
+  }, [activeId]);
+  _wrUE(() => {
+    refreshNotes();
+    window.addEventListener("lw:manuscript-notes-updated", refreshNotes);
+    window.addEventListener("lw:backend-ready", refreshNotes);
+    window.addEventListener("lw:project-imported", refreshNotes);
+    return () => {
+      window.removeEventListener("lw:manuscript-notes-updated", refreshNotes);
+      window.removeEventListener("lw:backend-ready", refreshNotes);
+      window.removeEventListener("lw:project-imported", refreshNotes);
+    };
+  }, [refreshNotes]);
 
   const persistChapters = _wrUC((nextChapters, nextManuscripts, nextActiveId, nextNotes, nextExtractions) => {
     const svc = window.LoomwrightBackend?.ManuscriptChapterService;
@@ -1084,7 +1145,6 @@ const WritersRoomScreen = ({
         setChapters(s.chapters);
         setActiveId(s.activeChapterId || s.chapters[0]?.id);
         setManuscriptsByChapter(s.manuscripts || {});
-        if (s.notes?.default) setNotes(s.notes.default);
         if (s.extractions?.default) setExtractions(s.extractions.default);
         else {
           const rq = loadReviewExtractions();
@@ -1311,7 +1371,70 @@ const WritersRoomScreen = ({
     setDenyItem(null);
   }, [denyItem]);
   const onOpenFullReview = _wrUC(() => onOpenReviewQueue && onOpenReviewQueue(), [onOpenReviewQueue]);
-  const onResolveNote = _wrUC((id) => setNotes((curr) => curr.map((n) => n.id === id ? { ...n, resolved: true } : n)), []);
+  // ----- paragraph note handlers (UAT #19) -----
+  const _wrCurrentParagraphId = _wrUC(() => {
+    const body = bodyRef.current;
+    if (!body) return null;
+    try {
+      const sel = window.getSelection && window.getSelection();
+      const node = sel && sel.anchorNode;
+      if (node && body.contains(node)) {
+        const el = node.nodeType === 1 ? node : node.parentElement;
+        const p = el && el.closest && el.closest("[data-paragraph-id]");
+        if (p) return p.getAttribute("data-paragraph-id");
+      }
+    } catch (_e) {}
+    const first = body.querySelector("[data-paragraph-id]");
+    return first ? first.getAttribute("data-paragraph-id") : null;
+  }, []);
+  const _wrSelectionQuote = _wrUC(() => {
+    try {
+      const sel = window.getSelection && window.getSelection();
+      if (sel && !sel.isCollapsed && bodyRef.current && bodyRef.current.contains(sel.anchorNode)) {
+        return String(sel.toString()).replace(/\s+/g, " ").trim().slice(0, 280);
+      }
+    } catch (_e) {}
+    return "";
+  }, []);
+  const onAddNote = _wrUC(async () => {
+    if (!activeId) return;
+    const svc = window.LoomwrightBackend?.ManuscriptNoteService;
+    if (!svc) return;
+    const paragraphId = _wrCurrentParagraphId();
+    const quote = _wrSelectionQuote();
+    setL((p) => ({ ...p, leftMarginCollapsed: false, writingLayoutMode: (p.writingLayoutMode === "full" || p.writingLayoutMode === "notes") ? p.writingLayoutMode : "full" }));
+    const note = await svc.createNote({ chapterId: activeId, paragraphId, quote, noteText: "", authorId: activeAuthorId, source: quote ? "selection" : "manual" });
+    setEditingNoteId(note.id);
+  }, [activeId, activeAuthorId, setL, _wrCurrentParagraphId, _wrSelectionQuote]);
+  const onEditNote = _wrUC((id) => setEditingNoteId(id), []);
+  const onCancelEditNote = _wrUC(() => setEditingNoteId(null), []);
+  const onSaveNoteText = _wrUC(async (id, text) => {
+    await window.LoomwrightBackend?.ManuscriptNoteService?.updateNote(id, { noteText: text });
+    setEditingNoteId(null);
+  }, []);
+  const onResolveNote = _wrUC(async (id, status) => {
+    await window.LoomwrightBackend?.ManuscriptNoteService?.resolveNote(id, status === "open" ? "open" : "resolved");
+  }, []);
+  const onDeleteNote = _wrUC(async (id) => {
+    await window.LoomwrightBackend?.ManuscriptNoteService?.deleteNote(id);
+    setEditingNoteId((cur) => (cur === id ? null : cur));
+  }, []);
+  const onFocusNoteParagraph = _wrUC((note) => {
+    const body = bodyRef.current;
+    if (!body || !note) return;
+    let el = null;
+    try {
+      el = note.paragraphId
+        ? body.querySelector('[data-paragraph-id="' + ((window.CSS && CSS.escape) ? CSS.escape(note.paragraphId) : note.paragraphId) + '"]')
+        : null;
+    } catch (_e) {}
+    if (!el) el = body.querySelector("[data-paragraph-id]");
+    if (el) {
+      try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (_e) {}
+      el.classList.add("wr-p--flash");
+      setTimeout(() => { try { el.classList.remove("wr-p--flash"); } catch (_e) {} }, 1200);
+    }
+  }, []);
 
   const onToolbarAction = _wrUC((action) => {
     if (action === "create-entity") onCreateEntityFromSelection();
@@ -1450,13 +1573,17 @@ const WritersRoomScreen = ({
         {leftMarginVisible && <div className="wr-stage__col wr-stage__col--left">
           <LeftMargin
           notes={notes}
-          authors={WR_AUTHORS}
+          authors={authorList}
+          editingNoteId={editingNoteId}
           filter={noteFilter}
           setFilter={setNoteFilter}
+          onAdd={onAddNote}
+          onEdit={onEditNote}
+          onSaveText={onSaveNoteText}
+          onCancelEdit={onCancelEditNote}
           onResolve={onResolveNote}
-          onEdit={() => {}}
-          onDelete={(id) => setNotes((curr) => curr.filter((n) => n.id !== id))}
-          onCreate={() => {}}
+          onDelete={onDeleteNote}
+          onFocus={onFocusNoteParagraph}
           pinned={L.leftMarginPinned}
           onTogglePin={() => setL({ leftMarginPinned: !L.leftMarginPinned })}
           onCollapse={() => setL({ leftMarginCollapsed: true })}
@@ -1464,7 +1591,7 @@ const WritersRoomScreen = ({
           <MarginResizer side="left" value={L.leftMarginWidth} min={LAYOUT_CONSTRAINTS.leftMarginMin} max={LAYOUT_CONSTRAINTS.leftMarginMax} onChange={(v) => setL({ leftMarginWidth: v })}/>
         </div>}
         {!leftMarginVisible && L.writingLayoutMode !== "clean" && L.writingLayoutMode !== "manuscript-focus" && (
-          <MarginEdgeTab side="left" label="Notes" count={notes.filter((n) => !n.resolved).length} onClick={() => setL({ leftMarginCollapsed: false })}/>
+          <MarginEdgeTab side="left" label="Notes" count={notes.filter((n) => n.status !== "resolved").length} onClick={() => setL({ leftMarginCollapsed: false })}/>
         )}
 
         <div className="wr-canvas-wrap"
