@@ -1,6 +1,41 @@
 # Loomwright v2 — Final QA Report
 
-_Last run: 2026-05-20 (Production Build Hardening Pass)._
+_Last run: 2026-05-20 (User Acceptance Regression Audit — live-render fix)._
+
+## User Acceptance Regression Audit (2026-05-20)
+
+```
+npm run validate         → 526 callbacks; 558 handlers; Bucket A = 0
+npm run test:smoke       → all smoke checks pass
+npm run test:e2e         → 85 pass (75 prior + 10 new DOM-level UI acceptance, workflow T)
+npm run build            → production build checks passed
+npm run test:e2e:preview → 2 pass (production boot)
+```
+
+Audited all 26 original user complaints against the post-PR #13 app
+(`USER_ACCEPTANCE_REGRESSION_AUDIT.md`). The dominant defect was a
+**render-layer demo-data leak**: bespoke panel bodies + dashboards
+rendered hardcoded `*_DATA` / `*_SAMPLE` constants instead of the live
+store, so a fresh project showed Aelinor Vey / Saren of Hess / Pale
+Reach and fake counts — undetected because the prior e2e suite drove
+services via `page.evaluate` and never asserted on rendered DOM.
+
+Contained fixes (no redesign): `decoratePanel` renders live empty
+state + live subtitle; `PANEL_PRESETS` demo rows + fake subtitles
+stripped; `NAV_ITEMS` hardcoded queue badges removed and computed live
+from `ReviewService` (Tangle un-disabled); bespoke bodies (cast,
+bestiary, factions, stats, quests, events, locations, items) read the
+live store; demo self-seeds into `ENTITY_SAMPLES` removed; entity
+pickers read live `EntityService`; Today + Home read live stats with
+empty states; focus mode gained a visible Exit affordance.
+
+New DOM-level suite `tests/e2e/15-ui-acceptance.spec.js` (workflow T, 10
+tests) **clicks real rendered DOM and asserts on rendered content** —
+the gap that let this regress. Counts: 11 Fixed, 6 Mostly fixed, 4
+Partial (follow-ups), 3 Needs-manual-UX, 1 Still-broken (notes/comments,
+#19), 0 Obsolete. Review Accept/Deny/Merge are now reachable + DOM-tested
+(plus an accept candidate-shape bug fixed). Status:
+**Loomwright V2 — local beta candidate, verified with live-render UAT tests.**
 
 ## Production Build Hardening Pass (2026-05-20)
 

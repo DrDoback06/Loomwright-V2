@@ -255,8 +255,10 @@ const BestiaryDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRel
 const BestiaryPanelBody = ({ panel, onSelectEntity }) => {
   const [selectedId, setSelectedId] = _bf_us("b1");
   const [search, setSearch] = _bf_us("");
-  const filtered = BESTIARY_DATA.filter((b) => !search || b.name.toLowerCase().includes(search.toLowerCase()));
-  const selected = filtered.find((b) => b.id === selectedId) || BESTIARY_DATA.find((b) => b.id === selectedId);
+  // Live bestiary entries only — never the demo BESTIARY_DATA.
+  const _src = (window.LoomwrightBackend?.EntityService?.listSync("bestiary")) || [];
+  const filtered = _src.filter((b) => !search || (b.name || "").toLowerCase().includes(search.toLowerCase()));
+  const selected = filtered.find((b) => b.id === selectedId) || null;
 
   return (
     <div className="loc-body" data-ui="BestiaryPanelBody">
@@ -618,8 +620,9 @@ const FactionDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRela
 const FactionsPanelBody = ({ panel, onSelectEntity }) => {
   const [selectedId, setSelectedId] = _bf_us("f1");
   const [search, setSearch] = _bf_us("");
-  const filtered = FACTIONS_DATA.filter((f) => !search || f.name.toLowerCase().includes(search.toLowerCase()));
-  const selected = filtered.find((f) => f.id === selectedId) || FACTIONS_DATA.find((f) => f.id === selectedId);
+  const _src = (window.LoomwrightBackend?.EntityService?.listSync("factions")) || [];
+  const filtered = _src.filter((f) => !search || (f.name || "").toLowerCase().includes(search.toLowerCase()));
+  const selected = filtered.find((f) => f.id === selectedId) || null;
 
   return (
     <div className="loc-body" data-ui="FactionsPanelBody">
@@ -688,8 +691,6 @@ window.BESTIARY_REVIEW = BESTIARY_REVIEW;
 window.FACTIONS_REVIEW = FACTIONS_REVIEW;
 
 window.ENTITY_SAMPLES = window.ENTITY_SAMPLES || {};
-window.ENTITY_SAMPLES.bestiary = BESTIARY_DATA;
-window.ENTITY_SAMPLES.factions = FACTIONS_DATA;
 window.ENTITY_REVIEW_SAMPLES = window.ENTITY_REVIEW_SAMPLES || {};
 window.ENTITY_REVIEW_SAMPLES.bestiary = BESTIARY_REVIEW;
 window.ENTITY_REVIEW_SAMPLES.factions = FACTIONS_REVIEW;

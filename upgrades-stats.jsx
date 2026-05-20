@@ -464,8 +464,9 @@ const StatDetailUpgraded = ({ entity, onSelectEntity, onOpenSourceMention }) => 
 const StatsPanelBody = ({ panel, onSelectEntity }) => {
   const [selectedId, setSelectedId] = _sx_us("s1");
   const [search, setSearch] = _sx_us("");
-  const filtered = STATS_DATA.filter((s) => !search || s.name.toLowerCase().includes(search.toLowerCase()));
-  const selected = filtered.find((s) => s.id === selectedId) || STATS_DATA.find((s) => s.id === selectedId);
+  const _src = (window.LoomwrightBackend?.EntityService?.listSync("stats")) || [];
+  const filtered = _src.filter((s) => !search || (s.name || "").toLowerCase().includes(search.toLowerCase()));
+  const selected = filtered.find((s) => s.id === selectedId) || null;
 
   return (
     <div className="loc-body" data-ui="StatsPanelBody">
@@ -533,7 +534,6 @@ const StatsPanelBody = ({ panel, onSelectEntity }) => {
 window.STATS_DATA   = STATS_DATA;
 window.STATS_REVIEW = STATS_REVIEW;
 window.ENTITY_SAMPLES = window.ENTITY_SAMPLES || {};
-window.ENTITY_SAMPLES.stats = STATS_DATA;
 window.ENTITY_REVIEW_SAMPLES = window.ENTITY_REVIEW_SAMPLES || {};
 window.ENTITY_REVIEW_SAMPLES.stats = STATS_REVIEW;
 

@@ -251,6 +251,29 @@ const DockedPanel = ({
             onDeleteEntityRequest: (e) => window.LoomwrightDispatchCallback?.("onDeleteEntityRequest", { entityId: e?.id, entityType: panel.entityType }),
             onOpenSourceMention: (m) => window.dispatchEvent(new CustomEvent("lw:open-source-mention", { detail: m })),
           };
+          // Reachable review queue: when this entity type has pending review
+          // items, render the (already-wired) EntityReviewQueue cards above
+          // the panel body so Accept / Edit / Merge / Deny are clickable in
+          // the actual UI — not only via the service layer.
+          const _reviewItems = panel.reviewItems || [];
+          const reviewQueueEl = (panel.entityType && _reviewItems.length && typeof EntityReviewQueue !== "undefined")
+            ? <EntityReviewQueue
+                entityType={panel.entityType}
+                items={_reviewItems}
+                state="default"
+                filters={{}} setFilters={() => {}}
+                selectedIds={[]} setSelectedIds={() => {}}
+                onAcceptQueueItem={bespokeProps.onAcceptQueueItem}
+                onEditQueueItem={bespokeProps.onEditQueueItem}
+                onMergeQueueItem={bespokeProps.onMergeQueueItem}
+                onDenyQueueItem={bespokeProps.onDenyQueueItem}
+                onBulkAcceptQueueItems={(ids) => window.LoomwrightDispatchCallback?.("onBulkAcceptQueueItems", { detail: { ids }, entityType: panel.entityType })}
+                onBulkDenyQueueItems={(ids) => window.LoomwrightDispatchCallback?.("onBulkDenyQueueItems", { detail: { ids }, entityType: panel.entityType })}
+                onBulkMergeQueueItems={(ids) => window.LoomwrightDispatchCallback?.("onBulkMergeQueueItems", { detail: { ids }, entityType: panel.entityType })}
+                onOpenRelatedTab={onSelectEntity}
+              />
+            : null;
+          const body = (() => {
           if (panel.id === "p-speedReader" && typeof SpeedReaderPanelBody !== "undefined") return <SpeedReaderPanelBody {...bespokeProps}/>;
           if (panel.entityType === "atlas" && typeof AtlasPanelBody !== "undefined") return <AtlasPanelBody {...bespokeProps}/>;
           if (panel.entityType === "cast" && typeof CastPanelBody !== "undefined" && !["loading","error","empty"].includes(panel.state)) return <CastPanelBody {...bespokeProps}/>;
@@ -285,6 +308,8 @@ const DockedPanel = ({
             {panel.state === "edit"       && <PanelEdit panel={panel}/>}
             {panel.state === "suggestion" && <PanelSuggestion panel={panel}/>}
           </>);
+          })();
+          return reviewQueueEl ? <>{reviewQueueEl}{body}</> : body;
         })()}
       </div>
     </section>

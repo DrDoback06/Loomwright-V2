@@ -77,37 +77,40 @@ const CONFIDENCE = {
 // `panelKind` is the key into PANEL_PRESETS that the rail uses when
 // opening / closing the panel — defaults to the item's `id`.
 // ---------------------------------------------------------------------
+// NOTE: nav items carry NO hardcoded `queue` counts. The live review-queue
+// badge per item is injected at render time in app.jsx from ReviewService,
+// so a fresh project shows no badges and counts always reflect the store.
 const NAV_ITEMS = [
   // Routes — full-screen workspace views
   { id: "home",          label: "Home",          icon: "home",     group: "routes", kind: "route" },
-  { id: "today",         label: "Today",         icon: "sun",      group: "routes", kind: "route", queue: 4 },
-  { id: "writers-room",  label: "Writer's Room", icon: "feather",  group: "routes", kind: "route", queue: 12 },
+  { id: "today",         label: "Today",         icon: "sun",      group: "routes", kind: "route" },
+  { id: "writers-room",  label: "Writer's Room", icon: "feather",  group: "routes", kind: "route" },
 
   // Panels — entity tabs that dock into the stack
-  { id: "cast",          label: "Cast",          icon: "user",     group: "entities", kind: "panel", entity: "cast",          panelKind: "cast",          queue: 3 },
-  { id: "bestiary",      label: "Bestiary",      icon: "claw",     group: "entities", kind: "panel", entity: "bestiary",      panelKind: "bestiary",      queue: 1 },
+  { id: "cast",          label: "Cast",          icon: "user",     group: "entities", kind: "panel", entity: "cast",          panelKind: "cast" },
+  { id: "bestiary",      label: "Bestiary",      icon: "claw",     group: "entities", kind: "panel", entity: "bestiary",      panelKind: "bestiary" },
   { id: "atlas",         label: "Atlas",         icon: "compass",  group: "entities", kind: "panel", entity: "atlas",         panelKind: "atlas" },
-  { id: "locations",     label: "Locations",     icon: "pin",      group: "entities", kind: "panel", entity: "locations",     panelKind: "locations",     queue: 2 },
+  { id: "locations",     label: "Locations",     icon: "pin",      group: "entities", kind: "panel", entity: "locations",     panelKind: "locations" },
   { id: "items",         label: "Items",         icon: "gem",      group: "entities", kind: "panel", entity: "items",         panelKind: "items" },
   { id: "classes",       label: "Classes",       icon: "shield",   group: "entities", kind: "panel", entity: "classes",       panelKind: "classes" },
   { id: "races",         label: "Races",         icon: "branch",   group: "entities", kind: "panel", entity: "races",         panelKind: "races" },
   { id: "stats",         label: "Stats",         icon: "bars",     group: "entities", kind: "panel", entity: "stats",         panelKind: "stats" },
-  { id: "abilities",     label: "Abilities",     icon: "spark",    group: "entities", kind: "panel", entity: "abilities",     panelKind: "abilities",     queue: 5 },
+  { id: "abilities",     label: "Abilities",     icon: "spark",    group: "entities", kind: "panel", entity: "abilities",     panelKind: "abilities" },
   { id: "skillTrees",    label: "Skill Trees",   icon: "tree",     group: "entities", kind: "panel", entity: "skillTrees",    panelKind: "skillTrees" },
   { id: "relationships", label: "Relationships", icon: "link",     group: "entities", kind: "panel", entity: "relationships", panelKind: "relationships" },
-  { id: "quests",        label: "Quests",        icon: "scroll",   group: "entities", kind: "panel", entity: "quests",        panelKind: "quests",        queue: 2 },
+  { id: "quests",        label: "Quests",        icon: "scroll",   group: "entities", kind: "panel", entity: "quests",        panelKind: "quests" },
   { id: "events",        label: "Events",        icon: "bolt",     group: "entities", kind: "panel", entity: "events",        panelKind: "events" },
   { id: "timeline",      label: "Timeline",      icon: "clock",    group: "entities", kind: "panel", entity: "timeline",      panelKind: "timeline" },
-  { id: "lore",          label: "Lore / Canon",  icon: "book",     group: "entities", kind: "panel", entity: "lore",          panelKind: "lore",          queue: 7 },
+  { id: "lore",          label: "Lore / Canon",  icon: "book",     group: "entities", kind: "panel", entity: "lore",          panelKind: "lore" },
 
   // Tools — also panels, separate group for clarity
-  { id: "tangle",        label: "Tangle",        icon: "knot",     group: "tools",    kind: "panel", panelKind: "tangle", soon: true },
+  { id: "tangle",        label: "Tangle",        icon: "knot",     group: "tools",    kind: "panel", panelKind: "tangle" },
   { id: "speedReader",   label: "Speed Reader",  icon: "eye",      group: "tools",    kind: "panel", panelKind: "speedReader" },
   { id: "references",    label: "References",    icon: "paper",    group: "tools",    kind: "panel", entity: "references", panelKind: "references" },
 
   // Utilities — review queue & friends, demoted at bottom
   { id: "review",        label: "Review Queue",     icon: "bell",    group: "utilities", kind: "utility", panelKind: "review" },
-  { id: "today-pulse",   label: "Today Suggestions",icon: "sparkle", group: "utilities", kind: "utility", panelKind: "today",  queue: 4 },
+  { id: "today-pulse",   label: "Today Suggestions",icon: "sparkle", group: "utilities", kind: "utility", panelKind: "today" },
   { id: "recent",        label: "Recent",           icon: "clock",   group: "utilities", kind: "utility", panelKind: "recent" },
   { id: "refs",          label: "Active References",icon: "paper",   group: "utilities", kind: "utility", panelKind: "refs" },
   { id: "notifs",        label: "Notifications",    icon: "warn",    group: "utilities", kind: "utility", panelKind: "notifs" },

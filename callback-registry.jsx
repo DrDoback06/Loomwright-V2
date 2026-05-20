@@ -291,11 +291,14 @@
       }
     } else if (row.payload && existingId) {
       saved = await B().EntityService.update(row.entityType, existingId, row.payload);
-    } else if (row.payload?.name || row.name) {
+    } else if (row.payload?.name || row.name || row.candidate?.name) {
       // For "new" candidates, save with the most informative shape we
-      // have. Prefer the candidate's payload if present (AI shape); fall
-      // back to fields drawn from the candidate itself.
-      const fields = row.payload && row.payload.name ? row.payload : { name: row.name, summary: row.summary };
+      // have. Prefer the candidate's payload if present (AI shape), then
+      // the `candidate` object the review card displays, then fields
+      // drawn from the row itself.
+      const fields = (row.payload && row.payload.name) ? row.payload
+        : (row.candidate && row.candidate.name) ? row.candidate
+        : { name: row.name, summary: row.summary };
       saved = await B().EntityService.save(row.entityType || "references", fields, { status: "active" });
     }
     // Backfill any pending occurrences that were recorded against this

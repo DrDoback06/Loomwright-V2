@@ -8,12 +8,16 @@ in older docs.
 
 ## 1. Current product status
 
-**Local beta candidate.** Loomwright v2 is a local-first, BYOK writing
-and worldbuilding app with: a functional local backend, tested core
-actions, a real production build (precompiled bundle, no in-browser
-Babel, no CDN runtime), and full privacy-respecting AI provider
-routing. It is no longer a "prototype" — it builds, runs, and tests
-like a packaged React app, while keeping the dev shell as the editing
+**Local beta candidate — verified with live-render UAT tests.** Loomwright
+v2 is a local-first, BYOK writing and worldbuilding app with: a functional
+local backend, tested core actions, a real production build (precompiled
+bundle, no in-browser Babel, no CDN runtime), and full privacy-respecting
+AI provider routing. A post-PR #13 User Acceptance Regression Audit
+corrected a render-layer gap where panels/dashboards showed design/demo
+constants instead of the live store; the rendered UI now reflects the live
+project, proven by a DOM-clicking e2e suite (workflow T). It is no longer a
+"prototype" — it builds, runs, and tests like a packaged React app, while
+keeping the dev shell as the editing
 source of truth.
 
 It is **not** yet "1.0": extraction quality needs real-manuscript

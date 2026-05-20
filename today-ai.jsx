@@ -8,7 +8,44 @@
 // prose samples in the Pale Reach voice.
 // =====================================================================
 
-const { useState: _td_us, useMemo: _td_um, useCallback: _td_uc } = React;
+const { useState: _td_us, useMemo: _td_um, useCallback: _td_uc, useEffect: _td_ue } = React;
+
+// Build Today suggestions from the LIVE project store. Returns [] for a
+// fresh/empty project (the UI then shows an empty state) — never the
+// static demo prompts. Sections: prompts / quests / threads / untouched.
+function buildTodaySuggestions() {
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  if (!B?.EntityService) return [];
+  const out = [];
+  const push = (o) => out.push({ confidence: "strong", related: [], chapter: "—", action: "Open", ...o });
+
+  // Quests with unfinished steps.
+  for (const q of B.EntityService.listSync("quests")) {
+    const steps = (q.data?.steps || []);
+    const open = steps.filter((s) => s && s.status !== "done" && s.status !== "complete");
+    if (steps.length && open.length) {
+      push({ id: "td-q-" + q.id, section: "quests", title: `${q.name}: ${open.length} step(s) open`,
+        why: `${steps.length - open.length}/${steps.length} steps done.`,
+        related: [{ id: q.id, type: "quests", label: q.name }], action: "Open in Quests panel" });
+    }
+  }
+  // Pending review items → things needing attention.
+  const pending = (B.ReviewService?.listSync() || []).filter((r) => r.status !== "done").slice(0, 6);
+  for (const r of pending) {
+    push({ id: "td-r-" + r.id, section: "untouched", title: `Review: ${r.name || r.payload?.name || "candidate"}`,
+      why: r.payload?.sourceQuote || r.reason || "Pending in the review queue.",
+      related: r.entityId && r.entityType ? [{ id: r.entityId, type: r.entityType, label: r.name || "entity" }] : [],
+      action: "Open Review Queue", confidence: "high" });
+  }
+  // Recent chapters → writing prompts.
+  const chapters = (B.ManuscriptChapterService?.loadSync()?.chapters || []).slice(-2);
+  for (const c of chapters) {
+    push({ id: "td-c-" + c.id, section: "prompts", title: `Continue "${c.title || "chapter"}"`,
+      why: "Pick up where the last draft left off.",
+      related: [], action: "Open Writer's Room", chapter: c.title || "—" });
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------------
 // Today data
@@ -105,9 +142,29 @@ const TODAY_SECTIONS = [
 // ---------------------------------------------------------------------
 // TodayPanelBody — side panel version (lightweight)
 // ---------------------------------------------------------------------
+// Shared hook: live Today suggestions that refresh on store mutations.
+function useTodaySuggestions() {
+  const [tick, setTick] = _td_us(0);
+  _td_ue(() => {
+    const bump = () => setTick((t) => t + 1);
+    window.addEventListener("lw:entity-store-updated", bump);
+    window.addEventListener("lw:review-queue-updated", bump);
+    window.addEventListener("lw:manuscript-chapters-updated", bump);
+    window.addEventListener("lw:backend-ready", bump);
+    return () => {
+      window.removeEventListener("lw:entity-store-updated", bump);
+      window.removeEventListener("lw:review-queue-updated", bump);
+      window.removeEventListener("lw:manuscript-chapters-updated", bump);
+      window.removeEventListener("lw:backend-ready", bump);
+    };
+  }, []);
+  return _td_um(() => buildTodaySuggestions(), [tick]);
+}
+
 const TodayPanelBody = ({ panel, onSelectEntity }) => {
   const [filter, setFilter] = _td_us("all");
-  const filtered = filter === "all" ? TODAY_SUGGESTIONS : TODAY_SUGGESTIONS.filter((s) => s.section === filter);
+  const suggestions = useTodaySuggestions();
+  const filtered = filter === "all" ? suggestions : suggestions.filter((s) => s.section === filter);
 
   return (
     <div className="loc-body" data-ui="TodayPanelBody">
@@ -123,6 +180,11 @@ const TodayPanelBody = ({ panel, onSelectEntity }) => {
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
+        {filtered.length === 0 && (
+          <div className="today__empty" style={{ padding: 16, color: "var(--ink-4)", fontStyle: "italic" }}>
+            Nothing for today yet. Write a chapter, run extraction, or create quests — suggestions appear from your live project.
+          </div>
+        )}
         {filtered.map((s) => (
           <TodayCardCompact key={s.id} s={s} onSelectEntity={onSelectEntity}/>
         ))}
@@ -166,7 +228,8 @@ const TodayCardCompact = ({ s, onSelectEntity }) => (
 // ---------------------------------------------------------------------
 const TodayScreen = ({ onSelectEntity }) => {
   const [filter, setFilter] = _td_us("all");
-  const filtered = filter === "all" ? TODAY_SUGGESTIONS : TODAY_SUGGESTIONS.filter((s) => s.section === filter);
+  const suggestions = useTodaySuggestions();
+  const filtered = filter === "all" ? suggestions : suggestions.filter((s) => s.section === filter);
   const bySection = _td_um(() => {
     const m = {};
     for (const s of filtered) (m[s.section] = m[s.section] || []).push(s);
@@ -191,6 +254,15 @@ const TodayScreen = ({ onSelectEntity }) => {
             <button className="today__filter" data-callback="onGenerateTodayPrompts">Refresh prompts</button>
           </div>
         </header>
+
+        {filtered.length === 0 && (
+          <section className="today__section" data-ui="TodayEmpty">
+            <div className="today__section-head">
+              <h2 className="today__section-title">Nothing for today yet</h2>
+              <span className="today__section-sub">Suggestions are derived from your live project — write a chapter, run extraction, or add quests and they'll appear here. Nothing is invented.</span>
+            </div>
+          </section>
+        )}
 
         {TODAY_SECTIONS.filter((s) => filter === "all" || filter === s.id).map((sec) => {
           const items = bySection[sec.id] || [];

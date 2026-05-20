@@ -236,7 +236,8 @@ const ItemReviewCard = ({ item }) => {
 // ItemsPanelBody — bespoke panel body
 // ---------------------------------------------------------------------
 const ItemsPanelBody = ({ panel, onSelectEntity }) => {
-  const data = (typeof RPG_ITEM_DATA !== "undefined" ? RPG_ITEM_DATA : ((window.ENTITY_SAMPLES || {}).items || []));
+  // Live items only — never the demo RPG_ITEM_DATA.
+  const data = (window.LoomwrightBackend?.EntityService?.listSync("items")) || [];
   const [selectedId, setSelectedId] = _it_us((data[0] && data[0].id) || null);
   const [search, setSearch]         = _it_us("");
   const [statusFilter, setStatus]   = _it_us("all");
@@ -485,7 +486,6 @@ window.ENTITY_REVIEW_SAMPLES.items = ITEMS_REVIEW;
 // Mirror rich data into ENTITY_SAMPLES so other panels chip-resolve items.
 if (typeof RPG_ITEM_DATA !== "undefined") {
   window.ENTITY_SAMPLES = window.ENTITY_SAMPLES || {};
-  window.ENTITY_SAMPLES.items = RPG_ITEM_DATA;
 }
 
 window.RPG_FILTERS = window.RPG_FILTERS || {};

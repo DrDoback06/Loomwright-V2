@@ -1115,6 +1115,14 @@ const WritersRoomScreen = ({
   const onToggleFocusMode  = _wrUC(() => setL((p) => ({ ...p, writingLayoutMode: p.writingLayoutMode === "clean" ? "full" : "clean" })), [setL]);
   const onSelectAuthor     = _wrUC((id) => setActiveAuthorId(id), []);
 
+  // Escape exits focus mode (clear, discoverable exit affordance).
+  _wrUE(() => {
+    if (!focusMode) return;
+    const onKey = (e) => { if (e.key === "Escape") setL((p) => ({ ...p, writingLayoutMode: "full" })); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusMode, setL]);
+
   const handleEntityHover = _wrUC((e) => setHoverEntity(e), []);
 
   // Double-click an entity span in the manuscript → open/focus the entity
@@ -1172,6 +1180,25 @@ const WritersRoomScreen = ({
         "--wr-right-w": (rightMarginVisible ? L.rightMarginWidth : 0) + "px",
       }}
     >
+      {focusMode && (
+        <button
+          type="button"
+          className="wr-focus-exit"
+          data-ui="ExitFocusMode"
+          data-testid="wr-exit-focus"
+          onClick={onToggleFocusMode}
+          title="Exit focus mode (Esc)"
+          style={{
+            position: "absolute", top: 12, right: 16, zIndex: 50,
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "6px 12px", borderRadius: "var(--r-2, 6px)",
+            border: "1px solid var(--line-2, #ccc)", background: "var(--surface-1, #fff)",
+            color: "var(--ink-1, #222)", cursor: "pointer", fontSize: 12,
+          }}
+        >
+          <Icon name="close" size={12}/> Exit focus mode
+        </button>
+      )}
       <ChapterNodeStrip
         chapters={chapters}
         activeId={activeId}
