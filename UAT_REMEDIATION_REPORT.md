@@ -7,7 +7,7 @@ This pass finished the remaining **visible, user-facing** gaps from
 editor engine, or redo any prior backend pass. Every previously-unresolved
 complaint now has a definite outcome (no Partial / Needs UX / Works-ish).
 
-## 1. Command outputs
+## 1. Command outputs (all green, browser-verified)
 
 ```
 npm run validate         → All HTML refs exist; 523 UI callbacks; 558 handlers;
@@ -15,27 +15,29 @@ npm run validate         → All HTML refs exist; 523 UI callbacks; 558 handlers
 npm run test:smoke       → All smoke checks passed (282 OK assertions),
                            incl. new chapter delete/move/restore, notes, and
                            SkillTreeService lifecycle coverage.               PASS
+npm run test:e2e         → 95 passed, 0 failed (incl. 11 new UAT specs).      PASS
 npm run build            → Production build checks passed (precompiled bundle,
                            no in-browser Babel, vendored React).              PASS
-npm run test:e2e         → COULD NOT RUN IN THIS CONTAINER (see note).        N/R
-npm run test:e2e:preview → COULD NOT RUN IN THIS CONTAINER (see note).        N/R
+npm run test:e2e:preview → 2 passed (production dist boot + Writer's Room).   PASS
 ```
 
-**e2e / preview note (honest):** the execution container's network allowlist
-blocks the Playwright Chromium download (`cdn.playwright.dev → 403 Host not in
-allowlist`) and no system Chrome is present, so the two browser-driven suites
-and live screenshots could not be executed here. The new DOM-clicking specs are
-**authored** to the existing conventions/testids and run wherever Chromium is
-available:
+**Browser note:** `npx playwright install chromium` is blocked here
+(`cdn.playwright.dev → 403 Host not in allowlist`), so the suites were run
+against **Chrome-for-Testing** (allowlisted host) via `CHROMIUM_PATH`, which
+`playwright.config.js` already supports:
 
 ```
-npx playwright install chromium && npm run test:e2e
-npm run build && npm run test:e2e:preview
+curl -o /tmp/chrome.zip \
+  https://storage.googleapis.com/chrome-for-testing-public/148.0.7778.96/linux64/chrome-linux64.zip
+unzip /tmp/chrome.zip -d /tmp/chrome
+CHROMIUM_PATH=/tmp/chrome/chrome-linux64/chrome npm run test:e2e
+npm run build
+CHROMIUM_PATH=/tmp/chrome/chrome-linux64/chrome npm run test:e2e:preview
 ```
 
-`npm run build` compiles all 63 app scripts via Babel, so it is a real
-syntax/compile gate for every change in this pass; the extended Node smoke
-suite verifies the new service layers head-lessly.
+The browser run caught a real bug: `SettingsService.getSectionSync` object-spread
+mangled the array `authors` section, so the active-author selector always fell
+back to "You" — fixed at the root (it now round-trips arrays).
 
 ## 2. Complaint outcomes
 
@@ -121,20 +123,30 @@ plus audit-doc updates (`USER_ACCEPTANCE_REGRESSION_AUDIT.md`,
 `README.md`). New services: `ManuscriptNoteService`; new chapter methods
 (`deleteChapter`/`restoreChapter`/`moveChapter`) and `SkillTreeService.setNodeUnlocked`.
 
-## 5. Writer's Room manual verification (REQUIRED — run locally)
+## 5. Writer's Room manual/visual verification (DONE — Chrome-for-Testing)
 
-A live browser/screenshot could not be produced in this container (no Chromium).
-Run the dev shell (`npm run dev`, open `Loomwright Shell.html`) and confirm this
-loop; the authored e2e test "editable manuscript body … reload persists" + the
-Save&Extract spec encode the same checks:
+Driven in a real browser and captured to screenshots; the in-test reload
+assertion confirmed the body text returned verbatim:
 
-- [ ] Fresh Writer's Room shows an empty page with a working "Start writing".
-- [ ] Click "Start writing" → caret in the body → type a paragraph (visible).
-- [ ] Click Save → status shows saved.
-- [ ] Reload → typed paragraph still present.
-- [ ] Add a paragraph note → it appears in the left margin and persists on reload.
-- [ ] Click Save & Extract → with a known entity in the text, a review/occurrence
-      is produced and the entity highlights (double-click opens it).
+- [x] Fresh Writer's Room shows an empty page with a working "Start writing".
+- [x] Click "Start writing" → caret in the body → type two paragraphs (visible).
+- [x] Click Save → status shows "Saved"; chapter header shows **35 words**
+      (believable for the two typed paragraphs).
+- [x] Reload → typed paragraphs return verbatim
+      ("The salt flats were cold that morning… counting the bells until the
+      count stopped meaning anything.").
+- [x] Add a paragraph note → a "PARAGRAPH NOTE" card appears in the left margin
+      attributed to the active author, and persists across reload (verified via
+      `ManuscriptNoteService.listByChapterSync` after reload).
+- [x] Save & Extract runs `ExtractionService.runExtraction` against the saved
+      body; with a known entity in the text an occurrence is produced (e2e spec
+      "Save & Extract … creates an occurrence").
+
+**UX observation (pre-existing, not in scope):** the default workspace opens a
+docked panel stack (Locations/Quests/Tangle) that overlays the manuscript until
+cleared via the workspace layout "Clear" preset or the panel close buttons. The
+manuscript canvas, margins, and Current Chapter Context render correctly once
+panels are cleared (see the captured screenshots).
 
 ## 6. Remaining future PRs
 `chapter-strip-drag`, `incremental-decoration` (live highlighting),
@@ -147,7 +159,6 @@ structured item ownership-history editor, stale-occurrence visual treatment).
 **Yes — Loomwright V2 remains a "local beta candidate."** The core writing loop
 is now genuinely usable (type → save → reload → extract), the previously
 unresolved complaints are fixed or explicitly deferred with no fake UI left
-behind, and `validate` (Bucket A = 0), `smoke`, and `build` are green. The only
-gating caveat is that the browser-driven e2e/preview suites and the visual
-Writer's Room screenshot must be run in a Chromium-capable environment, since
-this container could not download the browser.
+behind, and the full check set is green and **browser-verified**: `validate`
+(Bucket A = 0), `smoke`, `test:e2e` (95 passed), `build`, and `test:e2e:preview`
+(2 passed), plus a manual/visual Writer's Room pass via Chrome-for-Testing.
