@@ -28,11 +28,19 @@ INFO: 213 other callbacks fall to default notice (housekeeping/dispatch).
 All smoke checks passed (… + audit + ai routing — 22 new [ai routing] assertions).
 
 > CHROMIUM_PATH=/path/to/chrome npm run test:e2e
-75 passed (≈5.5 min wall, real Chromium) — 69 pre-existing + 6 new AI provider routing.
+75 passed (≈5.5 min wall, real Chromium) — workflows A–R against the dev shell.
+
+> npm run build
+Production build complete → dist/   (precompiled bundle, no in-browser Babel)
+Production build checks passed.     (16 self-check assertions)
+
+> CHROMIUM_PATH=/path/to/chrome npm run test:e2e:preview
+2 passed — workflow S, production boot against `vite preview` serving dist/.
 ```
 
-The e2e suite is in `tests/e2e/`; six spec files cover 28 tests across
-workflows A–J defined in `FINAL_QA_REPORT.md`.
+The dev e2e suite is in `tests/e2e/` (workflows A–R); the production
+boot smoke is in `tests/e2e-preview/` (workflow S). Product milestone:
+**local beta candidate** (see `PRODUCT_READINESS_REPORT.md`).
 
 ## Scope buckets
 
@@ -83,6 +91,7 @@ breaks `npm run test:smoke` or `npm run test:e2e`.
 | **Search / Indexing** — `SearchService` builds a local global index across entities (14 types), chapters, references, review queue, project intelligence, onboarding answers, safe settings sections, occurrences, and (opt-in) trash. Ranking: title exact > alias exact > title prefix > title contains > tag exact > body phrase > token overlap (capped). `CommandPalette` reads live results; result rows carry typed pointers (`entityId`, `chapterId`, `referenceId`, `settingsSectionId`, …) and click dispatches `lw:open-search-result` which maps to the right open event in `app.jsx`. Index refreshes (~150 ms debounced) on every relevant store mutation. **API secrets never indexed** — encrypted `api_keys_encrypted` blob is never read; secret-named fields are stripped recursively inside whitelisted settings sections. 11 new callbacks registered. | smoke (22 assertions) + e2e P (7 tests) |
 | **Audit Log / Undo (partial)** — `AuditService` records every meaningful mutation across `EntityService`, `ManuscriptChapterService`, `ReviewService`, `ReferencesService`, `OnboardingService`, `ProjectIntelService`, `SettingsService`, `SampleProjectService`. Each event carries `before/after` snapshots redacted via `redactSecrets`. Reversible actions (`entity.create/update/delete`, `chapter.create/save/delete`, `reference.*`, `onboarding.update`, `intel.update`, `settings.section-update`, `review.accept/deny`, `sample.load`) support `AuditService.undo(eventId)` with an anti-recursion `{skipAudit:true}` flag to prevent cascades. Destructive actions (`project.reset`, `entity.merge`, `project.import`, hard-delete, `library.import`, `review.bulk-*`) are audit-only. Home Recent Activity card reads live from `getRecentSync(10)` with Undo buttons. **API secrets never logged** (redacted on every event). 5 new callbacks registered (`onUndoAuditEvent`, `onOpenAuditLog`, `onClearAuditLog`, `onExportAuditLog`, `onOpenRecentActivityItem`). | smoke (23 assertions) + e2e Q (6 tests) |
 | **Multi-provider AI Routing** — `AIService` adapter pattern (OpenAI-compatible / OpenRouter / Anthropic / Ollama / Custom; Gemini pending) with `complete / completeJson / testConnection / saveProviderConfig / clearProviderKey / buildGuardSummary`. `AIRoutingService` persists per-task routing under `KEYS.aiRouting` (`mode`, `defaultProviderId`, `taskRoutes`, privacy flags); `resolveRoute(task)` returns `{providerId, model}` or null (localOnly blocks). `AIContextBuilder.build()` assembles bounded context (chapter + entities + intel + references). Privacy guard confirms before any manuscript/reference/intel text is sent; local-only mode blocks external calls. The 6 provider-gated callbacks route through routing + guard + adapters and are functional when configured. **Keys never in config/export/audit/search** (encrypted in `KEYS.apiKeys`; stripped from config; `testConnection` sends no manuscript text). 5 new config/routing callbacks registered. | smoke (22 assertions) + e2e R (6 tests) |
+| **Production build pipeline** — `npm run build` (`scripts/build-production.js`) precompiles the 63 source `.jsx` files (in the exact `Loomwright Shell.html` order, with the identical runtime Babel config: `react` + `transform-block-scoping`) into `dist/loomwright.bundle.js`, and generates `dist/index.html` loading vendored React + the bundle — **no in-browser Babel, no CDN runtime dependency**. `scripts/check-production-build.js` (16 assertions) verifies the output. `npm run preview` serves it; `npm run test:e2e:preview` proves production boot. The dev shell stays the editing source of truth, marked legacy/dev. | build self-check (16 assertions) + e2e S (2 boot tests) |
 
 ---
 
@@ -105,7 +114,7 @@ result** is prototype-level. They aren't broken; they aren't great yet.
 | ~~**Full project import/export**~~ | _Moved to **A. Implemented** by `PROJECT_IMPORT_EXPORT_REPORT.md`._ Row kept for diff-tracking only. | _n/a_ |
 | ~~**Audit log / undo trail**~~ | _Moved to **A. Implemented** by `AUDIT_UNDO_REPORT.md` — partial: core safe local actions are undoable; destructive/import/provider actions are audit-only._ Row kept for diff-tracking only. | _n/a_ |
 | **Field parity across all entity types** | Cast, Bestiary, Items, Quests, Events, Locations, Stats, Skills, Classes, Races, Lore, References, Factions, Relationships, Timeline editors exist. `FIELD_PARITY_AUDIT.md` documents what was filled. | Round-trip JSON import → edit → export hasn't been re-verified per type since the burn-down. |
-| **Production build pipeline** | `Loomwright Shell.html` still uses in-browser Babel-standalone | A precompiled JSX/Vite pipeline is documented as a future milestone (own pass, own plan). |
+| ~~**Production build pipeline**~~ | _Moved to **A. Implemented** by `PRODUCT_READINESS_REPORT.md` / `PRODUCTION_BUILD_PLAN.md`._ `npm run build` precompiles the JSX into `dist/loomwright.bundle.js` (no in-browser Babel, no CDN runtime); `dist/index.html` is the production entry. Row kept for diff-tracking only. | _n/a_ |
 | **Documentation consistency** | Many `*_HOOKUP.md` files still describe pre-implementation hookup requirements as if they were future work; addressed in this pass by adding a "Current state" footnote header referencing this audit | Bodies of those docs remain useful as design-intent references. |
 
 ---
@@ -150,7 +159,7 @@ blocking the "functional local prototype" status.
 - **Extraction-session undo trail** with per-action `previousState` and `revertSession()` — documented but not ported.
 - **Character enhancement** — legacy "Enhance" button that AI-fills stats/equipment/biography for a new cast member. Out of scope.
 - **Cloud sync / external collaboration / shared projects** — none planned.
-- **Production build pipeline** (precompiled JSX, no in-browser Babel, real bundle output, source maps) — own milestone, requires a plan doc and migration path.
+- _(Removed — implemented in Production Build Hardening Pass; see section A row "Production build". Source maps + minification + production-React swap remain future polish.)_
 - _(Removed — implemented in Search/Indexing Pass; see section A row "Search / Indexing".)_
 - _(Removed — implemented in Speed Reader Completion Pass; see section A row "Speed Reader".)_
 - **Per-workspace e2e coverage** for Atlas / Skill Trees / Relationships / Timeline / Tangle / Speed Reader.
@@ -177,7 +186,7 @@ until earlier passes are solid):
 7. ~~**Search / indexing**~~ _(landed; see section A row "Search / Indexing" and `SEARCH_INDEXING_REPORT.md`)._
 8. ~~**Audit log + undo**~~ _(landed; see section A row "Audit Log / Undo (partial)" and `AUDIT_UNDO_REPORT.md`)._
 9. ~~**Multi-provider AI routing**~~ _(landed; see section A row "Multi-provider AI Routing" and `AI_PROVIDER_ROUTING_REPORT.md`. Gemini adapter pending.)_
-10. **Production build pipeline** with `BUILD_PIPELINE_PLAN.md` first and smallest-safe-step implementation.
+10. ~~**Production build pipeline**~~ _(landed; see section A row "Production build" and `PRODUCTION_BUILD_PLAN.md` / `PRODUCT_READINESS_REPORT.md`)._
 
 ---
 

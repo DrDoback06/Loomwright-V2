@@ -1,6 +1,36 @@
 # Loomwright v2 — Final QA Report
 
-_Last run: 2026-05-20 (Multi-provider AI Routing Pass)._
+_Last run: 2026-05-20 (Production Build Hardening Pass)._
+
+## Production Build Hardening Pass (2026-05-20)
+
+```
+npm run validate         → 526 callbacks; 558 handlers; Bucket A = 0
+npm run test:smoke       → all smoke checks pass (256 assertions)
+npm run build            → dist/ precompiled bundle; 16 build self-checks pass
+npm run test:e2e         → 75 pass (dev shell, workflows A–R)
+npm run test:e2e:preview → 2 pass (production boot, workflow S)
+```
+
+Adds a real production build. `scripts/build-production.js` parses
+`Loomwright Shell.html` for its ordered script list, concatenates the
+63 source `.jsx` files in that exact order, and precompiles them once
+with `@babel/standalone` using the identical runtime config (`react` +
+`transform-block-scoping`) into `dist/loomwright.bundle.js`. It
+generates `dist/index.html` loading vendored React + the bundle —
+**no in-browser Babel, no CDN runtime dependency**.
+`scripts/check-production-build.js` (16 assertions) verifies the
+output: precompiled, no `text/babel`, no `babel.min.js`, no CDN script
+src, vendored React present, all CSS present.
+
+New `npm run build` (precompile + self-check), `npm run preview`
+(serve dist), `npm run test:e2e:preview` (boot smoke against the
+preview server via `playwright.preview.config.js`). The dev shell
+(`Loomwright Shell.html`) stays the editing source of truth, now
+clearly marked legacy/dev in a banner comment + README. Product
+milestone moves from "functional local prototype" to **local beta
+candidate**. See `PRODUCTION_BUILD_PLAN.md` and
+`PRODUCT_READINESS_REPORT.md`.
 
 ## Multi-provider AI Routing Pass (2026-05-20)
 

@@ -6,10 +6,24 @@ files, the local backend runtime (`backend-services.jsx` +
 `callback-registry.jsx`), vendored React/Babel, a Playwright e2e suite,
 and a Node-level service smoke test.
 
-Current milestone: **tested functional local prototype**. See
-`PRODUCT_COMPLETION_AUDIT.md` for the single source of truth on what's
-implemented, what's still thin, what's provider-gated (BYOK AI), and
-what's deliberately out of scope.
+Current milestone: **local beta candidate**. The app now has a real
+production build (`npm run build`) that precompiles the JSX into a
+single bundle with no in-browser Babel and no CDN runtime dependency.
+See `PRODUCT_COMPLETION_AUDIT.md` and `PRODUCT_READINESS_REPORT.md` for
+the single source of truth on what's implemented, what's still thin,
+what's provider-gated (BYOK AI), and what's deliberately out of scope.
+
+## Entrypoints
+
+- **Development / source of truth:** `Loomwright Shell.html` — loads the
+  modular `.jsx` files and transforms them in the browser via Babel
+  Standalone. **Edit the `.jsx` files here.** Run with `npm run dev`.
+- **Production:** `npm run build` → `dist/index.html` +
+  `dist/loomwright.bundle.js` (precompiled; vendored React only; no Babel
+  at runtime). Serve with `npm run preview`.
+
+The stale `Loomwright.bundle.jsx`, if present, is **not** canonical and
+must not be edited.
 
 ## Getting started
 
@@ -23,18 +37,25 @@ canonical app shell, `Loomwright Shell.html`.
 
 ## Useful scripts
 
-- `npm run dev` — start the local development server.
+- `npm run dev` — start the local development server (legacy/dev shell).
 - `npm run validate` — static checks: every `data-callback` is registered,
   every callback name reaches an explicit branch or a user-visible notice,
   no Bucket A action callback regresses to the generic default.
 - `npm run test:smoke` — Node-level smoke test that exercises every
   service end-to-end against a shimmed window/localStorage/IndexedDB in
   under a second. No browser required.
-- `npm run test:e2e` — Playwright suite (28 tests across 10 workflows)
-  against a real Chromium browser. Requires `npx playwright install
-  chromium`, or set `CHROMIUM_PATH` to point at an existing Chrome binary.
-- `npm run build` — copy the static app into `dist/` for preview/deployment.
-- `npm run preview` — serve the built `dist/` directory locally.
+- `npm run test:e2e` — Playwright suite (75 tests, workflows A–R) against a
+  real Chromium browser, run against the dev shell. Requires `npx playwright
+  install chromium`, or set `CHROMIUM_PATH` to point at an existing Chrome
+  binary.
+- `npm run build` — **production build**: precompile the JSX (in the exact
+  shell order) into `dist/loomwright.bundle.js`, generate `dist/index.html`
+  with vendored React and no in-browser Babel, then run the build self-check.
+- `npm run preview` — serve the precompiled `dist/` build locally.
+- `npm run test:e2e:preview` — Playwright boot-smoke suite (workflow S) run
+  against `npm run preview` to prove the production path boots.
+- `npm run build:static-legacy` — the old raw-copy build (kept for
+  reference; not the production path).
 
 ## Editing notes
 
