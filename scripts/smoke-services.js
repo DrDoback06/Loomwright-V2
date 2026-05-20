@@ -956,6 +956,98 @@ async function main() {
   Search.rebuildIndex();
   log("[search] rebuild after clear restores entries", Search.getIndexStatsSync().total > 0);
 
+  // -------------------------------------------------------------------
+  // Audit Log / Undo
+  // -------------------------------------------------------------------
+  console.log("");
+  console.log("[audit]");
+
+  await B.StorageService.clear();
+  const Audit = B.AuditService;
+  log("[audit] AuditService exposed", !!Audit && typeof Audit.log === "function");
+  log("[audit] defaultState is empty", Audit.loadSync().events.length === 0);
+
+  // Direct log() persists.
+  await Audit.log({ action: "entity.update", label: "Manual test event", targetType: "entity", targetId: "x", before: { foo: "old" }, after: { foo: "new" } });
+  log("[audit] log() persists event", Audit.loadSync().events.length === 1);
+
+  // Entity create → entity.create event with `after`.
+  await B.StorageService.clear();
+  const cast1 = await B.EntityService.save("cast", { name: "Hess Vaela", data: { summary: "Bearer of the Auger." } });
+  let recent = Audit.getRecentSync(1)[0];
+  log("[audit] entity.create event recorded", recent?.action === "entity.create" && recent.entityType === "cast" && recent.targetId === cast1.id);
+  log("[audit] entity.create after snapshot has the new name", recent?.after?.name === "Hess Vaela");
+
+  // Entity update → entity.update with before+after.
+  await B.EntityService.update("cast", cast1.id, { name: "Hess Vaela the Elder" });
+  recent = Audit.getRecentSync(1)[0];
+  log("[audit] entity.update event recorded", recent?.action === "entity.update");
+  log("[audit] entity.update before carries old name", recent?.before?.name === "Hess Vaela");
+  log("[audit] entity.update after carries new name", recent?.after?.name === "Hess Vaela the Elder");
+
+  // Entity delete → entity.delete with before.
+  await B.EntityService.delete("cast", cast1.id);
+  recent = Audit.getRecentSync(1)[0];
+  log("[audit] entity.delete event recorded", recent?.action === "entity.delete" && recent.before?.name === "Hess Vaela the Elder");
+
+  // canUndo behaviour.
+  log("[audit] canUndo true for entity.create", Audit.canUndo(Audit.listSync({ action: "entity.create" })[0]?.id));
+  const resetEvt = await Audit.log({ action: "project.reset", label: "test", targetType: "project", reversible: false });
+  log("[audit] canUndo false for project.reset", Audit.canUndo(resetEvt.id) === false);
+
+  // Undo: entity.update restores before.
+  await B.StorageService.clear();
+  const c2 = await B.EntityService.save("cast", { name: "Old Name" });
+  await B.EntityService.update("cast", c2.id, { name: "New Name" });
+  const updateEvent = Audit.listSync({ action: "entity.update" })[0];
+  await Audit.undo(updateEvent.id);
+  const c2After = B.EntityService.getSync(c2.id, "cast");
+  log("[audit] undo(entity.update) restores previous name", c2After?.name === "Old Name");
+  log("[audit] undo marks original event as undone", Audit.getSync(updateEvent.id)?.undone === true);
+
+  // Undo: entity.delete restores entity.
+  const c3 = await B.EntityService.save("cast", { name: "Will-be-restored" });
+  await B.EntityService.delete("cast", c3.id);
+  const deleteEvent = Audit.listSync({ action: "entity.delete" })[0];
+  await Audit.undo(deleteEvent.id);
+  const c3After = B.EntityService.getSync(c3.id, "cast");
+  log("[audit] undo(entity.delete) restores entity to active", c3After?.status === "active" && c3After?.name === "Will-be-restored");
+
+  // canUndo false after undo.
+  log("[audit] canUndo false after first undo", Audit.canUndo(updateEvent.id) === false);
+
+  // Undo: entity.create deletes the entity.
+  const c4 = await B.EntityService.save("cast", { name: "Created-then-undone" });
+  const createEvent = Audit.listSync({ action: "entity.create" }).find((e) => e.targetId === c4.id);
+  await Audit.undo(createEvent.id);
+  log("[audit] undo(entity.create) soft-deletes the created entity", B.EntityService.getSync(c4.id, "cast")?.status === "deleted");
+
+  // Reference create → reference.create event.
+  await B.ReferencesService.save({ id: "ref-1", title: "Style guide", content: "Pace breath." });
+  recent = Audit.getRecentSync(1)[0];
+  log("[audit] reference.create event recorded", recent?.action === "reference.create" && recent.targetId === "ref-1");
+
+  // Onboarding update.
+  await B.OnboardingService.save({ plot: "A bearer crosses the marsh." });
+  recent = Audit.getRecentSync(1)[0];
+  log("[audit] onboarding.update event recorded", recent?.action === "onboarding.update");
+
+  // Settings privacy: API key never leaks into the audit log.
+  await B.SettingsService.saveSection("aiProviders", { provider: "anthropic", apiKey: "sk-LEAK-AUDIT", model: "claude-opus-4-7" });
+  recent = Audit.getRecentSync(1)[0];
+  log("[audit] settings.section-update event recorded", recent?.action === "settings.section-update" && recent.targetId === "aiProviders");
+  const auditJson = JSON.stringify(Audit.loadSync());
+  log("[audit] API key value NEVER present in audit log JSON", auditJson.indexOf("sk-LEAK-AUDIT") === -1);
+  log("[audit] settings before/after fields are redacted", recent.after?.apiKey === "[redacted]");
+
+  // exportSync also clean.
+  const exported = Audit.exportSync();
+  log("[audit] exportSync redacted output never contains the secret value", JSON.stringify(exported).indexOf("sk-LEAK-AUDIT") === -1);
+
+  // clear().
+  await Audit.clear();
+  log("[audit] clear() empties the log", Audit.loadSync().events.length === 0);
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

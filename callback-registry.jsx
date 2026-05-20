@@ -319,6 +319,9 @@
     "onOpenReferenceFromSearch", "onOpenSettingsFromSearch",
     "onOpenReviewItemFromSearch", "onOpenProjectIntelligenceFromSearch",
     "onOpenOnboardingFromSearch",
+    // Audit Log / Undo (AuditService)
+    "onUndoAuditEvent", "onOpenAuditLog", "onClearAuditLog",
+    "onExportAuditLog", "onOpenRecentActivityItem",
   ]);
 
   async function dispatchCallback(name, ctx) {

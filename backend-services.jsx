@@ -35,6 +35,7 @@
     tangle: "tangle_canvas",
     skillTrees: "skill_trees",
     searchIndex: "search_index",
+    auditLog: "audit_log",
   };
 
   // Synchronously read the sample-loaded flag from localStorage BEFORE any
@@ -243,8 +244,17 @@
         };
       });
     };
-    const seedCast = (window.CAST_SAMPLE && window.CAST_SAMPLE.length) ? window.CAST_SAMPLE : (window.__LW_SAMPLE_SOURCES__?.CAST_SAMPLE || []);
-    const seedSamples = (window.ENTITY_SAMPLES && Object.keys(window.ENTITY_SAMPLES).length) ? window.ENTITY_SAMPLES : (window.__LW_SAMPLE_SOURCES__?.ENTITY_SAMPLES || {});
+    // Prefer the boot-captured snapshot so live globals (which
+    // applyEntityGlobals overwrites with user-created records) don't
+    // get mistaken for sample seeds. Fall back to live globals only
+    // when no snapshot exists (legacy shells that don't bootstrap
+    // __LW_SAMPLE_SOURCES__).
+    const seedCast = (window.__LW_SAMPLE_SOURCES__?.CAST_SAMPLE && window.__LW_SAMPLE_SOURCES__.CAST_SAMPLE.length)
+      ? window.__LW_SAMPLE_SOURCES__.CAST_SAMPLE
+      : (window.CAST_SAMPLE || []);
+    const seedSamples = (window.__LW_SAMPLE_SOURCES__?.ENTITY_SAMPLES && Object.keys(window.__LW_SAMPLE_SOURCES__.ENTITY_SAMPLES).length)
+      ? window.__LW_SAMPLE_SOURCES__.ENTITY_SAMPLES
+      : (window.ENTITY_SAMPLES || {});
     if (seedCast.length) add("cast", seedCast);
     Object.entries(seedSamples).forEach(([type, rows]) => add(type, rows));
     return out;
@@ -320,19 +330,19 @@
       const all = await StorageService.get(KEYS.entities, {});
       const byType = all[entityType] || {};
       const id = fields.id || uuid(entityType);
-      const previous = byType[id] || {};
-      const status = opts.status || fields.status || previous.status || "active";
+      const previous = byType[id] || null;
+      const status = opts.status || fields.status || previous?.status || "active";
       const entity = {
-        ...previous,
+        ...(previous || {}),
         ...clone(fields),
         id,
         type: entityType,
-        name: fields.name || fields.title || previous.name || "Untitled",
-        glyphChar: fields.glyphChar || previous.glyphChar || initialsFor(fields.name || fields.title || previous.name),
+        name: fields.name || fields.title || previous?.name || "Untitled",
+        glyphChar: fields.glyphChar || previous?.glyphChar || initialsFor(fields.name || fields.title || previous?.name),
         status,
-        sourceMentions: fields.sourceMentions || previous.sourceMentions || [],
-        reviewQueueCount: opts.reviewQueueCount ?? fields.reviewQueueCount ?? previous.reviewQueueCount ?? 0,
-        createdAt: previous.createdAt || fields.createdAt || nowIso(),
+        sourceMentions: fields.sourceMentions || previous?.sourceMentions || [],
+        reviewQueueCount: opts.reviewQueueCount ?? fields.reviewQueueCount ?? previous?.reviewQueueCount ?? 0,
+        createdAt: previous?.createdAt || fields.createdAt || nowIso(),
         updatedAt: nowIso(),
       };
       all[entityType] = { ...byType, [id]: entity };
@@ -350,19 +360,67 @@
         status: "pending",
         createdAt: nowIso(),
       });
+      // Audit log (create vs update). Restoring a soft-deleted entity
+      // (previous.status === "deleted" && new status === "active") is
+      // logged as entity.restore.
+      if (!opts.skipAudit) {
+        try {
+          const isRestore = previous && previous.status === "deleted" && status === "active";
+          const isCreate = !previous;
+          const action = isRestore ? "entity.restore" : (isCreate ? "entity.create" : "entity.update");
+          AuditService.log({
+            action,
+            label: (isCreate ? "Created " : isRestore ? "Restored " : "Updated ") + (entity.name || entity.id) + " (" + entityType + ")",
+            targetType: "entity",
+            targetId: id,
+            targetName: entity.name,
+            entityType,
+            before: previous,
+            after: entity,
+            source: "EntityService",
+            sourceSurface: opts.sourceSurface || null,
+          });
+        } catch (_) {}
+      }
       return entity;
     },
 
-    async update(type, id, patch = {}) {
+    async update(type, id, patch = {}, opts = {}) {
       const existing = this.getSync(id, type);
-      return this.save(type, { ...(existing || {}), ...patch, id });
+      return this.save(type, { ...(existing || {}), ...patch, id }, opts);
     },
 
-    async delete(type, id) {
+    async delete(type, id, opts = {}) {
       const entity = this.getSync(id, type);
       if (!entity) return null;
-      const deleted = await this.save(type || entity.type, { ...entity, status: "deleted", deletedAt: nowIso() });
+      // Hard delete (sample wipe) — skip trash + skip audit.
+      if (opts.hard) {
+        const all = await StorageService.get(KEYS.entities, {});
+        if (all[type || entity.type]) {
+          delete all[type || entity.type][id];
+          await StorageService.set(KEYS.entities, all);
+          applyEntityGlobals(all);
+        }
+        return entity;
+      }
+      const deleted = await this.save(type || entity.type, { ...entity, status: "deleted", deletedAt: nowIso() }, { skipAudit: true });
       await TrashService.add({ ...deleted, deletedAt: nowIso() });
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: "entity.delete",
+            label: "Deleted " + (entity.name || id) + " (" + (entity.type || type) + ")",
+            targetType: "entity",
+            targetId: id,
+            targetName: entity.name,
+            entityType: entity.type || type,
+            before: entity,
+            after: null,
+            source: "EntityService",
+            sourceSurface: opts.sourceSurface || null,
+          });
+        } catch (_) {}
+      }
       return deleted;
     },
 
@@ -402,20 +460,61 @@
       for (const item of items) await this.add(item);
       return this.listSync();
     },
-    async resolve(id, status = "done") {
+    async resolve(id, status = "done", opts = {}) {
       const all = await StorageService.get(KEYS.reviewQueue, []);
+      const before = all.find((item) => item.id === id) || null;
       const next = all.map((item) => item.id === id ? { ...item, status, updatedAt: nowIso() } : item);
       await StorageService.set(KEYS.reviewQueue, next);
+      window.dispatchEvent(new CustomEvent("lw:review-queue-updated"));
+      if (!opts.skipAudit && before) {
+        try {
+          const action = status === "accepted" ? "review.accept"
+                       : status === "denied"   ? "review.deny"
+                       : status === "merged"   ? "review.merge"
+                       : "review.accept";
+          AuditService.log({
+            action,
+            label: (status === "denied" ? "Denied review: " : status === "merged" ? "Merged review: " : "Accepted review: ") + (before.name || id),
+            targetType: "review",
+            targetId: id,
+            targetName: before.name,
+            entityType: before.entityType || null,
+            before,
+            after: next.find((item) => item.id === id) || null,
+            source: "ReviewService",
+            metadata: { createdEntityId: opts.createdEntityId || null, createdEntityType: opts.createdEntityType || null },
+          });
+        } catch (_) {}
+      }
       return next;
     },
-    async resolveMany(ids, status = "done") {
+    async resolveMany(ids, status = "done", opts = {}) {
       // Bulk resolve for the review queue's batch approve/deny actions
       // (ported from legacy NarrativeReviewQueue's approveAllForChapter).
       const idSet = new Set(ids || []);
       if (!idSet.size) return this.listSync();
       const all = await StorageService.get(KEYS.reviewQueue, []);
+      const beforeItems = all.filter((item) => idSet.has(item.id));
       const next = all.map((item) => idSet.has(item.id) ? { ...item, status, updatedAt: nowIso() } : item);
       await StorageService.set(KEYS.reviewQueue, next);
+      window.dispatchEvent(new CustomEvent("lw:review-queue-updated"));
+      if (!opts.skipAudit && beforeItems.length) {
+        try {
+          const action = status === "denied" ? "review.bulk-deny"
+                       : status === "merged" ? "review.bulk-merge"
+                       : "review.bulk-accept";
+          AuditService.log({
+            action,
+            label: `Bulk ${status} ${beforeItems.length} review item(s)`,
+            targetType: "review",
+            targetId: null,
+            source: "ReviewService",
+            relatedIds: beforeItems.map((b) => b.id),
+            metadata: { count: beforeItems.length, status },
+            reversible: false,
+          });
+        } catch (_) {}
+      }
       return next;
     },
   };
@@ -431,9 +530,10 @@
       window.REFERENCES = refs;
       return refs;
     },
-    async save(ref = {}) {
+    async save(ref = {}, opts = {}) {
       const refs = await StorageService.get(KEYS.references, []);
       const id = ref.id || uuid("ref");
+      const previous = refs.find((r) => r.id === id) || null;
       const nextRef = {
         aiContext: true,
         linkedEntities: [],
@@ -449,7 +549,45 @@
       await StorageService.set(KEYS.references, next);
       window.REFERENCES = next;
       window.dispatchEvent(new CustomEvent("lw:references-updated", { detail: { references: next } }));
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: previous ? "reference.update" : "reference.create",
+            label: (previous ? "Updated reference: " : "Created reference: ") + (nextRef.title || id),
+            targetType: "reference",
+            targetId: id,
+            targetName: nextRef.title,
+            before: previous,
+            after: nextRef,
+            source: "ReferencesService",
+          });
+        } catch (_) {}
+      }
       return nextRef;
+    },
+    async delete(id, opts = {}) {
+      const refs = await StorageService.get(KEYS.references, []);
+      const before = refs.find((r) => r.id === id) || null;
+      if (!before) return null;
+      const next = refs.filter((r) => r.id !== id);
+      await StorageService.set(KEYS.references, next);
+      window.REFERENCES = next;
+      window.dispatchEvent(new CustomEvent("lw:references-updated", { detail: { references: next } }));
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: "reference.delete",
+            label: "Deleted reference: " + (before.title || id),
+            targetType: "reference",
+            targetId: id,
+            targetName: before.title,
+            before,
+            after: null,
+            source: "ReferencesService",
+          });
+        } catch (_) {}
+      }
+      return before;
     },
   };
 
@@ -460,11 +598,25 @@
     async load(fallback = {}) {
       return StorageService.get(KEYS.onboarding, fallback);
     },
-    async save(answers = {}) {
+    async save(answers = {}, opts = {}) {
+      const previous = StorageService.getSync(KEYS.onboarding, null);
       const next = { ...clone(answers), updatedAt: nowIso() };
       await StorageService.set(KEYS.onboarding, next);
       window.ONBOARDING_ANSWERS = next;
       window.dispatchEvent(new CustomEvent("lw:onboarding-updated", { detail: { answers: next } }));
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: "onboarding.update",
+            label: "Updated onboarding answers",
+            targetType: "onboarding",
+            targetId: "default",
+            before: previous,
+            after: next,
+            source: "OnboardingService",
+          });
+        } catch (_) {}
+      }
       return next;
     },
   };
@@ -486,10 +638,25 @@
     loadSync() {
       return StorageService.getSync(KEYS.projectIntelligence, this.defaultIntel());
     },
-    async save(intel = {}) {
+    async save(intel = {}, opts = {}) {
+      const previous = StorageService.getSync(KEYS.projectIntelligence, null);
       const next = { ...this.defaultIntel(), ...clone(intel), lastUpdated: nowIso() };
       await StorageService.set(KEYS.projectIntelligence, next);
       window.PROJECT_INTELLIGENCE = next;
+      window.dispatchEvent(new CustomEvent("lw:project-intel-updated", { detail: { intel: next } }));
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: "intel.update",
+            label: "Updated project intelligence",
+            targetType: "intel",
+            targetId: "default",
+            before: previous,
+            after: next,
+            source: "ProjectIntelService",
+          });
+        } catch (_) {}
+      }
       return next;
     },
     async mergeFromOnboarding(answers) {
@@ -511,11 +678,28 @@
       const all = this.getAllSync();
       return all[section] ? { ...clone(fallback || {}), ...all[section] } : clone(fallback);
     },
-    async saveSection(section, value) {
+    async saveSection(section, value, opts = {}) {
       const all = await StorageService.get(KEYS.settings, {});
+      const previous = all[section] || null;
       const next = { ...all, [section]: clone(value), updatedAt: nowIso() };
       await StorageService.set(KEYS.settings, next);
       window.dispatchEvent(new CustomEvent("lw:settings-saved", { detail: { section, value } }));
+      window.dispatchEvent(new CustomEvent("lw:settings-updated", { detail: { section } }));
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: "settings.section-update",
+            label: `Updated settings section: ${section}`,
+            targetType: "settings",
+            targetId: section,
+            targetName: section,
+            before: previous,
+            after: clone(value),
+            source: "SettingsService",
+            metadata: { sectionId: section },
+          });
+        } catch (_) {}
+      }
       return next;
     },
   };
@@ -1150,25 +1334,42 @@
     loadSync() {
       return StorageService.getSync(KEYS.manuscriptChapters, this.defaultState());
     },
-    async save(state) {
+    async save(state, opts = {}) {
       const next = { ...this.loadSync(), ...clone(state), updatedAt: nowIso() };
       await StorageService.set(KEYS.manuscriptChapters, next);
       window.dispatchEvent(new CustomEvent("lw:manuscript-chapters-updated", { detail: next }));
       return next;
     },
-    async setChapterContent(chapterId, manuscript, meta = {}) {
+    async setChapterContent(chapterId, manuscript, meta = {}, opts = {}) {
       const state = this.loadSync();
+      const prevChapter = (state.chapters || []).find((c) => c.id === chapterId) || null;
+      const prevManuscript = (state.manuscripts || {})[chapterId] || null;
       const chapters = (state.chapters || []).map((c) => (
         c.id === chapterId ? { ...c, ...meta, updatedAt: nowIso() } : c
       ));
-      return this.save({
+      const result = await this.save({
         ...state,
         chapters: chapters.length ? chapters : state.chapters,
         manuscripts: { ...(state.manuscripts || {}), [chapterId]: manuscript },
         activeChapterId: chapterId,
-      });
+      }, opts);
+      if (!opts.skipAudit && prevChapter) {
+        try {
+          AuditService.log({
+            action: "chapter.save",
+            label: `Saved chapter "${prevChapter.title || chapterId}"`,
+            targetType: "chapter",
+            targetId: chapterId,
+            targetName: prevChapter.title || null,
+            before: { ..._auditSummariseChapter(prevChapter), bodyHtml: prevManuscript?.html || "", bodyText: prevManuscript?.text || "" },
+            after:  _auditSummariseChapter({ ...prevChapter, ...meta, bodyHtml: manuscript?.html, bodyText: manuscript?.text }),
+            source: "ManuscriptChapterService",
+          });
+        } catch (_) {}
+      }
+      return result;
     },
-    async createFromComposition(payload = {}) {
+    async createFromComposition(payload = {}, opts = {}) {
       const state = this.loadSync();
       const id = payload.id || uuid("chapter");
       const slotNumber = (state.chapters?.length || 0) + 1;
@@ -1190,8 +1391,22 @@
         manuscripts: { ...(state.manuscripts || {}), [id]: { html: chapter.bodyHtml, text: chapter.bodyText } },
         activeChapterId: id,
       };
-      await this.save(next);
+      await this.save(next, opts);
       window.dispatchEvent(new CustomEvent("lw:chapter-created", { detail: { chapter } }));
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: "chapter.create",
+            label: `Created chapter "${title}"`,
+            targetType: "chapter",
+            targetId: id,
+            targetName: title,
+            before: null,
+            after: _auditSummariseChapter(chapter),
+            source: "ManuscriptChapterService",
+          });
+        } catch (_) {}
+      }
       return chapter;
     },
   };
@@ -2341,6 +2556,23 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       await StorageService.set(KEYS.sampleLoaded, true);
       window.__LW_SAMPLE_LOADED__ = true;
       window.dispatchEvent(new CustomEvent("lw:project-imported", { detail: { sample: true } }));
+      // Audit: relatedIds = all sample entity + reference ids so undo
+      // can target exactly what we added.
+      try {
+        const addedIds = [];
+        for (const byId of Object.values(sampleEntities)) for (const id of Object.keys(byId || {})) addedIds.push(id);
+        for (const r of sampleRefs) addedIds.push(r.id);
+        AuditService.log({
+          action: "sample.load",
+          label: "Loaded sample project",
+          targetType: "project",
+          targetId: "default",
+          targetName: "Sample project",
+          source: "SampleProjectService",
+          relatedIds: addedIds,
+          metadata: { entityCount: addedIds.length },
+        });
+      } catch (_) {}
       notify("Sample project loaded.");
       return true;
     },
@@ -2381,10 +2613,34 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       window.__LW_SAMPLE_LOADED__ = false;
       applyEntityGlobals();
       window.dispatchEvent(new CustomEvent("lw:project-imported", { detail: { cleared: true, scope: "sample", removed } }));
+      try {
+        AuditService.log({
+          action: "sample.clear",
+          label: `Cleared ${removed} sample record(s)`,
+          targetType: "project",
+          targetId: "default",
+          source: "SampleProjectService",
+          metadata: { removed },
+          reversible: false,
+        });
+      } catch (_) {}
       notify(`Cleared ${removed} sample record(s); your work is untouched.`);
     },
     async resetProjectData() {
       // Destructive: wipes ALL persistent state. Caller must double-confirm.
+      // We log BEFORE we wipe so the event lands in storage; the wipe
+      // then erases the log too, but the post-init notify chain keeps
+      // the action traceable in console.
+      try {
+        AuditService.log({
+          action: "project.reset",
+          label: "Reset ALL local project data",
+          targetType: "project",
+          targetId: "default",
+          source: "SampleProjectService",
+          reversible: false,
+        });
+      } catch (_) {}
       for (const key of Object.values(KEYS)) {
         await StorageService.remove(key);
       }
@@ -3416,6 +3672,298 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     searchSync(q, opts) { return this.search(q, opts); },
   };
 
+  // -------------------------------------------------------------------
+  // AuditService — persistent log of meaningful local mutations, with
+  // bounded undo for safe actions. Anti-recursion: callers of undo set
+  // {skipAudit:true} when invoking underlying services so the undo
+  // itself emits only one `audit.undo` event.
+  //
+  // Privacy: every `before` / `after` snapshot passes through
+  // redactSecrets. The encrypted KEYS.apiKeys blob is never the target
+  // of any logged mutation.
+  // -------------------------------------------------------------------
+  const AUDIT_REVERSIBLE = new Set([
+    "entity.create", "entity.update", "entity.delete",
+    "chapter.create", "chapter.save", "chapter.delete",
+    "reference.create", "reference.update", "reference.delete",
+    "onboarding.update", "intel.update",
+    "settings.section-update",
+    "review.accept", "review.deny",
+    "sample.load",
+  ]);
+  const AUDIT_MAX_BODY_PREVIEW = 240;
+
+  function _auditSummariseChapter(c) {
+    if (!c) return null;
+    const txt = c.bodyText || (c.bodyHtml || "").replace(/<[^>]+>/g, "");
+    return {
+      id: c.id,
+      title: c.title,
+      slotNumber: c.slotNumber,
+      bodyTextPreview: (txt || "").slice(0, AUDIT_MAX_BODY_PREVIEW),
+      bodyTextLength: (txt || "").length,
+      bodyText: c.bodyText,
+      bodyHtml: c.bodyHtml,
+      activeChapterId: c.activeChapterId,
+    };
+  }
+
+  const AuditService = {
+    defaultState() {
+      return { events: [], updatedAt: null };
+    },
+    loadSync() {
+      const raw = StorageService.getSync(KEYS.auditLog, null);
+      if (!raw || !Array.isArray(raw.events)) return this.defaultState();
+      return raw;
+    },
+    async save(state) {
+      const next = { ...this.loadSync(), ...state, updatedAt: nowIso() };
+      await StorageService.set(KEYS.auditLog, next);
+      return next;
+    },
+    /**
+     * Append an audit event. Returns the persisted event.
+     * Caller passes redactable `before` / `after` — this method runs
+     * them through redactSecrets defensively.
+     */
+    async log(event = {}) {
+      const id = event.id || uuid("aud");
+      const action = event.action || "unknown";
+      const reversible = event.reversible !== undefined
+        ? !!event.reversible
+        : AUDIT_REVERSIBLE.has(action);
+      const entry = {
+        id,
+        projectId: event.projectId || "default",
+        action,
+        label: event.label || action,
+        targetType: event.targetType || null,
+        targetId: event.targetId || null,
+        targetName: event.targetName || null,
+        entityType: event.entityType || null,
+        before: event.before !== undefined ? redactSecrets(event.before) : null,
+        after: event.after !== undefined ? redactSecrets(event.after) : null,
+        patch: event.patch !== undefined ? redactSecrets(event.patch) : null,
+        source: event.source || null,
+        sourceSurface: event.sourceSurface || null,
+        reversible,
+        undoType: event.undoType || (reversible ? "restore-snapshot" : null),
+        relatedIds: Array.isArray(event.relatedIds) ? event.relatedIds : [],
+        metadata: event.metadata ? redactSecrets(event.metadata) : null,
+        undone: false,
+        undoneAt: null,
+        undoneByEventId: null,
+        createdAt: event.createdAt || nowIso(),
+      };
+      const state = this.loadSync();
+      const events = [entry, ...(state.events || [])].slice(0, 500); // cap log size
+      await this.save({ events });
+      window.dispatchEvent(new CustomEvent("lw:audit-log-updated", { detail: { event: entry } }));
+      return entry;
+    },
+    listSync(options = {}) {
+      const events = this.loadSync().events || [];
+      let out = events;
+      if (options.action) out = out.filter((e) => e.action === options.action);
+      if (options.targetType) out = out.filter((e) => e.targetType === options.targetType);
+      if (options.includeUndone === false) out = out.filter((e) => !e.undone);
+      const limit = options.limit || out.length;
+      return out.slice(0, limit);
+    },
+    getSync(id) {
+      return (this.loadSync().events || []).find((e) => e.id === id) || null;
+    },
+    getRecentSync(limit = 10) {
+      return this.listSync({ limit });
+    },
+    listByTargetSync(targetType, targetId) {
+      return this.listSync().filter((e) => e.targetType === targetType && e.targetId === targetId);
+    },
+    canUndo(eventId) {
+      const e = this.getSync(eventId);
+      if (!e) return false;
+      if (e.undone) return false;
+      if (e.action === "audit.undo") return false;
+      if (!e.reversible) return false;
+      return AUDIT_REVERSIBLE.has(e.action);
+    },
+    async markUndone(eventId, undoEventId) {
+      const state = this.loadSync();
+      const events = (state.events || []).map((e) =>
+        e.id === eventId ? { ...e, undone: true, undoneAt: nowIso(), undoneByEventId: undoEventId } : e
+      );
+      await this.save({ events });
+    },
+    async undo(eventId) {
+      const evt = this.getSync(eventId);
+      if (!this.canUndo(eventId)) {
+        throw new Error("Event is not reversible: " + eventId);
+      }
+      // Dispatch reversal based on action.
+      let undoLabel = "Undone " + (evt.label || evt.action);
+      try {
+        switch (evt.action) {
+          case "entity.create": {
+            if (evt.entityType && evt.targetId) {
+              await EntityService.delete(evt.entityType, evt.targetId, { skipAudit: true });
+            }
+            break;
+          }
+          case "entity.update": {
+            if (evt.entityType && evt.targetId && evt.before) {
+              await EntityService.save(evt.entityType, evt.before, { skipAudit: true });
+            }
+            break;
+          }
+          case "entity.delete": {
+            if (evt.before) {
+              await EntityService.save(evt.entityType || evt.before.type, { ...evt.before, status: "active" }, { skipAudit: true });
+              // Also purge from trash.
+              await TrashService.purge(evt.targetId).catch(() => {});
+            }
+            break;
+          }
+          case "chapter.create": {
+            if (evt.targetId) {
+              const state = ManuscriptChapterService.loadSync();
+              await ManuscriptChapterService.save({
+                ...state,
+                chapters: (state.chapters || []).filter((c) => c.id !== evt.targetId),
+                manuscripts: Object.fromEntries(Object.entries(state.manuscripts || {}).filter(([k]) => k !== evt.targetId)),
+              }, { skipAudit: true });
+            }
+            break;
+          }
+          case "chapter.save": {
+            if (evt.before && evt.targetId) {
+              const state = ManuscriptChapterService.loadSync();
+              const chapters = (state.chapters || []).map((c) =>
+                c.id === evt.targetId ? { ...c, ...evt.before, id: evt.targetId } : c
+              );
+              await ManuscriptChapterService.save({
+                ...state,
+                chapters,
+                manuscripts: { ...(state.manuscripts || {}), [evt.targetId]: { html: evt.before.bodyHtml || "", text: evt.before.bodyText || "" } },
+              }, { skipAudit: true });
+            }
+            break;
+          }
+          case "chapter.delete": {
+            if (evt.before) {
+              const state = ManuscriptChapterService.loadSync();
+              await ManuscriptChapterService.save({
+                ...state,
+                chapters: [...(state.chapters || []), evt.before],
+                manuscripts: { ...(state.manuscripts || {}), [evt.before.id]: { html: evt.before.bodyHtml || "", text: evt.before.bodyText || "" } },
+              }, { skipAudit: true });
+            }
+            break;
+          }
+          case "reference.create": {
+            if (evt.targetId) {
+              const refs = StorageService.getSync(KEYS.references, []);
+              await StorageService.set(KEYS.references, refs.filter((r) => r.id !== evt.targetId));
+            }
+            break;
+          }
+          case "reference.update":
+          case "reference.delete": {
+            if (evt.before) {
+              const refs = StorageService.getSync(KEYS.references, []);
+              const next = refs.filter((r) => r.id !== evt.before.id).concat([evt.before]);
+              await StorageService.set(KEYS.references, next);
+            }
+            break;
+          }
+          case "onboarding.update": {
+            if (evt.before) await StorageService.set(KEYS.onboarding, evt.before);
+            break;
+          }
+          case "intel.update": {
+            if (evt.before) await StorageService.set(KEYS.projectIntelligence, evt.before);
+            break;
+          }
+          case "settings.section-update": {
+            if (evt.before && evt.metadata?.sectionId) {
+              const all = SettingsService.getAllSync();
+              await SettingsService.saveSection(evt.metadata.sectionId, evt.before, { skipAudit: true });
+            }
+            break;
+          }
+          case "review.accept":
+          case "review.deny": {
+            // Reopen the review item by setting status back to pending.
+            if (evt.targetId) {
+              const items = StorageService.getSync(KEYS.reviewQueue, []);
+              const next = items.map((it) => it.id === evt.targetId ? { ...it, status: "pending", resolvedAt: null } : it);
+              await StorageService.set(KEYS.reviewQueue, next);
+              window.dispatchEvent(new CustomEvent("lw:review-queue-updated"));
+            }
+            // For review.accept that created an entity, also delete it.
+            if (evt.action === "review.accept" && evt.metadata?.createdEntityId && evt.metadata?.createdEntityType) {
+              await EntityService.delete(evt.metadata.createdEntityType, evt.metadata.createdEntityId, { skipAudit: true }).catch(() => {});
+            }
+            break;
+          }
+          case "sample.load": {
+            // Remove records tagged source:"sample" added by this event.
+            const ids = new Set(evt.relatedIds || []);
+            if (ids.size) {
+              const all = await StorageService.get(KEYS.entities, {});
+              for (const [type, byId] of Object.entries(all)) {
+                for (const id of Object.keys(byId || {})) {
+                  if (ids.has(id)) delete all[type][id];
+                }
+              }
+              await StorageService.set(KEYS.entities, all);
+              applyEntityGlobals();
+            }
+            // Also clear sample-tagged refs.
+            const refs = StorageService.getSync(KEYS.references, []);
+            await StorageService.set(KEYS.references, refs.filter((r) => !ids.has(r.id)));
+            break;
+          }
+          default: {
+            throw new Error("No undo handler for action: " + evt.action);
+          }
+        }
+      } catch (err) {
+        throw new Error("Undo failed: " + (err.message || err));
+      }
+      // Log the undo as its own event and mark the original.
+      const undoEvent = await this.log({
+        action: "audit.undo",
+        label: "Undid: " + (evt.label || evt.action),
+        targetType: evt.targetType,
+        targetId: evt.targetId,
+        targetName: evt.targetName,
+        entityType: evt.entityType,
+        source: "AuditService",
+        sourceSurface: "home",
+        reversible: false,
+        undoType: null,
+        relatedIds: [evt.id],
+        metadata: { undidAction: evt.action },
+      });
+      await this.markUndone(evt.id, undoEvent.id);
+      window.dispatchEvent(new CustomEvent("lw:audit-undo-applied", { detail: { originalEventId: evt.id, undoEventId: undoEvent.id } }));
+      return { ok: true, undoEvent };
+    },
+    async clear() {
+      await StorageService.set(KEYS.auditLog, this.defaultState());
+      window.dispatchEvent(new CustomEvent("lw:audit-log-cleared"));
+    },
+    exportSync() {
+      const state = this.loadSync();
+      return {
+        schemaVersion: "loomwright-audit-v1",
+        exportedAt: nowIso(),
+        events: state.events,
+      };
+    },
+  };
+
   function installDelegates() {
     if (window.__LW_BACKEND_DELEGATES__) return;
     window.__LW_BACKEND_DELEGATES__ = true;
@@ -3666,6 +4214,54 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
           // Generic dispatcher → the shell decides where to land.
           window.dispatchEvent(new CustomEvent("lw:open-search-result", { detail }));
         }
+        // -------- Audit Log / Undo --------
+        if (cb === "onUndoAuditEvent") {
+          e.preventDefault();
+          const detail = (el?.dataset && el.dataset.payload) ? (function () { try { return JSON.parse(el.dataset.payload); } catch (_) { return {}; } })() : {};
+          const eid = detail.eventId || detail.id || el.getAttribute("data-event-id");
+          if (!eid) { notify("No audit event id supplied."); return; }
+          try {
+            const evt = AuditService.getSync(eid);
+            await AuditService.undo(eid);
+            notify("Undid: " + (evt?.label || eid));
+          } catch (err) {
+            notify(err.message || "Could not undo that action.");
+          }
+        }
+        if (cb === "onOpenAuditLog") {
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent("lw:open-audit-log"));
+        }
+        if (cb === "onClearAuditLog") {
+          e.preventDefault();
+          if (!window.confirm || !window.confirm("Clear the local audit log? This cannot be undone.")) return;
+          await AuditService.clear();
+          notify("Audit log cleared.");
+        }
+        if (cb === "onExportAuditLog") {
+          e.preventDefault();
+          const data = AuditService.exportSync();
+          const stamp = (data.exportedAt || nowIso()).replace(/[:.]/g, "-");
+          await downloadJson(`loomwright-audit-${stamp}.json`, data);
+          notify("Audit log exported.");
+        }
+        if (cb === "onOpenRecentActivityItem") {
+          e.preventDefault();
+          const detail = (el?.dataset && el.dataset.payload) ? (function () { try { return JSON.parse(el.dataset.payload); } catch (_) { return {}; } })() : {};
+          const eid = detail.eventId || el.getAttribute("data-event-id");
+          const evt = eid ? AuditService.getSync(eid) : null;
+          if (!evt) { notify("No matching activity."); return; }
+          // Map the event's target to lw:open-search-result for re-use.
+          window.dispatchEvent(new CustomEvent("lw:open-search-result", { detail: {
+            type: evt.targetType,
+            entityType: evt.entityType,
+            entityId: evt.targetType === "entity" ? evt.targetId : null,
+            chapterId: evt.targetType === "chapter" ? evt.targetId : null,
+            referenceId: evt.targetType === "reference" ? evt.targetId : null,
+            settingsSectionId: evt.targetType === "settings" ? evt.targetId : null,
+            reviewItemId: evt.targetType === "review" ? evt.targetId : null,
+          } }));
+        }
         if (cb === "onCopyProjectContextPack" || cb === "onCopyStyleProfilePack" || cb === "onCopyCanonRulesPack" || cb === "onCopyCharacterBiblePack") {
           e.preventDefault();
           const intel = ProjectIntelService.loadSync();
@@ -3728,6 +4324,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     SkillTreeService,
     SpeedReaderService,
     SearchService,
+    AuditService,
     ProjectArchiveService,
     LinkService,
     AIService,

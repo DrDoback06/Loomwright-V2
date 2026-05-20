@@ -17,7 +17,7 @@ Reproduce on a clean checkout of `main`:
 > npm install
 > npm run validate
 All checked HTML references exist.
-OK: 525 UI callbacks; registry bootstraps 547 handlers
+OK: 526 UI callbacks; registry bootstraps 552 handlers
 OK: registry default branch emits a user-visible notice (no silent fall-through).
 OK: 0 Bucket A action callbacks reach the generic default notice.
 OK: 6 Bucket B (provider-gated) callbacks use requireProviderOrNotice.
@@ -25,10 +25,10 @@ OK: 4 Bucket D (React-owned) callbacks declared.
 INFO: 213 other callbacks fall to default notice (housekeeping/dispatch).
 
 > npm run test:smoke
-All smoke checks passed (extraction + workspace persistence + project import/export + speed reader + search — 22 new [search] assertions).
+All smoke checks passed (extraction + workspace persistence + project import/export + speed reader + search + audit — 23 new [audit] assertions).
 
 > CHROMIUM_PATH=/path/to/chrome npm run test:e2e
-63 passed (≈7.2 min wall, real Chromium) — 56 pre-existing + 7 new search/indexing.
+69 passed (≈6.2 min wall, real Chromium) — 63 pre-existing + 6 new audit/undo.
 ```
 
 The e2e suite is in `tests/e2e/`; six spec files cover 28 tests across
@@ -81,6 +81,7 @@ breaks `npm run test:smoke` or `npm run test:e2e`.
 | **Full Project Import / Export / Backup / Entity Library** — `ProjectArchiveService` builds `loomwright-project-v1` payloads; `validateExportPayload` accepts v1 + legacy `loomwright/project-export/v1\|v2`; `summarizeExportPayload` powers the import preview; `applyImport({mode: "merge" \| "replace", overwriteOnConflict})` covers entities/chapters/refs/occurrences/queue/onboarding/intel/skill-trees/tangle/composition/settings/trash; `createBackupBeforeReplace()` downloads a recovery file before destructive replace; `buildEntityLibrary({types})` / `applyEntityLibrary` move selected entity types between projects. **API keys never export** (`api_keys_encrypted` blob is never read; `metadata.apiKeysIncluded` is hard-coded `false`; `redactSecrets` strips any `apiKey/secret/token/password/bearer/credential` recursively). | smoke (24 assertions) + e2e N (5 tests) |
 | **Speed Reader** — `SpeedReaderService` persists per-source RSVP sessions under `KEYS.speedReader`. Source resolvers: current chapter (via `ManuscriptChapterService`), pasted text, references (via `KEYS.references`). Session shape carries `currentWordIndex`, `wpm`, `fontSize`, pause settings, `bookmarks`, `notes`, `stats`. `useSpeedReader` hydrates on mount, debounces persistence (~250 ms) for the active persisted session, and re-hydrates on source switch. Five new callbacks (`onCreateSpeedReaderSession`, `onReadCurrentChapter`, `onReadReference`, `onDeleteSpeedReaderSession`, `onResetSpeedReaderProgress`) wired through the backend delegate. | smoke (26 assertions) + e2e O (5 tests) |
 | **Search / Indexing** — `SearchService` builds a local global index across entities (14 types), chapters, references, review queue, project intelligence, onboarding answers, safe settings sections, occurrences, and (opt-in) trash. Ranking: title exact > alias exact > title prefix > title contains > tag exact > body phrase > token overlap (capped). `CommandPalette` reads live results; result rows carry typed pointers (`entityId`, `chapterId`, `referenceId`, `settingsSectionId`, …) and click dispatches `lw:open-search-result` which maps to the right open event in `app.jsx`. Index refreshes (~150 ms debounced) on every relevant store mutation. **API secrets never indexed** — encrypted `api_keys_encrypted` blob is never read; secret-named fields are stripped recursively inside whitelisted settings sections. 11 new callbacks registered. | smoke (22 assertions) + e2e P (7 tests) |
+| **Audit Log / Undo (partial)** — `AuditService` records every meaningful mutation across `EntityService`, `ManuscriptChapterService`, `ReviewService`, `ReferencesService`, `OnboardingService`, `ProjectIntelService`, `SettingsService`, `SampleProjectService`. Each event carries `before/after` snapshots redacted via `redactSecrets`. Reversible actions (`entity.create/update/delete`, `chapter.create/save/delete`, `reference.*`, `onboarding.update`, `intel.update`, `settings.section-update`, `review.accept/deny`, `sample.load`) support `AuditService.undo(eventId)` with an anti-recursion `{skipAudit:true}` flag to prevent cascades. Destructive actions (`project.reset`, `entity.merge`, `project.import`, hard-delete, `library.import`, `review.bulk-*`) are audit-only. Home Recent Activity card reads live from `getRecentSync(10)` with Undo buttons. **API secrets never logged** (redacted on every event). 5 new callbacks registered (`onUndoAuditEvent`, `onOpenAuditLog`, `onClearAuditLog`, `onExportAuditLog`, `onOpenRecentActivityItem`). | smoke (23 assertions) + e2e Q (6 tests) |
 
 ---
 
@@ -101,7 +102,7 @@ result** is prototype-level. They aren't broken; they aren't great yet.
 | ~~**Search / indexing**~~ | _Moved to **A. Implemented** by `SEARCH_INDEXING_REPORT.md`._ Row kept for diff-tracking only. | _n/a_ |
 | **Workspace persistence (beyond what's wired)** | Atlas / Skill Trees / Relationships / Timeline / Tangle / Speed Reader open and can persist via their respective services where wired, but deep create→edit→reorder→reload paths are not test-covered for every workspace | Bespoke workspaces vary in completeness. No e2e tests per workspace. |
 | ~~**Full project import/export**~~ | _Moved to **A. Implemented** by `PROJECT_IMPORT_EXPORT_REPORT.md`._ Row kept for diff-tracking only. | _n/a_ |
-| **Audit log / undo trail** | Some services log to `lw:*` events; `extractionHistoryService`-style per-action `previousState` undo is not implemented | Legacy audit documents the model; not yet ported. |
+| ~~**Audit log / undo trail**~~ | _Moved to **A. Implemented** by `AUDIT_UNDO_REPORT.md` — partial: core safe local actions are undoable; destructive/import/provider actions are audit-only._ Row kept for diff-tracking only. | _n/a_ |
 | **Field parity across all entity types** | Cast, Bestiary, Items, Quests, Events, Locations, Stats, Skills, Classes, Races, Lore, References, Factions, Relationships, Timeline editors exist. `FIELD_PARITY_AUDIT.md` documents what was filled. | Round-trip JSON import → edit → export hasn't been re-verified per type since the burn-down. |
 | **Production build pipeline** | `Loomwright Shell.html` still uses in-browser Babel-standalone | A precompiled JSX/Vite pipeline is documented as a future milestone (own pass, own plan). |
 | **Documentation consistency** | Many `*_HOOKUP.md` files still describe pre-implementation hookup requirements as if they were future work; addressed in this pass by adding a "Current state" footnote header referencing this audit | Bodies of those docs remain useful as design-intent references. |
@@ -149,7 +150,7 @@ blocking the "functional local prototype" status.
 - _(Removed — implemented in Speed Reader Completion Pass; see section A row "Speed Reader".)_
 - **Per-workspace e2e coverage** for Atlas / Skill Trees / Relationships / Timeline / Tangle / Speed Reader.
 - _(Removed — implemented; see Full Project Import / Export / Backup / Entity Library row in section A.)_
-- **Audit log surface on Home** with undo for last review action / extraction session / entity edit / chapter delete.
+- _(Removed — implemented in Audit Log / Undo Pass; see section A row "Audit Log / Undo (partial)".)_
 
 ---
 
@@ -169,7 +170,7 @@ until earlier passes are solid):
 
 6. ~~**Speed Reader engine**~~ _(landed; see section A row "Speed Reader" and `SPEED_READER_COMPLETION_REPORT.md`)._
 7. ~~**Search / indexing**~~ _(landed; see section A row "Search / Indexing" and `SEARCH_INDEXING_REPORT.md`)._
-8. **Audit log + undo** as a single safety-net pass.
+8. ~~**Audit log + undo**~~ _(landed; see section A row "Audit Log / Undo (partial)" and `AUDIT_UNDO_REPORT.md`)._
 9. **Multi-provider AI routing** when single-provider gating proves limiting.
 10. **Production build pipeline** with `BUILD_PIPELINE_PLAN.md` first and smallest-safe-step implementation.
 

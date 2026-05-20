@@ -127,6 +127,31 @@ const HomeProgressBar = ({ value, max, label, sub }) => {
 // ---------------------------------------------------------------------
 // HomeScreen
 // ---------------------------------------------------------------------
+function _homeFormatRelative(iso) {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return "";
+  const diff = Date.now() - t;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + " min ago";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + " hr ago";
+  const d = Math.floor(h / 24);
+  if (d < 7) return d + " day" + (d === 1 ? "" : "s") + " ago";
+  return new Date(iso).toLocaleDateString();
+}
+function _homeKindForAction(action) {
+  if (!action) return "panel";
+  if (action.startsWith("chapter.")) return "chapter";
+  if (action.startsWith("review.")) return "extraction";
+  if (action.startsWith("entity.")) return "entity";
+  if (action.startsWith("reference.")) return "panel";
+  if (action.startsWith("sample.") || action === "project.reset") return "panel";
+  if (action === "audit.undo") return "panel";
+  return "panel";
+}
+
 const HomeScreen = ({
   onOpenPanel, onSetRoute, onOpenReviewQueue,
   onOpenProjectIntelligence, onOpenContinuityWarning,
@@ -135,6 +160,36 @@ const HomeScreen = ({
   const ms = HOME_MANUSCRIPT;
   const PI = HOME_PI;
   const RQ = HOME_REVIEW;
+
+  // Live recent activity from AuditService — re-reads on every audit
+  // event. Falls back to sample rows only when log is genuinely empty.
+  const [auditTick, setAuditTick] = React.useState(0);
+  React.useEffect(() => {
+    const refresh = () => setAuditTick((t) => t + 1);
+    window.addEventListener("lw:audit-log-updated", refresh);
+    window.addEventListener("lw:audit-undo-applied", refresh);
+    window.addEventListener("lw:audit-log-cleared", refresh);
+    return () => {
+      window.removeEventListener("lw:audit-log-updated", refresh);
+      window.removeEventListener("lw:audit-undo-applied", refresh);
+      window.removeEventListener("lw:audit-log-cleared", refresh);
+    };
+  }, []);
+  const liveActivity = React.useMemo(() => {
+    const Audit = (typeof window !== "undefined") ? window.LoomwrightBackend?.AuditService : null;
+    if (!Audit) return null;
+    const events = Audit.getRecentSync(10);
+    if (!events.length) return [];
+    return events.map((e) => ({
+      id: e.id,
+      kind: _homeKindForAction(e.action),
+      text: e.label || e.action,
+      when: _homeFormatRelative(e.createdAt),
+      undoable: Audit.canUndo(e.id),
+      _event: e,
+    }));
+  }, [auditTick]);
+  const activityRows = (liveActivity && liveActivity.length > 0) ? liveActivity : HOME_RECENT_ACTIVITY;
 
   const totalEntities = HOME_ENTITY_HEALTH.reduce((s, e) => s + e.count, 0);
 
@@ -462,12 +517,58 @@ const HomeScreen = ({
             eyebrow="History"
             title="Recent activity"
           >
-            <ol className="home-activity">
-              {HOME_RECENT_ACTIVITY.map((a) => (
-                <li key={a.id} className="home-activity__row" onClick={() => handleActivityClick(a)} data-callback="onOpenRecentEntity">
+            <ol className="home-activity" data-ui="HomeRecentActivity">
+              {activityRows.length === 0 && (
+                <li className="home-activity__row home-activity__row--empty">
+                  <span className="home-activity__text" style={{ fontStyle: "italic", opacity: 0.6 }}>Activity will appear here as you work.</span>
+                </li>
+              )}
+              {activityRows.map((a) => (
+                <li
+                  key={a.id}
+                  className="home-activity__row"
+                  data-callback="onOpenRecentActivityItem"
+                  data-event-id={a._event?.id || a.id}
+                  data-testid={"home-activity-" + a.id}
+                  onClick={() => {
+                    if (a._event) {
+                      window.dispatchEvent(new CustomEvent("lw:open-search-result", { detail: {
+                        type: a._event.targetType,
+                        entityType: a._event.entityType,
+                        entityId: a._event.targetType === "entity" ? a._event.targetId : null,
+                        chapterId: a._event.targetType === "chapter" ? a._event.targetId : null,
+                        referenceId: a._event.targetType === "reference" ? a._event.targetId : null,
+                        settingsSectionId: a._event.targetType === "settings" ? a._event.targetId : null,
+                        reviewItemId: a._event.targetType === "review" ? a._event.targetId : null,
+                      } }));
+                    } else {
+                      handleActivityClick(a);
+                    }
+                  }}
+                >
                   <span className={"home-activity__dot home-activity__dot--" + a.kind}/>
                   <span className="home-activity__text">{a.text}</span>
                   <span className="home-activity__when">{a.when}</span>
+                  {a.undoable && (
+                    <button
+                      type="button"
+                      className="home-activity__undo"
+                      data-callback="onUndoAuditEvent"
+                      data-event-id={a._event.id}
+                      data-testid={"home-undo-" + a._event.id}
+                      title="Undo this action"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const B = window.LoomwrightBackend;
+                        if (!B?.AuditService) return;
+                        B.AuditService.undo(a._event.id).catch((err) => {
+                          window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: err.message || "Could not undo." } }));
+                        });
+                      }}
+                    >
+                      Undo
+                    </button>
+                  )}
                 </li>
               ))}
             </ol>
