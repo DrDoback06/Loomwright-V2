@@ -190,7 +190,7 @@ const Step_Style = ({ data, set, callbacks }) => {
 };
 
 // ---- 4. Voice Sample ------------------------------------------------
-const Step_Voice = ({ data, set, callbacks }) => {
+const Step_Voice = ({ data, set, callbacks, jumpTo }) => {
   const v = data.voice || { samples: [] };
   const upd = (k, val) => set("voice", { ...v, [k]: val });
   const [analyzing, setAnalyzing] = _us_st(false);
@@ -205,15 +205,15 @@ const Step_Voice = ({ data, set, callbacks }) => {
           <textarea className="ob-textarea" rows={9} placeholder="The auger spoke, as it had not spoken for a hundred years, and the throne-room hushed itself the way a forest hushes for a wolf…" value={v.sample || ""} onChange={(e) => upd("sample", e.target.value)} data-callback="onSaveOnboardingDraft"/>
         </Field>
         <Field label="Or upload a file" optional>
-          <DropZone callback="onUploadReference" onFile={() => upd("uploaded", { name: "Chapter-1.docx", state: "uploaded", words: 4220 })} state={v.uploaded?.state || "idle"}/>
+          <DropZone callback="onUploadReference" accept=".txt, .md, .markdown, .text" onFile={(f) => set("voice", { ...v, uploaded: { name: f.name, state: f.state, words: (f.content || "").trim().split(/\s+/).filter(Boolean).length }, sample: (v.sample && v.sample.trim()) ? v.sample : (f.content || "") })} state={v.uploaded?.state || "idle"}/>
           {v.uploaded && (
             <div className="ob-card" style={{ marginTop: 8 }}>
               <div className="ob-card__main">
                 <div className="ob-card__title">{v.uploaded.name}</div>
-                <div className="ob-card__sub"><span className="chip chip--ok"><Icon name="check" size={10}/>Upload complete</span><span>{v.uploaded.words?.toLocaleString()} words</span></div>
+                <div className="ob-card__sub"><span className="chip chip--ok"><Icon name="check" size={10}/>Upload complete</span><span>{(v.uploaded.words || 0).toLocaleString()} words</span></div>
               </div>
               <div className="ob-card__actions">
-                <Btn variant="ghost" size="sm" icon="trash" data-callback="onDeleteReference"/>
+                <Btn variant="ghost" size="sm" icon="trash" data-callback="onDeleteReference" onClick={() => upd("uploaded", null)}/>
               </div>
             </div>
           )}
@@ -226,7 +226,7 @@ const Step_Voice = ({ data, set, callbacks }) => {
             onClick={() => { setAnalyzing(true); setTimeout(() => { setAnalyzing(false); setAnalyzed(true); upd("analyzed", true); }, 900); }}
             data-callback="onAnalyzeStyleSample"
           >{analyzing ? "Distilling voice…" : "Analyze style"}</Btn>
-          <Btn variant="ghost" icon="plus" data-callback="onAddVoiceSample">Add another sample</Btn>
+          <Btn variant="ghost" icon="plus" data-callback="onAddVoiceSample" onClick={() => { const s = (v.sample || "").trim(); if (!s) return; set("voice", { ...v, samples: [...(v.samples || []), { id: "vs" + Date.now(), text: s }], sample: "" }); }}>Add another sample</Btn>
           <ToggleRow label="Use this as primary voice reference" sub="Loomwright prefers this fingerprint when blending suggestions." value={v.primary} onChange={(x) => upd("primary", x)} callback="onMarkSamplePrimary"/>
         </div>
       </div>
@@ -246,8 +246,8 @@ const Step_Voice = ({ data, set, callbacks }) => {
                 </div>
                 <div className="ob-card__meta">Notes: precise verbs, infrequent dialogue tags, painterly nouns. Tendency toward semicolons in narration.</div>
                 <div className="ob-card__tags">
-                  <Btn variant="primary" size="sm" icon="check" data-callback="onAcceptStyleProfile">Accept profile</Btn>
-                  <Btn variant="outline" size="sm" icon="paper" data-callback="onEditStyleProfile">Edit profile</Btn>
+                  <Btn variant={v.profileAccepted ? "outline" : "primary"} size="sm" icon="check" data-callback="onAcceptStyleProfile" onClick={() => upd("profileAccepted", true)}>{v.profileAccepted ? "Profile accepted" : "Accept profile"}</Btn>
+                  <Btn variant="outline" size="sm" icon="paper" data-callback="onEditStyleProfile" onClick={() => jumpTo && jumpTo("style")}>Edit profile</Btn>
                 </div>
               </div>
             </div>
@@ -361,6 +361,28 @@ const Step_Cast = ({ data, set, callbacks }) => {
   const seeds = c.seeds || [];
   const upd = (s) => set("cast", { ...c, seeds: s });
   const [editing, setEditing] = _us_st(null);
+  const [importOpen, setImportOpen] = _us_st(false);
+  const [importText, setImportText] = _us_st("");
+  // Use the offline NER engine to pull character names out of pasted prose.
+  const runImport = () => {
+    const text = (importText || "").trim();
+    if (!text) { setImportOpen(false); return; }
+    let names = [];
+    try {
+      const B = window.LoomwrightBackend;
+      if (B && B.discoverEntities) {
+        names = (B.discoverEntities(text, {}, "ob-cast", "ob-cast").candidates || [])
+          .filter((x) => x.entityType === "cast").map((x) => x.name);
+      }
+    } catch (_e) {}
+    const existing = new Set(seeds.map((s) => (s.name || "").toLowerCase()));
+    const additions = [...new Set(names)].filter((n) => n && !existing.has(n.toLowerCase())).map((n) => ({
+      id: "seed-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+      name: n, aliases: "", role: "", race: "", klass: "", faction: "", personality: "", voice: "", goals: "", fears: "", secrets: "", relationships: "", isNew: false,
+    }));
+    if (additions.length) upd([...seeds, ...additions]);
+    setImportText(""); setImportOpen(false);
+  };
 
   const blank = { id: "", name: "", aliases: "", role: "", race: "", klass: "", faction: "", personality: "", voice: "", goals: "", fears: "", secrets: "", relationships: "" };
   const startAdd = () => setEditing({ ...blank, id: "seed-" + Date.now(), isNew: true });
@@ -379,8 +401,19 @@ const Step_Cast = ({ data, set, callbacks }) => {
         <div className="ob-block__sub">Drop in starter cards. They appear in the Cast panel as soon as you finish onboarding.</div>
         <div style={{ display: "flex", gap: 8 }}>
           <Btn variant="primary" icon="plus" onClick={startAdd} data-callback="onAddCharacterSeed">Add character seed</Btn>
-          <Btn variant="outline" icon="paper" data-callback="onImportCharactersFromText">Import from pasted text</Btn>
+          <Btn variant="outline" icon="paper" data-callback="onImportCharactersFromText" onClick={() => setImportOpen((o) => !o)}>Import from pasted text</Btn>
         </div>
+        {importOpen && (
+          <div className="ob-block" style={{ marginTop: 8 }}>
+            <Field label="Paste prose — characters are extracted offline" hint="Names from dialogue, honorifics, and recurring proper nouns become seeds you can edit.">
+              <textarea className="ob-textarea" rows={5} data-testid="cast-import-text" placeholder={"\"We ride at dawn,\" said Aelinor. Lord Brennan only nodded…"} value={importText} onChange={(e) => setImportText(e.target.value)}/>
+            </Field>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn variant="primary" icon="sparkle" data-testid="cast-import-run" onClick={runImport}>Extract characters</Btn>
+              <Btn variant="ghost" onClick={() => { setImportText(""); setImportOpen(false); }}>Cancel</Btn>
+            </div>
+          </div>
+        )}
         <div className="ob-list">
           {seeds.length === 0 && !editing && <div className="ob__learned__empty" style={{ padding: 24 }}>No character seeds yet. The Auger doesn’t mind starting with strangers.</div>}
           {seeds.map((s) => (
@@ -478,17 +511,22 @@ const Step_RPG = ({ data, set }) => {
           <div className="ob-block">
             <div className="ob-block__title">Custom rules</div>
             {T.stats && (
-              <Field label="Custom stat set" hint="One stat per line: name, min, max, default.">
+              <Field label="Custom stat set" hint="Name, min, max, default — added to the Stats bank when you finish.">
                 <div className="ob-list">
-                  {[["Wits", 1, 20, 10], ["Steel", 1, 20, 8], ["Sight", 1, 20, 14]].map(([n,mn,mx,d]) => (
-                    <div key={n} className="ob-stat-row">
-                      <div className="ob-stat-row__name">{n}</div>
-                      <input className="ob-input" defaultValue={mn} style={{ height: 28 }}/>
-                      <input className="ob-input" defaultValue={mx} style={{ height: 28 }}/>
-                      <input className="ob-input" defaultValue={d} style={{ height: 28 }}/>
-                    </div>
-                  ))}
-                  <Btn variant="outline" size="sm" icon="plus" data-callback="onAddCustomStat">Add stat</Btn>
+                  {(r.customStats || []).map((st, i) => {
+                    const updStat = (k, val) => upd("customStats", (r.customStats || []).map((x, j) => j === i ? { ...x, [k]: val } : x));
+                    return (
+                      <div key={st.id || i} className="ob-stat-row">
+                        <input className="ob-input" placeholder="Stat name" value={st.name || ""} onChange={(e) => updStat("name", e.target.value)} style={{ height: 28 }}/>
+                        <input className="ob-input" type="number" value={st.min ?? 1} onChange={(e) => updStat("min", Number(e.target.value))} style={{ height: 28 }}/>
+                        <input className="ob-input" type="number" value={st.max ?? 20} onChange={(e) => updStat("max", Number(e.target.value))} style={{ height: 28 }}/>
+                        <input className="ob-input" type="number" value={st.def ?? 10} onChange={(e) => updStat("def", Number(e.target.value))} style={{ height: 28 }}/>
+                        <Btn variant="ghost" size="sm" icon="trash" onClick={() => upd("customStats", (r.customStats || []).filter((_, j) => j !== i))}/>
+                      </div>
+                    );
+                  })}
+                  {(r.customStats || []).length === 0 && <div className="ob__learned__empty" style={{ padding: 12 }}>No custom stats yet — add Strength, Wits, Resolve, anything your world tracks.</div>}
+                  <Btn variant="outline" size="sm" icon="plus" data-callback="onAddCustomStat" onClick={() => upd("customStats", [...(r.customStats || []), { id: "stat" + Date.now(), name: "", min: 1, max: 20, def: 10 }])}>Add stat</Btn>
                 </div>
               </Field>
             )}
@@ -519,6 +557,25 @@ const Step_Plot = ({ data, set }) => {
     upd("beats", [...(p.beats || []), { ...draft, id: "b" + Date.now() }]);
     setDraft({ title: "", summary: "", chapter: "", chars: "", locs: "", status: "planned" });
   };
+  const [importOpen, setImportOpen] = _us_st(false);
+  const [importText, setImportText] = _us_st("");
+  const importBeats = () => {
+    try {
+      const parsed = JSON.parse(importText);
+      const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.beats) ? parsed.beats : []);
+      const beats = arr.filter(Boolean).map((b, i) => ({
+        id: "b" + Date.now() + "-" + i,
+        title: b.title || b.beat || b.name || ("Beat " + (i + 1)),
+        summary: b.summary || b.description || b.purpose || "",
+        chapter: b.chapter || "",
+        chars: Array.isArray(b.characters) ? b.characters.join(", ") : (b.chars || ""),
+        locs: Array.isArray(b.locations) ? b.locations.join(", ") : (b.locs || ""),
+        status: b.status || "planned",
+      }));
+      if (beats.length) upd("beats", [...(p.beats || []), ...beats]);
+      setImportText(""); setImportOpen(false);
+    } catch (_e) { /* invalid JSON — keep the editor open */ }
+  };
   const remove = (id) => upd("beats", (p.beats || []).filter((x) => x.id !== id));
   const beats = p.beats || [];
 
@@ -548,8 +605,19 @@ const Step_Plot = ({ data, set }) => {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <Btn variant="primary" icon="plus" onClick={add} data-callback="onAddPlotBeat">Add beat</Btn>
-          <Btn variant="outline" icon="paper" data-callback="onImportPlotJson">Import outline JSON</Btn>
+          <Btn variant="outline" icon="paper" data-callback="onImportPlotJson" onClick={() => setImportOpen((o) => !o)}>Import outline JSON</Btn>
         </div>
+        {importOpen && (
+          <div className="ob-block" style={{ marginTop: 8 }}>
+            <Field label="Paste a JSON array of beats" hint='e.g. [{"title":"Inciting incident","summary":"…","characters":["Aelinor"]}]'>
+              <textarea className="ob-textarea" rows={5} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder='[{ "title": "…", "summary": "…" }]'/>
+            </Field>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn variant="primary" icon="check" onClick={importBeats}>Import beats</Btn>
+              <Btn variant="ghost" onClick={() => { setImportText(""); setImportOpen(false); }}>Cancel</Btn>
+            </div>
+          </div>
+        )}
         <div className="ob-list">
           {beats.length === 0 && <div className="ob__learned__empty" style={{ padding: 18 }}>No beats yet. Even three is enough to feel the spine.</div>}
           {beats.map((b, i) => (
@@ -626,7 +694,7 @@ const Step_Manuscript = ({ data, set }) => {
                     : <><span className="chip chip--ok"><Icon name="check" size={10}/>Uploaded</span><span>{m.uploaded.words || 0} words</span></>}
                 </div>
               </div>
-              <div className="ob-card__actions"><Btn variant="ghost" size="sm" icon="trash"/></div>
+              <div className="ob-card__actions"><Btn variant="ghost" size="sm" icon="trash" onClick={() => upd("uploaded", null)}/></div>
             </div>
           )}
         </div>
@@ -736,9 +804,10 @@ const Step_AI = ({ data, set, callbacks }) => {
   const a = data.ai || { mode: "local", provider: "anthropic", storeLocal: true, allowEgress: false, key: "", validation: "idle" };
   const upd = (k, v) => set("ai", { ...a, [k]: v });
   const validate = () => {
-    set("ai", { ...a, validation: "validating" });
-    setTimeout(() => set("ai", { ...a, validation: a.key && a.key.startsWith("sk-") ? "ok" : "err" }), 700);
-    callbacks.onValidateProviderKey && callbacks.onValidateProviderKey({ provider: a.provider, key: a.key });
+    // Real connection test (the callbacks bag calls AIService.testConnection
+    // and updates ai.validation to "validating" → "ok"/"err").
+    if (callbacks.onValidateProviderKey) callbacks.onValidateProviderKey({ provider: a.provider, key: a.key });
+    else { set("ai", { ...a, validation: "validating" }); setTimeout(() => set("ai", { ...a, validation: a.key ? "ok" : "err" }), 700); }
   };
 
   return (

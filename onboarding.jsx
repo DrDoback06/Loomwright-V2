@@ -175,17 +175,45 @@ const OnboardingWizard = ({ initial = {}, onCompleteOnboarding, onExitOnboarding
 
   // --- callbacks bag passed to step bodies ---------------------------
   const callbacks = {
-    onCopyHelperPrompt:    (p) => console.log("[loom] copy helper prompt", p?.length, "chars"),
-    onQuickImportJson:     (obj) => console.log("[loom] quick import json", obj),
-    onCopyStepJsonPrompt:  ({ category, prompt }) => console.log("[loom] copy step prompt", category, prompt?.length),
-    onPasteStepJson:       ({ category, parsed, status }) => console.log("[loom] paste step", category, status),
-    onApplyStepJson:       ({ category, parsed }) => {
-      console.log("[loom] apply step json", category, parsed);
-      setSection(category, { ...(data[category] || {}), ...parsed });
+    onCopyHelperPrompt: (p) => {
+      try { navigator.clipboard && navigator.clipboard.writeText(typeof p === "string" ? p : JSON.stringify(p, null, 2)); } catch (_e) {}
+      setSaveState({ kind: "saved", label: "Prompt copied to clipboard" });
     },
-    onOpenIntelFile:       () => setIntelOpen(true),
-    onValidateProviderKey: (x) => console.log("[loom] validate key", x?.provider),
-    onTogglePrivacyMode:   (m) => console.log("[loom] privacy mode", m),
+    onQuickImportJson: (obj) => {
+      try {
+        const parsed = typeof obj === "string" ? JSON.parse(obj) : obj;
+        if (parsed && typeof parsed === "object") {
+          setData((d) => {
+            const next = { ...d, ...parsed };
+            try { window.LoomwrightBackend?.OnboardingService?.save(next, { skipAudit: true }); } catch (_e) {}
+            return next;
+          });
+          setSaveState({ kind: "saved", label: "Imported answers" });
+        }
+      } catch (_e) { setSaveState({ kind: "error", label: "Couldn't parse JSON" }); }
+    },
+    onCopyStepJsonPrompt: ({ category, prompt }) => {
+      try { navigator.clipboard && navigator.clipboard.writeText(prompt || ""); } catch (_e) {}
+      setSaveState({ kind: "saved", label: "Prompt copied" + (category ? " · " + category : "") });
+    },
+    onPasteStepJson: () => {},
+    onApplyStepJson: ({ category, parsed }) => {
+      if (category && parsed && typeof parsed === "object") setSection(category, { ...(data[category] || {}), ...parsed });
+    },
+    onOpenIntelFile: () => setIntelOpen(true),
+    onValidateProviderKey: async ({ provider, key } = {}) => {
+      const prov = provider || data.ai?.provider || "anthropic";
+      const k = key != null ? key : data.ai?.key;
+      setData((d) => ({ ...d, ai: { ...(d.ai || {}), validation: "validating" } }));
+      try {
+        const B = window.LoomwrightBackend;
+        if (!B || !B.AIService) { setData((d) => ({ ...d, ai: { ...(d.ai || {}), validation: "err", validationMessage: "Backend unavailable" } })); return; }
+        if (k) await B.AIService.saveProviderConfig({ id: prov, providerType: prov, apiKey: k });
+        const res = await B.AIService.testConnection(prov);
+        setData((d) => ({ ...d, ai: { ...(d.ai || {}), validation: res && res.ok ? "ok" : "err", validationMessage: (res && res.message) || "" } }));
+      } catch (e) { setData((d) => ({ ...d, ai: { ...(d.ai || {}), validation: "err", validationMessage: (e && e.message) || "Validation failed" } })); }
+    },
+    onTogglePrivacyMode: (m) => setSection("ai", { ...(data.ai || {}), mode: m, allowEgress: m === "local" ? false : (data.ai?.allowEgress || false) }),
     onStartWriting:        () => onCompleteOnboarding && onCompleteOnboarding({ ...data, __dest: "writers-room" }),
     onOpenCast:            () => onCompleteOnboarding && onCompleteOnboarding({ ...data, __dest: "cast" }),
     onOpenAtlas:           () => onCompleteOnboarding && onCompleteOnboarding({ ...data, __dest: "atlas" }),

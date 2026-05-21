@@ -58,6 +58,17 @@ test.describe("T18. Onboarding wizard", () => {
     expect(/reluctant heir/.test(seeded.foundation)).toBe(true);
   });
 
+  test("Cast step: 'Import from pasted text' extracts character seeds offline (NER)", async ({ page }) => {
+    await freshFirstRun(page);
+    await expect(page.locator("[data-ui='OnboardingOverlay']")).toBeVisible({ timeout: 6000 });
+    await page.locator("[data-step='cast']").click();
+    await page.locator("button:has-text('Import from pasted text')").click();
+    await page.locator("[data-testid='cast-import-text']").fill('"We ride at dawn," said Aelinor. Lord Brennan only nodded. Later, Aelinor found Brennan by the gate.');
+    await page.locator("[data-testid='cast-import-run']").click();
+    // Discovered seeds render as cards with the character name.
+    await expect(page.locator(".ob-card__title:has-text('Aelinor')")).toBeVisible({ timeout: 5000 });
+  });
+
   test("a project that already onboarded does not reopen the wizard", async ({ page }) => {
     await page.goto(SHELL_PATH);
     await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
