@@ -518,6 +518,21 @@
       await denyQueueItem(ctx, ctx.detail);
       return;
     }
+    // Auto-added (blue) items: Keep confirms it (clears from the queue, entity
+    // stays); Remove undoes the auto-add (deletes the created entity + denies).
+    if (name === "onKeepAutoAddedItem") {
+      const id = ctx.detail?.id || ctx.detail?.item?.id;
+      if (!id) return;
+      await B().ReviewService.resolve(id, "accepted");
+      notify("Kept in your dossier.");
+      return;
+    }
+    if (name === "onRemoveAutoAddedItem") {
+      const id = ctx.detail?.id || ctx.detail?.item?.id;
+      if (!id) return;
+      await denyQueueItem(ctx, { id });
+      return;
+    }
     // Bulk review-queue actions (ported from legacy NarrativeReviewQueue).
     // Detail can be either { ids: [...] } or { chapterId } to resolve all
     // pending items in a chapter.

@@ -248,6 +248,8 @@ const DockedPanel = ({
             onEditQueueItem: (item) => window.LoomwrightDispatchCallback?.("onEditQueueItem", { detail: item, entityType: panel.entityType }),
             onMergeQueueItem: (item) => window.LoomwrightDispatchCallback?.("onMergeQueueItem", { detail: item, entityType: panel.entityType }),
             onDenyQueueItem: (item) => window.LoomwrightDispatchCallback?.("onDenyQueueItem", { detail: item, entityType: panel.entityType }),
+            onKeepAutoAddedItem: (item) => window.LoomwrightDispatchCallback?.("onKeepAutoAddedItem", { detail: item, entityType: panel.entityType }),
+            onRemoveAutoAddedItem: (item) => window.LoomwrightDispatchCallback?.("onRemoveAutoAddedItem", { detail: item, entityType: panel.entityType }),
             onDeleteEntityRequest: (e) => window.LoomwrightDispatchCallback?.("onDeleteEntityRequest", { entityId: e?.id, entityType: panel.entityType }),
             onOpenSourceMention: (m) => window.dispatchEvent(new CustomEvent("lw:open-source-mention", { detail: m })),
           };
@@ -267,6 +269,8 @@ const DockedPanel = ({
                 onEditQueueItem={bespokeProps.onEditQueueItem}
                 onMergeQueueItem={bespokeProps.onMergeQueueItem}
                 onDenyQueueItem={bespokeProps.onDenyQueueItem}
+                onKeepAutoAddedItem={bespokeProps.onKeepAutoAddedItem}
+                onRemoveAutoAddedItem={bespokeProps.onRemoveAutoAddedItem}
                 onBulkAcceptQueueItems={(ids) => window.LoomwrightDispatchCallback?.("onBulkAcceptQueueItems", { detail: { ids }, entityType: panel.entityType })}
                 onBulkDenyQueueItems={(ids) => window.LoomwrightDispatchCallback?.("onBulkDenyQueueItems", { detail: { ids }, entityType: panel.entityType })}
                 onBulkMergeQueueItems={(ids) => window.LoomwrightDispatchCallback?.("onBulkMergeQueueItems", { detail: { ids }, entityType: panel.entityType })}
