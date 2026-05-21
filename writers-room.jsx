@@ -539,6 +539,9 @@ const FloatingSelectionToolbar = ({ x, y, onAction, onCreateEntityFromSelection,
       <button className="wr-fst__btn" title="Add paragraph note" onClick={() => onAction("comment")}><Icon name="bell" size={13}/></button>
       <span className="wr-fst__sep"/>
       <button className="wr-fst__btn" data-callback="onLinkEntity" title="Link to entity" onClick={onLinkEntity}><Icon name="link" size={13}/></button>
+      <button className="wr-fst__btn" title="Extract entities from selection" onClick={() => onAction("extract-selection")}>
+        <Icon name="sparkle" size={12}/>Extract
+      </button>
       <button className="wr-fst__btn wr-fst__btn--strong" data-callback="onCreateEntityFromSelection" title="Create entity from selection" onClick={onCreateEntityFromSelection}>
         <Icon name="plus" size={11}/>New entity
       </button>
@@ -1599,7 +1602,32 @@ const WritersRoomScreen = ({
     }
   }, []);
 
+  // Chapter Extraction from a highlighted passage. Runs in the background
+  // off the local ExtractionService; discovered candidates carry this
+  // chapter's id, so they surface in the Current Chapter Context panel and
+  // the global review queue. No AI required.
+  const onExtractSelection = _wrUC(async () => {
+    let text = "";
+    try {
+      const sel = window.getSelection && window.getSelection();
+      if (sel && !sel.isCollapsed && bodyRef.current && bodyRef.current.contains(sel.anchorNode)) {
+        text = String(sel.toString()).replace(/\s+/g, " ").trim();
+      }
+    } catch (_e) {}
+    const toast = (message) => window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message } }));
+    if (!text) { toast("Highlight some text first to extract from it."); return; }
+    const B = window.LoomwrightBackend;
+    if (!B || !B.ExtractionService) return;
+    toast("Extracting from selection… results appear in the review queue.");
+    try {
+      window.__LW_WIZARD_SELECTION__ = { text, chapterId: activeId };
+      await B.ExtractionService.runExtraction({ chapterId: activeId, text, scope: "selection" });
+      toast("Selection extracted.");
+    } catch (_e) { toast("Selection extraction failed."); }
+  }, [activeId]);
+
   const onToolbarAction = _wrUC((action) => {
+    if (action === "extract-selection") { onExtractSelection(); return; }
     if (action === "create-entity") { onCreateEntityFromSelection(); return; }
     if (action === "link-entity") { onLinkEntity(); return; }
     if (action === "inline-note" || action === "comment") { onAddNote(); return; }
@@ -1609,7 +1637,7 @@ const WritersRoomScreen = ({
       if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
       return;
     }
-  }, [onCreateEntityFromSelection, onLinkEntity, onAddNote, canvasState, onSetSyncState]);
+  }, [onExtractSelection, onCreateEntityFromSelection, onLinkEntity, onAddNote, canvasState, onSetSyncState]);
 
   const onToggleFocusMode  = _wrUC(() => setL((p) => ({ ...p, writingLayoutMode: p.writingLayoutMode === "clean" ? "full" : "clean" })), [setL]);
   const onSelectAuthor     = _wrUC((id) => {

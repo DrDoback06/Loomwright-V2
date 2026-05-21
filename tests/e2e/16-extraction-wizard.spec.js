@@ -46,6 +46,23 @@ test.describe("T16. Entity Extraction Wizard", () => {
     expect(await page.locator("[data-testid='wizard-stream-row']").count()).toBeGreaterThan(0);
   });
 
+  test("selection scope extracts only the highlighted passage", async ({ page }) => {
+    await openFreshApp(page);
+    // The Writer's Room "Extract" toolbar action captures the selection into
+    // window.__LW_WIZARD_SELECTION__; simulate that, then run selection scope.
+    await page.evaluate(() => {
+      window.__LW_WIZARD_SELECTION__ = { text: "Theron crossed into Hesselmark and raised the Sunblade.", chapterId: "wz-sel" };
+    });
+    await page.evaluate(() => window.LoomwrightDispatchCallback("onOpenExtractionWizard", { detail: { scope: "selection" } }));
+    await expect(page.locator("[data-testid='extraction-wizard']")).toBeVisible({ timeout: 5000 });
+    await page.locator("[data-testid='wizard-start']").click();
+    await expect(page.locator("[data-testid='wizard-review']")).toBeVisible({ timeout: 15000 });
+    const cands = await page.evaluate(() =>
+      window.LoomwrightBackend.ReviewService.listSync().filter((q) => q.chapterId === "wz-sel"));
+    expect(cands.length).toBeGreaterThan(0);
+    expect(cands.some((c) => c.entityType === "cast" || c.entityType === "locations")).toBe(true);
+  });
+
   test("clicking Review opens the review queue panel", async ({ page }) => {
     await openFreshApp(page);
     await seedManuscript(page);
