@@ -678,9 +678,11 @@
       try { await ProjectIntelService.mergeFromOnboarding(data); } catch (_) {}
       const seeded = { cast: 0, chapters: 0, references: 0 };
 
-      // Cast seeds → cast entities.
+      // Cast seeds → cast entities (skip names that already exist so a
+      // re-run doesn't duplicate).
+      const existingCastNames = new Set(EntityService.listSync("cast").map((e) => (e.name || "").toLowerCase()));
       for (const s of (data.cast && data.cast.seeds) || []) {
-        if (!s || !s.name) continue;
+        if (!s || !s.name || existingCastNames.has(s.name.toLowerCase())) continue;
         const aliases = typeof s.aliases === "string"
           ? s.aliases.split(",").map((x) => x.trim()).filter(Boolean)
           : (Array.isArray(s.aliases) ? s.aliases : []);
@@ -689,12 +691,16 @@
             name: s.name, aliases, summary: s.personality || "",
             data: { role: s.role || "", race: s.race || "", class: s.klass || "", faction: s.faction || "", voice: s.voice || "", goals: s.goals || "", fears: s.fears || "", secrets: s.secrets || "", relationships: s.relationships || "", source: "onboarding" },
           }, { status: "active" });
+          existingCastNames.add(s.name.toLowerCase());
           seeded.cast++;
         } catch (_) {}
       }
 
-      // Manuscript → chapters.
+      // Manuscript → chapters. NEVER overwrite existing written chapters — a
+      // re-run of onboarding must not destroy the user's manuscript.
       const m = data.manuscript || {};
+      const existingMcs = (ManuscriptChapterService.loadSync && ManuscriptChapterService.loadSync()) || { chapters: [] };
+      const hasExistingContent = (existingMcs.chapters || []).some((c) => c.bodyText && c.bodyText.trim());
       const chapters = [];
       const addChapter = (title, body) => chapters.push({ id: uuid("ch"), num: chapters.length + 1, title: title || ("Chapter " + (chapters.length + 1)), state: "saved", bodyText: body || "", words: (body || "").trim().split(/\s+/).filter(Boolean).length });
       const src = m.mode === "paste" ? (m.pasted || "") : (m.mode === "upload" ? ((m.uploaded && m.uploaded.content) || "") : "");
@@ -707,27 +713,35 @@
       if (m.reserve && target > chapters.length) {
         for (let n = chapters.length + 1; n <= target; n++) chapters.push({ id: uuid("ch"), num: n, title: "", state: "reserved", bodyText: "", words: 0 });
       }
-      const manuscripts = {};
-      chapters.forEach((c) => { manuscripts[c.id] = { text: c.bodyText, html: "" }; });
-      try { await ManuscriptChapterService.save({ chapters, activeChapterId: chapters[0] && chapters[0].id, manuscripts, trashedChapters: [] }); } catch (_) {}
-      seeded.chapters = chapters.filter((c) => c.state !== "reserved").length;
+      if (!hasExistingContent) {
+        const manuscripts = {};
+        chapters.forEach((c) => { manuscripts[c.id] = { text: c.bodyText, html: "" }; });
+        try { await ManuscriptChapterService.save({ chapters, activeChapterId: chapters[0] && chapters[0].id, manuscripts, trashedChapters: existingMcs.trashedChapters || [] }); } catch (_) {}
+        seeded.chapters = chapters.filter((c) => c.state !== "reserved").length;
+      }
+      const seededChapters = hasExistingContent ? [] : chapters;
 
-      // References (pasted/uploaded) → ReferencesService store.
+      // References (pasted/uploaded) → ReferencesService store, deduped.
+      const existingRefs = await StorageService.get(KEYS.references, []);
+      const refKey = (r) => (r.title || "").toLowerCase() + "|" + (r.content || "").slice(0, 60);
+      const existingRefKeys = new Set((existingRefs || []).map(refKey));
       const newRefs = (((data.references && data.references.items) || []).filter(Boolean)).map((it) => ({
         id: it.id || uuid("ref"), title: it.title || "Reference", content: it.content || "", kind: it.kind || "pasted",
         includedInAIContext: it.context !== false, tags: it.tags || [], createdAt: nowIso(),
-      }));
+      })).filter((r) => !existingRefKeys.has(refKey(r)));
       if (newRefs.length) {
-        try { const cur = await StorageService.get(KEYS.references, []); await StorageService.set(KEYS.references, [...cur, ...newRefs]); window.dispatchEvent(new CustomEvent("lw:references-updated")); seeded.references = newRefs.length; } catch (_) {}
+        try { await StorageService.set(KEYS.references, [...(existingRefs || []), ...newRefs]); window.dispatchEvent(new CustomEvent("lw:references-updated")); seeded.references = newRefs.length; } catch (_) {}
       }
 
-      // AI provider + privacy default (local-first unless the user opted in).
+      // AI provider + tier. "local" → Free tier (local providers like Ollama
+      // only — free, private, no cloud), NOT a hard AI block, so the free
+      // writing tools still work. byok/cloud → save key + normal tier.
       const ai = data.ai || {};
       try {
         if (ai.key && (ai.mode === "byok" || ai.mode === "cloud")) {
           await AIService.saveProviderConfig({ id: ai.provider || "anthropic", providerType: ai.provider || "anthropic", apiKey: ai.key });
         }
-        await AIRoutingService.save({ mode: ai.mode === "local" ? "localOnly" : "balanced" });
+        await AIRoutingService.save({ mode: "balanced", tier: ai.mode === "local" ? "free" : "normal" });
       } catch (_) {}
 
       // Extraction preferences from the Review step.
@@ -738,10 +752,26 @@
         } catch (_) {}
       }
 
+      // Custom stats the author defined → real Stats entities (deduped).
+      const existingStatNames = new Set(EntityService.listSync("stats").map((e) => (e.name || "").toLowerCase()));
+      for (const cs of (data.rpg && data.rpg.customStats) || []) {
+        if (!cs || !cs.name || existingStatNames.has(cs.name.toLowerCase())) continue;
+        try {
+          await EntityService.save("stats", { name: cs.name, data: { min: cs.min, max: cs.max, default: cs.def, source: "onboarding" } }, { status: "active" });
+          existingStatNames.add(cs.name.toLowerCase());
+          seeded.stats = (seeded.stats || 0) + 1;
+        } catch (_) {}
+      }
+
+      // Persist workspace preferences + the RPG system config so they survive
+      // (startTab drives routing below; the rest is read by their own areas).
+      try { if (data.workspace) await SettingsService.saveSection("workspace", { ...data.workspace }); } catch (_) {}
+      try { if (data.rpg) await SettingsService.saveSection("rpg", { template: data.rpg.template, toggles: data.rpg.toggles || {}, suggestExamples: data.rpg.suggestExamples !== false }); } catch (_) {}
+
       await this.setStatus("complete");
 
       if (m.runExtraction) {
-        for (const c of chapters.filter((ch) => ch.bodyText && ch.bodyText.trim())) {
+        for (const c of seededChapters.filter((ch) => ch.bodyText && ch.bodyText.trim())) {
           try { await ExtractionService.runExtraction({ chapterId: c.id, text: c.bodyText, deep: false }); } catch (_) {}
         }
       }
@@ -758,7 +788,7 @@
   // onboarding.style.tone) so only canon rules ever populated.
   function deriveIntelFromOnboarding(ob) {
     ob = ob || {};
-    const w = ob.welcome || {}, f = ob.foundation || {}, st = ob.style || {}, world = ob.world || {}, voice = ob.voice || {};
+    const w = ob.welcome || {}, f = ob.foundation || {}, st = ob.style || {}, world = ob.world || {}, voice = ob.voice || {}, plot = ob.plot || {};
     const join = (a) => (Array.isArray(a) ? a.filter(Boolean).join(", ") : (a || ""));
     const foundationParts = [];
     if (w.title) foundationParts.push("Title: " + w.title);
@@ -769,6 +799,11 @@
     if (f.coreConflict) foundationParts.push("Core conflict: " + f.coreConflict);
     if (f.themes && f.themes.length) foundationParts.push("Themes: " + join(f.themes));
     if (f.readerExperience) foundationParts.push("Reader experience: " + f.readerExperience);
+    if (f.comparables) foundationParts.push("Comparables: " + f.comparables);
+    if (f.isNot) foundationParts.push("What it is NOT: " + f.isNot);
+    // Planned arc — so the AI knows where the story is heading.
+    const beats = Array.isArray(plot.beats) ? plot.beats.filter((b) => b && (b.title || b.summary)) : [];
+    if (beats.length) foundationParts.push("Planned beats:\n" + beats.slice(0, 20).map((b, i) => `  ${i + 1}. ${b.title || ""}${b.summary ? " — " + b.summary : ""}`).join("\n"));
     const styleParts = [];
     if (st.narratorTone) styleParts.push("Narrator tone: " + st.narratorTone);
     if (f.toneWords && f.toneWords.length) styleParts.push("Tone words: " + join(f.toneWords));

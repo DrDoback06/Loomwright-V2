@@ -33,6 +33,24 @@ CHROMIUM_PATH=/path/to/chrome npm run test:e2e -- 18-onboarding   # 6 tests
 ```
 Manual: `npm run dev` on a fresh project → wizard appears → fill it (Cast → "Import from pasted text" to extract seeds; Voice → "Analyze") → "Open the door" → land in the Writer's Room with cast, chapters, references seeded and the style/canon captured for the AI.
 
+## Robustness audit pass — fixes applied
+
+An independent audit flagged data-loss and feature gaps; all fixed:
+- **Re-completion no longer destroys work.** `applyCompletion` never overwrites
+  existing written chapters (guards on existing content), and dedupes cast (by
+  name) + references — so reopening onboarding and finishing again is safe.
+  Smoke: re-completion preserves chapters + doesn't duplicate cast.
+- **AI "local" → Free tier, not a hard block.** Was mapping to `localOnly`
+  (which blocks *all* AI, including free local Ollama). Now maps to the Free
+  tier (local providers only) so the free writing tools work while cloud stays
+  off. Smoke covers it.
+- **First-run gate won't override an existing project** — only auto-opens when
+  status is "pending" AND the project has no cast/chapters.
+- **No more dead data.** Every captured answer is now consumed:
+  `foundation.comparables`/`isNot` and `plot.beats` flow into project
+  intelligence (the AI sees the planned arc); `rpg.customStats` seed real Stats
+  entities; `workspace.*` and the `rpg` system config persist to settings.
+
 ## Deferred from Area 2 (tracked in DEFERRED_BACKLOG.md)
 - **Genre RPG entity templates** (seed example classes/races/stats from the chosen genre/template) → RPG depth area; the choice is captured.
 - **"Import existing project"** start option (welcome.start === "import") has no file-import flow wired in onboarding yet → wire to `ProjectArchiveService.applyImport`.

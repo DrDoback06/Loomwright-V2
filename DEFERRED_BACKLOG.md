@@ -19,13 +19,17 @@ display/seed wiring, not a rebuild.
   extraction-quality pass.
 
 ## From Area 2 — Onboarding
-- **Genre RPG entity templates** — seed example classes/races/stats from the
-  chosen genre/template. Choice is captured in answers + intel. → **RPG depth**.
+- **Genre RPG entity templates** — seed example classes/races/abilities from the
+  chosen genre/template. The template + toggles + custom stats are captured and
+  persisted (custom stats already seed real Stats entities). → **RPG depth**.
 - **"Import existing project"** — the Welcome "import" start option has no
   file-import flow in onboarding; wire it to `ProjectArchiveService.applyImport`.
   → onboarding follow-up / Project I/O.
-- **Deeper AI style critique** of the voice sample beyond local metrics. →
-  **AI Writer area**.
+- **Apply workspace.* layout prefs** — editorWidth/font/margins/panelStack etc.
+  are now persisted to the `workspace` settings section, but the Writer's Room
+  doesn't yet read them (startTab IS used for routing). → **Writers Room polish**.
+- **Deeper AI style critique** of the voice sample beyond the local metrics
+  (which are implemented). → **AI Writer area**.
 
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).

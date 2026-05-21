@@ -1323,8 +1323,12 @@ async function main() {
     references: { items: [{ id: "r1", title: "House Vey", content: "Pedigree notes for House Vey.", kind: "pasted", context: true }] },
     ai: { mode: "local", provider: "anthropic", allowEgress: false },
     review: { autoAddHigh: true, showAutoInQueue: true, aggressiveness: 1, scan: { cast: true, locations: true } },
-    workspace: { startTab: "writers-room" },
+    workspace: { startTab: "writers-room", font: "EB Garamond" },
+    plot: { beats: [{ id: "pb1", title: "Inciting incident", summary: "The relic is stolen." }], targetChapters: 0 },
+    rpg: { template: "Grimdark", customStats: [{ id: "cs1", name: "Resolve", min: 1, max: 20, def: 10 }], toggles: { stats: true } },
   };
+  obAnswers.foundation.comparables = "The First Law";
+  obAnswers.foundation.isNot = "cozy";
   const obResult = await B.OnboardingService.applyCompletion(obAnswers);
   log("[ob] applyCompletion marks onboarding complete", B.OnboardingService.statusSync() === "complete");
   log("[ob] seeds cast from seeds", B.EntityService.listSync("cast").some((e) => e.name === "Aelinor Vey"));
@@ -1337,7 +1341,19 @@ async function main() {
   log("[ob] intel projectFoundation derived from premise", /reluctant heir/.test(obIntel.projectFoundation || ""));
   log("[ob] intel writingStyleGuide derived from style", /dry|short sentences/.test(obIntel.writingStyleGuide || ""));
   log("[ob] intel canonRules flattened (not nested)", Array.isArray(obIntel.canonRules) && obIntel.canonRules[0] === "Magic costs blood");
+  log("[ob] intel includes comparables + isNot", /The First Law/.test(obIntel.projectFoundation || "") && /cozy/.test(obIntel.projectFoundation || ""));
+  log("[ob] intel includes the planned plot beats", /Inciting incident/.test(obIntel.projectFoundation || ""));
+  log("[ob] custom stats seeded as Stats entities", B.EntityService.listSync("stats").some((e) => e.name === "Resolve"));
+  log("[ob] workspace + rpg prefs persisted to settings", B.SettingsService.getSectionSync("workspace", {}).font === "EB Garamond" && B.SettingsService.getSectionSync("rpg", {}).template === "Grimdark");
   log("[ob] applyCompletion reports a destination", !!obResult.dest);
+  log("[ob] local AI mode maps to Free tier (not a hard block)", B.AIRoutingService.loadSync().tier === "free" && B.AIRoutingService.loadSync().mode !== "localOnly");
+  // Re-completion safety: must not duplicate cast or clobber written chapters.
+  const obCastBefore = B.EntityService.listSync("cast").length;
+  const obChBefore = (B.ManuscriptChapterService.loadSync().chapters || []).length;
+  await B.OnboardingService.applyCompletion(obAnswers);
+  const obChAfter = (B.ManuscriptChapterService.loadSync().chapters || []).map((c) => c.bodyText || "");
+  log("[ob] re-completion does not duplicate cast", B.EntityService.listSync("cast").length === obCastBefore, `${obCastBefore} -> ${B.EntityService.listSync("cast").length}`);
+  log("[ob] re-completion preserves existing chapters", obChAfter.length === obChBefore && obChAfter.some((b) => b.includes("Hesselmark")));
   const styleProfile = B.analyzeWritingStyle("The wolf ran fast. It was a long, careful, deliberate hunt across the frozen waste, and nothing stirred for hours. \"Wait,\" she whispered.");
   log("[ob] analyzeWritingStyle computes real metrics", !!styleProfile && styleProfile.avgSentenceLen > 0 && !!styleProfile.register && !!styleProfile.pacing);
   await B.ProjectIntelService.mergeFromOnboarding({ voice: { profile: { avgSentenceLen: 14, register: "direct", pacing: "balanced", lexicalDiversity: 60, dialogueRatio: 20 } } });

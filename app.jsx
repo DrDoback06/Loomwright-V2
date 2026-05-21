@@ -131,8 +131,18 @@ const AppShell = () => {
     const B = () => window.LoomwrightBackend;
     const firstRun = () => {
       try {
-        const OS = B() && B().OnboardingService;
-        if (OS && OS.statusSync() === "pending") setOnboarding({ open: true, initial: OS.loadSync({}) });
+        const bk = B();
+        const OS = bk && bk.OnboardingService;
+        if (!OS || OS.statusSync() !== "pending") return;
+        // Don't force onboarding over an existing project (storage with data
+        // but a missing/legacy status key).
+        let hasData = false;
+        try {
+          const cast = bk.EntityService ? bk.EntityService.listSync("cast").length : 0;
+          const chs = bk.ManuscriptChapterService ? (bk.ManuscriptChapterService.loadSync().chapters || []).some((c) => c.bodyText && c.bodyText.trim()) : false;
+          hasData = cast > 0 || chs;
+        } catch (_e) {}
+        if (!hasData) setOnboarding({ open: true, initial: OS.loadSync({}) });
       } catch (_e) {}
     };
     if (window.LoomwrightBackend) firstRun();
