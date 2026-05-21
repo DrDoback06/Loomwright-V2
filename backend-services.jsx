@@ -3049,6 +3049,39 @@
     return result;
   }
 
+  // Compact "author's rules" context assembled from onboarding answers +
+  // project intelligence, injected into AI prompts so any model — including
+  // free/local ones like Ollama — follows the same premise, tone, POV,
+  // canon, and forbidden-terms rules. Bounded; never includes secrets.
+  function buildAuthorContext(opts = {}) {
+    const maxChars = opts.maxChars || 1200;
+    let ob = {}; try { ob = OnboardingService.loadSync({}) || {}; } catch (_) {}
+    let intel = {}; try { intel = ProjectIntelService.loadSync({}) || {}; } catch (_) {}
+    const w = ob.welcome || {}, f = ob.foundation || {}, st = ob.style || {}, world = ob.world || {};
+    const lines = [];
+    const add = (label, val) => {
+      const s = Array.isArray(val) ? val.filter(Boolean).join(", ") : (val == null ? "" : String(val).trim());
+      if (s) lines.push(label + ": " + s);
+    };
+    add("Title", w.title);
+    add("Genre", [w.genre, w.subgenre].filter(Boolean).join(" / "));
+    add("Audience", w.audience);
+    add("Premise", f.premise || f.logline);
+    add("Themes", f.themes);
+    add("Tone", [].concat(f.toneWords || [], st.narratorTone || []));
+    add("POV / tense", [f.pov, f.tense].filter(Boolean).join(", "));
+    add("Style signature", st.signature);
+    add("Avoid", st.avoid);
+    add("Canon rules", world.canonRules);
+    add("Forbidden terms", world.forbidden);
+    add("Terminology", world.terminology);
+    add("Project foundation", intel.projectFoundation);
+    add("Writing style guide", intel.writingStyleGuide);
+    let out = lines.join("\n");
+    if (out.length > maxChars) out = out.slice(0, maxChars) + "…";
+    return out;
+  }
+
   const ExtractionService = {
     loadSessionSync() {
       return StorageService.getSync(KEYS.extractionSession, { status: "idle", items: [] });
@@ -3118,12 +3151,14 @@
           .filter(Boolean)
           .slice(0, 50)
           .join(", ");
+        const authorCtx = buildAuthorContext();
+        const rulesBlock = authorCtx ? `\nAuthor's project rules (respect these when naming/classifying entities):\n${authorCtx}\n` : "";
         for (const chunk of chunks) {
           if (isAborted()) break;
           report("ai", { chunkIndex: chunk.index, chunkCount: chunks.length });
           const promptHeader = deep
             ? `You are a canon extraction system for a long-form story. Analyze this chapter chunk and extract narrative elements across every domain.
-
+${rulesBlock}
 Chapter chunk ${chunk.index + 1}/${chunks.length}:
 ---
 ${chunk.text}
@@ -3147,7 +3182,7 @@ Extract into these categories (each item has a confidence 0-1):
 
 Return valid JSON only.`
             : `Analyze the following chapter chunk and extract notable named entities.
-
+${rulesBlock}
 Chunk ${chunk.index + 1}/${chunks.length}:
 ${chunk.text}
 
@@ -5091,6 +5126,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     ExtractionService,
     discoverEntities,
     extractProperNounSpans,
+    buildAuthorContext,
     OccurrenceService,
     isOccurrenceStale,
     SampleProjectService,

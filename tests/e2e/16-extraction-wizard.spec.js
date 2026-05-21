@@ -30,6 +30,9 @@ test.describe("T16. Entity Extraction Wizard", () => {
     // Wizard window appears with a scope selector.
     await expect(page.locator("[data-testid='extraction-wizard']")).toBeVisible({ timeout: 5000 });
     await expect(page.locator("[data-testid='wizard-scope-manuscript']")).toBeVisible();
+    // Quick (free, local) and Deep AI methods are both offered.
+    await expect(page.locator("[data-testid='wizard-mode-quick']")).toBeVisible();
+    await expect(page.locator("[data-testid='wizard-mode-deep']")).toBeVisible();
 
     // Start the run; it should reach a completed state with a Review button.
     await page.locator("[data-testid='wizard-start']").click();

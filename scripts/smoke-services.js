@@ -1194,6 +1194,19 @@ async function main() {
   log("[ai] extraction skips AI in Local-only mode", exLocal.session.aiUsed === false);
   await Routing.save({ mode: "balanced" });
 
+  // Author context: onboarding answers must surface so any model follows the rules.
+  await B.OnboardingService.save({
+    welcome: { title: "The Salt Reach", genre: "Grimdark fantasy" },
+    foundation: { premise: "A reluctant heir hunts a stolen relic.", pov: "third-limited", tense: "past", toneWords: ["bleak", "wry"] },
+    style: { narratorTone: "dry", signature: "short, punchy sentences", avoid: "purple prose" },
+    world: { canonRules: ["Magic always costs blood"], forbidden: ["modern slang"] },
+  });
+  const authorCtx = B.buildAuthorContext();
+  log("[ai] buildAuthorContext includes premise", /reluctant heir/.test(authorCtx));
+  log("[ai] buildAuthorContext includes style + canon rules", /short, punchy/.test(authorCtx) && /blood/.test(authorCtx));
+  log("[ai] buildAuthorContext includes POV and forbidden", /third-limited/.test(authorCtx) && /modern slang/.test(authorCtx));
+  await B.OnboardingService.save({}); // restore clean onboarding state for later tests
+
   // Context builder.
   const cChap = await B.ManuscriptChapterService.createFromComposition({ title: "Ctx Chapter", bodyText: "Hess crossed the salt marsh at dawn." });
   await B.EntityService.save("cast", { name: "Hess Vaela", data: { summary: "Bearer of the Auger." } });

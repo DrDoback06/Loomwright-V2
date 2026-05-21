@@ -27,6 +27,7 @@ function ewChapterText(data, id) {
 
 const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null, initialChapterId = null, onClose }) => {
   const [scope, setScope] = _ewUS(initialScope);
+  const [mode, setMode] = _ewUS("quick"); // quick (local, free) | deep (BYOK AI)
   const [phase, setPhase] = _ewUS("setup"); // setup | running | complete | cancelled | error
   const [streamed, setStreamed] = _ewUS([]);
   const [counts, setCounts] = _ewUS({});
@@ -34,7 +35,7 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
   const abortRef = _ewUR(null);
 
   _ewUE(() => {
-    if (open) { setScope(initialScope || "manuscript"); setPhase("setup"); setStreamed([]); setCounts({}); setNote(""); }
+    if (open) { setScope(initialScope || "manuscript"); setMode("quick"); setPhase("setup"); setStreamed([]); setCounts({}); setNote(""); }
   }, [open, initialScope]);
 
   // Allow an external cancel (e.g. a registry-dispatched onCancelExtraction).
@@ -96,17 +97,20 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
       for (let i = 0; i < targets.length; i++) {
         if (ctrl.signal.aborted) break;
         setNote(targets.length > 1 ? ("Reading " + (i + 1) + " of " + targets.length + ": " + targets[i].title) : targets[i].title);
-        await B.ExtractionService.runExtraction({ chapterId: targets[i].id, text: targets[i].text, deep: false, scope: "wizard", onProgress, signal: ctrl.signal });
+        await B.ExtractionService.runExtraction({ chapterId: targets[i].id, text: targets[i].text, deep: mode === "deep", scope: "wizard", onProgress, signal: ctrl.signal });
       }
       setPhase(ctrl.signal.aborted ? "cancelled" : "complete");
     } catch (e) {
       setPhase("error"); setNote((e && e.message) || "Extraction failed.");
     }
-  }, [resolveTargets, typeFocus, scope]);
+  }, [resolveTargets, typeFocus, scope, mode]);
 
   if (!open) return null;
   const total = streamed.length;
   const ENTYPES = window.ENTITY_TYPES || {};
+  let deepRoute = null;
+  try { deepRoute = window.LoomwrightBackend?.AIRoutingService?.resolveRoute?.("deepExtraction") || null; } catch (_) { deepRoute = null; }
+  const usingAI = mode === "deep" && !!deepRoute;
   const openReview = () => { window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onOpenReviewQueue" } })); if (onClose) onClose(); };
   const cancelRun = () => { if (abortRef.current) abortRef.current.abort(); };
 
@@ -126,7 +130,7 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
             </div>
             <div className="exm__title-meta">
               <span className="chip">{typeFocus ? ((ENTYPES[typeFocus] && ENTYPES[typeFocus].label) || typeFocus).toUpperCase() : "ALL TYPES"}</span>
-              <span className="chip">LOCAL</span>
+              <span className="chip">{usingAI ? "AI" : "LOCAL"}</span>
               {note && <span>· {note}</span>}
             </div>
           </div>
@@ -156,6 +160,28 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
               {scope === "manuscript" && "Reads every chapter in order and streams discovered entities into the review queue."}
               {scope === "chapter" && "Reads only the current chapter."}
               {scope === "selection" && "Reads only the passage you highlighted in the Writer's Room."}
+            </p>
+
+            <div className="exm__col-title" style={{ marginTop: 14 }}>Method</div>
+            <div style={{ display: "flex", gap: 8, margin: "10px 0 4px", flexWrap: "wrap" }}>
+              {[["quick", "Quick · local, free"], ["deep", "Deep AI extraction"]].map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  data-testid={"wizard-mode-" + val}
+                  aria-pressed={mode === val}
+                  onClick={() => setMode(val)}
+                  style={{ padding: "8px 14px", borderRadius: 10, cursor: "pointer", border: "1px solid var(--line, #d8cdb6)", background: mode === val ? "var(--accent, #b08a3e)" : "transparent", color: mode === val ? "#fff" : "inherit", fontWeight: 600 }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p style={{ opacity: 0.7, fontSize: 13, marginTop: 10 }}>
+              {mode === "quick" && "Fast, deterministic, runs entirely on your device. No tokens, no cost."}
+              {mode === "deep" && (deepRoute
+                ? ("Uses your configured AI (" + deepRoute.providerId + (deepRoute.model ? " · " + deepRoute.model : "") + ") for a deeper, multi-domain read. Your project's style and canon are sent so the model follows your rules.")
+                : "No AI provider configured — Deep will run locally for now. Add a provider in Settings (a local Ollama model is free) to enable AI-deep extraction.")}
             </p>
           </div>
         ) : (
