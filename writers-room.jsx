@@ -119,13 +119,11 @@ const ChapterNode = ({
       tabIndex={reserved ? -1 : 0}
       onClick={() => !reserved && onSelect && onSelect(chapter.id)}
       onContextMenu={handleContext}
-      draggable={!reserved}
     >
       {reserved ? (
         <>
           <div className="wr-node__top">
             <span className="wr-node__num">CH. {String(chapter.num).padStart(2, "0")}</span>
-            <span className="wr-node__grip" aria-hidden><Icon name="grip" size={10}/></span>
           </div>
           <div className="wr-node__reserved-mark">∅</div>
           <div className="wr-node__meta">
@@ -136,7 +134,6 @@ const ChapterNode = ({
         <>
           <div className="wr-node__top">
             <span className="wr-node__num">CH. {String(chapter.num).padStart(2, "0")}</span>
-            <span className="wr-node__grip" aria-hidden><Icon name="grip" size={10}/></span>
           </div>
           <div className="wr-node__title">{chapter.title || "Untitled"}</div>
           <div className="wr-node__meta">
@@ -385,50 +382,55 @@ const ManuscriptToolbar = ({
   attribution = true, focusMode = false,
   onToggleFocusMode, onToggleAttribution, onToggleSpellcheck, onToggleGrammar, onToggleStyle, onToggleVoice, onToggleRevision,
 }) => {
-  const TB = ({ icon, label, active, onClick, children, className = "" }) => (
+  // disabled buttons stay visible but are clearly non-interactive with a
+  // reason in the tooltip (UAT #7 — no fake controls left clickable).
+  const TB = ({ icon, label, active, onClick, children, className = "", disabled = false, testid }) => (
     <button
       type="button"
       className={"wr-toolbar__btn " + className + (active ? " is-active" : "")}
-      title={label}
+      title={disabled ? label + " — not available in this beta" : label}
       aria-label={label}
+      aria-disabled={disabled || undefined}
       onClick={onClick}
+      disabled={disabled}
+      data-testid={testid}
     >{icon ? <Icon name={icon} size={13}/> : children}</button>
   );
 
   return (
     <div className="wr-toolbar" data-ui="ManuscriptToolbar" role="toolbar" aria-label="Manuscript formatting">
       <div className="wr-toolbar__group">
-        <TB label="Bold (⌘B)"           className="wr-toolbar__btn--text"      onClick={() => onAction("bold")}><b>B</b></TB>
-        <TB label="Italic (⌘I)"         className="wr-toolbar__btn--text wr-toolbar__btn--italic" onClick={() => onAction("italic")}><i>I</i></TB>
-        <TB label="Underline (⌘U)"      className="wr-toolbar__btn--text wr-toolbar__btn--underline" onClick={() => onAction("underline")}>U</TB>
-        <TB label="Strikethrough"       className="wr-toolbar__btn--text wr-toolbar__btn--strike" onClick={() => onAction("strike")}>S</TB>
+        <TB label="Bold (⌘B)"           testid="wr-tb-bold"      className="wr-toolbar__btn--text"      onClick={() => onAction("bold")}><b>B</b></TB>
+        <TB label="Italic (⌘I)"         testid="wr-tb-italic"    className="wr-toolbar__btn--text wr-toolbar__btn--italic" onClick={() => onAction("italic")}><i>I</i></TB>
+        <TB label="Underline (⌘U)"      testid="wr-tb-underline" className="wr-toolbar__btn--text wr-toolbar__btn--underline" onClick={() => onAction("underline")}>U</TB>
+        <TB label="Strikethrough"       testid="wr-tb-strike"    className="wr-toolbar__btn--text wr-toolbar__btn--strike" onClick={() => onAction("strike")}>S</TB>
       </div>
       <div className="wr-toolbar__group">
-        <TB label="Heading"             className="wr-toolbar__btn--text" onClick={() => onAction("heading")}>H</TB>
-        <TB label="Scene break"         icon="bars" onClick={() => onAction("scene-break")}/>
-        <TB label="Quote"               className="wr-toolbar__btn--text" onClick={() => onAction("quote")}>"</TB>
+        <TB label="Heading"             disabled className="wr-toolbar__btn--text">H</TB>
+        <TB label="Scene break"         disabled icon="bars"/>
+        <TB label="Quote"               disabled className="wr-toolbar__btn--text">"</TB>
       </div>
       <div className="wr-toolbar__group">
-        <TB label="Inline note"         icon="paper" onClick={() => onAction("inline-note")}/>
-        <TB label="Comment"             icon="bell" onClick={() => onAction("comment")}/>
-        <TB label="Highlight"           icon="drop" onClick={() => onAction("highlight")}/>
+        <TB label="Add paragraph note"  testid="wr-tb-note" icon="paper" onClick={() => onAction("inline-note")}/>
+        <TB label="Add paragraph note (comment)" icon="bell" onClick={() => onAction("comment")}/>
+        <TB label="Highlight"           disabled icon="drop"/>
       </div>
       <div className="wr-toolbar__group">
         <TB label="Link to entity"      icon="link" onClick={() => onAction("link-entity")}/>
         <TB label="Create entity from selection" icon="plus" onClick={() => onAction("create-entity")}/>
-        <TB label="Insert reference"    icon="bookmark" onClick={() => onAction("insert-ref")}/>
-        <TB label="Insert footnote"     icon="paper" onClick={() => onAction("footnote")}/>
+        <TB label="Insert reference"    disabled icon="bookmark"/>
+        <TB label="Insert footnote"     disabled icon="paper"/>
       </div>
       <div className="wr-toolbar__group">
-        <TB label="Find / replace (⌘F)" icon="search" onClick={() => onAction("find")}/>
+        <TB label="Find / replace"      disabled icon="search"/>
         <TB label="Spellcheck"   active={spellcheck} className="wr-toolbar__btn--small" onClick={onToggleSpellcheck}>SP</TB>
-        <TB label="Grammar"      active={grammar}    className="wr-toolbar__btn--small" onClick={onToggleGrammar}>GR</TB>
-        <TB label="Style"        active={style}      className="wr-toolbar__btn--small" onClick={onToggleStyle}>ST</TB>
-        <TB label="Voice consistency" active={voice} className="wr-toolbar__btn--small" onClick={onToggleVoice}>VO</TB>
+        <TB label="Grammar (preference)"      active={grammar}    className="wr-toolbar__btn--small" onClick={onToggleGrammar}>GR</TB>
+        <TB label="Style (preference)"        active={style}      className="wr-toolbar__btn--small" onClick={onToggleStyle}>ST</TB>
+        <TB label="Voice consistency (preference)" active={voice} className="wr-toolbar__btn--small" onClick={onToggleVoice}>VO</TB>
       </div>
       <div className="wr-toolbar__group">
-        <TB label="Thesaurus"           icon="book" onClick={() => onAction("thesaurus")}/>
-        <TB label="Revision mode"       active={revision}    className="wr-toolbar__btn--small" onClick={onToggleRevision}>REV</TB>
+        <TB label="Thesaurus"           disabled icon="book"/>
+        <TB label="Revision mode (preference)"       active={revision}    className="wr-toolbar__btn--small" onClick={onToggleRevision}>REV</TB>
         <TB label="Author attribution"  active={attribution} className="wr-toolbar__btn--small" onClick={onToggleAttribution}>AUT</TB>
         <TB label="Focus mode"          active={focusMode}   icon="eye" onClick={onToggleFocusMode}/>
       </div>
@@ -474,24 +476,53 @@ const SaveModeControls = ({ onSave, onSaveAndExtract, onSaveAndDeepExtract, sync
 // AuthorSelector
 // ---------------------------------------------------------------------
 const AuthorSelector = ({ authors, activeId, onSelectAuthor }) => {
-  const a = authors.find((x) => x.id === activeId) || authors[0];
+  const list = (authors && authors.length) ? authors : [{ id: "you", name: "You", initials: "Y", color: "var(--accent)" }];
+  const a = list.find((x) => x.id === activeId) || list[0];
+  const [open, setOpen] = _wrUS(false);
+  const ref = _wrUR(null);
+  _wrUE(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const initials = (x) => x.initials || (x.name || "?").slice(0, 2).toUpperCase();
   return (
-    <button
-      className="wr-author-sel"
-      data-ui="AuthorSelector"
-      data-callback="onSelectAuthor"
-      data-testid="wr-author-selector"
-      onClick={() => {
-        const i = authors.findIndex((x) => x.id === activeId);
-        const next = authors[(i + 1) % authors.length];
-        onSelectAuthor && onSelectAuthor(next.id);
-      }}
-      title="Switch active author"
-    >
-      <span className="wr-author-sel__chip" style={{ "--ac": a.color }}>{a.initials}</span>
-      <span>{a.name}</span>
-      <Icon name="chevron-d" size={11}/>
-    </button>
+    <div className="wr-author-sel-wrap" ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        className="wr-author-sel"
+        data-ui="AuthorSelector"
+        data-testid="wr-author-selector"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        title="Active author"
+      >
+        <span className="wr-author-sel__chip" style={{ "--ac": a.color }}>{initials(a)}</span>
+        <span>{a.name}</span>
+        <Icon name="chevron-d" size={11}/>
+      </button>
+      {open && (
+        <div className="wr-author-pop" data-ui="AuthorSelectorPopover" role="listbox">
+          {list.map((x) => (
+            <button
+              key={x.id}
+              type="button"
+              role="option"
+              aria-selected={x.id === a.id}
+              className={"wr-author-pop__item " + (x.id === a.id ? "is-active" : "")}
+              data-testid={"wr-author-option-" + x.id}
+              onClick={() => { onSelectAuthor && onSelectAuthor(x.id); setOpen(false); }}
+            >
+              <span className="wr-author-sel__chip" style={{ "--ac": x.color }}>{initials(x)}</span>
+              <span>{x.name}</span>
+            </button>
+          ))}
+          <div className="wr-author-pop__hint">Manage authors in Settings → Authors.</div>
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -500,13 +531,12 @@ const AuthorSelector = ({ authors, activeId, onSelectAuthor }) => {
 // ---------------------------------------------------------------------
 const FloatingSelectionToolbar = ({ x, y, onAction, onCreateEntityFromSelection, onLinkEntity }) => {
   return (
-    <div className="wr-fst" style={{ left: x, top: y }} data-ui="FloatingSelectionToolbar">
+    <div className="wr-fst" style={{ left: x, top: y, position: "fixed" }} data-ui="FloatingSelectionToolbar" onMouseDown={(e) => e.preventDefault()}>
       <button className="wr-fst__btn" title="Bold" onClick={() => onAction("bold")}><b>B</b></button>
       <button className="wr-fst__btn" title="Italic" onClick={() => onAction("italic")}><i>I</i></button>
       <button className="wr-fst__btn" title="Underline" onClick={() => onAction("underline")}>U</button>
       <span className="wr-fst__sep"/>
-      <button className="wr-fst__btn" title="Highlight" onClick={() => onAction("highlight")}><Icon name="drop" size={13}/></button>
-      <button className="wr-fst__btn" title="Comment" onClick={() => onAction("comment")}><Icon name="bell" size={13}/></button>
+      <button className="wr-fst__btn" title="Add paragraph note" onClick={() => onAction("comment")}><Icon name="bell" size={13}/></button>
       <span className="wr-fst__sep"/>
       <button className="wr-fst__btn" data-callback="onLinkEntity" title="Link to entity" onClick={onLinkEntity}><Icon name="link" size={13}/></button>
       <button className="wr-fst__btn wr-fst__btn--strong" data-callback="onCreateEntityFromSelection" title="Create entity from selection" onClick={onCreateEntityFromSelection}>
@@ -528,7 +558,12 @@ const FloatingEntityChip = ({ entity, x, y, onOpenEntity, onShowMentions, onOpen
         <EntityTypeBadge type={entity.type} size="xs" showLabel={false}/>
         <div className="wr-chip__name">{entity.text}</div>
       </div>
-      <div className="wr-chip__sub">{t?.label} · 7 mentions across 4 chapters</div>
+      <div className="wr-chip__sub">{t?.label}{(() => {
+        try {
+          const n = window.LoomwrightBackend?.OccurrenceService?.listByEntitySync?.(entity.id)?.length;
+          return n ? ` · ${n} mention${n === 1 ? "" : "s"}` : "";
+        } catch (_e) { return ""; }
+      })()}</div>
       <div className="wr-chip__row">
         <Btn variant="outline" size="sm" icon="paper" data-callback="onOpenEntity" onClick={() => onOpenEntity && onOpenEntity(entity)}>Dossier</Btn>
         <Btn variant="ghost" size="sm" icon="search" data-callback="onShowMentions" onClick={() => onShowMentions && onShowMentions(entity)}>Mentions</Btn>
@@ -541,26 +576,51 @@ const FloatingEntityChip = ({ entity, x, y, onOpenEntity, onShowMentions, onOpen
 // ---------------------------------------------------------------------
 // MarginNoteCard
 // ---------------------------------------------------------------------
-const MarginNoteCard = ({ note, authors, onResolve, onEdit, onDelete }) => {
-  const a = authors.find((x) => x.id === note.authorId);
-  const [collapsed, setCollapsed] = _wrUS(!!note.collapsed);
+const MarginNoteCard = ({ note, authors, editing, onEdit, onSaveText, onCancelEdit, onResolve, onDelete, onFocus }) => {
+  const a = (authors || []).find((x) => x.id === note.authorId);
+  const [draft, setDraft] = _wrUS(note.noteText || "");
+  _wrUE(() => { setDraft(note.noteText || ""); }, [note.id, editing]);
+  const resolved = note.status === "resolved";
   return (
-    <div className={"wr-note " + (note.resolved ? "is-resolved " : "")} data-ui="MarginNoteCard" style={{ "--ac": a?.color }}>
+    <div className={"wr-note " + (resolved ? "is-resolved " : "")} data-ui="MarginNoteCard" data-testid={"wr-note-" + note.id} style={{ "--ac": a?.color || "var(--accent)" }}>
       <div className="wr-note__head">
-        <span className="wr-note__author">
-          <span className="wr-note__author-dot"/>{a?.name || "Unknown"}
-        </span>
-        <span className="wr-note__type">{note.type}</span>
-        <span className="wr-note__time">{note.ts}</span>
+        <span className="wr-note__author"><span className="wr-note__author-dot"/>{a?.name || "You"}</span>
+        <span className="wr-note__type">{note.source === "selection" ? "Quote note" : "Paragraph note"}</span>
+        {resolved && <span className="wr-note__type">Resolved</span>}
       </div>
-      {note.anchor && <span className="wr-note__anchor">↳ {note.anchor}</span>}
-      <div className={"wr-note__body " + (collapsed ? "wr-note__body--collapsed" : "")}>{note.body}</div>
-      <div className="wr-note__actions">
-        <Btn variant="ghost" size="sm" icon={collapsed ? "chevron-d" : "chevron-up"} onClick={() => setCollapsed((v) => !v)}>{collapsed ? "Expand" : "Collapse"}</Btn>
-        {!note.resolved && <Btn variant="ghost" size="sm" icon="check" onClick={() => onResolve && onResolve(note.id)}>Resolve</Btn>}
-        <Btn variant="ghost" size="sm" icon="more" onClick={() => onEdit && onEdit(note.id)}>Edit</Btn>
-        <Btn variant="ghost" size="sm" icon="trash" onClick={() => onDelete && onDelete(note.id)}/>
-      </div>
+      {note.quote ? (
+        <blockquote className="wr-note__quote" onClick={() => onFocus && onFocus(note)} title="Go to paragraph">“{note.quote}”</blockquote>
+      ) : null}
+      {editing ? (
+        <div className="wr-note__edit">
+          <textarea
+            className="wr-note__textarea"
+            data-testid={"wr-note-text-" + note.id}
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Write a note about this paragraph…"
+          />
+          <div className="wr-note__actions">
+            <Btn variant="primary" size="sm" icon="check" data-testid={"wr-note-save-" + note.id} onClick={() => onSaveText && onSaveText(note.id, draft)}>Save</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => onCancelEdit && onCancelEdit()}>Cancel</Btn>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="wr-note__body" onClick={() => onFocus && onFocus(note)}>
+            {note.noteText ? note.noteText : <span style={{ color: "var(--ink-4)", fontStyle: "italic" }}>Empty note — click Edit to add text.</span>}
+          </div>
+          <div className="wr-note__actions">
+            <Btn variant="ghost" size="sm" icon="search" data-testid={"wr-note-focus-" + note.id} onClick={() => onFocus && onFocus(note)}>Go to ¶</Btn>
+            {!resolved
+              ? <Btn variant="ghost" size="sm" icon="check" data-testid={"wr-note-resolve-" + note.id} onClick={() => onResolve && onResolve(note.id, "resolved")}>Resolve</Btn>
+              : <Btn variant="ghost" size="sm" icon="check" onClick={() => onResolve && onResolve(note.id, "open")}>Reopen</Btn>}
+            <Btn variant="ghost" size="sm" icon="more" data-testid={"wr-note-edit-" + note.id} onClick={() => onEdit && onEdit(note.id)}>Edit</Btn>
+            <Btn variant="ghost" size="sm" icon="trash" data-testid={"wr-note-delete-" + note.id} onClick={() => onDelete && onDelete(note.id)}/>
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -609,24 +669,23 @@ const MarginExtractionCard = ({
 // ---------------------------------------------------------------------
 // LeftMargin
 // ---------------------------------------------------------------------
-const LeftMargin = ({ notes, authors, onResolve, onEdit, onDelete, onCreate, filter, setFilter, pinned, onTogglePin, onCollapse }) => {
-  const visible = notes.filter((n) => {
-    if (filter === "open") return !n.resolved;
-    if (filter === "resolved") return n.resolved;
-    if (filter === "mine") return n.authorId === "em";
+const LeftMargin = ({ notes, authors, editingNoteId, onAdd, onEdit, onSaveText, onCancelEdit, onResolve, onDelete, onFocus, filter, setFilter, pinned, onTogglePin, onCollapse }) => {
+  const visible = (notes || []).filter((n) => {
+    if (filter === "open") return n.status !== "resolved";
+    if (filter === "resolved") return n.status === "resolved";
     return true;
   });
   return (
-    <aside className="wr-margin" data-side="left" data-ui="LeftMargin" aria-label="Author notes & comments">
+    <aside className="wr-margin" data-side="left" data-ui="LeftMargin" aria-label="Paragraph notes & comments">
       <div className="wr-margin__head">
         <span className="wr-margin__head-title">Notes &amp; Comments</span>
         <span className="wr-margin__head-count">{visible.length}</span>
-        <Btn variant="ghost" size="sm" icon="plus" data-callback="onCreate" onClick={onCreate} title="Add note"/>
+        <Btn variant="ghost" size="sm" icon="plus" data-testid="wr-add-note" onClick={onAdd} title="Add a note to the current paragraph">Add paragraph note</Btn>
         <button className={"wr-margin__head__pin " + (pinned ? "is-active" : "")} onClick={onTogglePin} data-callback="onTogglePin" title={pinned ? "Unpin margin" : "Pin margin"}><Icon name="pin-tack" size={11}/></button>
         <button className="wr-margin__head__collapse" onClick={onCollapse} data-callback="onCollapseMargin" title="Collapse to tab"><Icon name="chevron-r" size={11}/></button>
       </div>
       <div className="wr-margin__filters">
-        {[["all", "All"], ["open", "Open"], ["resolved", "Resolved"], ["mine", "Mine"]].map(([k, l]) => (
+        {[["all", "All"], ["open", "Open"], ["resolved", "Resolved"]].map(([k, l]) => (
           <button
             key={k}
             className={"wr-margin__filter " + (filter === k ? "is-active" : "")}
@@ -636,11 +695,12 @@ const LeftMargin = ({ notes, authors, onResolve, onEdit, onDelete, onCreate, fil
       </div>
       <div className="wr-margin__list">
         {visible.length === 0 ? (
-          <EmptyState icon="paper" title="No notes here" body="Highlight a passage and choose Inline Note to drop one."/>
+          <EmptyState icon="paper" title="No notes here" body="Place the cursor in a paragraph (or select text), then choose “Add paragraph note”."/>
         ) : visible.map((n) => (
           <MarginNoteCard
-            key={n.id} note={n} authors={authors}
-            onResolve={onResolve} onEdit={onEdit} onDelete={onDelete}
+            key={n.id} note={n} authors={authors} editing={editingNoteId === n.id}
+            onEdit={onEdit} onSaveText={onSaveText} onCancelEdit={onCancelEdit}
+            onResolve={onResolve} onDelete={onDelete} onFocus={onFocus}
           />
         ))}
       </div>
@@ -720,6 +780,97 @@ const RightMargin = ({
 };
 
 // ---------------------------------------------------------------------
+// CurrentChapterContext (UAT #22) — live, chapter-scoped context surface:
+// entities mentioned in this chapter (from occurrences), references linked
+// to them, and pending review items. Self-contained: reads the live store
+// and refreshes on store events / chapter change.
+// ---------------------------------------------------------------------
+const CurrentChapterContext = ({ chapterId, onOpenEntity, onOpenPanel, onOpenReviewQueue }) => {
+  const [data, setData] = _wrUS({ entities: [], references: [], reviews: [] });
+  const compute = _wrUC(() => {
+    const B = window.LoomwrightBackend;
+    if (!B || !chapterId) { setData({ entities: [], references: [], reviews: [] }); return; }
+    let occ = [];
+    try { occ = B.OccurrenceService?.listByChapterSync?.(chapterId) || []; } catch (_e) {}
+    const seen = new Set();
+    const entities = [];
+    for (const o of occ) {
+      if (!o.entityId || seen.has(o.entityId)) continue;
+      seen.add(o.entityId);
+      let ent = null;
+      try { ent = B.EntityService?.getSync?.(o.entityId, o.entityType); } catch (_e) {}
+      entities.push({
+        id: o.entityId, type: o.entityType,
+        name: (ent && ent.name) || o.exactText || "Unknown",
+        count: occ.filter((x) => x.entityId === o.entityId).length,
+      });
+    }
+    let references = [];
+    try {
+      references = (B.ReferencesService?.listSync?.() || []).filter((r) =>
+        Array.isArray(r.linkedEntities) && r.linkedEntities.some((id) => seen.has(id)));
+    } catch (_e) {}
+    let reviews = [];
+    try {
+      reviews = (B.ReviewService?.listSync?.() || []).filter((q) =>
+        q.status === "pending" && (q.chapterId === chapterId || (seen.size && seen.has(q.entityId))));
+    } catch (_e) {}
+    setData({ entities, references, reviews });
+  }, [chapterId]);
+  _wrUE(() => {
+    compute();
+    const evs = ["lw:entity-store-updated", "lw:extraction-updated", "lw:references-updated", "lw:review-queue-updated", "lw:manuscript-chapters-updated"];
+    evs.forEach((e) => window.addEventListener(e, compute));
+    return () => evs.forEach((e) => window.removeEventListener(e, compute));
+  }, [compute]);
+  const { entities, references, reviews } = data;
+  const empty = !entities.length && !references.length && !reviews.length;
+  return (
+    <section className="wr-ctx" data-ui="CurrentChapterContext" data-testid="wr-current-context" aria-label="Current chapter context">
+      <div className="wr-ctx__head"><Icon name="book" size={12}/> Current Chapter Context</div>
+      {empty ? (
+        <div className="wr-ctx__empty" data-testid="wr-ctx-empty">Entities mentioned in this chapter, their linked references, and pending review items appear here after you write and run Save &amp; Extract.</div>
+      ) : (
+        <>
+          {entities.length > 0 && (
+            <div className="wr-ctx__group">
+              <div className="wr-ctx__group-title">Entities mentioned ({entities.length})</div>
+              {entities.map((e) => (
+                <button key={e.id} type="button" className="wr-ctx__row" data-testid={"wr-ctx-entity-" + e.id} onClick={() => onOpenEntity && onOpenEntity(e)} title="Open entity">
+                  <EntityTypeBadge type={e.type} size="xs" showLabel={false}/>
+                  <span className="wr-ctx__row-name">{e.name}</span>
+                  <span className="wr-ctx__row-meta">{e.count}×</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {references.length > 0 && (
+            <div className="wr-ctx__group">
+              <div className="wr-ctx__group-title">Linked references ({references.length})</div>
+              {references.map((r) => (
+                <button key={r.id} type="button" className="wr-ctx__row" data-testid={"wr-ctx-ref-" + r.id} onClick={() => onOpenPanel && onOpenPanel("references")} title="Open in References">
+                  <Icon name="bookmark" size={11}/>
+                  <span className="wr-ctx__row-name">{r.title || r.name || "Reference"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {reviews.length > 0 && (
+            <div className="wr-ctx__group">
+              <div className="wr-ctx__group-title">Pending review ({reviews.length})</div>
+              <button type="button" className="wr-ctx__row" data-testid="wr-ctx-open-review" onClick={() => onOpenReviewQueue && onOpenReviewQueue()} title="Open review queue">
+                <Icon name="bell" size={11}/>
+                <span className="wr-ctx__row-name">{reviews.length} item{reviews.length === 1 ? "" : "s"} to review</span>
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+};
+
+// ---------------------------------------------------------------------
 // ChapterDeleteConfirmModal
 // ---------------------------------------------------------------------
 const ChapterDeleteConfirmModal = ({ open, chapter, onCancel, onConfirm }) => {
@@ -730,13 +881,13 @@ const ChapterDeleteConfirmModal = ({ open, chapter, onCancel, onConfirm }) => {
       title={"Delete Chapter " + chapter.num + "?"}
       body={
         <>
-          <p>This will move <b>{chapter.title || "this chapter"}</b> to Trash, where it will sit for 30 days before deletion.</p>
+          <p>This removes <b>{chapter.title || "this chapter"}</b> and its text from the manuscript and renumbers the remaining chapters.</p>
           <p style={{ color: "var(--ink-3)", fontSize: "var(--fs-xs)", marginTop: 8 }}>
-            Linked entity mentions stay attached to the manuscript object — restoring the chapter restores them.
+            The deletion is recorded in the project history, and the chapter and its text are retained so it can be restored.
           </p>
         </>
       }
-      confirmLabel="Move to Trash"
+      confirmLabel="Delete chapter"
       cancelLabel="Keep chapter"
       tone="danger"
       onCancel={onCancel}
@@ -746,11 +897,137 @@ const ChapterDeleteConfirmModal = ({ open, chapter, onCancel, onConfirm }) => {
 };
 
 // ---------------------------------------------------------------------
+// Editable manuscript body — helpers + uncontrolled contentEditable
+//
+// The body is an UNCONTROLLED contentEditable region: React never renders
+// children into it (so it never reconciles typed text → no caret jump).
+// innerHTML is written imperatively only when the chapter or `bodyEpoch`
+// changes (chapter switch / after Save & Extract). Save snapshots the DOM.
+// ---------------------------------------------------------------------
+function _wrEscapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+function _wrGenId(prefix) {
+  return (prefix || "p") + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
+}
+function _wrCountWords(t) {
+  const m = String(t || "").match(/\S+/g);
+  return m ? m.length : 0;
+}
+function _wrParagraphText(p) {
+  if (p == null) return "";
+  if (typeof p === "string") return p;
+  if (p.sceneBreak) return "";
+  if (typeof p.text === "string") return p.text;
+  if (Array.isArray(p.parts)) return p.parts.map((part) => (part && part.text != null ? part.text : "")).join("");
+  return "";
+}
+function _wrNormalizeManuscript(m) {
+  if (!m) return { paragraphs: [] };
+  if (Array.isArray(m)) return { paragraphs: m };
+  if (Array.isArray(m.paragraphs)) return { paragraphs: m.paragraphs };
+  if (typeof m.text === "string" && m.text.trim()) {
+    const parts = m.text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
+    return { paragraphs: parts.map((text) => ({ id: _wrGenId("p"), text })) };
+  }
+  if (typeof m.html === "string" && m.html.trim()) return { paragraphs: [], html: m.html };
+  return { paragraphs: [] };
+}
+function _wrHighlightHtml(text, lookup) {
+  const chunks = splitByOccurrences(text || "", lookup);
+  return chunks.map((c) => {
+    if (c.occ) {
+      const occ = c.occ;
+      const t = (typeof ENTITY_TYPES !== "undefined" && ENTITY_TYPES[occ.entityType]) || {};
+      const label = t.label || occ.entityType || "entity";
+      const style = `--ec:${t.color || "#8a7a52"};--es:${t.soft || "#efe9da"};--ed:${t.deep || "#5a4d2e"}`;
+      const title = `${label}: ${occ.exactText || c.text} — double-click to open`;
+      return `<span class="wr-mark" data-ui="EntityBrushHighlight" data-entity="${_wrEscapeHtml(occ.entityType)}" data-entity-type="${_wrEscapeHtml(occ.entityType)}" data-entity-id="${_wrEscapeHtml(occ.entityId)}" data-occurrence-id="${_wrEscapeHtml(occ.occurrenceId || "")}" contenteditable="false" style="${style}" title="${_wrEscapeHtml(title)}" aria-label="${_wrEscapeHtml(title)}">${_wrEscapeHtml(c.text)}</span>`;
+    }
+    return _wrEscapeHtml(c.text);
+  }).join("");
+}
+function _wrBuildBodyHtml(paragraphs, lookup) {
+  if (!paragraphs || !paragraphs.length) return "";
+  return paragraphs.map((p) => {
+    const id = (p && p.id) || _wrGenId("p");
+    if (p && p.sceneBreak) {
+      return `<div class="wr-scene-break" data-kind="scene-break" data-paragraph-id="${_wrEscapeHtml(id)}" contenteditable="false"><span class="wr-scene-break__line"></span><span aria-hidden="true">※   ※   ※</span><span class="wr-scene-break__line"></span></div>`;
+    }
+    const text = _wrParagraphText(p);
+    const inner = _wrHighlightHtml(text, lookup) || "<br>";
+    const author = p && p.author ? ` data-author="${_wrEscapeHtml(p.author)}"` : "";
+    return `<p class="wr-p" data-paragraph-id="${_wrEscapeHtml(id)}"${author}>${inner}</p>`;
+  }).join("");
+}
+// Snapshot the editable DOM into a persistable manuscript object.
+function _wrSnapshotBody(bodyEl) {
+  if (!bodyEl) return { paragraphs: [], text: "", html: "", words: 0 };
+  const out = [];
+  const kids = Array.from(bodyEl.children).filter((el) => el && el.nodeType === 1);
+  if (kids.length) {
+    kids.forEach((el) => {
+      if (el.getAttribute("data-kind") === "scene-break" || el.classList.contains("wr-scene-break")) {
+        out.push({ id: el.getAttribute("data-paragraph-id") || _wrGenId("sb"), sceneBreak: true });
+        return;
+      }
+      let id = el.getAttribute("data-paragraph-id");
+      if (!id) { id = _wrGenId("p"); try { el.setAttribute("data-paragraph-id", id); } catch (_e) {} }
+      const text = (el.textContent || "").replace(/ /g, " ");
+      out.push({ id, text });
+    });
+  } else {
+    const raw = bodyEl.innerText || bodyEl.textContent || "";
+    raw.split(/\n{2,}/).map((s) => s.replace(/ /g, " ").trim()).filter(Boolean)
+      .forEach((text) => out.push({ id: _wrGenId("p"), text }));
+  }
+  const text = out.filter((p) => !p.sceneBreak).map((p) => p.text || "").join("\n\n");
+  return { paragraphs: out, text, html: bodyEl.innerHTML, words: _wrCountWords(text) };
+}
+
+const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, spellCheck, onInput, onDoubleClick, onMouseOver, onMouseOut }) => {
+  const localRef = _wrUR(null);
+  const htmlRef = _wrUR(html);
+  htmlRef.current = html;
+  const assign = (el) => { localRef.current = el; if (bodyRef) bodyRef.current = el; };
+  // Write innerHTML ONLY on chapter switch / explicit epoch bump — never on
+  // keystroke. The JSX has no children, so React never touches typed nodes.
+  _wrUE(() => {
+    const el = localRef.current;
+    if (!el) return;
+    el.innerHTML = htmlRef.current || "";
+    try { if (document.execCommand) document.execCommand("defaultParagraphSeparator", false, "p"); } catch (_e) {}
+  }, [chapterId, bodyEpoch]);
+  return (
+    <div
+      ref={assign}
+      className="wr-canvas__body wr-body--editable"
+      data-ui="ManuscriptBody"
+      data-testid="wr-manuscript-body"
+      contentEditable
+      suppressContentEditableWarning
+      spellCheck={spellCheck !== false}
+      role="textbox"
+      aria-multiline="true"
+      aria-label="Manuscript body — start writing"
+      data-placeholder="Start writing…"
+      onInput={onInput}
+      onDoubleClick={onDoubleClick}
+      onMouseOver={onMouseOver}
+      onMouseOut={onMouseOut}
+    />
+  );
+};
+
+// ---------------------------------------------------------------------
 // ManuscriptCanvas
 // ---------------------------------------------------------------------
 const ManuscriptCanvas = ({
-  chapter, paragraphs, state,
-  onEntityHover, onCommentClick, onEntityDoubleClick,
+  chapter, manuscript, state, bodyRef, titleRef, bodyEpoch, spellCheck,
+  onBodyInput, onStartWriting,
+  onEntityHoverDelegated, onEntityDoubleClickDelegated,
   onCreateChapter, onSaveAndExtract,
 }) => {
   // Load persisted EntityOccurrences for this chapter and rebuild the
@@ -774,6 +1051,18 @@ const ManuscriptCanvas = ({
     };
   }, [chapter?.id]);
   const occurrenceLookup = React.useMemo(() => buildOccurrenceLookup(occurrences), [occurrences]);
+  const norm = React.useMemo(() => _wrNormalizeManuscript(manuscript), [manuscript]);
+  const bodyHtml = React.useMemo(() => (
+    (norm.html != null && !(norm.paragraphs && norm.paragraphs.length))
+      ? norm.html
+      : _wrBuildBodyHtml(norm.paragraphs, occurrenceLookup)
+  ), [norm, occurrenceLookup]);
+  const isEmptyBody = !bodyHtml || !bodyHtml.trim();
+  const [hintDismissed, setHintDismissed] = _wrUS(false);
+  _wrUE(() => { setHintDismissed(false); }, [chapter && chapter.id]);
+  _wrUE(() => {
+    if (titleRef && titleRef.current && chapter) titleRef.current.textContent = chapter.title || "Untitled";
+  }, [chapter && chapter.id]);
   if (!chapter) {
     return (
       <div className="wr-canvas wr-canvas--empty" data-ui="ManuscriptCanvas" data-state="no-chapter">
@@ -802,42 +1091,45 @@ const ManuscriptCanvas = ({
       </div>
     );
   }
-  if (state === "empty" || !paragraphs || paragraphs.length === 0) {
-    return (
-      <div className="wr-canvas wr-canvas--empty" data-ui="ManuscriptCanvas" data-state="empty">
-        <div className="wr-empty-card">
-          <Icon name="feather" size={28}/>
-          <div className="wr-empty-card__title">Empty page, full ink</div>
-          <div className="wr-empty-card__body">Start writing here. Highlight any name to link it, or run extraction to surface candidates.</div>
-          <div className="wr-empty-card__actions">
-            <Btn variant="primary" size="sm" icon="feather">Start writing</Btn>
-            <Btn variant="outline" size="sm" icon="sparkle" onClick={onSaveAndExtract}>Run extraction</Btn>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  const showHint = !hintDismissed && isEmptyBody;
   return (
     <article className="wr-canvas" data-ui="ManuscriptCanvas" data-state={state} data-chapter-id={chapter.id}>
       <header className="wr-canvas__head">
         <div className="wr-canvas__eyebrow">Chapter {chapter.num}</div>
-        <h1 className="wr-canvas__title" contentEditable suppressContentEditableWarning data-callback="onManuscriptChange">
-          {chapter.title || "Untitled"}
-        </h1>
-        <div className="wr-canvas__sub">{(chapter.words || 0).toLocaleString()} words · drafted {chapter.author === "em" ? "by E. Marlowe" : ""}</div>
+        <h1
+          className="wr-canvas__title"
+          data-ui="ManuscriptTitle"
+          ref={titleRef}
+          contentEditable
+          suppressContentEditableWarning
+          aria-label="Chapter title"
+          onInput={onBodyInput}
+        />
+        <div className="wr-canvas__sub">{(chapter.words || 0).toLocaleString()} words</div>
       </header>
-      <div data-ui="ManuscriptBody" data-callback="onManuscriptChange">
-        {paragraphs.map((p, i) => (
-          <ManuscriptParagraph
-            key={p.id || ("sb" + i)}
-            para={p}
-            occurrenceLookup={occurrenceLookup}
-            onEntityHover={onEntityHover}
-            onCommentClick={onCommentClick}
-            onEntityDoubleClick={onEntityDoubleClick}
-          />
-        ))}
+      <div className="wr-canvas__bodywrap" style={{ position: "relative" }}>
+        <EditableManuscriptBody
+          bodyRef={bodyRef}
+          chapterId={chapter.id}
+          bodyEpoch={bodyEpoch}
+          html={bodyHtml}
+          spellCheck={spellCheck}
+          onInput={(e) => { setHintDismissed(true); onBodyInput && onBodyInput(e); }}
+          onDoubleClick={onEntityDoubleClickDelegated}
+          onMouseOver={onEntityHoverDelegated}
+          onMouseOut={(e) => onEntityHoverDelegated && onEntityHoverDelegated(e, true)}
+        />
+        {showHint && (
+          <div className="wr-empty-card wr-empty-card--inline" data-ui="ManuscriptEmptyHint">
+            <Icon name="feather" size={24}/>
+            <div className="wr-empty-card__title">Empty page, full ink</div>
+            <div className="wr-empty-card__body">Start writing here. Run extraction later to surface entity candidates.</div>
+            <div className="wr-empty-card__actions">
+              <Btn variant="primary" size="sm" icon="feather" data-testid="wr-start-writing" onClick={() => { setHintDismissed(true); onStartWriting && onStartWriting(); }}>Start writing</Btn>
+              <Btn variant="outline" size="sm" icon="sparkle" onClick={onSaveAndExtract}>Run extraction</Btn>
+            </div>
+          </div>
+        )}
       </div>
     </article>
   );
@@ -887,12 +1179,45 @@ const WritersRoomScreen = ({
 
   // Manuscript state
   const [canvasState, setCanvasState] = _wrUS("writing"); // writing | empty | loading | error | saving | saved | offline
-  const paragraphs = activeChapter && !activeChapter.reserved
-    ? (Array.isArray(manuscriptsByChapter[activeId]) ? manuscriptsByChapter[activeId] : [])
-    : [];
+  const bodyRef = _wrUR(null);
+  const titleRef = _wrUR(null);
+  const [bodyEpoch, setBodyEpoch] = _wrUS(0);
+  const activeManuscript = activeChapter && !activeChapter.reserved ? manuscriptsByChapter[activeId] : null;
 
-  // Authors
-  const [activeAuthorId, setActiveAuthorId] = _wrUS("em");
+  // Authors — live profiles from Settings (UAT #6). Falls back to a single
+  // "You" author when none are configured, so notes/attribution never show
+  // demo author names on a fresh project.
+  const loadAuthors = () => {
+    try {
+      // NB: read the raw array via getAllSync — getSectionSync object-spreads
+      // its result, which mangles array sections like "authors".
+      const list = window.LoomwrightBackend?.SettingsService?.getAllSync?.()?.authors;
+      if (Array.isArray(list) && list.length) return list;
+    } catch (_e) {}
+    return [{ id: "you", name: "You", initials: "Y", color: "var(--accent)" }];
+  };
+  const [authorList, setAuthorList] = _wrUS(loadAuthors);
+  const [activeAuthorId, setActiveAuthorId] = _wrUS(() => {
+    const list = loadAuthors();
+    try {
+      const saved = window.LoomwrightBackend?.SettingsService?.getSectionSync?.("writersRoom", {})?.activeAuthorId;
+      if (saved && list.some((a) => a.id === saved)) return saved;
+    } catch (_e) {}
+    return (list[0] && list[0].id) || "you";
+  });
+  _wrUE(() => {
+    const refresh = () => setAuthorList(loadAuthors());
+    window.addEventListener("lw:settings-saved", refresh);
+    window.addEventListener("lw:settings-updated", refresh);
+    window.addEventListener("lw:backend-ready", refresh);
+    window.addEventListener("lw:project-imported", refresh);
+    return () => {
+      window.removeEventListener("lw:settings-saved", refresh);
+      window.removeEventListener("lw:settings-updated", refresh);
+      window.removeEventListener("lw:backend-ready", refresh);
+      window.removeEventListener("lw:project-imported", refresh);
+    };
+  }, []);
 
   // Toolbar toggles
   const [spellcheck, setSpellcheck] = _wrUS(true);
@@ -912,6 +1237,7 @@ const WritersRoomScreen = ({
   const [noteFilter, setNoteFilter] = _wrUS("open");
   const [extFilter, setExtFilter] = _wrUS("all");
   const [notes, setNotes] = _wrUS([]);
+  const [editingNoteId, setEditingNoteId] = _wrUS(null);
   const loadReviewExtractions = () => {
     const items = window.LoomwrightBackend?.ReviewService?.listSync() || [];
     return items.filter((i) => i.status === "pending").map((i) => ({
@@ -927,6 +1253,24 @@ const WritersRoomScreen = ({
   const [extractions, setExtractions] = _wrUS(() => loadReviewExtractions());
   const [selectedExtId, setSelectedExtId] = _wrUS("x5");
 
+  // Paragraph notes (UAT #19) — source of truth is ManuscriptNoteService,
+  // scoped to the active chapter and refreshed on store updates.
+  const refreshNotes = _wrUC(() => {
+    const svc = window.LoomwrightBackend?.ManuscriptNoteService;
+    setNotes(svc && activeId ? svc.listByChapterSync(activeId) : []);
+  }, [activeId]);
+  _wrUE(() => {
+    refreshNotes();
+    window.addEventListener("lw:manuscript-notes-updated", refreshNotes);
+    window.addEventListener("lw:backend-ready", refreshNotes);
+    window.addEventListener("lw:project-imported", refreshNotes);
+    return () => {
+      window.removeEventListener("lw:manuscript-notes-updated", refreshNotes);
+      window.removeEventListener("lw:backend-ready", refreshNotes);
+      window.removeEventListener("lw:project-imported", refreshNotes);
+    };
+  }, [refreshNotes]);
+
   const persistChapters = _wrUC((nextChapters, nextManuscripts, nextActiveId, nextNotes, nextExtractions) => {
     const svc = window.LoomwrightBackend?.ManuscriptChapterService;
     if (!svc) return;
@@ -936,9 +1280,9 @@ const WritersRoomScreen = ({
       manuscripts: nextManuscripts ?? manuscriptsByChapter,
       notes: { default: nextNotes ?? notes },
       extractions: { default: nextExtractions ?? extractions },
-      authors: WR_AUTHORS,
+      authors: authorList,
     });
-  }, [activeId, chapters, manuscriptsByChapter, notes, extractions]);
+  }, [activeId, chapters, manuscriptsByChapter, notes, extractions, authorList]);
 
   _wrUE(() => {
     const onReady = () => {
@@ -947,7 +1291,6 @@ const WritersRoomScreen = ({
         setChapters(s.chapters);
         setActiveId(s.activeChapterId || s.chapters[0]?.id);
         setManuscriptsByChapter(s.manuscripts || {});
-        if (s.notes?.default) setNotes(s.notes.default);
         if (s.extractions?.default) setExtractions(s.extractions.default);
         else {
           const rq = loadReviewExtractions();
@@ -996,7 +1339,24 @@ const WritersRoomScreen = ({
 
   // Floating UI
   const [hoverEntity, setHoverEntity] = _wrUS(null);
-  const [selToolbar, setSelToolbar] = _wrUS({ x: 380, y: 220, visible: true }); // demo: visible by default
+  // Floating selection toolbar — hidden until the user actually selects text
+  // inside the editable body (UAT #7: no fake always-on toolbar).
+  const [selToolbar, setSelToolbar] = _wrUS({ x: 0, y: 0, visible: false });
+  _wrUE(() => {
+    const onSel = () => {
+      try {
+        const sel = window.getSelection && window.getSelection();
+        if (sel && !sel.isCollapsed && bodyRef.current && bodyRef.current.contains(sel.anchorNode) && String(sel.toString()).trim()) {
+          const rect = sel.getRangeAt(0).getBoundingClientRect();
+          setSelToolbar({ x: Math.max(8, rect.left), y: Math.max(8, rect.top - 46), visible: true });
+        } else {
+          setSelToolbar((p) => (p.visible ? { ...p, visible: false } : p));
+        }
+      } catch (_e) {}
+    };
+    document.addEventListener("selectionchange", onSel);
+    return () => document.removeEventListener("selectionchange", onSel);
+  }, []);
 
   // Delete confirm modal
   const [deletingChapter, setDeletingChapter] = _wrUS(null);
@@ -1007,44 +1367,95 @@ const WritersRoomScreen = ({
     persistChapters(chapters, manuscriptsByChapter, id);
   }, [chapters, manuscriptsByChapter, persistChapters]);
   const onCreateChapter = _wrUC(() => {
-    const next = chapters.length + 1;
-    setChapters((curr) => [...curr, { id: "c" + next, num: next, title: "New chapter", state: "unsaved", queue: 0, words: 0, author: activeAuthorId }]);
-  }, [chapters.length, activeAuthorId]);
+    const n = chapters.length + 1;
+    const id = _wrGenId("ch");
+    const nextChapters = [...chapters, { id, num: n, title: "New chapter", state: "unsaved", queue: 0, words: 0, author: activeAuthorId }];
+    setChapters(nextChapters);
+    setActiveId(id);
+    persistChapters(nextChapters, manuscriptsByChapter, id);
+  }, [chapters, manuscriptsByChapter, activeAuthorId, persistChapters]);
   const onReserveChapter = _wrUC(() => {
-    const next = chapters.length + 1;
-    setChapters((curr) => [...curr, { id: "c" + next, num: next, title: "", state: "reserved", reserved: true, queue: 0, words: 0 }]);
-  }, [chapters.length]);
+    const n = chapters.length + 1;
+    const id = _wrGenId("ch");
+    const nextChapters = [...chapters, { id, num: n, title: "", state: "reserved", reserved: true, queue: 0, words: 0 }];
+    setChapters(nextChapters);
+    persistChapters(nextChapters, manuscriptsByChapter, activeId);
+  }, [chapters, manuscriptsByChapter, activeId, persistChapters]);
   const onRenameChapter = _wrUC(() => {}, []);
   const onDeleteChapterRequest = _wrUC(() => {
     setDeletingChapter(activeChapter);
   }, [activeChapter]);
-  const onConfirmDeleteChapter = _wrUC(() => {
+  const onConfirmDeleteChapter = _wrUC(async () => {
     if (!deletingChapter) return;
-    setChapters((curr) => curr.filter((c) => c.id !== deletingChapter.id));
+    const svc = window.LoomwrightBackend?.ManuscriptChapterService;
+    if (svc) {
+      await svc.deleteChapter(deletingChapter.id);
+      const s = svc.loadSync();
+      setChapters(s.chapters || []);
+      setActiveId(s.activeChapterId || (s.chapters && s.chapters[0] && s.chapters[0].id) || null);
+      setManuscriptsByChapter(s.manuscripts || {});
+    } else {
+      setChapters((curr) => curr.filter((c) => c.id !== deletingChapter.id));
+    }
     setDeletingChapter(null);
   }, [deletingChapter]);
-  const onReorderChapter = _wrUC(() => {}, []);
+  const onMoveChapter = _wrUC(async (direction) => {
+    if (!activeChapter) return;
+    const svc = window.LoomwrightBackend?.ManuscriptChapterService;
+    if (!svc) return;
+    await svc.moveChapter(activeChapter.id, direction);
+    const s = svc.loadSync();
+    setChapters(s.chapters || []);
+  }, [activeChapter]);
 
   const onSave = _wrUC(async () => {
     setCanvasState("saving");
     onSetSyncState && onSetSyncState("syncing");
-    await window.LoomwrightBackend?.ManuscriptService?.saveCurrentDom();
-    const next = { ...manuscriptsByChapter, [activeId]: paragraphs };
+    const snap = _wrSnapshotBody(bodyRef.current);
+    const title = ((titleRef.current && titleRef.current.innerText) || (activeChapter && activeChapter.title) || "").trim();
+    const next = { ...manuscriptsByChapter, [activeId]: snap };
+    const nextChapters = chapters.map((c) => c.id === activeId ? { ...c, title: title || c.title, words: snap.words, state: "saved" } : c);
     setManuscriptsByChapter(next);
-    persistChapters(chapters, next, activeId);
+    setChapters(nextChapters);
+    persistChapters(nextChapters, next, activeId);
+    try { await window.LoomwrightBackend?.ManuscriptService?.saveCurrentDom(); } catch (_e) {}
     setCanvasState("writing");
     onSetSyncState && onSetSyncState("saved");
-  }, [onSetSyncState, chapters, manuscriptsByChapter, activeId, persistChapters]);
-  const onSaveAndExtract = _wrUC(() => {
+  }, [onSetSyncState, chapters, manuscriptsByChapter, activeId, persistChapters, activeChapter]);
+  const runExtractionFlow = _wrUC(async (deep) => {
+    const snap = _wrSnapshotBody(bodyRef.current);
+    const nextManuscripts = { ...manuscriptsByChapter, [activeId]: snap };
+    const extractingChapters = chapters.map((c) => c.id === activeId ? { ...c, words: snap.words, state: "extracting" } : c);
+    setManuscriptsByChapter(nextManuscripts);
+    setChapters(extractingChapters);
+    persistChapters(extractingChapters, nextManuscripts, activeId);
+    try { await window.LoomwrightBackend?.ManuscriptService?.saveCurrentDom(); } catch (_e) {}
     setExtractionState("running");
-    setProgressMode("quick"); setProgressStage(0); setProgressFailed(false); setProgressOpen(true);
+    setProgressMode(deep ? "deep" : "quick"); setProgressStage(0); setProgressFailed(false); setProgressOpen(true);
     onSetSyncState && onSetSyncState("syncing");
-  }, [onSetSyncState]);
-  const onSaveAndDeepExtract = _wrUC(() => {
-    setExtractionState("running");
-    setProgressMode("deep"); setProgressStage(0); setProgressFailed(false); setProgressOpen(true);
-    onSetSyncState && onSetSyncState("syncing");
-  }, [onSetSyncState]);
+    // Paragraph offset map so each occurrence can be attributed to a paragraph id.
+    const offsets = []; let cursor = 0;
+    (snap.paragraphs || []).forEach((p) => {
+      if (p.sceneBreak) return;
+      const t = p.text || "";
+      offsets.push({ id: p.id, start: cursor, end: cursor + t.length });
+      cursor += t.length + 2;
+    });
+    try {
+      await window.LoomwrightBackend?.ExtractionService?.runExtraction({ chapterId: activeId, text: snap.text, deep, paragraphs: offsets });
+    } catch (_e) {
+      setProgressFailed(true);
+    }
+    setExtractions(loadReviewExtractions());
+    setChapters((curr) => curr.map((c) => c.id === activeId ? { ...c, state: "extracted" } : c));
+    // Ensure the canvas re-pulls occurrences, then force a one-time body
+    // re-highlight from the freshly-saved content (safe: just saved).
+    try { window.dispatchEvent(new CustomEvent("lw:entity-store-updated")); } catch (_e) {}
+    setBodyEpoch((v) => v + 1);
+    onSetSyncState && onSetSyncState("saved");
+  }, [activeId, chapters, manuscriptsByChapter, persistChapters, onSetSyncState]);
+  const onSaveAndExtract = _wrUC(() => runExtractionFlow(false), [runExtractionFlow]);
+  const onSaveAndDeepExtract = _wrUC(() => runExtractionFlow(true), [runExtractionFlow]);
   const onCloseProgress = _wrUC(() => {
     setProgressOpen(false);
     setExtractionState("complete");
@@ -1063,6 +1474,24 @@ const WritersRoomScreen = ({
   const onCloseSessionDrawer = _wrUC(() => setSessionDrawerOpen(false), []);
 
   const onManuscriptChange = _wrUC(() => {
+    if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+  }, [canvasState, onSetSyncState]);
+  const onStartWriting = _wrUC(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    if (!el.textContent || !el.textContent.trim()) {
+      el.innerHTML = '<p class="wr-p" data-paragraph-id="' + _wrGenId("p") + '"><br></p>';
+    }
+    el.focus();
+    try {
+      const sel = window.getSelection();
+      const range = document.createRange();
+      const first = el.querySelector("[data-paragraph-id]") || el;
+      range.selectNodeContents(first);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (_e) {}
     if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
   }, [canvasState, onSetSyncState]);
   const onSelectText = _wrUC(() => {}, []);
@@ -1105,15 +1534,94 @@ const WritersRoomScreen = ({
     setDenyItem(null);
   }, [denyItem]);
   const onOpenFullReview = _wrUC(() => onOpenReviewQueue && onOpenReviewQueue(), [onOpenReviewQueue]);
-  const onResolveNote = _wrUC((id) => setNotes((curr) => curr.map((n) => n.id === id ? { ...n, resolved: true } : n)), []);
+  // ----- paragraph note handlers (UAT #19) -----
+  const _wrCurrentParagraphId = _wrUC(() => {
+    const body = bodyRef.current;
+    if (!body) return null;
+    try {
+      const sel = window.getSelection && window.getSelection();
+      const node = sel && sel.anchorNode;
+      if (node && body.contains(node)) {
+        const el = node.nodeType === 1 ? node : node.parentElement;
+        const p = el && el.closest && el.closest("[data-paragraph-id]");
+        if (p) return p.getAttribute("data-paragraph-id");
+      }
+    } catch (_e) {}
+    const first = body.querySelector("[data-paragraph-id]");
+    return first ? first.getAttribute("data-paragraph-id") : null;
+  }, []);
+  const _wrSelectionQuote = _wrUC(() => {
+    try {
+      const sel = window.getSelection && window.getSelection();
+      if (sel && !sel.isCollapsed && bodyRef.current && bodyRef.current.contains(sel.anchorNode)) {
+        return String(sel.toString()).replace(/\s+/g, " ").trim().slice(0, 280);
+      }
+    } catch (_e) {}
+    return "";
+  }, []);
+  const onAddNote = _wrUC(async () => {
+    if (!activeId) return;
+    const svc = window.LoomwrightBackend?.ManuscriptNoteService;
+    if (!svc) return;
+    const paragraphId = _wrCurrentParagraphId();
+    const quote = _wrSelectionQuote();
+    setL((p) => ({ ...p, leftMarginCollapsed: false, writingLayoutMode: (p.writingLayoutMode === "full" || p.writingLayoutMode === "notes") ? p.writingLayoutMode : "full" }));
+    const note = await svc.createNote({ chapterId: activeId, paragraphId, quote, noteText: "", authorId: activeAuthorId, source: quote ? "selection" : "manual" });
+    setEditingNoteId(note.id);
+  }, [activeId, activeAuthorId, setL, _wrCurrentParagraphId, _wrSelectionQuote]);
+  const onEditNote = _wrUC((id) => setEditingNoteId(id), []);
+  const onCancelEditNote = _wrUC(() => setEditingNoteId(null), []);
+  const onSaveNoteText = _wrUC(async (id, text) => {
+    await window.LoomwrightBackend?.ManuscriptNoteService?.updateNote(id, { noteText: text });
+    setEditingNoteId(null);
+  }, []);
+  const onResolveNote = _wrUC(async (id, status) => {
+    await window.LoomwrightBackend?.ManuscriptNoteService?.resolveNote(id, status === "open" ? "open" : "resolved");
+  }, []);
+  const onDeleteNote = _wrUC(async (id) => {
+    await window.LoomwrightBackend?.ManuscriptNoteService?.deleteNote(id);
+    setEditingNoteId((cur) => (cur === id ? null : cur));
+  }, []);
+  const onFocusNoteParagraph = _wrUC((note) => {
+    const body = bodyRef.current;
+    if (!body || !note) return;
+    let el = null;
+    try {
+      el = note.paragraphId
+        ? body.querySelector('[data-paragraph-id="' + ((window.CSS && CSS.escape) ? CSS.escape(note.paragraphId) : note.paragraphId) + '"]')
+        : null;
+    } catch (_e) {}
+    if (!el) el = body.querySelector("[data-paragraph-id]");
+    if (el) {
+      try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (_e) {}
+      el.classList.add("wr-p--flash");
+      setTimeout(() => { try { el.classList.remove("wr-p--flash"); } catch (_e) {} }, 1200);
+    }
+  }, []);
 
   const onToolbarAction = _wrUC((action) => {
-    if (action === "create-entity") onCreateEntityFromSelection();
-    if (action === "link-entity")   onLinkEntity();
-  }, [onCreateEntityFromSelection, onLinkEntity]);
+    if (action === "create-entity") { onCreateEntityFromSelection(); return; }
+    if (action === "link-entity") { onLinkEntity(); return; }
+    if (action === "inline-note" || action === "comment") { onAddNote(); return; }
+    if (action === "bold" || action === "italic" || action === "underline" || action === "strike") {
+      const cmd = action === "strike" ? "strikeThrough" : action;
+      try { if (bodyRef.current) bodyRef.current.focus(); if (document.execCommand) document.execCommand(cmd, false, null); } catch (_e) {}
+      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      return;
+    }
+  }, [onCreateEntityFromSelection, onLinkEntity, onAddNote, canvasState, onSetSyncState]);
 
   const onToggleFocusMode  = _wrUC(() => setL((p) => ({ ...p, writingLayoutMode: p.writingLayoutMode === "clean" ? "full" : "clean" })), [setL]);
-  const onSelectAuthor     = _wrUC((id) => setActiveAuthorId(id), []);
+  const onSelectAuthor     = _wrUC((id) => {
+    setActiveAuthorId(id);
+    try {
+      const svc = window.LoomwrightBackend?.SettingsService;
+      if (svc) {
+        const cur = svc.getSectionSync("writersRoom", {}) || {};
+        svc.saveSection("writersRoom", { ...cur, activeAuthorId: id });
+      }
+    } catch (_e) {}
+  }, []);
 
   // Escape exits focus mode (clear, discoverable exit affordance).
   _wrUE(() => {
@@ -1155,6 +1663,33 @@ const WritersRoomScreen = ({
     const kind = FALLBACK_MAP[detail.type] || detail.type;
     onOpenPanel && onOpenPanel(kind);
   }, [onOpenEntityFromManuscript, onOpenPanel]);
+
+  // Delegated handlers for the editable body's atomic occurrence spans
+  // (contenteditable=false). Double-click opens the entity; hover shows the
+  // floating chip. Delegation survives innerHTML rewrites.
+  const onEntityDoubleClickDelegated = _wrUC((e) => {
+    const span = e.target && e.target.closest && e.target.closest("[data-entity-id]");
+    if (!span) return;
+    if (e.preventDefault) e.preventDefault();
+    try { const s = window.getSelection && window.getSelection(); if (s) s.removeAllRanges(); } catch (_e) {}
+    handleEntityDoubleClick({
+      type: span.getAttribute("data-entity-type"),
+      id: span.getAttribute("data-entity-id"),
+      occurrenceId: span.getAttribute("data-occurrence-id") || null,
+      label: span.textContent,
+    });
+  }, [handleEntityDoubleClick]);
+  const onEntityHoverDelegated = _wrUC((e, leaving) => {
+    if (leaving) { setHoverEntity(null); return; }
+    const span = e.target && e.target.closest && e.target.closest("[data-entity-id]");
+    if (!span) return;
+    setHoverEntity({
+      type: span.getAttribute("data-entity-type"),
+      id: span.getAttribute("data-entity-id"),
+      text: span.textContent,
+      x: e.clientX, y: e.clientY,
+    });
+  }, []);
 
   // Optional context menu / long-press for chapter strip handled inside ChapterNode.
   const wrContext = (e) => {
@@ -1205,7 +1740,6 @@ const WritersRoomScreen = ({
         onSelectChapter={onSelectChapter}
         onCreateChapter={onCreateChapter}
         onReserveChapter={onReserveChapter}
-        onReorderChapter={onReorderChapter}
         onOpenAdaptiveWheel={onOpenAdaptiveWheel}
       />
 
@@ -1218,13 +1752,17 @@ const WritersRoomScreen = ({
         {leftMarginVisible && <div className="wr-stage__col wr-stage__col--left">
           <LeftMargin
           notes={notes}
-          authors={WR_AUTHORS}
+          authors={authorList}
+          editingNoteId={editingNoteId}
           filter={noteFilter}
           setFilter={setNoteFilter}
+          onAdd={onAddNote}
+          onEdit={onEditNote}
+          onSaveText={onSaveNoteText}
+          onCancelEdit={onCancelEditNote}
           onResolve={onResolveNote}
-          onEdit={() => {}}
-          onDelete={(id) => setNotes((curr) => curr.filter((n) => n.id !== id))}
-          onCreate={() => {}}
+          onDelete={onDeleteNote}
+          onFocus={onFocusNoteParagraph}
           pinned={L.leftMarginPinned}
           onTogglePin={() => setL({ leftMarginPinned: !L.leftMarginPinned })}
           onCollapse={() => setL({ leftMarginCollapsed: true })}
@@ -1232,7 +1770,7 @@ const WritersRoomScreen = ({
           <MarginResizer side="left" value={L.leftMarginWidth} min={LAYOUT_CONSTRAINTS.leftMarginMin} max={LAYOUT_CONSTRAINTS.leftMarginMax} onChange={(v) => setL({ leftMarginWidth: v })}/>
         </div>}
         {!leftMarginVisible && L.writingLayoutMode !== "clean" && L.writingLayoutMode !== "manuscript-focus" && (
-          <MarginEdgeTab side="left" label="Notes" count={notes.filter((n) => !n.resolved).length} onClick={() => setL({ leftMarginCollapsed: false })}/>
+          <MarginEdgeTab side="left" label="Notes" count={notes.filter((n) => n.status !== "resolved").length} onClick={() => setL({ leftMarginCollapsed: false })}/>
         )}
 
         <div className="wr-canvas-wrap"
@@ -1288,7 +1826,7 @@ const WritersRoomScreen = ({
               <span>Chapter {activeChapter?.num || "—"}</span>
             </div>
             <div className="wr-canvasbar__chips">
-              <AuthorSelector authors={WR_AUTHORS} activeId={activeAuthorId} onSelectAuthor={onSelectAuthor}/>
+              <AuthorSelector authors={authorList} activeId={activeAuthorId} onSelectAuthor={onSelectAuthor}/>
               <Btn variant={compositionOverlayOpen ? "primary" : "outline"} size="sm" icon="sparkle"
                 onClick={onOpenCompositionOverlay}
                 data-callback="onOpenEntityCompositionOverlay"
@@ -1306,6 +1844,8 @@ const WritersRoomScreen = ({
                 setL({ workspaceLayoutPreset: presetId === "clear" ? "writing-only" : presetId });
                 if (onApplyWorkspacePreset) onApplyWorkspacePreset(presetId, panelKinds);
               }}/>
+              <Btn variant="ghost" size="sm" icon="chevron-up" data-testid="wr-move-up" onClick={() => onMoveChapter("up")} title="Move chapter earlier" disabled={!activeChapter || activeChapter.num <= 1}/>
+              <Btn variant="ghost" size="sm" icon="chevron-d" data-testid="wr-move-down" onClick={() => onMoveChapter("down")} title="Move chapter later" disabled={!activeChapter || activeChapter.num >= chapters.length}/>
               <Btn variant="ghost" size="sm" icon="trash" onClick={onDeleteChapterRequest} data-callback="onDeleteChapterRequest" title="Delete chapter"/>
               <SaveModeControls
                 onSave={onSave}
@@ -1318,11 +1858,16 @@ const WritersRoomScreen = ({
 
           <ManuscriptCanvas
             chapter={activeChapter}
-            paragraphs={paragraphs}
+            manuscript={activeManuscript}
             state={canvasState}
-            onEntityHover={handleEntityHover}
-            onEntityDoubleClick={handleEntityDoubleClick}
-            onCommentClick={() => {}}
+            bodyRef={bodyRef}
+            titleRef={titleRef}
+            bodyEpoch={bodyEpoch}
+            spellCheck={spellcheck}
+            onBodyInput={onManuscriptChange}
+            onStartWriting={onStartWriting}
+            onEntityHoverDelegated={onEntityHoverDelegated}
+            onEntityDoubleClickDelegated={onEntityDoubleClickDelegated}
             onCreateChapter={onCreateChapter}
             onSaveAndExtract={onSaveAndExtract}
           />
@@ -1359,6 +1904,12 @@ const WritersRoomScreen = ({
         )}
         {rightMarginVisible && <div className="wr-stage__col wr-stage__col--right">
           <MarginResizer side="right" value={L.rightMarginWidth} min={LAYOUT_CONSTRAINTS.rightMarginMin} max={LAYOUT_CONSTRAINTS.rightMarginMax} onChange={(v) => setL({ rightMarginWidth: v })}/>
+          <CurrentChapterContext
+            chapterId={activeId}
+            onOpenEntity={(e) => handleEntityDoubleClick({ type: e.type, id: e.id, label: e.name })}
+            onOpenPanel={onOpenPanel}
+            onOpenReviewQueue={onOpenReviewQueue}
+          />
           <RightMargin
           extractions={extractions}
           selectedId={selectedExtId}

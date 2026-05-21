@@ -132,6 +132,26 @@ const AppShell = () => {
   // Status / chips
   const [privacyMode, setPrivacyMode] = _us_a("local");
   const [syncState, setSyncState] = _us_a("saved");
+  // Real "last saved" timestamp (UAT #25 — no fake "2 min ago").
+  const [lastSavedAt, setLastSavedAt] = _us_a(null);
+  React.useEffect(() => {
+    const mark = () => setLastSavedAt(Date.now());
+    window.addEventListener("lw:manuscript-saved", mark);
+    window.addEventListener("lw:manuscript-chapters-updated", mark);
+    return () => {
+      window.removeEventListener("lw:manuscript-saved", mark);
+      window.removeEventListener("lw:manuscript-chapters-updated", mark);
+    };
+  }, []);
+  const fmtSavedAt = (ts) => {
+    if (!ts) return "Not saved yet";
+    const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (s < 5) return "saved just now";
+    if (s < 60) return "saved " + s + "s ago";
+    const m = Math.round(s / 60);
+    if (m < 60) return "saved " + m + " min ago";
+    return "saved " + Math.round(m / 60) + "h ago";
+  };
 
   // Panels (docked side-panel stack)
   const [panels, setPanels] = _us_a(INITIAL_PANELS);
@@ -1049,11 +1069,11 @@ const AppShell = () => {
         <div className="app-status">
           <BottomStatusStrip
             mode={ROUTE_META[routeId]?.title || "Workspace"}
-            lastSavedAt="2 min ago"
+            lastSavedAt={fmtSavedAt(lastSavedAt)}
             isLocal={privacyMode === "local"}
-            wordCount={31482}
+            wordCount={(() => { try { return (window.LoomwrightBackend?.ManuscriptChapterService?.loadSync?.().chapters || []).reduce((n, c) => n + (c.words || 0), 0); } catch (_e) { return 0; } })()}
             reviewQueueCount={globalQueueCount}
-            activeAuthor={brand.project.author}
+            activeAuthor={(() => { try { const S = window.LoomwrightBackend?.SettingsService; const authors = S?.getAllSync?.()?.authors; const activeId = S?.getSectionSync?.("writersRoom", {}).activeAuthorId; const a = Array.isArray(authors) ? (authors.find((x) => x.id === activeId) || authors[0]) : null; return (a && a.name) || "You"; } catch (_e) { return "You"; } })()}
             extractionState={syncState === "syncing" ? "running" : "idle"}
             canvasZoom={routeId === "tangle" ? 1 : null}
           />

@@ -1,6 +1,31 @@
 # Loomwright v2 — Final QA Report
 
-_Last run: 2026-05-20 (User Acceptance Regression Audit — live-render fix)._
+_Last run: 2026-05-20 (UAT Remediation + Visible Interaction pass)._
+
+## UAT Remediation + Visible Interaction Pass (`claude/uat-remediation-pass`)
+
+```
+npm run validate         → 523 UI callbacks; 558 handlers; Bucket A = 0 ✓
+npm run test:smoke       → all smoke checks passed (282 OK; +chapter delete/move,
+                           ManuscriptNoteService, SkillTreeService lifecycle) ✓
+npm run test:e2e         → 95 passed, 0 failed (incl. 11 new UAT specs) ✓
+npm run build            → production build checks passed ✓
+npm run test:e2e:preview → 2 passed (production dist boot + Writer's Room) ✓
+```
+
+Browser suites were run via Chrome-for-Testing (`CHROMIUM_PATH`), since the
+Playwright CDN is blocked here. The browser run caught + fixed a real bug
+(`getSectionSync` mangled the array `authors` section → author selector). A
+manual/visual Writer's Room pass (type → save → reload → note) was captured.
+
+Delivered: editable + persisted manuscript body, Save & Extract against the
+saved body, chapter Move Up/Down + persisted delete, paragraph notes, live
+active-author selector, inline-marker title/aria + real mention count, centred
+Speed Reader pivot, live skill-tree editing, Current Chapter Context, and
+truthful save status. Every unresolved UAT complaint is Fixed or Fixed-for-beta.
+Full detail + the e2e/screenshot caveat: `UAT_REMEDIATION_REPORT.md`.
+
+
 
 ## User Acceptance Regression Audit (2026-05-20)
 

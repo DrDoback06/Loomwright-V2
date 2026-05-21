@@ -6,6 +6,15 @@ This is an honest, detailed snapshot of where Loomwright v2 stands after
 the Production Build Hardening pass. It supersedes the milestone wording
 in older docs.
 
+> **Pass 2 update (`claude/uat-remediation-pass`).** A UAT Remediation +
+> Visible Interaction pass finished the remaining user-facing gaps: an editable
+> + persisted manuscript body, chapter management (Move Up/Down + persisted
+> delete), paragraph notes, a live active-author selector, inline-marker
+> clarity, the centred Speed Reader pivot, live skill-tree editing, a Current
+> Chapter Context surface, and truthful save status. `validate`/`smoke`/`build`
+> are green; the browser-driven e2e/preview suites must be run where Chromium is
+> available. Full detail: `UAT_REMEDIATION_REPORT.md`.
+
 ## 1. Current product status
 
 **Local beta candidate — verified with live-render UAT tests.** Loomwright

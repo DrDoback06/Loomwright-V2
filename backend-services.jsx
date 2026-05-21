@@ -37,6 +37,7 @@
     searchIndex: "search_index",
     auditLog: "audit_log",
     aiRouting: "ai_routing",
+    manuscriptNotes: "manuscript_notes",
   };
 
   // Synchronously read the sample-loaded flag from localStorage BEFORE any
@@ -683,7 +684,11 @@
     },
     getSectionSync(section, fallback) {
       const all = this.getAllSync();
-      return all[section] ? { ...clone(fallback || {}), ...all[section] } : clone(fallback);
+      const val = all[section];
+      // Array sections (e.g. "authors") must round-trip as arrays — the
+      // object-spread below would turn them into numeric-keyed objects.
+      if (Array.isArray(val)) return clone(val);
+      return val ? { ...clone(fallback || {}), ...val } : clone(fallback);
     },
     async saveSection(section, value, opts = {}) {
       const all = await StorageService.get(KEYS.settings, {});
@@ -976,7 +981,8 @@
         assignedCast: Array.isArray(tree.assignedCast) ? tree.assignedCast.slice() : [],
         createdAt: tree.createdAt || nowIso(),
       };
-      return this.save({ ...state, trees: [...(state.trees || []), row] });
+      await this.save({ ...state, trees: [...(state.trees || []), row] });
+      return row;
     },
     async updateTree(id, patch) {
       const state = this.loadSync();
@@ -1073,6 +1079,19 @@
           const set = new Set(t.assignedCast || []);
           set.add(castEntityId);
           return { ...t, assignedCast: [...set], updatedAt: nowIso() };
+        }),
+      });
+    },
+    // Persist a node's locked/unlocked state in the tree layout (UAT #17).
+    async setNodeUnlocked(treeId, skillEntityId, unlocked) {
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => {
+          if (t.id !== treeId) return t;
+          const prev = (t.layout || {})[skillEntityId] || {};
+          const layout = { ...(t.layout || {}), [skillEntityId]: { ...prev, unlocked: !!unlocked } };
+          return { ...t, layout, updatedAt: nowIso() };
         }),
       });
     },
@@ -1354,6 +1373,7 @@
         manuscripts: {},
         notes: {},
         extractions: {},
+        trashedChapters: [],
         updatedAt: nowIso(),
       };
     },
@@ -1434,6 +1454,187 @@
         } catch (_) {}
       }
       return chapter;
+    },
+    // Delete a chapter: removes it + its manuscript, renumbers the rest,
+    // and retains the removed {chapter, manuscript} in `trashedChapters`
+    // so it can be restored (no silent data loss). Logged to the audit
+    // trail. Not marked reversible via the generic undo path because
+    // chapter restore uses restoreChapter() rather than entity undo.
+    async deleteChapter(chapterId, opts = {}) {
+      const state = this.loadSync();
+      const chapter = (state.chapters || []).find((c) => c.id === chapterId) || null;
+      if (!chapter) return null;
+      const manuscript = (state.manuscripts || {})[chapterId] || null;
+      const remaining = (state.chapters || [])
+        .filter((c) => c.id !== chapterId)
+        .map((c, i) => ({ ...c, num: i + 1 }));
+      const manuscripts = { ...(state.manuscripts || {}) };
+      delete manuscripts[chapterId];
+      const trashedChapters = [{ chapter, manuscript, deletedAt: nowIso() }, ...(state.trashedChapters || [])].slice(0, 50);
+      const nextActive = state.activeChapterId === chapterId ? (remaining[0]?.id || null) : state.activeChapterId;
+      await this.save({ ...state, chapters: remaining, manuscripts, trashedChapters, activeChapterId: nextActive }, { skipAudit: true });
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: "chapter.delete",
+            label: `Deleted chapter "${chapter.title || chapterId}"`,
+            targetType: "chapter",
+            targetId: chapterId,
+            targetName: chapter.title || null,
+            before: _auditSummariseChapter(chapter),
+            after: null,
+            source: "ManuscriptChapterService",
+            reversible: false,
+          });
+        } catch (_) {}
+      }
+      return { chapter, manuscript };
+    },
+    async restoreChapter(chapterId, opts = {}) {
+      const state = this.loadSync();
+      const entry = (state.trashedChapters || []).find((t) => t.chapter && t.chapter.id === chapterId);
+      if (!entry) return null;
+      const trashedChapters = (state.trashedChapters || []).filter((t) => !(t.chapter && t.chapter.id === chapterId));
+      const chapters = [...(state.chapters || []), entry.chapter].map((c, i) => ({ ...c, num: i + 1 }));
+      const manuscripts = { ...(state.manuscripts || {}) };
+      if (entry.manuscript) manuscripts[chapterId] = entry.manuscript;
+      return this.save({ ...state, chapters, manuscripts, trashedChapters, activeChapterId: chapterId }, opts);
+    },
+    // Move a chapter one slot up/down and renumber. Drag-and-drop reorder
+    // is deferred; this backs the visible Move Up / Move Down controls.
+    async moveChapter(chapterId, direction, opts = {}) {
+      const state = this.loadSync();
+      const chapters = (state.chapters || []).slice();
+      const idx = chapters.findIndex((c) => c.id === chapterId);
+      if (idx < 0) return state;
+      const swapWith = direction === "up" ? idx - 1 : idx + 1;
+      if (swapWith < 0 || swapWith >= chapters.length) return state;
+      const tmp = chapters[idx];
+      chapters[idx] = chapters[swapWith];
+      chapters[swapWith] = tmp;
+      const renumbered = chapters.map((c, i) => ({ ...c, num: i + 1 }));
+      const result = await this.save({ ...state, chapters: renumbered }, { skipAudit: true });
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: "chapter.reorder",
+            label: `Moved chapter "${tmp.title || chapterId}" ${direction}`,
+            targetType: "chapter",
+            targetId: chapterId,
+            targetName: tmp.title || null,
+            source: "ManuscriptChapterService",
+            reversible: false,
+          });
+        } catch (_) {}
+      }
+      return result;
+    },
+  };
+
+  // ManuscriptNoteService — paragraph-level notes/comments anchored to a
+  // chapter + paragraph id (UAT #19). Range/selection-anchored comments are
+  // future polish; a captured selection is stored as `quote` when available.
+  const ManuscriptNoteService = {
+    defaultState() {
+      return { notes: {}, updatedAt: nowIso() };
+    },
+    loadSync() {
+      return StorageService.getSync(KEYS.manuscriptNotes, this.defaultState());
+    },
+    getSync(id) {
+      const s = this.loadSync();
+      return (s.notes && s.notes[id]) || null;
+    },
+    listByChapterSync(chapterId) {
+      const s = this.loadSync();
+      return Object.values(s.notes || {})
+        .filter((n) => n.chapterId === chapterId)
+        .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    },
+    listByParagraphSync(chapterId, paragraphId) {
+      return this.listByChapterSync(chapterId).filter((n) => n.paragraphId === paragraphId);
+    },
+    async _persist(notes) {
+      const next = { notes, updatedAt: nowIso() };
+      await StorageService.set(KEYS.manuscriptNotes, next);
+      window.dispatchEvent(new CustomEvent("lw:manuscript-notes-updated", { detail: next }));
+      return next;
+    },
+    async createNote(note = {}) {
+      const s = this.loadSync();
+      const id = note.id || uuid("note");
+      const row = {
+        id,
+        projectId: note.projectId || null,
+        chapterId: note.chapterId || null,
+        paragraphId: note.paragraphId || null,
+        startOffset: note.startOffset != null ? note.startOffset : null,
+        endOffset: note.endOffset != null ? note.endOffset : null,
+        quote: note.quote || "",
+        noteText: note.noteText || "",
+        authorId: note.authorId || null,
+        status: note.status === "resolved" ? "resolved" : "open",
+        source: note.source || "manual",
+        createdAt: note.createdAt || nowIso(),
+        updatedAt: nowIso(),
+        resolvedAt: null,
+      };
+      const notes = { ...(s.notes || {}), [id]: row };
+      await this._persist(notes);
+      try {
+        AuditService.log({
+          action: "note.create",
+          label: `Added paragraph note${row.quote ? ` on "${String(row.quote).slice(0, 40)}"` : ""}`,
+          targetType: "note", targetId: id,
+          targetName: row.noteText ? String(row.noteText).slice(0, 40) : null,
+          before: null, after: row, source: "ManuscriptNoteService", reversible: false,
+        });
+      } catch (_) {}
+      return row;
+    },
+    async updateNote(id, patch = {}) {
+      const s = this.loadSync();
+      const prev = s.notes && s.notes[id];
+      if (!prev) return null;
+      const row = { ...prev, ...patch, id, updatedAt: nowIso() };
+      const notes = { ...(s.notes || {}), [id]: row };
+      await this._persist(notes);
+      return row;
+    },
+    async resolveNote(id, status = "resolved") {
+      const s = this.loadSync();
+      const prev = s.notes && s.notes[id];
+      if (!prev) return null;
+      const nextStatus = status === "resolved" ? "resolved" : "open";
+      const row = { ...prev, status: nextStatus, resolvedAt: nextStatus === "resolved" ? nowIso() : null, updatedAt: nowIso() };
+      const notes = { ...(s.notes || {}), [id]: row };
+      await this._persist(notes);
+      try {
+        AuditService.log({
+          action: "note.resolve",
+          label: `${nextStatus === "resolved" ? "Resolved" : "Reopened"} paragraph note`,
+          targetType: "note", targetId: id, before: prev, after: row,
+          source: "ManuscriptNoteService", reversible: false,
+        });
+      } catch (_) {}
+      return row;
+    },
+    async deleteNote(id) {
+      const s = this.loadSync();
+      const prev = s.notes && s.notes[id];
+      if (!prev) return null;
+      const notes = { ...(s.notes || {}) };
+      delete notes[id];
+      await this._persist(notes);
+      try {
+        AuditService.log({
+          action: "note.delete",
+          label: "Deleted paragraph note",
+          targetType: "note", targetId: id, before: prev, after: null,
+          source: "ManuscriptNoteService", reversible: false,
+        });
+      } catch (_) {}
+      return prev;
     },
   };
 
@@ -4591,6 +4792,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     KeysService,
     ManuscriptService,
     ManuscriptChapterService,
+    ManuscriptNoteService,
     CompositionService,
     HandoffService,
     TrashService,

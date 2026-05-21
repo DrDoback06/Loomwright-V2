@@ -39,8 +39,7 @@ test.describe("M. Workspace persistence — service-level round-trip", () => {
     const skillB = await saveEntity(page, "skills", { name: "Sidestep" }, { status: "active" });
     const treeId = await page.evaluate(async ({ aId, bId }) => {
       const STS = window.LoomwrightBackend.SkillTreeService;
-      const s1 = await STS.addTree({ name: "Footwork" });
-      const tree = s1.trees[s1.trees.length - 1];
+      const tree = await STS.addTree({ name: "Footwork" });
       await STS.addNode(tree.id, aId, { x: 100, y: 200 });
       await STS.addNode(tree.id, bId, { x: 200, y: 200 });
       await STS.connectNodes(tree.id, aId, bId);

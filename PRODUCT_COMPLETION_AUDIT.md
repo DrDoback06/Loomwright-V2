@@ -8,6 +8,14 @@ _Created: 2026-05-19 (post-PR-#3 merge to `main`)._
 > below) contain useful design intent but may include obsolete status
 > claims from earlier passes — this file supersedes their _status_
 > sections.
+>
+> **Pass 2 (`claude/uat-remediation-pass`).** Writer's Room is now genuinely
+> usable — an editable + persisted manuscript body, paragraph notes
+> (`ManuscriptNoteService`), a Current Chapter Context surface, an honest
+> toolbar, a live active-author selector — and skill-tree editing persists via
+> a live manager (`SkillTreeLiveManager`). Every previously-unresolved UAT
+> complaint is now Fixed or Fixed-for-beta with named future polish; see
+> `USER_ACCEPTANCE_REGRESSION_AUDIT.md` and `UAT_REMEDIATION_REPORT.md`.
 
 ## Verification baseline
 
