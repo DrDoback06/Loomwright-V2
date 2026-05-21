@@ -315,6 +315,23 @@ const AppShell = () => {
     };
   }, []);
 
+  // ----- Entity Extraction Wizard (global big-extraction window) -----
+  const [exWizard, setExWizard] = _us_a({ open: false, scope: "manuscript", typeFocus: null, chapterId: null });
+  const closeExWizard = _uc_a(() => setExWizard((s) => ({ ...s, open: false })), []);
+  _ue_a(() => {
+    const onOpen = (e) => {
+      const d = e.detail || {};
+      setExWizard({ open: true, scope: d.scope || "manuscript", typeFocus: d.typeFocus || null, chapterId: d.chapterId || null });
+    };
+    const onClose = () => setExWizard((s) => ({ ...s, open: false }));
+    window.addEventListener("lw:open-extraction-wizard", onOpen);
+    window.addEventListener("lw:close-extraction-wizard", onClose);
+    return () => {
+      window.removeEventListener("lw:open-extraction-wizard", onOpen);
+      window.removeEventListener("lw:close-extraction-wizard", onClose);
+    };
+  }, []);
+
   const confirmMerge = _uc_a(async (altId) => {
     const { item, sourceId, type } = mergeModal;
     const targetType = type || item?.entityType;
@@ -1170,6 +1187,17 @@ const AppShell = () => {
           onConfirmMerge={confirmMerge}
           onCreateNewInstead={createNewInsteadOfMerge}
           onCancel={closeMergeModal}
+        />
+      )}
+
+      {/* Entity Extraction Wizard — global big-extraction window */}
+      {exWizard.open && typeof ExtractionWizard !== "undefined" && (
+        <ExtractionWizard
+          open={exWizard.open}
+          initialScope={exWizard.scope}
+          typeFocus={exWizard.typeFocus}
+          initialChapterId={exWizard.chapterId}
+          onClose={closeExWizard}
         />
       )}
 

@@ -830,6 +830,34 @@
       return;
     }
 
+    // —— Entity Extraction Wizard (the big-extraction window) ——
+    // These were previously unwired ("the wizard opens but does nothing").
+    if (name === "onOpenExtractionWizard" || name === "onExtractCast" || name === "onExtractLocations") {
+      const typeFocus = name === "onExtractCast" ? "cast"
+        : name === "onExtractLocations" ? "locations"
+        : (ctx.detail?.typeFocus || null);
+      window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", {
+        detail: { scope: ctx.detail?.scope || "manuscript", typeFocus, chapterId: ctx.detail?.chapterId || null },
+      }));
+      return;
+    }
+    if (name === "onRerunExtraction") {
+      window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "chapter" } }));
+      return;
+    }
+    if (name === "onCancelExtraction") {
+      window.dispatchEvent(new CustomEvent("lw:extraction-cancel"));
+      return;
+    }
+    if (name === "onContinueExtractionInBackground") {
+      window.dispatchEvent(new CustomEvent("lw:close-extraction-wizard"));
+      return;
+    }
+    if (name === "onOpenExtractionSession") {
+      openPanel("review");
+      return;
+    }
+
     // —— Bucket B — AI/provider-gated. Show a specific notice if no
     // provider is configured, else perform the AI call.
     if (name === "onGenerateAIWriterDraft") {
