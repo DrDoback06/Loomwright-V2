@@ -3098,9 +3098,13 @@
       report("detect", { candidates: [...discoveryCandidates, ...localCandidates] });
 
       let items = [];
-      // Only invoke AI when a provider is configured. Otherwise the local
-      // pass alone produces useful occurrences without leaking text.
-      const aiAvailable = !!(await AIService.getProviderConfig().catch(() => null))?.apiKey;
+      // AI is opt-in enrichment only. Resolve through the routing tier so we
+      // honour Local-only mode (no AI) and the Free tier (local providers
+      // like Ollama only — never a paid cloud call). The local pass above
+      // already produced candidates with no AI and no text egress.
+      let aiRoute = null;
+      try { aiRoute = AIRoutingService.resolveRoute(deep ? "deepExtraction" : "quickExtraction"); } catch (_) { aiRoute = null; }
+      const aiAvailable = !!aiRoute;
       if (aiAvailable) {
         // Chunk with overlap so entities mentioned across boundaries
         // aren't lost (ported from legacy chapterDataExtractionService).
@@ -3153,6 +3157,8 @@ Known items:      ${known("items") || "None"}
 Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confidence}]`;
           try {
             const raw = await AIService.complete({
+              providerId: aiRoute.providerId,
+              model: aiRoute.model,
               prompt: promptHeader,
               system: "Return valid JSON only. No markdown fences.",
               maxTokens: deep ? 2500 : 1200,

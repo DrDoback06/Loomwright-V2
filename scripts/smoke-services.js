@@ -1188,6 +1188,12 @@ async function main() {
   log("[ai] normal tier allows the cloud provider again", Routing.resolveRoute("writingDraft")?.providerId === "openai" || Routing.resolveRoute("writingDraft")?.providerId === "ollama");
   await Routing.save({ tier: "normal" });
 
+  // Extraction honours Local-only mode: no AI attempted, local pass only.
+  await Routing.save({ mode: "localOnly" });
+  const exLocal = await B.ExtractionService.runExtraction({ chapterId: "ch-localonly", text: "Theron crossed into Hesselmark at dawn.", deep: false });
+  log("[ai] extraction skips AI in Local-only mode", exLocal.session.aiUsed === false);
+  await Routing.save({ mode: "balanced" });
+
   // Context builder.
   const cChap = await B.ManuscriptChapterService.createFromComposition({ title: "Ctx Chapter", bodyText: "Hess crossed the salt marsh at dawn." });
   await B.EntityService.save("cast", { name: "Hess Vaela", data: { summary: "Bearer of the Auger." } });
