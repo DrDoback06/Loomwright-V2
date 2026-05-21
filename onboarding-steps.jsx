@@ -615,14 +615,15 @@ const Step_Manuscript = ({ data, set }) => {
       )}
       {m.mode === "upload" && (
         <div className="ob-block">
-          <DropZone callback="onUploadManuscript" accept=".docx, .md, .txt, .scriv" onFile={() => upd("uploaded", { name: "manuscript.docx", state: "uploaded", chapters: 7 })} state={m.uploaded?.state || "idle"}/>
+          <DropZone callback="onUploadManuscript" accept=".md, .txt, .markdown, .text" onFile={(f) => upd("uploaded", { name: f.name, state: f.state, content: f.content || "", note: f.note, words: (f.content || "").trim().split(/\s+/).filter(Boolean).length })} state={m.uploaded?.state || "idle"}/>
           {m.uploaded && (
             <div className="ob-card">
               <div className="ob-card__main">
                 <div className="ob-card__title">{m.uploaded.name}</div>
                 <div className="ob-card__sub">
-                  <span className="chip chip--ok"><Icon name="check" size={10}/>Uploaded</span>
-                  <span>Detected {m.uploaded.chapters} chapter breaks</span>
+                  {m.uploaded.state === "unsupported"
+                    ? <span className="chip chip--warn">{m.uploaded.note || "Unsupported format — paste the text instead"}</span>
+                    : <><span className="chip chip--ok"><Icon name="check" size={10}/>Uploaded</span><span>{m.uploaded.words || 0} words</span></>}
                 </div>
               </div>
               <div className="ob-card__actions"><Btn variant="ghost" size="sm" icon="trash"/></div>
@@ -638,18 +639,23 @@ const Step_Manuscript = ({ data, set }) => {
         <ToggleRow label="Reserve future chapters" sub={"Pre-create empty Ch.8–" + (data.plot?.targetChapters || 28) + " slots."} value={m.reserve ?? true} onChange={(v) => upd("reserve", v)} callback="onReserveChapters"/>
         <ToggleRow label="Run quick extraction after import" sub="Find names, places, factions in 30 seconds. You approve everything." value={m.runExtraction ?? true} onChange={(v) => upd("runExtraction", v)} callback="onRunQuickExtraction"/>
       </div>
-      {m.uploaded && (
+      {m.uploaded && m.uploaded.content && (
         <div className="ob-block">
           <div className="ob-block__title">Import preview</div>
           <div className="ob-list">
-            {["Chapter 1 — The Auger Speaks","Chapter 2 — Veyling Returns","Chapter 3 — Pale Reach","Chapter 4 — The Quiet Court","Chapter 5 — Mara’s Letter","Chapter 6 — Hess by Lamplight","Chapter 7 — The First Vision"].map((t, i) => (
-              <div key={i} className="ob-card">
-                <div className="ob-card__main">
-                  <div className="ob-card__title">{t}</div>
-                  <div className="ob-card__sub"><span className="chip chip--neutral">{2400 + i * 380} words</span><span className="chip chip--ok">ready to import</span></div>
+            {(() => {
+              const re = /^[ \t]*(?:chapter\s+[\dIVXLCM]+\b[^\n]*|#{1,6}\s+[^\n]+)\s*$/gim;
+              const heads = (m.uploaded.content.match(re) || []).map((h) => h.replace(/^#{1,6}\s*/, "").trim());
+              const titles = heads.length ? heads.slice(0, 12) : ["Chapter 1"];
+              return titles.map((t, i) => (
+                <div key={i} className="ob-card">
+                  <div className="ob-card__main">
+                    <div className="ob-card__title">{t}</div>
+                    <div className="ob-card__sub"><span className="chip chip--ok">ready to import</span></div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         </div>
       )}
@@ -665,13 +671,16 @@ const Step_References = ({ data, set, callbacks }) => {
 
   const addPasted = () => {
     if (!r.pasteText?.trim()) return;
-    upd("items", [...items, {
+    const item = {
       id: "ref" + Date.now(),
       title: r.pasteTitle || "Untitled reference",
-      kind: "pasted", words: r.pasteText.trim().split(/\s+/).length,
+      kind: "pasted", content: r.pasteText.trim(),
+      words: r.pasteText.trim().split(/\s+/).filter(Boolean).length,
       tags: ["pasted"], style: false, canon: true, context: true, state: "ready",
-    }]);
-    set("references", { ...r, items: [...items], pasteTitle: "", pasteText: "" });
+    };
+    // Single set with the new item AND cleared inputs (the previous two-set
+    // form dropped the item and never stored its text).
+    set("references", { ...r, items: [...items, item], pasteTitle: "", pasteText: "" });
   };
   const remove = (id) => upd("items", items.filter((x) => x.id !== id));
   const toggleFlag = (id, k) => upd("items", items.map((x) => x.id === id ? { ...x, [k]: !x[k] } : x));

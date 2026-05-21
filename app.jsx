@@ -124,6 +124,50 @@ const AppShell = () => {
   // Valid: home, today, writers-room, settings.
   const [routeId, setRouteId] = _us_a("writers-room");
 
+  // Onboarding wizard — shown on first run (status "pending") and on demand
+  // via lw:open-onboarding-wizard. Completion seeds the project + routes.
+  const [onboarding, setOnboarding] = _us_a({ open: false, initial: null });
+  _ue_a(() => {
+    const B = () => window.LoomwrightBackend;
+    const firstRun = () => {
+      try {
+        const OS = B() && B().OnboardingService;
+        if (OS && OS.statusSync() === "pending") setOnboarding({ open: true, initial: OS.loadSync({}) });
+      } catch (_e) {}
+    };
+    if (window.LoomwrightBackend) firstRun();
+    else window.addEventListener("lw:backend-ready", firstRun, { once: true });
+    const onOpen = () => {
+      const OS = B() && B().OnboardingService;
+      setOnboarding({ open: true, initial: (OS && OS.loadSync({})) || {} });
+    };
+    const onComplete = (e) => {
+      setOnboarding({ open: false, initial: null });
+      const dest = e && e.detail && e.detail.dest;
+      if (dest) setRouteId(dest === "atlas" || dest === "cast" ? dest : (["home", "today", "writers-room"].includes(dest) ? dest : "writers-room"));
+    };
+    window.addEventListener("lw:open-onboarding-wizard", onOpen);
+    window.addEventListener("lw:onboarding-complete", onComplete);
+    return () => {
+      window.removeEventListener("lw:backend-ready", firstRun);
+      window.removeEventListener("lw:open-onboarding-wizard", onOpen);
+      window.removeEventListener("lw:onboarding-complete", onComplete);
+    };
+  }, []);
+  const handleCompleteOnboarding = _uc_a(async (data) => {
+    const OS = window.LoomwrightBackend && window.LoomwrightBackend.OnboardingService;
+    try { if (OS) await OS.applyCompletion(data || {}); } catch (_e) {}
+    // applyCompletion fires lw:onboarding-complete (handled above) to close + route.
+  }, []);
+  const handleExitOnboarding = _uc_a(async () => {
+    try { await window.LoomwrightBackend?.OnboardingService?.setStatus("skipped"); } catch (_e) {}
+    setOnboarding({ open: false, initial: null });
+  }, []);
+  const handleMinimizeOnboarding = _uc_a(async () => {
+    try { await window.LoomwrightBackend?.OnboardingService?.setStatus("in-progress"); } catch (_e) {}
+    setOnboarding({ open: false, initial: null });
+  }, []);
+
   // Left rail expansion (the only rail now)
   const [leftExpanded, setLeftExpanded] = _us_a(tweaks.leftRailDefault === "expanded");
   _ue_a(() => setLeftExpanded(tweaks.leftRailDefault === "expanded"), [tweaks.leftRailDefault]);
@@ -989,6 +1033,16 @@ const AppShell = () => {
 
   return (
     <>
+      {onboarding.open && typeof OnboardingWizard !== "undefined" && (
+        <div className="ob-overlay" data-ui="OnboardingOverlay" style={{ position: "fixed", inset: 0, zIndex: 9000, background: "var(--paper-0, #f4ecd8)", overflow: "auto" }}>
+          <OnboardingWizard
+            initial={onboarding.initial || {}}
+            onCompleteOnboarding={handleCompleteOnboarding}
+            onExitOnboarding={handleExitOnboarding}
+            onMinimizeOnboarding={handleMinimizeOnboarding}
+          />
+        </div>
+      )}
       <div
         className="app-shell"
         data-ui="AppShell"

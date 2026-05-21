@@ -10,6 +10,10 @@ async function openFreshApp(page) {
     try { await window.LoomwrightBackend.StorageService.clear(); } catch (_) {}
     try { window.localStorage.clear(); } catch (_) {}
     try { window.__LW_SAMPLE_LOADED__ = false; } catch (_) {}
+    // Tests exercise the post-onboarding shell; mark onboarding handled so the
+    // first-run wizard overlay doesn't cover the app. The onboarding spec sets
+    // status back to "pending" to test the first-run flow explicitly.
+    try { await window.LoomwrightBackend.OnboardingService.setStatus("skipped"); } catch (_) {}
   });
   await page.goto(SHELL_PATH);
   await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });

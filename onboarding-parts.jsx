@@ -177,22 +177,46 @@ const JsonImportBox = ({ label = "Paste filled JSON here", value, onParseSuccess
 };
 
 // --- Drop zone (placeholder upload) ---------------------------------
-const DropZone = ({ accept = ".txt, .md, .docx", title = "Drop a file or click to upload", hint = "Max 10MB · text files preferred", state = "idle", callback, onFile }) => (
-  <div
-    className="ob-drop"
-    role="button"
-    tabIndex={0}
-    data-callback={callback}
-    onClick={() => onFile && onFile({ name: "sample.txt", state: "pending" })}
-  >
-    <div className="ob-drop__icon">
-      <Icon name={state === "uploaded" ? "check" : state === "pending" ? "clock" : "paper"} size={16}/>
+const DropZone = ({ accept = ".txt, .md, .docx", title = "Drop a file or click to upload", hint = "Max 10MB · text files preferred", state = "idle", callback, onFile }) => {
+  const inputRef = React.useRef(null);
+  const readFile = (file) => {
+    if (!file || !onFile) return;
+    const name = file.name || "file";
+    const isText = /\.(txt|md|markdown|text|rtf|csv|json|html?|xml|log|tex)$/i.test(name) || (file.type || "").startsWith("text");
+    if (!isText) {
+      // Binary formats (.docx/.scriv) can't be parsed offline without a
+      // library; surface that honestly rather than faking content.
+      onFile({ name, size: file.size, state: "unsupported", content: "", note: "Can't read this format offline — paste the text instead, or export to .txt/.md." });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => onFile({ name, size: file.size, state: "uploaded", content: String(reader.result || "") });
+    reader.onerror = () => onFile({ name, size: file.size, state: "error", content: "" });
+    reader.readAsText(file);
+  };
+  const onChange = (e) => { const f = e.target.files && e.target.files[0]; readFile(f); try { e.target.value = ""; } catch (_) {} };
+  const onDrop = (e) => { e.preventDefault(); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; readFile(f); };
+  return (
+    <div
+      className="ob-drop"
+      role="button"
+      tabIndex={0}
+      data-callback={callback}
+      onClick={() => inputRef.current && inputRef.current.click()}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); inputRef.current && inputRef.current.click(); } }}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+    >
+      <input ref={inputRef} type="file" accept={accept} style={{ display: "none" }} onChange={onChange} data-testid="ob-file-input"/>
+      <div className="ob-drop__icon">
+        <Icon name={state === "uploaded" ? "check" : state === "pending" ? "clock" : "paper"} size={16}/>
+      </div>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-lg)", color: "var(--ink-1)" }}>{title}</div>
+      <div className="ob-drop__hint">{hint}</div>
+      <div className="ob-drop__hint" style={{ fontFamily: "var(--font-mono)" }}>{accept}</div>
     </div>
-    <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-lg)", color: "var(--ink-1)" }}>{title}</div>
-    <div className="ob-drop__hint">{hint}</div>
-    <div className="ob-drop__hint" style={{ fontFamily: "var(--font-mono)" }}>{accept}</div>
-  </div>
-);
+  );
+};
 
 // --- OnboardingStepRail ----------------------------------------------
 const OnboardingStepRail = ({ steps, currentId, completedIds, onOnboardingStepChange, projectName, percent }) => {

@@ -122,14 +122,18 @@ const OnboardingWizard = ({ initial = {}, onCompleteOnboarding, onExitOnboarding
 
   // setData for one section
   const setSection = _uc_W((key, val) => {
+    let nextData = null;
     setData((d) => {
       setHistory((h) => [...h.slice(-9), { key, prev: d[key] }]);
-      return { ...d, [key]: val };
+      nextData = { ...d, [key]: val };
+      return nextData;
     });
-    // schedule autosave
+    // schedule autosave — actually persist to the backend so "save & continue
+    // later" and reopening the wizard restore the answers.
     setSaveState({ kind: "saving", label: "Saving draft…" });
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
+      try { if (nextData) window.LoomwrightBackend?.OnboardingService?.save(nextData, { skipAudit: true }); } catch (_e) {}
       setSaveState({ kind: "saved", label: "Draft saved · just now" });
     }, 700);
   }, []);
