@@ -228,6 +228,27 @@ async function main() {
   log("occurrences are bound to chapterId", ch2Occs.length >= 2);
   log("occurrences point at the real entityId", ch2Occs.some((o) => o.entityId === cast.id));
 
+  // -- Offline NER discovery + streaming progress (no AI) --
+  {
+    const stages = [];
+    const progListener = (e) => stages.push("evt:" + (e.detail && e.detail.stage));
+    win.addEventListener("lw:extraction-progress", progListener);
+    await B.ExtractionService.runExtraction({
+      chapterId: "ch-stream",
+      text: "\"Hold the line,\" said Theron. Theron raised the Sunblade high and rode toward Kelmoor.",
+      deep: false,
+      onProgress: (d) => stages.push(d.stage),
+    });
+    win.removeEventListener("lw:extraction-progress", progListener);
+    const streamCands = B.StorageService.getSync(B.keys.reviewQueue, []).filter((q) => q.chapterId === "ch-stream");
+    log("runExtraction reports a start stage via onProgress", stages.includes("start"));
+    log("runExtraction reports a complete stage via onProgress", stages.includes("complete"));
+    log("runExtraction dispatches lw:extraction-progress window events", stages.some((s) => String(s).startsWith("evt:")));
+    log("offline discovery finds a new cast member from dialogue", streamCands.some((c) => c.entityType === "cast" && c.matchType === "new"));
+    log("offline discovery finds a new item from naming cue", streamCands.some((c) => c.entityType === "items" && c.matchType === "new"));
+    log("offline discovery finds a new location from a directional cue", streamCands.some((c) => c.entityType === "locations" && c.matchType === "new"));
+  }
+
   // -- mergeEntities global rewrite --
   const dup = await B.EntityService.save("locations", { name: "Vraska Pass Alt" }, { status: "active" });
   // Plant cross-references that should be rewritten.

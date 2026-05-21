@@ -3035,8 +3035,18 @@
       await StorageService.set(KEYS.extractionSession, { ...session, updatedAt: nowIso() });
       window.dispatchEvent(new CustomEvent("lw:extraction-updated", { detail: session }));
     },
-    async runExtraction({ chapterId, text, deep = false, paragraphs = null }) {
+    async runExtraction({ chapterId, text, deep = false, paragraphs = null, scope = "chapter", onProgress = null, signal = null }) {
       const sessionId = uuid("ext");
+      // Optional live-progress reporting. onProgress + a window event let a
+      // wizard render entities as they are found; both are no-ops for the
+      // existing batch callers. All the extra params are optional.
+      const report = (stage, extra = {}) => {
+        const detail = { sessionId, chapterId, scope, stage, deep, ...extra };
+        try { if (typeof onProgress === "function") onProgress(detail); } catch (_) {}
+        try { window.dispatchEvent(new CustomEvent("lw:extraction-progress", { detail })); } catch (_) {}
+      };
+      const isAborted = () => !!(signal && signal.aborted);
+      report("start");
       // Local pass: scan text for mentions of known entities and persist
       // EntityOccurrence records pointing at real entity IDs. This runs
       // regardless of AI configuration so double-click works without BYOK.
@@ -3051,6 +3061,7 @@
         }
       }
       if (occurrences.length) await OccurrenceService.saveMany(occurrences);
+      report("scan", { occurrenceCount: occurrences.length });
 
       // Local detectors (Pass 1): pattern-based phrase scans for item
       // transfer/loss, travel, relationships, stat changes, quest
@@ -3062,6 +3073,7 @@
       // extraction is not empty. Deterministic, no AI, no text egress.
       const discovery = discoverEntities(text || "", knownEntityIndex(), chapterId, sessionId);
       const discoveryCandidates = clusterAliases(discovery.candidates);
+      report("detect", { candidates: [...discoveryCandidates, ...localCandidates] });
 
       let items = [];
       // Only invoke AI when a provider is configured. Otherwise the local
@@ -3081,6 +3093,8 @@
           .slice(0, 50)
           .join(", ");
         for (const chunk of chunks) {
+          if (isAborted()) break;
+          report("ai", { chunkIndex: chunk.index, chunkCount: chunks.length });
           const promptHeader = deep
             ? `You are a canon extraction system for a long-form story. Analyze this chapter chunk and extract narrative elements across every domain.
 
@@ -3131,6 +3145,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
                     return arr.map((row) => ({ ...row, type: row.type || typeMap[category] || "references" }));
                   });
               items.push(...chunkItems.map((it) => ({ ...it, _chunkIndex: chunk.index, _chunkStart: chunk.start })));
+              report("ai", { chunkIndex: chunk.index, chunkCount: chunks.length, names: chunkItems.map((it) => it.name).filter(Boolean) });
             } catch (_) {
               // Skip unparseable chunk
             }
@@ -3208,18 +3223,21 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
         }));
       }
       const session = {
-        status: "complete",
+        status: isAborted() ? "cancelled" : "complete",
         chapterId,
         deep,
         sessionId,
+        scope,
         itemCount: items.length,
+        candidateCount: reviewItems.length,
         occurrenceCount: occurrences.length,
         aiUsed: aiAvailable,
         updatedAt: nowIso(),
       };
       await this.saveSession(session);
       window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
-      return { session, items, occurrences, occurrenceCount: occurrences.length, itemCount: items.length };
+      report(isAborted() ? "cancelled" : "complete", { candidates: reviewItems, candidateCount: reviewItems.length, occurrenceCount: occurrences.length });
+      return { session, items, occurrences, candidates: reviewItems, occurrenceCount: occurrences.length, itemCount: items.length };
     },
   };
 
