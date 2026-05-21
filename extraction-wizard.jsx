@@ -113,6 +113,15 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
   const usingAI = mode === "deep" && !!deepRoute;
   const openReview = () => { window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onOpenReviewQueue" } })); if (onClose) onClose(); };
   const cancelRun = () => { if (abortRef.current) abortRef.current.abort(); };
+  // Per-row triage uses the SAME registry callbacks as the Review Queue, so
+  // Accept/Edit/Merge/Deny behave identically. Accept/Deny optimistically drop
+  // the row from the live list.
+  const act = (cbName, it) => {
+    window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: cbName, detail: { id: it.id } } }));
+    if (cbName === "onAcceptQueueItem" || cbName === "onDenyQueueItem") {
+      setStreamed((s) => s.filter((x) => x.id !== it.id));
+    }
+  };
 
   return (
     <div className="exm-backdrop" role="dialog" aria-modal="true" data-ui="ExtractionWizardBackdrop">
@@ -201,6 +210,10 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
                     <span style={{ fontWeight: 600, flex: "0 0 auto" }}>{it.name}</span>
                     {it.matchType === "ambiguous" && <span className="chip" style={{ fontSize: 10 }}>maybe known</span>}
                     <span style={{ flex: 1, opacity: 0.55, fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.sourceQuote}</span>
+                    <Btn variant="ghost" size="sm" icon="check" data-testid={"wizard-row-accept-" + it.id} aria-label="Accept" onClick={() => act("onAcceptQueueItem", it)} />
+                    <Btn variant="ghost" size="sm" icon="more" aria-label="Edit" onClick={() => act("onEditQueueItem", it)} />
+                    <Btn variant="ghost" size="sm" icon="link" aria-label="Merge" onClick={() => act("onMergeQueueItem", it)} />
+                    <Btn variant="ghost" size="sm" icon="close" aria-label="Deny" onClick={() => act("onDenyQueueItem", it)} />
                   </div>
                 ))}
               </div>

@@ -332,6 +332,45 @@ const AppShell = () => {
     };
   }, []);
 
+  // ----- Global Edit-candidate modal (shared by every extraction surface) -----
+  const [editModal, setEditModal] = _us_a({ open: false, item: null });
+  const closeEditModal = _uc_a(() => setEditModal({ open: false, item: null }), []);
+  _ue_a(() => {
+    const onOpen = (e) => {
+      const raw = (e.detail && (e.detail.item || e.detail)) || null;
+      const norm = window.candidateToCardItem ? window.candidateToCardItem(raw) : raw;
+      setEditModal({ open: true, item: norm });
+    };
+    window.addEventListener("lw:open-edit-candidate", onOpen);
+    return () => window.removeEventListener("lw:open-edit-candidate", onOpen);
+  }, []);
+  const applyEditedAndAccept = _uc_a(async (edited) => {
+    const B = window.LoomwrightBackend;
+    if (!B || !edited) { setEditModal({ open: false, item: null }); return; }
+    const cand = edited.candidate || {};
+    const type = edited.entityType || "references";
+    const existingId = edited.existingEntityId || edited.targetEntityId || null;
+    const aliases = cand.aliases || [];
+    try {
+      let saved;
+      if (existingId) {
+        const existing = B.EntityService.getSync(existingId, type);
+        const patch = { name: cand.name, aliases, summary: cand.summary };
+        if (edited.suggestedChanges && Object.keys(edited.suggestedChanges).length) patch.data = { ...((existing && existing.data) || {}), ...edited.suggestedChanges };
+        saved = await B.EntityService.update(type, existingId, patch);
+      } else {
+        saved = await B.EntityService.save(type, { name: cand.name, aliases, summary: cand.summary }, { status: "active" });
+      }
+      if (saved && saved.id && edited.candidateId && B.OccurrenceService) {
+        await B.OccurrenceService.linkCandidateToEntity(edited.candidateId, saved.id, type);
+      }
+      if (edited.id) await B.ReviewService.resolve(edited.id, "accepted");
+    } catch (_) {}
+    setEditModal({ open: false, item: null });
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+    window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Saved edited entity." } }));
+  }, []);
+
   const confirmMerge = _uc_a(async (altId) => {
     const { item, sourceId, type } = mergeModal;
     const targetType = type || item?.entityType;
@@ -1187,6 +1226,19 @@ const AppShell = () => {
           onConfirmMerge={confirmMerge}
           onCreateNewInstead={createNewInsteadOfMerge}
           onCancel={closeMergeModal}
+        />
+      )}
+
+      {/* Global edit-candidate modal — populates with the extracted info,
+          lets the user tune it, then applies + accepts. Shared by the queue,
+          the Writer's Room margin, the wizard, and the per-chapter context. */}
+      {editModal.open && typeof EditCandidateModal !== "undefined" && (
+        <EditCandidateModal
+          open={editModal.open}
+          candidate={editModal.item}
+          onSave={applyEditedAndAccept}
+          onAcceptEdited={applyEditedAndAccept}
+          onCancel={closeEditModal}
         />
       )}
 

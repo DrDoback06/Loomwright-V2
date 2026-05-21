@@ -492,7 +492,7 @@
       return;
     }
     const editType = parseEditType(name);
-    if (editType || name === "onEditEntity") {
+    if ((editType || name === "onEditEntity") && !/QueueItem$/.test(name)) {
       openEditor(editType || type, entity || { id }, "full");
       return;
     }
@@ -553,8 +553,10 @@
       return;
     }
     if (/^onEdit\w*QueueItem$/.test(name)) {
-      const row = ctx.detail;
-      openEditor(row?.entityType || type, row?.payload || row, "full");
+      const detail = ctx.detail || {};
+      const itemId = detail.id;
+      const row = itemId ? (ReviewService.listSync().find((q) => q.id === itemId) || detail) : detail;
+      window.dispatchEvent(new CustomEvent("lw:open-edit-candidate", { detail: { item: row } }));
       return;
     }
     if (/^onMerge\w*QueueItem$/.test(name)) {

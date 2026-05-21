@@ -860,10 +860,25 @@ const CurrentChapterContext = ({ chapterId, onOpenEntity, onOpenPanel, onOpenRev
           )}
           {reviews.length > 0 && (
             <div className="wr-ctx__group">
-              <div className="wr-ctx__group-title">Pending review ({reviews.length})</div>
+              <div className="wr-ctx__group-title">From this chapter · pending review ({reviews.length})</div>
+              {reviews.map((q) => {
+                const card = window.candidateToCardItem ? window.candidateToCardItem(q) : null;
+                const name = (card && card.candidate && card.candidate.name) || q.name;
+                const triage = (cb) => { window.LoomwrightDispatchCallback && window.LoomwrightDispatchCallback(cb, { detail: { id: q.id } }); };
+                return (
+                  <div key={q.id} className="wr-ctx__row" data-testid={"wr-ctx-review-" + q.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <EntityTypeBadge type={q.entityType} size="xs" showLabel={false}/>
+                    <span className="wr-ctx__row-name" style={{ flex: 1 }}>{name}</span>
+                    <Btn variant="ghost" size="sm" icon="check" aria-label="Accept" onClick={() => triage("onAcceptQueueItem")}/>
+                    <Btn variant="ghost" size="sm" icon="more" aria-label="Edit" onClick={() => triage("onEditQueueItem")}/>
+                    <Btn variant="ghost" size="sm" icon="link" aria-label="Merge" onClick={() => triage("onMergeQueueItem")}/>
+                    <Btn variant="ghost" size="sm" icon="close" aria-label="Deny" onClick={() => triage("onDenyQueueItem")}/>
+                  </div>
+                );
+              })}
               <button type="button" className="wr-ctx__row" data-testid="wr-ctx-open-review" onClick={() => onOpenReviewQueue && onOpenReviewQueue()} title="Open review queue">
                 <Icon name="bell" size={11}/>
-                <span className="wr-ctx__row-name">{reviews.length} item{reviews.length === 1 ? "" : "s"} to review</span>
+                <span className="wr-ctx__row-name">Open full review queue</span>
               </button>
             </div>
           )}
@@ -1243,15 +1258,21 @@ const WritersRoomScreen = ({
   const [editingNoteId, setEditingNoteId] = _wrUS(null);
   const loadReviewExtractions = () => {
     const items = window.LoomwrightBackend?.ReviewService?.listSync() || [];
-    return items.filter((i) => i.status === "pending").map((i) => ({
-      id: i.id,
-      type: i.entityType,
-      name: i.name,
-      quote: i.reason || "",
-      conf: i.level || "med",
-      pct: i.value || 70,
-      summary: i.reason,
-    }));
+    return items.filter((i) => i.status === "pending").map((i) => {
+      // Normalise the backend candidate to the card shape so the margin shows
+      // the real name / band / source quote (not a generic reason/level).
+      const card = window.candidateToCardItem ? window.candidateToCardItem(i) : null;
+      return {
+        id: i.id,
+        type: i.entityType,
+        name: (card && card.candidate && card.candidate.name) || i.name,
+        quote: (card && card.mention) || i.sourceQuote || "",
+        conf: (card && card.confidence && card.confidence.band) || "uncertain",
+        pct: (card && card.confidence && card.confidence.value != null) ? card.confidence.value : (i.value || 70),
+        summary: i.summary || "",
+        merge: i.matchType === "ambiguous",
+      };
+    });
   };
   const [extractions, setExtractions] = _wrUS(() => loadReviewExtractions());
   const [selectedExtId, setSelectedExtId] = _wrUS("x5");
@@ -1328,9 +1349,6 @@ const WritersRoomScreen = ({
   const [activeSession, setActiveSession] = _wrUS(null);
 
   // Review modals
-  const [mergeItem, setMergeItem] = _wrUS(null);
-  const [editItem, setEditItem] = _wrUS(null);
-  const [denyItem, setDenyItem] = _wrUS(null);
 
   // Walk progress stages
   _wrUE(() => {
@@ -1507,35 +1525,23 @@ const WritersRoomScreen = ({
     if (window.LoomwrightDispatchCallback) await window.LoomwrightDispatchCallback("onAcceptQueueItem", { detail: { id } });
     setExtractions((curr) => curr.filter((x) => x.id !== id));
   }, []);
-  const onEditQueueItem = _wrUC((item) => {
-    // accept margin-card shape too
-    const normalized = item?.candidate ? item : {
-      id: item?.id, entityType: item?.type, mention: item?.quote, sourceChapter: { num: 7 },
-      candidate: { name: item?.name, summary: item?.summary, aliases: [] },
-      confidence: { band: item?.conf, value: item?.pct }, status: "pending",
-    };
-    setEditItem(normalized);
+  // Edit / Merge / Deny all delegate to the same registry callbacks the
+  // Review Queue uses, so the margin behaves identically (Edit opens the
+  // global edit-candidate modal; Merge opens the real merge modal; Deny
+  // resolves + removes any auto-added entity). No demo modals here.
+  const onEditQueueItem = _wrUC((idOrItem) => {
+    const id = typeof idOrItem === "string" ? idOrItem : idOrItem?.id;
+    window.LoomwrightDispatchCallback && window.LoomwrightDispatchCallback("onEditQueueItem", { detail: { id } });
   }, []);
-  const onMergeQueueItem = _wrUC((item) => {
-    const normalized = item?.candidate ? item : {
-      id: item?.id, entityType: item?.type, mention: item?.quote, sourceChapter: { num: 7 },
-      candidate: { name: item?.name, summary: item?.summary, aliases: [] },
-      confidence: { band: item?.conf, value: item?.pct }, status: "pending",
-      conflict: item?.merge ? { kind: "alias", note: "Possibly the same as 'the Vraska' from Ch. 2." } : null,
-    };
-    setMergeItem(normalized);
+  const onMergeQueueItem = _wrUC((idOrItem) => {
+    const id = typeof idOrItem === "string" ? idOrItem : idOrItem?.id;
+    window.LoomwrightDispatchCallback && window.LoomwrightDispatchCallback("onMergeQueueItem", { detail: { id } });
   }, []);
-  const onDenyQueueItem = _wrUC((item) => {
-    const normalized = item?.candidate ? item : {
-      id: item?.id, entityType: item?.type, mention: item?.quote,
-      candidate: { name: item?.name }, confidence: { band: item?.conf, value: item?.pct },
-    };
-    setDenyItem(normalized);
+  const onDenyQueueItem = _wrUC(async (idOrItem) => {
+    const id = typeof idOrItem === "string" ? idOrItem : idOrItem?.id;
+    if (window.LoomwrightDispatchCallback) await window.LoomwrightDispatchCallback("onDenyQueueItem", { detail: { id } });
+    setExtractions((curr) => curr.filter((x) => x.id !== id));
   }, []);
-  const onConfirmDeny = _wrUC(() => {
-    if (denyItem) setExtractions((curr) => curr.filter((x) => x.id !== denyItem.id));
-    setDenyItem(null);
-  }, [denyItem]);
   const onOpenFullReview = _wrUC(() => onOpenReviewQueue && onOpenReviewQueue(), [onOpenReviewQueue]);
   // ----- paragraph note handlers (UAT #19) -----
   const _wrCurrentParagraphId = _wrUC(() => {
@@ -2003,31 +2009,9 @@ const WritersRoomScreen = ({
         onOpenReviewQueue={onOpenReviewQueue}
       />
 
-      <MergeCandidateModal
-        open={!!mergeItem}
-        candidate={mergeItem}
-        alternatives={mergeItem ? [
-          { id: "alt1", name: "the Vraska", confidence: 84, summary: "Mountain pass, Bk I Ch. 4.", aliases: ["Vraska"] },
-          { id: "alt2", name: "Vraska Hold", confidence: 41, summary: "Fortress in Bk I.", aliases: ["the Hold"] },
-        ] : []}
-        onConfirmMerge={() => { if (mergeItem) setExtractions((c) => c.filter((x) => x.id !== mergeItem.id)); setMergeItem(null); }}
-        onCreateNewInstead={() => { if (mergeItem) setExtractions((c) => c.filter((x) => x.id !== mergeItem.id)); setMergeItem(null); }}
-        onCancel={() => setMergeItem(null)}
-      />
-      <EditCandidateModal
-        open={!!editItem}
-        candidate={editItem}
-        targetTabs={Object.values(ENTITY_TYPES).map((t) => ({ id: t.id, label: t.label }))}
-        onSave={() => setEditItem(null)}
-        onAcceptEdited={() => { if (editItem) setExtractions((c) => c.filter((x) => x.id !== editItem.id)); setEditItem(null); }}
-        onCancel={() => setEditItem(null)}
-      />
-      <DenyConfirmation
-        open={!!denyItem}
-        candidate={denyItem}
-        onConfirm={onConfirmDeny}
-        onCancel={() => setDenyItem(null)}
-      />
+      {/* Edit / Merge / Deny are handled by the global modals in app.jsx
+          (shared with the Review Queue); the margin dispatches the same
+          registry callbacks, so behaviour is identical everywhere. */}
     </div>
   );
 };
