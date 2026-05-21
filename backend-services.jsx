@@ -2798,6 +2798,235 @@
     return [...byKey.values()];
   }
 
+  // -------------------------------------------------------------------
+  // Offline NER discovery (no AI required). The phrase detectors above
+  // only fire on entities that ALREADY exist; this pass discovers
+  // brand-new named entities (cast / locations / items / skills) from raw
+  // prose, so a fresh project's first Save & Extract is not empty.
+  // Deterministic and private — no text leaves the device. Discoveries
+  // are capped at 0.92 confidence so they are never silently auto-added.
+  // -------------------------------------------------------------------
+  const NER_STOPWORDS = new Set([
+    "the","a","an","and","but","or","nor","so","yet","for","as","at","by","in","on","to","of","off","up","out",
+    "if","then","now","when","where","why","how","what","who","whom","whose","which","that","this","these","those",
+    "he","she","it","they","we","you","i","me","him","her","them","us","his","hers","its","their","our","my","your",
+    "mine","yours","theirs","here","there","yes","no","not","never","always","once","twice","still","just","only",
+    "even","also","too","very","quite","rather","perhaps","maybe","indeed","however","therefore","thus","hence",
+    "meanwhile","suddenly","finally","soon","later","after","before","while","until","since","because","although",
+    "though","unless","whether","despite","during","within","without","across","behind","beyond","beneath","above",
+    "below","between","among","around","through","toward","towards","upon","into","onto","from","with","about",
+    "against","along","amid","everything","nothing","someone","anyone","everyone","nobody","something","another",
+    "chapter","part","prologue","epilogue","monday","tuesday","wednesday","thursday","friday","saturday","sunday",
+    "january","february","march","april","may","june","july","august","september","october","november","december",
+    "oh","ah","well","okay","hey","please","thanks","thank","again","perhaps","suddenly","eventually",
+  ]);
+  const NER_CONNECTORS = new Set(["of","the","de","von","van","al","da","di","del","la","le"]);
+  const NER_HONORIFIC_SRC = "Lord|Lady|Ser|Sir|Dame|King|Queen|Prince|Princess|Captain|Commander|Lieutenant|Colonel|Major|Sergeant|Master|Mistress|Maester|Archon|General|Admiral|Doctor|Dr|Professor|Mr|Mrs|Ms|Miss|Father|Brother|Sister|Aunt|Uncle|Saint|St|Emperor|Empress|Duke|Duchess|Baron|Baroness|Count|Countess";
+  const NER_HONORIFIC_LEAD = new RegExp(`^(?:${NER_HONORIFIC_SRC})\\.?\\s+`);
+  const NER_HONORIFICS_BEFORE = new RegExp(`(?:^|\\b)(?:${NER_HONORIFIC_SRC})\\.?\\s+$`);
+  const NER_DIALOGUE_VERBS = "said|asked|replied|whispered|shouted|murmured|cried|answered|muttered|growled|hissed|breathed|snapped|wondered|added|continued|exclaimed|declared|warned";
+  const NER_DIALOGUE_AFTER = new RegExp(`^[,"'”’\\s]*\\b(?:${NER_DIALOGUE_VERBS})\\b`, "i");
+  const NER_DIALOGUE_BEFORE = new RegExp(`\\b(?:${NER_DIALOGUE_VERBS})\\s+$`, "i");
+  const NER_LOC_KINDS = "city|keep|village|town|castle|fortress|hold|port|harbour|harbor|isle|island|river|mountain|mountains|forest|gate|tower|temple|inn|tavern|kingdom|realm|land|lands|valley|peak|pass|road|sea|ocean|lake|hall|palace|citadel|abbey|monastery|province|county|shire|domain|territory|wastes|plains|desert|swamp|marsh|moor|caverns|caves|ruins|district|quarter";
+  const NER_LOC_OF_BEFORE = new RegExp(`\\b(?:${NER_LOC_KINDS})\\s+of\\s+$`, "i");
+  const NER_LOC_HEADNOUN_AFTER = /^\s+(?:Keep|Castle|Tower|Gate|Hold|Fortress|Citadel|Palace|Temple|Bridge|Pass|Peak|Vale|Wood|Woods|Forest|Marsh|Moor|Hall|Inn|Tavern|City|Town|Village|Harbour|Harbor|Port|Isle|Island|Mountains?|River|Lake|Sea|Plains|Desert|Wastes|Ruins)\b/;
+  const NER_LOC_PREP_BEFORE = /\b(?:to|at|from|toward|towards|into|near|beyond|through|across|past|reached|entered|left|arrived\s+at|returned\s+to)\s+$/i;
+  const NER_ITEM_DET_BEFORE = /\b(?:the|a|an|his|her|their|its|my|your|our)\s+$/i;
+  const NER_ITEM_VERB_BEFORE = /\b(?:called|named|wielded|carried|drew|sheathed|forged|enchanted|found|holding|held|equipped|gripped|raised)\s+$/i;
+  const NER_ITEM_NOUN_END = /(?:sword|blade|dagger|knife|axe|bow|spear|lance|mace|hammer|flail|club|whip|ring|amulet|crown|circlet|cloak|robe|staff|wand|rod|sceptre|scepter|shield|tome|grimoire|chalice|goblet|orb|gauntlets?|helm|helmet|pendant|necklace|locket|relic|key|crystal|gem|jewel|stone|elixir|potion|scroll|banner|horn|bell|mirror|talisman|charm|armour|armor|plate|mail|boots|gloves|belt|brooch)$/i;
+  const NER_SKILL_BEFORE = /\b(?:skill|spell|ability|technique|power|talent|art|incantation|maneuver|manoeuvre)\s+(?:(?:called|named|known\s+as)\s+)?$/i;
+
+  // Find runs of capitalised words (multi-word proper nouns), trimming
+  // leading stopwords (sentence-initial "The Keep" → "Keep") and recording
+  // whether each kept span sits at a sentence start. Offsets index `text`.
+  function extractProperNounSpans(text) {
+    if (!text || typeof text !== "string") return [];
+    const tokenRe = /[A-Za-z][A-Za-z'’\-]*/g;
+    const tokens = [];
+    let tm;
+    while ((tm = tokenRe.exec(text)) !== null) {
+      tokens.push({ word: tm[0], start: tm.index, end: tm.index + tm[0].length });
+    }
+    const isCap = (w) => /^[A-Z]/.test(w);
+    // Two tokens only belong to the same proper-noun run if the text between
+    // them is plain horizontal whitespace — a period/comma/newline ends the
+    // run ("Aelinor. Lord Brennan" must NOT become one span).
+    const smallGap = (a, b) => /^[ \t]{1,4}$/.test(text.slice(a.end, b.start));
+    const spans = [];
+    let i = 0;
+    while (i < tokens.length) {
+      if (!isCap(tokens[i].word)) { i++; continue; }
+      let last = i;
+      let j = i;
+      while (j + 1 < tokens.length) {
+        const next = tokens[j + 1];
+        if (!smallGap(tokens[j], next)) break;
+        if (isCap(next.word)) { j++; last = j; continue; }
+        if (NER_CONNECTORS.has(next.word.toLowerCase()) && j + 2 < tokens.length && isCap(tokens[j + 2].word) && smallGap(next, tokens[j + 2])) {
+          j += 2; last = j; continue;
+        }
+        break;
+      }
+      // Sentence-start detection from the char preceding the first token.
+      let k = tokens[i].start - 1;
+      while (k >= 0 && /\s/.test(text[k])) k--;
+      const prev = k >= 0 ? text[k] : "";
+      const atStart = k < 0 || /[.!?:;"“”'‘()\[\]—–\-]/.test(prev);
+      // Trim leading stopwords.
+      let s = i;
+      while (s <= last && NER_STOPWORDS.has(tokens[s].word.toLowerCase())) s++;
+      if (s <= last) {
+        const start = tokens[s].start;
+        const end = tokens[last].end;
+        const surface = text.slice(start, end);
+        if (surface.length >= 2 && !NER_STOPWORDS.has(surface.toLowerCase())) {
+          spans.push({ surface, start, end, atSentenceStart: atStart && s === i });
+        }
+      }
+      i = last + 1;
+    }
+    return spans;
+  }
+
+  // Classify a proper-noun surface using lexical signals around its
+  // occurrences. Returns { type, signal, confidence } or null (no signal).
+  function classifyProperNoun(text, surface, occurrences) {
+    if (NER_HONORIFIC_LEAD.test(surface)) return { type: "cast", signal: "honorific", confidence: 0.82 };
+    let best = null;
+    const consider = (c) => { if (c && (!best || c.confidence > best.confidence)) best = c; };
+    if (NER_ITEM_NOUN_END.test(surface)) consider({ type: "items", signal: "item-name", confidence: 0.68 });
+    for (const o of occurrences) {
+      const before = text.slice(Math.max(0, o.start - 32), o.start);
+      const after = text.slice(o.end, Math.min(text.length, o.end + 28));
+      if (NER_HONORIFICS_BEFORE.test(before)) return { type: "cast", signal: "honorific", confidence: 0.82 };
+      if (NER_DIALOGUE_AFTER.test(after) || NER_DIALOGUE_BEFORE.test(before)) consider({ type: "cast", signal: "dialogue", confidence: 0.8 });
+      if (NER_LOC_OF_BEFORE.test(before)) { consider({ type: "locations", signal: "loc-cue", confidence: 0.8 }); }
+      if (NER_LOC_HEADNOUN_AFTER.test(after)) consider({ type: "locations", signal: "loc-headnoun", confidence: 0.7 });
+      if (NER_SKILL_BEFORE.test(before)) consider({ type: "skills", signal: "skill-cue", confidence: 0.72 });
+      if (NER_ITEM_VERB_BEFORE.test(before) && NER_ITEM_NOUN_END.test(surface)) consider({ type: "items", signal: "item-cue", confidence: 0.76 });
+      if (NER_ITEM_DET_BEFORE.test(before) && NER_ITEM_NOUN_END.test(surface)) consider({ type: "items", signal: "item-cue", confidence: 0.74 });
+      if (NER_LOC_PREP_BEFORE.test(before)) consider({ type: "locations", signal: "loc-prep", confidence: 0.62 });
+    }
+    return best;
+  }
+
+  // Discover brand-new entities from prose. Returns { candidates,
+  // discoveredNames }. `knownIndex` is used only to skip names that already
+  // exist (those are handled by scanTextForKnownEntities); near-fuzzy hits
+  // become `ambiguous` candidates so the queue can offer Merge.
+  function discoverEntities(text, knownIndex, chapterId, sessionId, opts = {}) {
+    const out = [];
+    const discoveredNames = [];
+    if (!text || typeof text !== "string") return { candidates: out, discoveredNames };
+    const minRecurrence = opts.minRecurrence != null ? opts.minRecurrence : 2;
+    const maxCandidates = opts.maxCandidates != null ? opts.maxCandidates : 200;
+    const spans = extractProperNounSpans(text);
+    const groups = new Map();
+    for (const sp of spans) {
+      const key = sp.surface.toLowerCase();
+      if (!groups.has(key)) groups.set(key, { surface: sp.surface, occ: [] });
+      const g = groups.get(key);
+      g.occ.push(sp);
+      if (!sp.atSentenceStart) g.surface = sp.surface; // prefer a mid-sentence form
+    }
+    for (const g of groups.values()) {
+      if (out.length >= maxCandidates) break;
+      const surface = g.surface;
+      const count = g.occ.length;
+      const known = findKnownEntityMention(surface, { threshold: 0.9 });
+      let matchType = "new";
+      if (known && (known.matchType === "exact" || known.matchType === "nickname")) continue;
+      if (known) matchType = "ambiguous";
+      const cls = classifyProperNoun(text, surface, g.occ);
+      let type, signal, confidence;
+      if (cls) {
+        type = cls.type;
+        signal = cls.signal;
+        confidence = Math.min(cls.confidence + 0.03 * (count - 1), 0.92);
+      } else {
+        if (count < minRecurrence) continue; // bare single-mention proper noun: skip
+        // A proper noun that ONLY ever appears at a sentence start, with no
+        // lexical signal, is almost always a capitalised common word
+        // ("Time", "Morning"). Require at least one mid-sentence mention.
+        if (!g.occ.some((o) => !o.atSentenceStart)) continue;
+        type = known ? known.type : "cast";
+        signal = "recurrence";
+        confidence = Math.min(0.48 + 0.05 * count, 0.6);
+      }
+      if (matchType === "ambiguous") confidence = Math.min(confidence, known.confidence);
+      // Strip a leading honorific into an alias for a cleaner cast name.
+      let name = surface;
+      const aliases = [];
+      if (signal === "honorific") {
+        const stripped = surface.replace(NER_HONORIFIC_LEAD, "").trim();
+        if (stripped.length >= 2) { aliases.push(surface); name = stripped; }
+      }
+      const rep = g.occ.find((o) => !o.atSentenceStart) || g.occ[0];
+      const cand = buildCandidate({
+        entityType: type,
+        name,
+        isNew: matchType === "new",
+        matchType,
+        existingEntityId: matchType === "ambiguous" ? known.entity.id : null,
+        suggestedAction: matchType === "ambiguous" ? "merge" : "create",
+        confidence,
+        sourceQuote: makeSourceQuote(text, rep.start, rep.end),
+        sourceQuotes: g.occ.slice(0, 3).map((o) => makeSourceQuote(text, o.start, o.end)),
+        chapterId,
+        startOffset: rep.start,
+        endOffset: rep.end,
+        suggestedChanges: aliases.length ? { aliases } : null,
+        payload: { discovered: true, signal, count, detector: "ner:" + signal, aliases },
+        extractionSessionId: sessionId,
+      }, { extractionSessionId: sessionId });
+      out.push(cand);
+      if (matchType === "new") discoveredNames.push({ id: uuid("tmp"), type, name });
+    }
+    return { candidates: out, discoveredNames };
+  }
+
+  // Cluster near-duplicate discovery candidates of the same type (typo-level
+  // Levenshtein, or token-subset like "Saren" ⊂ "Saren of Hess"). Keeps the
+  // longer/more-frequent name canonical and records the rest as aliases.
+  function clusterAliases(candidates) {
+    if (!Array.isArray(candidates) || candidates.length < 2) return candidates || [];
+    const used = new Set();
+    const result = [];
+    const tokens = (s) => String(s || "").toLowerCase().split(/\s+/).filter((t) => t && !NER_CONNECTORS.has(t));
+    for (let i = 0; i < candidates.length; i++) {
+      if (used.has(i)) continue;
+      const base = candidates[i];
+      const aliases = [];
+      const baseTok = new Set(tokens(base.name));
+      for (let j = i + 1; j < candidates.length; j++) {
+        if (used.has(j)) continue;
+        const other = candidates[j];
+        if (other.entityType !== base.entityType) continue;
+        const otherTok = new Set(tokens(other.name));
+        const subset = [...baseTok].every((t) => otherTok.has(t)) || [...otherTok].every((t) => baseTok.has(t));
+        const near = levenshteinSimilarity(base.name, other.name) >= 0.88;
+        if (!subset && !near) continue;
+        used.add(j);
+        const longer = base.name.length >= other.name.length ? base.name : other.name;
+        const shorter = longer === base.name ? other.name : base.name;
+        if (shorter && shorter !== longer && !aliases.includes(shorter)) aliases.push(shorter);
+        base.name = longer;
+        base.confidence = Math.max(base.confidence || 0, other.confidence || 0);
+        base.confidenceBand = confidenceBand(base.confidence);
+        base.sourceQuotes = [...new Set([...(base.sourceQuotes || []), ...(other.sourceQuotes || [])])].slice(0, 3);
+        base.relatedEntityIds = [...new Set([...(base.relatedEntityIds || []), ...(other.relatedEntityIds || [])])];
+      }
+      if (aliases.length) {
+        const merged = [...new Set([...((base.suggestedChanges && base.suggestedChanges.aliases) || []), ...aliases])];
+        base.suggestedChanges = { ...(base.suggestedChanges || {}), aliases: merged };
+        base.payload = { ...(base.payload || {}), aliasCandidates: merged };
+      }
+      result.push(base);
+      used.add(i);
+    }
+    return result;
+  }
+
   const ExtractionService = {
     loadSessionSync() {
       return StorageService.getSync(KEYS.extractionSession, { status: "idle", items: [] });
@@ -2827,6 +3056,12 @@
       // transfer/loss, travel, relationships, stat changes, quest
       // progression, events, and lore. Run unconditionally, with no AI.
       const localCandidates = runLocalDetectors(text || "", chapterId, sessionId);
+
+      // Offline NER discovery (Pass 0): find brand-new named entities
+      // (cast / locations / items / skills) so a fresh project's first
+      // extraction is not empty. Deterministic, no AI, no text egress.
+      const discovery = discoverEntities(text || "", knownEntityIndex(), chapterId, sessionId);
+      const discoveryCandidates = clusterAliases(discovery.candidates);
 
       let items = [];
       // Only invoke AI when a provider is configured. Otherwise the local
@@ -2943,7 +3178,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
         }, { deep, extractionSessionId: sessionId });
       });
 
-      const reviewItems = dedupeCandidates([...localCandidates, ...aiCandidates]);
+      const reviewItems = dedupeCandidates([...discoveryCandidates, ...localCandidates, ...aiCandidates]);
       await ReviewService.addMany(reviewItems);
       // Tag occurrences for unknown candidates (`matchType: "new"`) so
       // accept can backfill the entityId after entity creation. Known
@@ -4808,6 +5043,8 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     AIRoutingService,
     AIContextBuilder,
     ExtractionService,
+    discoverEntities,
+    extractProperNounSpans,
     OccurrenceService,
     isOccurrenceStale,
     SampleProjectService,
