@@ -247,6 +247,9 @@ async function main() {
     log("offline discovery finds a new cast member from dialogue", streamCands.some((c) => c.entityType === "cast" && c.matchType === "new"));
     log("offline discovery finds a new item from naming cue", streamCands.some((c) => c.entityType === "items" && c.matchType === "new"));
     log("offline discovery finds a new location from a directional cue", streamCands.some((c) => c.entityType === "locations" && c.matchType === "new"));
+    const groupCounts = {};
+    streamCands.forEach((c) => { if (c.groupId) groupCounts[c.groupId] = (groupCounts[c.groupId] || 0) + 1; });
+    log("multi-entry candidates from one sentence share a groupId", Object.values(groupCounts).some((n) => n >= 2));
   }
 
   // -- Auto-apply high-confidence (blue) candidates --

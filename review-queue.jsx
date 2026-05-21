@@ -11,11 +11,84 @@ const { useState: _rqUS, useMemo: _rqUM } = React;
 // ---------------------------------------------------------------------
 const SUGGESTION_LABELS = {
   "create":       "Create new",
+  "update":       "Update existing",
   "enrich":       "Enrich existing",
   "link":         "Link mention",
   "merge":        "Merge with existing",
   "update state": "Update state",
 };
+
+// ---------------------------------------------------------------------
+// candidateToCardItem — normalise a backend candidate (flat shape from
+// ExtractionService.buildCandidate: confidenceBand / name / sourceQuote /
+// suggestedAction / chapterId …) into the rich shape the cards render
+// (confidence.{band,value} / candidate.{name,summary,aliases} / mention /
+// suggestion / sourceChapter …). Idempotent: a card-shaped item passes
+// through. This is the single bridge that lets the Review Queue, the
+// Writer's Room margin, the wizard, and the per-chapter context all render
+// real extraction data identically.
+// ---------------------------------------------------------------------
+const RQ_BAND_MAP = {
+  blue: "high", green: "strong", orange: "uncertain", red: "weak",
+  high: "high", strong: "strong", uncertain: "uncertain", weak: "weak",
+};
+function candidateToCardItem(c) {
+  if (!c) return c;
+  if (c.candidate && c.confidence && typeof c.confidence === "object") return c; // already card-shaped
+  const band = RQ_BAND_MAP[c.confidenceBand] || RQ_BAND_MAP[c.confidence && c.confidence.band] || "uncertain";
+  const value = c.value != null ? c.value
+    : (typeof c.confidence === "number" ? Math.round(c.confidence * 100)
+      : (c.confidence && c.confidence.value != null ? c.confidence.value : null));
+  const aliases = (c.suggestedChanges && c.suggestedChanges.aliases) || c.aliases || [];
+  const matched = c.matched
+    || (c.previousState && c.previousState.name ? { name: c.previousState.name, confidence: value } : null)
+    || (c.existingEntityId && c.matchType && c.matchType !== "new" ? { name: c.name, confidence: value } : null);
+  const rationaleBits = [];
+  if (c.matchType) rationaleBits.push("match: " + c.matchType);
+  if (c.payload && c.payload.detector) rationaleBits.push(c.payload.detector);
+  else if (c.payload && c.payload.signal) rationaleBits.push("signal: " + c.payload.signal);
+  return {
+    ...c,
+    id: c.id,
+    entityType: c.entityType,
+    status: c.status || "pending",
+    suggestion: c.suggestion || c.suggestedAction || "create",
+    mention: c.mention || c.sourceQuote || (c.sourceQuotes && c.sourceQuotes[0]) || "",
+    confidence: { band, value },
+    candidate: c.candidate || { name: c.name, summary: c.summary || "", aliases },
+    matched,
+    conflict: c.conflict || (c.matchType === "ambiguous" ? { kind: "possible duplicate", note: "May already exist — consider Merge." } : null),
+    rationale: c.rationale || rationaleBits.join(" · ") || c.summary || "",
+    sourceChapter: c.sourceChapter || (c.chapterId ? { id: c.chapterId, num: c.chapterNum || "" } : null),
+    sourceParagraph: c.sourceParagraph || c.paragraphId || "",
+    extractedAt: c.extractedAt || c.createdAt || "",
+    sessionId: c.sessionId || c.extractionSessionId || "",
+    groupId: c.groupId || null,
+  };
+}
+
+// Bucket normalised card items by groupId so candidates extracted from the
+// same sentence (e.g. an actor + a location + a travel event) render
+// together. Items without a shared group become singleton groups.
+function groupCardItems(items) {
+  const byGroup = new Map();
+  const order = [];
+  for (const it of items || []) {
+    const key = it.groupId || ("__solo__:" + it.id);
+    if (!byGroup.has(key)) { byGroup.set(key, []); order.push(key); }
+    byGroup.get(key).push(it);
+  }
+  return order.map((key) => {
+    const members = byGroup.get(key);
+    return {
+      key,
+      groupId: members.length > 1 ? members[0].groupId : null,
+      sourceQuote: members[0].mention || "",
+      ids: members.map((m) => m.id),
+      members,
+    };
+  });
+}
 
 // ---------------------------------------------------------------------
 // QueueFilterBar
@@ -143,12 +216,13 @@ const ConfidenceBandBadge = ({ band }) => (
 // ReviewQueueCard
 // ---------------------------------------------------------------------
 const ReviewQueueCard = ({
-  item, selected, expanded: expandedProp,
+  item: _rawItem, selected, expanded: expandedProp,
   onToggleSelect,
   onAcceptQueueItem, onEditQueueItem, onMergeQueueItem, onDenyQueueItem,
   onOpenSourceInManuscript, onOpenRelatedTab,
   onKeepAutoAddedItem, onRemoveAutoAddedItem,
 }) => {
+  const item = candidateToCardItem(_rawItem) || {};
   const [expanded, setExpanded] = _rqUS(!!expandedProp);
   const c = CONFIDENCE[item.confidence?.band] || CONFIDENCE.uncertain;
   const t = ENTITY_TYPES[item.entityType];
@@ -264,9 +338,30 @@ const ReviewQueueCard = ({
 };
 
 // ---------------------------------------------------------------------
+// ReviewGroupCard — wraps the candidate cards extracted from a single
+// sentence, with the shared source quote and an "Accept all" affordance.
+// ---------------------------------------------------------------------
+const ReviewGroupCard = ({ group, ...cardProps }) => (
+  <div className="rqg" data-ui="ReviewGroupCard" data-testid="rqg"
+    style={{ border: "1px solid var(--line, #e3dac6)", borderRadius: 12, padding: "8px 8px 4px", marginBottom: "var(--sp-3)", background: "var(--paper-2, rgba(120,90,40,0.04))" }}>
+    <div className="rqg__head" style={{ display: "flex", alignItems: "center", gap: 8, padding: "2px 4px 8px" }}>
+      <Icon name="link" size={12}/>
+      <span style={{ fontSize: 12, opacity: 0.7, flex: 1, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>"{group.sourceQuote}"</span>
+      <span className="chip" style={{ fontSize: 10 }}>{group.members.length} from one sentence</span>
+      <Btn variant="ghost" size="sm" icon="check" data-callback="onBulkAcceptQueueItems" data-testid="rqg-accept-all"
+        onClick={() => cardProps.onBulkAcceptQueueItems && cardProps.onBulkAcceptQueueItems(group.ids)}>Accept all</Btn>
+    </div>
+    {group.members.map((m) => (
+      <ReviewQueueCard key={m.id} item={m} {...cardProps}/>
+    ))}
+  </div>
+);
+
+// ---------------------------------------------------------------------
 // AutoAddedHistoryCard — slim row for blue items in collapsible section
 // ---------------------------------------------------------------------
-const AutoAddedHistoryCard = ({ item, onKeepAutoAddedItem, onRemoveAutoAddedItem, onEditQueueItem, onOpenRelatedTab }) => {
+const AutoAddedHistoryCard = ({ item: _rawItem, onKeepAutoAddedItem, onRemoveAutoAddedItem, onEditQueueItem, onOpenRelatedTab }) => {
+  const item = candidateToCardItem(_rawItem) || {};
   const t = ENTITY_TYPES[item.entityType];
   return (
     <div className="aahc" data-ui="AutoAddedHistoryCard" data-testid={"aahc-" + item.id}>
@@ -274,12 +369,11 @@ const AutoAddedHistoryCard = ({ item, onKeepAutoAddedItem, onRemoveAutoAddedItem
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)" }}>
           <EntityTypeBadge type={item.entityType} size="xs"/>
-          <span className="aahc__name">{item.name}</span>
+          <span className="aahc__name">{item.candidate?.name}</span>
         </div>
         <div className="aahc__meta">
-          <span>{item.confidence}%</span>
-          <span>·</span>
-          <span>{item.addedAt}</span>
+          {item.confidence?.value != null && <><span>{item.confidence.value}%</span><span>·</span></>}
+          <span>{item.extractedAt || "auto-added"}</span>
           <span>·</span>
           <span style={{ color: "var(--ink-3)" }}>{t?.label}</span>
         </div>
@@ -319,8 +413,12 @@ const EntityReviewQueue = ({
   const set = (k, v) => setFilters && setFilters({ ...filters, [k]: v });
   const view = filters.view || "list";
 
+  // Normalise backend candidates → card shape so filtering/sorting/render all
+  // see real data regardless of which surface fed the items.
+  const norm = _rqUM(() => (items || []).map(candidateToCardItem), [items]);
+
   const filtered = _rqUM(() => {
-    let out = items;
+    let out = norm;
     if (filters.confidence && filters.confidence !== "all") out = out.filter((x) => x.confidence?.band === filters.confidence);
     if (filters.status && filters.status !== "all")     out = out.filter((x) => x.status === filters.status);
     if (filters.chapter && filters.chapter !== "all")   out = out.filter((x) => x.sourceChapter?.id === filters.chapter);
@@ -339,10 +437,15 @@ const EntityReviewQueue = ({
       return (b.confidence?.value || 0) - (a.confidence?.value || 0);
     });
     return out;
-  }, [items, filters]);
+  }, [norm, filters]);
 
-  // Filter out auto-added from main list — they live in the bottom collapsible
+  // Filter out auto-added from main list — they live in the bottom collapsible.
   const main = filtered.filter((x) => x.status !== "auto-added");
+  // Derive auto-added from the items when a dedicated list wasn't supplied
+  // (the panel feeds a single `items` array containing every status).
+  const autoAddedItems = (autoAdded && autoAdded.length) ? autoAdded : norm.filter((x) => x.status === "auto-added");
+  // Group the main list by groupId so multi-entry sentences cluster together.
+  const groups = _rqUM(() => groupCardItems(main), [main]);
 
   return (
     <div className="rqp" data-ui="EntityReviewQueue" data-entity={entityType} data-state={state} data-testid={"rqp-" + entityType}>
@@ -355,7 +458,7 @@ const EntityReviewQueue = ({
           </div>
           <div className="rqp__count">
             <strong>{main.length}</strong> pending
-            {autoAdded.length > 0 && <> · {autoAdded.length} auto-added</>}
+            {autoAddedItems.length > 0 && <> · {autoAddedItems.length} auto-added</>}
           </div>
         </div>
 
@@ -382,39 +485,53 @@ const EntityReviewQueue = ({
       <div className="rqp__body" data-grid={view === "grid"}>
         {state === "loading" && <LoadingState title={"Reading the " + t.label.toLowerCase() + " queue…"} lines={4}/>}
         {state === "error"   && <ErrorState title="Couldn't load this queue" body="The local index didn't respond. Your candidates are safe."/>}
-        {state === "default" && main.length === 0 && (
+        {state === "default" && main.length === 0 && autoAddedItems.length === 0 && (
           <EmptyState icon="bell" title={"No " + t.label.toLowerCase() + " candidates"} body="Run an extraction to surface new entries here."/>
         )}
-        {state === "default" && main.map((x) => (
-          <ReviewQueueCard
-            key={x.id}
-            item={x}
-            selected={selectedIds.includes(x.id)}
-            onAcceptQueueItem={onAcceptQueueItem}
-            onEditQueueItem={onEditQueueItem}
-            onMergeQueueItem={onMergeQueueItem}
-            onDenyQueueItem={onDenyQueueItem}
-            onOpenSourceInManuscript={onOpenSourceInManuscript}
-            onOpenRelatedTab={onOpenRelatedTab}
-            onKeepAutoAddedItem={onKeepAutoAddedItem}
-            onRemoveAutoAddedItem={onRemoveAutoAddedItem}
-          />
+        {state === "default" && groups.map((g) => (
+          g.members.length > 1
+            ? <ReviewGroupCard
+                key={g.key}
+                group={g}
+                onAcceptQueueItem={onAcceptQueueItem}
+                onEditQueueItem={onEditQueueItem}
+                onMergeQueueItem={onMergeQueueItem}
+                onDenyQueueItem={onDenyQueueItem}
+                onBulkAcceptQueueItems={onBulkAcceptQueueItems}
+                onOpenSourceInManuscript={onOpenSourceInManuscript}
+                onOpenRelatedTab={onOpenRelatedTab}
+                onKeepAutoAddedItem={onKeepAutoAddedItem}
+                onRemoveAutoAddedItem={onRemoveAutoAddedItem}
+              />
+            : <ReviewQueueCard
+                key={g.members[0].id}
+                item={g.members[0]}
+                selected={selectedIds.includes(g.members[0].id)}
+                onAcceptQueueItem={onAcceptQueueItem}
+                onEditQueueItem={onEditQueueItem}
+                onMergeQueueItem={onMergeQueueItem}
+                onDenyQueueItem={onDenyQueueItem}
+                onOpenSourceInManuscript={onOpenSourceInManuscript}
+                onOpenRelatedTab={onOpenRelatedTab}
+                onKeepAutoAddedItem={onKeepAutoAddedItem}
+                onRemoveAutoAddedItem={onRemoveAutoAddedItem}
+              />
         ))}
 
         {/* Auto-added collapsible at bottom */}
-        {autoAdded.length > 0 && state === "default" && (
+        {autoAddedItems.length > 0 && state === "default" && (
           <div className="rqp__autoadded">
             <button className="rqp__autoadded__head" onClick={() => setAutoOpen((v) => !v)} aria-expanded={autoOpen}>
               <span className="rqp__autoadded__title">
                 <span className="rqp__autoadded__title-dot"/>
                 Auto-added · still reviewable
               </span>
-              <span className="rqp__autoadded__count">{autoAdded.length}</span>
+              <span className="rqp__autoadded__count">{autoAddedItems.length}</span>
               <Icon name={autoOpen ? "chevron-up" : "chevron-d"} size={11}/>
             </button>
             {autoOpen && (
               <div className="rqp__autoadded__list">
-                {autoAdded.map((a) => (
+                {autoAddedItems.map((a) => (
                   <AutoAddedHistoryCard
                     key={a.id} item={a}
                     onKeepAutoAddedItem={onKeepAutoAddedItem}
@@ -433,8 +550,9 @@ const EntityReviewQueue = ({
 };
 
 Object.assign(window, {
-  EntityReviewQueue, ReviewQueueCard, AutoAddedHistoryCard,
+  EntityReviewQueue, ReviewQueueCard, ReviewGroupCard, AutoAddedHistoryCard,
   ConfidenceStrip, ConfidenceBandBadge,
   QueueFilterBar, QueueBulkActions,
+  candidateToCardItem, groupCardItems,
   SUGGESTION_LABELS, CONFIDENCE_LABELS,
 });

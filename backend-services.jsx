@@ -3049,6 +3049,38 @@
     return result;
   }
 
+  // Split text into sentence spans (crude but offset-accurate) so candidates
+  // can be grouped by the sentence that produced them.
+  function splitSentenceSpans(text) {
+    const spans = [];
+    if (!text) return spans;
+    const re = /[^.!?\n]+[.!?]*(?:\s+|$)/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (!m[0].trim()) { if (m.index === re.lastIndex) re.lastIndex++; continue; }
+      spans.push({ start: m.index, end: m.index + m[0].length });
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+    return spans;
+  }
+
+  // Stamp each candidate with the sentence it came from, so the review UI can
+  // cluster the multiple entities a single sentence yields (e.g. an actor + a
+  // location + a travel event from "Dave went to Scotland from England").
+  function assignSentenceGroups(candidates, text, chapterId) {
+    if (!Array.isArray(candidates) || !candidates.length || !text) return candidates;
+    const spans = splitSentenceSpans(text);
+    for (const c of candidates) {
+      if (c.startOffset == null) continue;
+      const span = spans.find((s) => c.startOffset >= s.start && c.startOffset < s.end);
+      if (span) {
+        c.sentenceId = (chapterId || "ch") + ":s:" + span.start;
+        c.groupId = c.sentenceId;
+      }
+    }
+    return candidates;
+  }
+
   // Compact "author's rules" context assembled from onboarding answers +
   // project intelligence, injected into AI prompts so any model — including
   // free/local ones like Ollama — follows the same premise, tone, POV,
@@ -3278,6 +3310,8 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       });
 
       const reviewItems = dedupeCandidates([...discoveryCandidates, ...localCandidates, ...aiCandidates]);
+      // Group candidates by the sentence that produced them (multi-entry).
+      assignSentenceGroups(reviewItems, text || "", chapterId);
       // Auto-apply blue (>=0.95) candidates: apply now but keep them in the
       // queue (status "auto-added") so the user can review or undo. Local
       // discovery is capped below blue, so this only fires for AI-boosted or
