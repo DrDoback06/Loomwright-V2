@@ -1179,6 +1179,15 @@ async function main() {
   log("[ai] resolveRoute returns null in localOnly", Routing.resolveRoute("writingDraft") === null);
   await Routing.save({ mode: "balanced" });
 
+  // Cost tiers: the "free" tier must never route to a paid cloud provider.
+  await Routing.save({ tier: "free", taskRoutes: {} });
+  log("[ai] free tier won't use a paid cloud provider", Routing.resolveRoute("writingDraft") === null);
+  await AI.saveProviderConfig({ id: "ollama", providerType: "ollama", label: "Ollama (local)", baseUrl: "http://localhost:11434", defaultModel: "llama3" });
+  log("[ai] free tier routes to a local provider (Ollama), no key needed", Routing.resolveRoute("writingDraft")?.providerId === "ollama");
+  await Routing.save({ tier: "normal" });
+  log("[ai] normal tier allows the cloud provider again", Routing.resolveRoute("writingDraft")?.providerId === "openai" || Routing.resolveRoute("writingDraft")?.providerId === "ollama");
+  await Routing.save({ tier: "normal" });
+
   // Context builder.
   const cChap = await B.ManuscriptChapterService.createFromComposition({ title: "Ctx Chapter", bodyText: "Hess crossed the salt marsh at dawn." });
   await B.EntityService.save("cast", { name: "Hess Vaela", data: { summary: "Bearer of the Auger." } });

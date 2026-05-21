@@ -346,6 +346,11 @@ const SetAIProviders = () => {
     uses: (window.LoomwrightBackend?.KeysService?.loadAllProviderSettingsSync()?.[p.id]?.uses) || p.suggestedUses.reduce((acc, u) => ({ ...acc, [u]: true }), {}),
   })));
   const [addOpen, setAddOpen] = _set_us(false);
+  const [aiTier, setAiTier] = _set_us(() => window.LoomwrightBackend?.AIRoutingService?.loadSync?.()?.tier || "normal");
+  const chooseTier = (t) => {
+    setAiTier(t);
+    window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onSetAITier", detail: { tier: t } } }));
+  };
 
   const up = (id, k, v) => setProviders((arr) => {
     const next = arr.map((p) => {
@@ -384,6 +389,25 @@ const SetAIProviders = () => {
           <b>You control AI costs.</b> Loomwright never sends content to AI providers without your action. Manuscript text is only sent when you confirm. Local-only mode means zero outbound calls.
         </span>
       </div>
+
+      {/* Cost tier */}
+      <SetRow label="Cost tier" hint="Free uses only local providers like Ollama — no tokens, no cost, nothing leaves your device. Higher tiers use your configured cloud provider.">
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {[["free", "Free · local only"], ["budget", "Budget"], ["normal", "Normal"], ["extended", "Extended"], ["full", "Full"]].map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              data-callback="onSetAITier"
+              data-tier={val}
+              aria-pressed={aiTier === val}
+              onClick={() => chooseTier(val)}
+              className={"set-btn " + (aiTier === val ? "set-btn--accent" : "set-btn--outline")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </SetRow>
 
       {/* Provider list */}
       <div className="set-providers">

@@ -1969,6 +1969,7 @@
     defaultState() {
       return {
         mode: "balanced",
+        tier: "normal", // free | budget | normal | extended | full
         defaultProviderId: "openai",
         taskRoutes: {},
         maxContextTokens: 8000,
@@ -1998,25 +1999,46 @@
     requiresManuscriptConfirmation() {
       return this.loadSync().confirmBeforeSendingManuscript !== false;
     },
+    // A provider that runs on the user's own machine — zero token cost and
+    // no text egress. Ollama, or a custom endpoint pointed at localhost.
+    isLocalProviderCfg(cfg) {
+      if (!cfg) return false;
+      const t = cfg.providerType || "";
+      if (t === "ollama") return true;
+      if (t === "custom" && /(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)/.test(cfg.baseUrl || "")) return true;
+      return false;
+    },
+    // A provider usable for a real call: enabled, and either keyed or local
+    // (Ollama needs no key).
+    isUsableProviderCfg(cfg) {
+      return !!cfg && cfg.enabled !== false && (cfg.hasKey || this.isLocalProviderCfg(cfg));
+    },
     /**
      * Resolve a task to { providerId, model } or null when blocked /
-     * unconfigured. Honours localOnly, explicit task routes, and the
-     * default provider.
+     * unconfigured. Honours localOnly (no AI at all), the cost tier (the
+     * "free" tier only ever routes to a local provider, so it never costs
+     * the user anything), explicit task routes, and the default provider.
      */
     resolveRoute(task) {
       const state = this.loadSync();
       if (state.mode === "localOnly") return null;
+      const tier = state.tier || "normal";
+      const tierOk = (cfg) => tier !== "free" || this.isLocalProviderCfg(cfg);
+      // 1) explicit per-task route
       const route = state.taskRoutes?.[task];
       if (route?.providerId) {
         const cfg = KeysService.loadProviderSync(route.providerId);
-        if (cfg && cfg.enabled !== false) return { providerId: route.providerId, model: route.model || cfg.defaultModel || cfg.model };
+        if (this.isUsableProviderCfg(cfg) && tierOk(cfg)) return { providerId: route.providerId, model: route.model || cfg.defaultModel || cfg.model };
       }
-      // Fall back to default provider, then first enabled provider.
       const all = KeysService.loadAllProviderSettingsSync() || {};
+      // 2) default provider
       const def = state.defaultProviderId && all[state.defaultProviderId];
-      if (def && def.enabled !== false) return { providerId: state.defaultProviderId, model: def.defaultModel || def.model };
-      const firstEnabled = Object.values(all).find((p) => p.enabled !== false && p.hasKey);
-      if (firstEnabled) return { providerId: firstEnabled.id, model: firstEnabled.defaultModel || firstEnabled.model };
+      if (this.isUsableProviderCfg(def) && tierOk(def)) return { providerId: state.defaultProviderId, model: def.defaultModel || def.model };
+      // 3) first usable provider honouring the tier (prefers local on "free")
+      const usable = Object.values(all).filter((p) => this.isUsableProviderCfg(p) && tierOk(p));
+      // On the free tier, always prefer a local provider.
+      const pick = usable.find((p) => this.isLocalProviderCfg(p)) || usable[0];
+      if (pick) return { providerId: pick.id, model: pick.defaultModel || pick.model };
       return null;
     },
   };

@@ -1319,6 +1319,14 @@
       notify(`Routed ${task} → ${providerId || "default"}.`);
       return;
     }
+    if (name === "onSetAITier") {
+      const tier = ctx.detail?.tier || ctx.detail?.value || "normal";
+      await B().AIRoutingService.save({ tier });
+      notify(tier === "free"
+        ? "AI tier: Free — only local providers (e.g. Ollama) will be used. No tokens, no cost."
+        : `AI tier: ${tier}.`);
+      return;
+    }
     if (name === "onConfirmAIPrivacyGuard") {
       // The privacy guard resolves inline via window.confirm in this
       // build; this callback exists so a future modal can resolve a
