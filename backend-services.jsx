@@ -758,7 +758,7 @@
   // onboarding.style.tone) so only canon rules ever populated.
   function deriveIntelFromOnboarding(ob) {
     ob = ob || {};
-    const w = ob.welcome || {}, f = ob.foundation || {}, st = ob.style || {}, world = ob.world || {};
+    const w = ob.welcome || {}, f = ob.foundation || {}, st = ob.style || {}, world = ob.world || {}, voice = ob.voice || {};
     const join = (a) => (Array.isArray(a) ? a.filter(Boolean).join(", ") : (a || ""));
     const foundationParts = [];
     if (w.title) foundationParts.push("Title: " + w.title);
@@ -775,6 +775,8 @@
     if (f.pov || f.tense) styleParts.push("POV / tense: " + [f.pov, f.tense].filter(Boolean).join(", "));
     if (st.signature) styleParts.push("Signature: " + st.signature);
     if (st.avoid) styleParts.push("Avoid: " + st.avoid);
+    const vp = voice.profile;
+    if (vp && vp.avgSentenceLen) styleParts.push(`Voice metrics: ${vp.register} register, ${vp.pacing} pacing, avg ${vp.avgSentenceLen}-word sentences, ${vp.lexicalDiversity}% lexical diversity, ${vp.dialogueRatio}% dialogue`);
     const canonRules = (Array.isArray(world.canonRules) ? world.canonRules : (world.canonRules ? [world.canonRules] : [])).filter(Boolean);
     return {
       projectFoundation: foundationParts.join("\n"),
@@ -3251,6 +3253,33 @@
   // project intelligence, injected into AI prompts so any model — including
   // free/local ones like Ollama — follows the same premise, tone, POV,
   // canon, and forbidden-terms rules. Bounded; never includes secrets.
+  // Offline writing-style analysis — computes real metrics from a prose
+  // sample (no AI). Feeds the onboarding "voice fingerprint" and the style
+  // guide so suggestions match the author's voice.
+  function analyzeWritingStyle(text) {
+    const t = String(text || "").trim();
+    if (!t) return null;
+    const words = t.split(/\s+/).filter(Boolean);
+    const wordCount = words.length;
+    if (!wordCount) return null;
+    const sentences = t.split(/[.!?]+(?:\s|$)/).map((s) => s.trim()).filter(Boolean);
+    const sentenceCount = sentences.length || 1;
+    const avgSentenceLen = Math.round(wordCount / sentenceCount);
+    const lens = sentences.map((s) => s.split(/\s+/).filter(Boolean).length);
+    const sentenceVariance = lens.length ? Math.round(Math.sqrt(lens.reduce((a, l) => a + Math.pow(l - avgSentenceLen, 2), 0) / lens.length)) : 0;
+    const uniqueWords = new Set(words.map((w) => w.toLowerCase().replace(/[^a-z']/g, "")).filter(Boolean)).size;
+    const lexicalDiversity = Math.round((uniqueWords / wordCount) * 100);
+    const dialogueMatches = (t.match(/[“"][^”"]{1,}[”"]/g) || []).length;
+    const dialogueRatio = Math.round((dialogueMatches / sentenceCount) * 100);
+    const adverbs = words.filter((w) => /ly$/i.test(w) && w.replace(/[^a-z]/gi, "").length > 4).length;
+    const adverbDensity = Math.round((adverbs / wordCount) * 1000) / 10; // per 100 words
+    const longWords = words.filter((w) => w.replace(/[^a-z]/gi, "").length >= 7).length;
+    const longWordRatio = longWords / wordCount;
+    const register = longWordRatio > 0.18 ? "elevated" : (avgSentenceLen > 22 ? "literary" : "direct");
+    const pacing = avgSentenceLen <= 12 ? "brisk" : (avgSentenceLen >= 24 ? "measured" : "balanced");
+    return { wordCount, sentenceCount, avgSentenceLen, sentenceVariance, lexicalDiversity, dialogueRatio, adverbDensity, register, pacing };
+  }
+
   function buildAuthorContext(opts = {}) {
     const maxChars = opts.maxChars || 1200;
     let ob = {}; try { ob = OnboardingService.loadSync({}) || {}; } catch (_) {}
@@ -5388,6 +5417,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     discoverEntities,
     extractProperNounSpans,
     buildAuthorContext,
+    analyzeWritingStyle,
     autoApplyCandidate,
     OccurrenceService,
     isOccurrenceStale,

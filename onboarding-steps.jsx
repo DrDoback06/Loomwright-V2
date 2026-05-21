@@ -223,7 +223,15 @@ const Step_Voice = ({ data, set, callbacks, jumpTo }) => {
             variant="primary"
             icon={analyzing ? "clock" : "sparkle"}
             disabled={!v.sample && !v.uploaded}
-            onClick={() => { setAnalyzing(true); setTimeout(() => { setAnalyzing(false); setAnalyzed(true); upd("analyzed", true); }, 900); }}
+            onClick={() => {
+              setAnalyzing(true);
+              setTimeout(() => {
+                let profile = null;
+                try { const B = window.LoomwrightBackend; if (B && B.analyzeWritingStyle) profile = B.analyzeWritingStyle(v.sample || ""); } catch (_e) {}
+                setAnalyzing(false); setAnalyzed(true);
+                set("voice", { ...v, analyzed: true, profile });
+              }, 500);
+            }}
             data-callback="onAnalyzeStyleSample"
           >{analyzing ? "Distilling voice…" : "Analyze style"}</Btn>
           <Btn variant="ghost" icon="plus" data-callback="onAddVoiceSample" onClick={() => { const s = (v.sample || "").trim(); if (!s) return; set("voice", { ...v, samples: [...(v.samples || []), { id: "vs" + Date.now(), text: s }], sample: "" }); }}>Add another sample</Btn>
@@ -237,14 +245,18 @@ const Step_Voice = ({ data, set, callbacks, jumpTo }) => {
             <div className="ob-block__title">Style profile result</div>
             <div className="ob-card">
               <div className="ob-card__main">
-                <div className="ob-card__title">Voice fingerprint · ready</div>
-                <div className="ob-card__sub">
-                  <span className="chip chip--ok"><Icon name="check" size={10}/>87% match confidence</span>
-                  <span className="chip chip--accent">avg sentence: 18 words</span>
-                  <span className="chip chip--neutral">archaic register</span>
-                  <span className="chip chip--neutral">moderate clause depth</span>
-                </div>
-                <div className="ob-card__meta">Notes: precise verbs, infrequent dialogue tags, painterly nouns. Tendency toward semicolons in narration.</div>
+                <div className="ob-card__title">Voice fingerprint · {v.profile ? "ready" : "needs a longer sample"}</div>
+                {v.profile ? (
+                  <div className="ob-card__sub">
+                    <span className="chip chip--accent">avg sentence: {v.profile.avgSentenceLen} words</span>
+                    <span className="chip chip--neutral">{v.profile.register} register</span>
+                    <span className="chip chip--neutral">{v.profile.pacing} pacing</span>
+                    <span className="chip chip--neutral">{v.profile.lexicalDiversity}% lexical diversity</span>
+                    <span className="chip chip--neutral">{v.profile.dialogueRatio}% dialogue</span>
+                    <span className="chip chip--neutral">{v.profile.adverbDensity}/100 adverbs</span>
+                  </div>
+                ) : <div className="ob-card__meta">Paste a few sentences and analyze again.</div>}
+                <div className="ob-card__meta">{v.profile ? ("Computed locally from " + v.profile.wordCount + " words — no text leaves your device.") : ""}</div>
                 <div className="ob-card__tags">
                   <Btn variant={v.profileAccepted ? "outline" : "primary"} size="sm" icon="check" data-callback="onAcceptStyleProfile" onClick={() => upd("profileAccepted", true)}>{v.profileAccepted ? "Profile accepted" : "Accept profile"}</Btn>
                   <Btn variant="outline" size="sm" icon="paper" data-callback="onEditStyleProfile" onClick={() => jumpTo && jumpTo("style")}>Edit profile</Btn>

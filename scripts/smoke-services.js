@@ -1338,6 +1338,10 @@ async function main() {
   log("[ob] intel writingStyleGuide derived from style", /dry|short sentences/.test(obIntel.writingStyleGuide || ""));
   log("[ob] intel canonRules flattened (not nested)", Array.isArray(obIntel.canonRules) && obIntel.canonRules[0] === "Magic costs blood");
   log("[ob] applyCompletion reports a destination", !!obResult.dest);
+  const styleProfile = B.analyzeWritingStyle("The wolf ran fast. It was a long, careful, deliberate hunt across the frozen waste, and nothing stirred for hours. \"Wait,\" she whispered.");
+  log("[ob] analyzeWritingStyle computes real metrics", !!styleProfile && styleProfile.avgSentenceLen > 0 && !!styleProfile.register && !!styleProfile.pacing);
+  await B.ProjectIntelService.mergeFromOnboarding({ voice: { profile: { avgSentenceLen: 14, register: "direct", pacing: "balanced", lexicalDiversity: 60, dialogueRatio: 20 } } });
+  log("[ob] voice profile flows into the writing style guide", /Voice metrics/.test(B.ProjectIntelService.loadSync().writingStyleGuide || ""));
 
   console.log("");
   if (failures.length) {

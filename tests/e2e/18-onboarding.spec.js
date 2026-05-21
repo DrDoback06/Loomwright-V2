@@ -69,6 +69,31 @@ test.describe("T18. Onboarding wizard", () => {
     await expect(page.locator(".ob-card__title:has-text('Aelinor')")).toBeVisible({ timeout: 5000 });
   });
 
+  test("Voice step: Analyze computes real, local style metrics", async ({ page }) => {
+    await freshFirstRun(page);
+    await expect(page.locator("[data-ui='OnboardingOverlay']")).toBeVisible({ timeout: 6000 });
+    await page.locator("[data-step='voice']").click();
+    await page.getByPlaceholder(/The auger spoke/).fill("The wolf ran fast. It was a long, careful, deliberate hunt across the frozen waste, and nothing stirred for a while. \"Wait,\" she whispered to the dark.");
+    await page.locator("button:has-text('Analyze style')").click();
+    await expect(page.locator(".chip:has-text('avg sentence:')")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".ob-card__meta:has-text('Computed locally')")).toBeVisible();
+  });
+
+  test("the wizard can be reopened after onboarding is complete", async ({ page }) => {
+    await page.goto(SHELL_PATH);
+    await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
+    await page.evaluate(async () => {
+      try { await window.LoomwrightBackend.StorageService.clear(); } catch (_) {}
+      try { await window.LoomwrightBackend.OnboardingService.setStatus("complete"); } catch (_) {}
+    });
+    await page.goto(SHELL_PATH);
+    await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
+    await page.waitForTimeout(300);
+    await expect(page.locator("[data-ui='OnboardingOverlay']")).toHaveCount(0);
+    await page.evaluate(() => window.LoomwrightDispatchCallback("onReopenOnboardingWizard", { detail: {} }));
+    await expect(page.locator("[data-ui='OnboardingOverlay']")).toBeVisible({ timeout: 5000 });
+  });
+
   test("a project that already onboarded does not reopen the wizard", async ({ page }) => {
     await page.goto(SHELL_PATH);
     await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
