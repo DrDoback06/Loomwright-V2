@@ -249,6 +249,15 @@ async function main() {
     log("offline discovery finds a new location from a directional cue", streamCands.some((c) => c.entityType === "locations" && c.matchType === "new"));
   }
 
+  // -- Auto-apply high-confidence (blue) candidates --
+  {
+    const created = await B.autoApplyCandidate({ entityType: "cast", name: "Auto Knight", summary: "Forged in extraction.", suggestedAction: "create", confidenceBand: "blue" });
+    log("auto-apply creates a new entity for a blue candidate", !!(created && created.id) && !!B.EntityService.getSync(created.id, "cast"));
+    const itm = await B.EntityService.save("items", { name: "Auto Blade" }, { status: "active" });
+    await B.autoApplyCandidate({ entityType: "items", existingEntityId: itm.id, suggestedChanges: { rarity: "rare" }, suggestedAction: "update", confidenceBand: "blue" });
+    log("auto-apply applies only the diff to an existing entity", B.EntityService.getSync(itm.id, "items")?.data?.rarity === "rare");
+  }
+
   // -- mergeEntities global rewrite --
   const dup = await B.EntityService.save("locations", { name: "Vraska Pass Alt" }, { status: "active" });
   // Plant cross-references that should be rewritten.

@@ -314,8 +314,15 @@
 
   async function denyQueueItem(ctx, item) {
     const id = item?.id || ctx.detail?.id;
+    const row = B().ReviewService.listSync().find((q) => q.id === id) || item;
+    // Denying an auto-added candidate also removes the entity it created, so
+    // "I'm not happy with this auto-add" actually undoes it.
+    if (row && row.status === "auto-added" && row.autoAddedEntityId) {
+      try { await B().EntityService.delete(row.entityType, row.autoAddedEntityId); } catch (_) {}
+    }
     if (id) await B().ReviewService.resolve(id, "denied");
-    notify("Suggestion denied.");
+    notify(row && row.autoAddedEntityId ? "Auto-added entity removed." : "Suggestion denied.");
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
   }
 
   function parseCreateType(name) {

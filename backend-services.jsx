@@ -3082,6 +3082,27 @@
     return out;
   }
 
+  // Auto-apply a high-confidence (blue, >=0.95) candidate: create the new
+  // entity, or apply the suggested diff to an existing one. Mirrors the
+  // accept path but runs inline during extraction. Returns the saved entity.
+  async function autoApplyCandidate(ri) {
+    if (!ri) return null;
+    const type = ri.entityType || "references";
+    const existingId = ri.existingEntityId || ri.targetEntityId || null;
+    if (existingId && ri.suggestedChanges && Object.keys(ri.suggestedChanges).length) {
+      const existing = EntityService.getSync(existingId, type);
+      if (!existing) return null;
+      const nextData = { ...(existing.data || {}), ...ri.suggestedChanges };
+      return EntityService.update(type, existingId, { data: nextData });
+    }
+    if ((ri.suggestedAction || "create") === "create") {
+      const fields = (ri.payload && ri.payload.name) ? { ...ri.payload } : { name: ri.name, summary: ri.summary };
+      if (ri.suggestedChanges && ri.suggestedChanges.aliases) fields.aliases = ri.suggestedChanges.aliases;
+      return EntityService.save(type, fields, { status: "active" });
+    }
+    return null;
+  }
+
   const ExtractionService = {
     loadSessionSync() {
       return StorageService.getSync(KEYS.extractionSession, { status: "idle", items: [] });
@@ -3257,6 +3278,21 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       });
 
       const reviewItems = dedupeCandidates([...discoveryCandidates, ...localCandidates, ...aiCandidates]);
+      // Auto-apply blue (>=0.95) candidates: apply now but keep them in the
+      // queue (status "auto-added") so the user can review or undo. Local
+      // discovery is capped below blue, so this only fires for AI-boosted or
+      // exact matches — never a low-confidence local guess.
+      for (const ri of reviewItems) {
+        if (ri.confidenceBand !== "blue") continue;
+        try {
+          const saved = await autoApplyCandidate(ri);
+          if (saved && saved.id) {
+            ri.status = "auto-added";
+            ri.autoAddedEntityId = saved.id;
+            if (ri.matchType === "new") ri.existingEntityId = saved.id;
+          }
+        } catch (_) {}
+      }
       await ReviewService.addMany(reviewItems);
       // Tag occurrences for unknown candidates (`matchType: "new"`) so
       // accept can backfill the entityId after entity creation. Known
@@ -5127,6 +5163,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     discoverEntities,
     extractProperNounSpans,
     buildAuthorContext,
+    autoApplyCandidate,
     OccurrenceService,
     isOccurrenceStale,
     SampleProjectService,
