@@ -1306,6 +1306,39 @@ async function main() {
   const searchJson = JSON.stringify(B.SearchService.loadSync());
   log("[ai] api key never indexed by SearchService", searchJson.indexOf("sk-VERIFY-NOLEAK") === -1);
 
+  // -------------------------------------------------------------------
+  // Onboarding → project seeding (Area 2). Run last; it reseeds the store.
+  // -------------------------------------------------------------------
+  console.log("");
+  console.log("[onboarding]");
+  await B.StorageService.clear();
+  win.__LW_SAMPLE_LOADED__ = false;
+  const obAnswers = {
+    welcome: { title: "The Salt Reach", genre: "Grimdark fantasy" },
+    foundation: { premise: "A reluctant heir hunts a stolen relic.", themes: ["betrayal"], toneWords: ["bleak"], pov: "third-limited", tense: "past" },
+    style: { narratorTone: "dry", signature: "short sentences" },
+    world: { canonRules: ["Magic costs blood"], forbidden: ["modern slang"] },
+    cast: { seeds: [{ id: "s1", name: "Aelinor Vey", aliases: "Ael, the Heir", role: "Protagonist", personality: "Wary, sharp." }] },
+    manuscript: { mode: "paste", autoDetect: true, runExtraction: false, pasted: "Chapter 1 — Arrival\nAelinor Vey rode into Hesselmark at dusk.\n\nChapter 2 — The Keep\nThe keep of Vraska stood dark." },
+    references: { items: [{ id: "r1", title: "House Vey", content: "Pedigree notes for House Vey.", kind: "pasted", context: true }] },
+    ai: { mode: "local", provider: "anthropic", allowEgress: false },
+    review: { autoAddHigh: true, showAutoInQueue: true, aggressiveness: 1, scan: { cast: true, locations: true } },
+    workspace: { startTab: "writers-room" },
+  };
+  const obResult = await B.OnboardingService.applyCompletion(obAnswers);
+  log("[ob] applyCompletion marks onboarding complete", B.OnboardingService.statusSync() === "complete");
+  log("[ob] seeds cast from seeds", B.EntityService.listSync("cast").some((e) => e.name === "Aelinor Vey"));
+  log("[ob] cast seed carries role/personality into data", (B.EntityService.listSync("cast").find((e) => e.name === "Aelinor Vey")?.data || {}).role === "Protagonist");
+  const obChapters = B.ManuscriptChapterService.loadSync().chapters || [];
+  log("[ob] splits pasted manuscript into chapters", obChapters.filter((c) => c.state !== "reserved").length >= 2, `got ${obChapters.length}`);
+  log("[ob] chapter bodies carry the pasted text", obChapters.some((c) => (c.bodyText || "").includes("Hesselmark")));
+  log("[ob] seeds references with content", (B.StorageService.getSync(B.keys.references, []) || []).some((r) => (r.content || "").includes("House Vey")));
+  const obIntel = B.ProjectIntelService.loadSync();
+  log("[ob] intel projectFoundation derived from premise", /reluctant heir/.test(obIntel.projectFoundation || ""));
+  log("[ob] intel writingStyleGuide derived from style", /dry|short sentences/.test(obIntel.writingStyleGuide || ""));
+  log("[ob] intel canonRules flattened (not nested)", Array.isArray(obIntel.canonRules) && obIntel.canonRules[0] === "Magic costs blood");
+  log("[ob] applyCompletion reports a destination", !!obResult.dest);
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

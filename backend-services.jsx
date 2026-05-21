@@ -18,6 +18,7 @@
     entities: "entities",
     references: "references",
     onboarding: "onboarding_answers",
+    onboardingStatus: "onboarding_status",
     projectIntelligence: "project_intelligence",
     settings: "settings",
     providerSettings: "ai_provider_settings",
@@ -607,6 +608,31 @@
     },
   };
 
+  // Split pasted/uploaded manuscript text into chapters on common headers
+  // ("Chapter N", markdown "#", form-feed, scene breaks). Falls back to a
+  // single chapter when no markers are found.
+  function splitChaptersText(text) {
+    if (!text || !text.trim()) return [];
+    const t = text.replace(/\r\n/g, "\n");
+    const re = /^[ \t]*(?:chapter\s+[\dIVXLCM]+\b[^\n]*|#{1,6}\s+[^\n]+|\f|\*\s*\*\s*\*)\s*$/gim;
+    const markers = [];
+    let m;
+    while ((m = re.exec(t)) !== null) { markers.push({ index: m.index, header: m[0].trim() }); if (m.index === re.lastIndex) re.lastIndex++; }
+    if (!markers.length) return [{ title: "Chapter 1", text: t.trim() }];
+    const out = [];
+    const pre = t.slice(0, markers[0].index).trim();
+    if (pre) out.push({ title: "Chapter 1", text: pre });
+    for (let i = 0; i < markers.length; i++) {
+      const start = markers[i].index;
+      const end = i + 1 < markers.length ? markers[i + 1].index : t.length;
+      const nl = t.indexOf("\n", start);
+      const title = markers[i].header.replace(/^#{1,6}\s*/, "").trim() || ("Chapter " + (out.length + 1));
+      const body = t.slice(nl >= 0 ? nl + 1 : start, end).trim();
+      out.push({ title: title.slice(0, 120), text: body });
+    }
+    return out.length ? out : [{ title: "Chapter 1", text: t.trim() }];
+  }
+
   const OnboardingService = {
     loadSync(fallback = {}) {
       return StorageService.getSync(KEYS.onboarding, fallback);
@@ -635,16 +661,139 @@
       }
       return next;
     },
+    statusSync() {
+      return StorageService.getSync(KEYS.onboardingStatus, "pending");
+    },
+    async setStatus(status) {
+      await StorageService.set(KEYS.onboardingStatus, status);
+      window.dispatchEvent(new CustomEvent("lw:onboarding-status", { detail: { status } }));
+      return status;
+    },
+    // "Open the door": persist the answers and seed the project from them —
+    // project intelligence, cast, chapters, references, AI + extraction
+    // settings — then optionally run a first extraction. Returns a summary.
+    async applyCompletion(answers = {}, opts = {}) {
+      const data = answers || {};
+      await this.save(data, { skipAudit: opts.skipAudit });
+      try { await ProjectIntelService.mergeFromOnboarding(data); } catch (_) {}
+      const seeded = { cast: 0, chapters: 0, references: 0 };
+
+      // Cast seeds → cast entities.
+      for (const s of (data.cast && data.cast.seeds) || []) {
+        if (!s || !s.name) continue;
+        const aliases = typeof s.aliases === "string"
+          ? s.aliases.split(",").map((x) => x.trim()).filter(Boolean)
+          : (Array.isArray(s.aliases) ? s.aliases : []);
+        try {
+          await EntityService.save("cast", {
+            name: s.name, aliases, summary: s.personality || "",
+            data: { role: s.role || "", race: s.race || "", class: s.klass || "", faction: s.faction || "", voice: s.voice || "", goals: s.goals || "", fears: s.fears || "", secrets: s.secrets || "", relationships: s.relationships || "", source: "onboarding" },
+          }, { status: "active" });
+          seeded.cast++;
+        } catch (_) {}
+      }
+
+      // Manuscript → chapters.
+      const m = data.manuscript || {};
+      const chapters = [];
+      const addChapter = (title, body) => chapters.push({ id: uuid("ch"), num: chapters.length + 1, title: title || ("Chapter " + (chapters.length + 1)), state: "saved", bodyText: body || "", words: (body || "").trim().split(/\s+/).filter(Boolean).length });
+      const src = m.mode === "paste" ? (m.pasted || "") : (m.mode === "upload" ? ((m.uploaded && m.uploaded.content) || "") : "");
+      if (src && src.trim()) {
+        const parts = (m.autoDetect !== false) ? splitChaptersText(src) : [{ title: "Chapter 1", text: src.trim() }];
+        parts.forEach((p) => addChapter(p.title, p.text));
+      }
+      if (!chapters.length) addChapter("Chapter 1", "");
+      const target = (data.plot && data.plot.targetChapters) || 0;
+      if (m.reserve && target > chapters.length) {
+        for (let n = chapters.length + 1; n <= target; n++) chapters.push({ id: uuid("ch"), num: n, title: "", state: "reserved", bodyText: "", words: 0 });
+      }
+      const manuscripts = {};
+      chapters.forEach((c) => { manuscripts[c.id] = { text: c.bodyText, html: "" }; });
+      try { await ManuscriptChapterService.save({ chapters, activeChapterId: chapters[0] && chapters[0].id, manuscripts, trashedChapters: [] }); } catch (_) {}
+      seeded.chapters = chapters.filter((c) => c.state !== "reserved").length;
+
+      // References (pasted/uploaded) → ReferencesService store.
+      const newRefs = (((data.references && data.references.items) || []).filter(Boolean)).map((it) => ({
+        id: it.id || uuid("ref"), title: it.title || "Reference", content: it.content || "", kind: it.kind || "pasted",
+        includedInAIContext: it.context !== false, tags: it.tags || [], createdAt: nowIso(),
+      }));
+      if (newRefs.length) {
+        try { const cur = await StorageService.get(KEYS.references, []); await StorageService.set(KEYS.references, [...cur, ...newRefs]); window.dispatchEvent(new CustomEvent("lw:references-updated")); seeded.references = newRefs.length; } catch (_) {}
+      }
+
+      // AI provider + privacy default (local-first unless the user opted in).
+      const ai = data.ai || {};
+      try {
+        if (ai.key && (ai.mode === "byok" || ai.mode === "cloud")) {
+          await AIService.saveProviderConfig({ id: ai.provider || "anthropic", providerType: ai.provider || "anthropic", apiKey: ai.key });
+        }
+        await AIRoutingService.save({ mode: ai.mode === "local" ? "localOnly" : "balanced" });
+      } catch (_) {}
+
+      // Extraction preferences from the Review step.
+      if (data.review) {
+        try {
+          const aggr = ["gentle", "balanced", "aggressive"][Math.max(0, Math.min(2, data.review.aggressiveness != null ? data.review.aggressiveness : 1))] || "balanced";
+          await SettingsService.saveSection("extraction", { aggressiveness: aggr, autoAdd95: data.review.autoAddHigh !== false, showAutoAddedInReview: data.review.showAutoInQueue !== false, threshold: 50, scan: data.review.scan || {} });
+        } catch (_) {}
+      }
+
+      await this.setStatus("complete");
+
+      if (m.runExtraction) {
+        for (const c of chapters.filter((ch) => ch.bodyText && ch.bodyText.trim())) {
+          try { await ExtractionService.runExtraction({ chapterId: c.id, text: c.bodyText, deep: false }); } catch (_) {}
+        }
+      }
+      const dest = data.__dest || (data.workspace && data.workspace.startTab) || "writers-room";
+      window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      window.dispatchEvent(new CustomEvent("lw:onboarding-complete", { detail: { dest, seeded } }));
+      return { dest, seeded };
+    },
   };
+
+  // Derive structured project intelligence from the onboarding answers,
+  // reading the REAL schema (welcome/foundation/style/world). The previous
+  // mapping read non-existent fields (onboarding.project.goals,
+  // onboarding.style.tone) so only canon rules ever populated.
+  function deriveIntelFromOnboarding(ob) {
+    ob = ob || {};
+    const w = ob.welcome || {}, f = ob.foundation || {}, st = ob.style || {}, world = ob.world || {};
+    const join = (a) => (Array.isArray(a) ? a.filter(Boolean).join(", ") : (a || ""));
+    const foundationParts = [];
+    if (w.title) foundationParts.push("Title: " + w.title);
+    if (w.genre || w.subgenre) foundationParts.push("Genre: " + [w.genre, w.subgenre].filter(Boolean).join(" / "));
+    if (w.audience) foundationParts.push("Audience: " + w.audience);
+    if (f.premise) foundationParts.push("Premise: " + f.premise);
+    if (f.logline) foundationParts.push("Logline: " + f.logline);
+    if (f.coreConflict) foundationParts.push("Core conflict: " + f.coreConflict);
+    if (f.themes && f.themes.length) foundationParts.push("Themes: " + join(f.themes));
+    if (f.readerExperience) foundationParts.push("Reader experience: " + f.readerExperience);
+    const styleParts = [];
+    if (st.narratorTone) styleParts.push("Narrator tone: " + st.narratorTone);
+    if (f.toneWords && f.toneWords.length) styleParts.push("Tone words: " + join(f.toneWords));
+    if (f.pov || f.tense) styleParts.push("POV / tense: " + [f.pov, f.tense].filter(Boolean).join(", "));
+    if (st.signature) styleParts.push("Signature: " + st.signature);
+    if (st.avoid) styleParts.push("Avoid: " + st.avoid);
+    const canonRules = (Array.isArray(world.canonRules) ? world.canonRules : (world.canonRules ? [world.canonRules] : [])).filter(Boolean);
+    return {
+      projectFoundation: foundationParts.join("\n"),
+      writingStyleGuide: styleParts.join("\n"),
+      toneKeywords: [].concat(f.toneWords || [], st.narratorTone ? [st.narratorTone] : []).filter(Boolean).slice(0, 12),
+      canonRules,
+      genre: [w.genre, w.subgenre].filter(Boolean).join(" / "),
+      pov: f.pov || "",
+      tense: f.tense || "",
+      forbidden: Array.isArray(world.forbidden) ? world.forbidden.filter(Boolean) : [],
+      terminology: Array.isArray(world.terminology) ? world.terminology.filter(Boolean) : [],
+    };
+  }
 
   const ProjectIntelService = {
     defaultIntel() {
       const onboarding = OnboardingService.loadSync({});
       return {
-        projectFoundation: onboarding.project?.goals || "",
-        writingStyleGuide: onboarding.style?.tone || "",
-        toneKeywords: (onboarding.style?.tone || "").split(/[,.]/).map((s) => s.trim()).filter(Boolean).slice(0, 8),
-        canonRules: [onboarding.world?.canonRules].filter(Boolean),
+        ...deriveIntelFromOnboarding(onboarding),
         characterSummaries: EntityService.listSync("cast").map((e) => ({ entityId: e.id, summary: e.summary || "" })),
         extractionRules: [],
         privacySettings: StorageService.getSync(KEYS.settings, {}).privacy || {},
@@ -677,12 +826,14 @@
     },
     async mergeFromOnboarding(answers) {
       const current = this.loadSync();
-      return this.save({
-        ...current,
-        projectFoundation: answers?.project?.goals || current.projectFoundation,
-        writingStyleGuide: answers?.style?.tone || current.writingStyleGuide,
-        canonRules: [answers?.world?.canonRules].filter(Boolean),
-      });
+      const derived = deriveIntelFromOnboarding(answers);
+      // Keep any existing non-empty values if the answers don't supply them.
+      const merged = { ...current };
+      for (const [k, v] of Object.entries(derived)) {
+        const empty = v == null || v === "" || (Array.isArray(v) && v.length === 0);
+        if (!empty) merged[k] = v;
+      }
+      return this.save(merged);
     },
   };
 
