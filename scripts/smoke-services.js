@@ -259,6 +259,40 @@ async function main() {
     const itm = await B.EntityService.save("items", { name: "Auto Blade" }, { status: "active" });
     await B.autoApplyCandidate({ entityType: "items", existingEntityId: itm.id, suggestedChanges: { rarity: "rare" }, suggestedAction: "update", confidenceBand: "blue" });
     log("auto-apply applies only the diff to an existing entity", B.EntityService.getSync(itm.id, "items")?.data?.rarity === "rare");
+    // suggestedChanges land on a NEW entity (relationship fromId/toId etc.).
+    const rel = await B.autoApplyCandidate({ entityType: "relationships", name: "Theron → Brennan", suggestedAction: "create", confidenceBand: "blue", suggestedChanges: { fromId: "a1", toId: "b1", relationshipType: "ally" }, relatedEntityIds: ["a1", "b1"] });
+    const relEnt = rel && B.EntityService.getSync(rel.id, "relationships");
+    log("new relationship carries fromId/toId/type in data", !!relEnt && relEnt.data && relEnt.data.fromId === "a1" && relEnt.data.toId === "b1" && relEnt.data.relationshipType === "ally");
+  }
+
+  // -- Re-extraction is idempotent (no duplicate candidates/occurrences) --
+  {
+    const text = "Korrin rode into Drassmoor. \"Onward,\" said Korrin.";
+    await B.ExtractionService.runExtraction({ chapterId: "ree-ch", text, deep: false });
+    const cand1 = B.StorageService.getSync(B.keys.reviewQueue, []).filter((q) => q.chapterId === "ree-ch").length;
+    const occ1 = B.OccurrenceService.listByChapterSync("ree-ch").length;
+    await B.ExtractionService.runExtraction({ chapterId: "ree-ch", text, deep: false });
+    const cand2 = B.StorageService.getSync(B.keys.reviewQueue, []).filter((q) => q.chapterId === "ree-ch").length;
+    const occ2 = B.OccurrenceService.listByChapterSync("ree-ch").length;
+    log("re-extraction does not duplicate candidates", cand1 > 0 && cand2 === cand1, `${cand1} -> ${cand2}`);
+    log("re-extraction does not duplicate occurrences", occ1 > 0 && occ2 === occ1, `${occ1} -> ${occ2}`);
+  }
+
+  // -- Extraction settings actually control behaviour --
+  {
+    const text = "\"Hold,\" said Theronn. Lord Brennann rode into Hesselmarr and raised the Sunblade.";
+    // Disable the cast scan; cast candidates should drop, others survive.
+    await B.SettingsService.saveSection("extraction", { aggressiveness: "balanced", autoAdd95: true, showAutoAddedInReview: true, threshold: 50, scan: { cast: false, locations: true, items: true } });
+    await B.ExtractionService.runExtraction({ chapterId: "set-ch", text, deep: false });
+    const cands = B.StorageService.getSync(B.keys.reviewQueue, []).filter((q) => q.chapterId === "set-ch");
+    log("scan toggle off suppresses that entity type", cands.length > 0 && !cands.some((c) => c.entityType === "cast"));
+    log("scan still finds enabled types", cands.some((c) => c.entityType === "locations" || c.entityType === "items"));
+    // High threshold drops local candidates below it.
+    await B.SettingsService.saveSection("extraction", { threshold: 99, scan: {}, autoAdd95: false });
+    await B.ExtractionService.runExtraction({ chapterId: "thr-ch", text, deep: false });
+    const thrCands = B.StorageService.getSync(B.keys.reviewQueue, []).filter((q) => q.chapterId === "thr-ch");
+    log("threshold 99 drops sub-threshold local candidates", thrCands.length === 0, `got ${thrCands.length}`);
+    await B.SettingsService.saveSection("extraction", { threshold: 50, scan: {}, autoAdd95: true }); // restore default
   }
 
   // -- mergeEntities global rewrite --

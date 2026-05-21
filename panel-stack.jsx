@@ -215,6 +215,10 @@ const DockedPanel = ({
         </div>
         <Btn variant="ghost" size="sm" icon="filter" title="Filter" data-callback="onFilterPanel"/>
         <Btn variant="ghost" size="sm" icon="sort" title="Sort" data-callback="onSortPanel"/>
+        {panel.entityType && (
+          <Btn variant="ghost" size="sm" icon="sparkle" title={"Extract " + panel.title.toLowerCase() + " from the manuscript"} data-testid="panel-extract"
+            onClick={() => window.LoomwrightDispatchCallback?.("onOpenExtractionWizard", { detail: { scope: "manuscript", typeFocus: panel.entityType } })}/>
+        )}
         <Btn variant="ghost" size="sm" icon="bell" title="Review queue" onClick={onOpenReviewQueue} data-callback="onOpenReviewQueue"/>
       </div>
 

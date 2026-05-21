@@ -296,9 +296,19 @@
       // have. Prefer the candidate's payload if present (AI shape), then
       // the `candidate` object the review card displays, then fields
       // drawn from the row itself.
-      const fields = (row.payload && row.payload.name) ? row.payload
-        : (row.candidate && row.candidate.name) ? row.candidate
+      const fields = (row.payload && row.payload.name) ? { ...row.payload }
+        : (row.candidate && row.candidate.name) ? { ...row.candidate }
         : { name: row.name, summary: row.summary };
+      // Carry the structured cross-links (fromId/toId for relationships,
+      // actorId for stats, location for travel, phase for quests, …) into the
+      // new entity's data so the relationship/stat/quest actually lands wired,
+      // not as a bare name.
+      if (row.suggestedChanges && Object.keys(row.suggestedChanges).length) {
+        fields.data = { ...(fields.data || {}), ...row.suggestedChanges };
+      }
+      if (Array.isArray(row.relatedEntityIds) && row.relatedEntityIds.length) {
+        fields.data = { ...(fields.data || {}), relatedEntityIds: row.relatedEntityIds };
+      }
       saved = await B().EntityService.save(row.entityType || "references", fields, { status: "active" });
     }
     // Backfill any pending occurrences that were recorded against this

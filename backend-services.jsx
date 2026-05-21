@@ -468,6 +468,14 @@
       for (const item of items) await this.add(item);
       return this.listSync();
     },
+    // Drop still-pending candidates for a chapter so a re-extraction refreshes
+    // them instead of duplicating. Triaged items (accepted/denied/auto-added)
+    // are preserved.
+    async removePendingByChapter(chapterId) {
+      if (!chapterId) return;
+      const all = await StorageService.get(KEYS.reviewQueue, []);
+      await StorageService.set(KEYS.reviewQueue, all.filter((q) => !(q.chapterId === chapterId && q.status === "pending")));
+    },
     async resolve(id, status = "done", opts = {}) {
       const all = await StorageService.get(KEYS.reviewQueue, []);
       const before = all.find((item) => item.id === id) || null;
@@ -2338,6 +2346,13 @@
       const all = await StorageService.get(KEYS.occurrences, []);
       await StorageService.set(KEYS.occurrences, all.filter((o) => o.candidateId !== candidateId));
     },
+    // Remove every occurrence for a chapter — used to make re-extraction
+    // idempotent (the scan re-creates them for known entities afterwards).
+    async deleteByChapter(chapterId) {
+      if (!chapterId) return;
+      const all = await StorageService.get(KEYS.occurrences, []);
+      await StorageService.set(KEYS.occurrences, all.filter((o) => o.chapterId !== chapterId));
+    },
     async rebindEntity(fromId, toId) {
       if (!fromId || !toId || fromId === toId) return;
       const all = await StorageService.get(KEYS.occurrences, []);
@@ -3130,6 +3145,8 @@
     if ((ri.suggestedAction || "create") === "create") {
       const fields = (ri.payload && ri.payload.name) ? { ...ri.payload } : { name: ri.name, summary: ri.summary };
       if (ri.suggestedChanges && ri.suggestedChanges.aliases) fields.aliases = ri.suggestedChanges.aliases;
+      if (ri.suggestedChanges && Object.keys(ri.suggestedChanges).length) fields.data = { ...(fields.data || {}), ...ri.suggestedChanges };
+      if (Array.isArray(ri.relatedEntityIds) && ri.relatedEntityIds.length) fields.data = { ...(fields.data || {}), relatedEntityIds: ri.relatedEntityIds };
       return EntityService.save(type, fields, { status: "active" });
     }
     return null;
@@ -3155,6 +3172,14 @@
       };
       const isAborted = () => !!(signal && signal.aborted);
       report("start");
+      // Idempotent re-extraction: clear this chapter's prior occurrences and
+      // still-pending candidates so re-running refreshes them instead of
+      // duplicating. Accepted/denied/auto-added work is preserved; known
+      // entities get their occurrences re-created by the scan below.
+      if (chapterId) {
+        try { await OccurrenceService.deleteByChapter(chapterId); } catch (_) {}
+        try { await ReviewService.removePendingByChapter(chapterId); } catch (_) {}
+      }
       // Local pass: scan text for mentions of known entities and persist
       // EntityOccurrence records pointing at real entity IDs. This runs
       // regardless of AI configuration so double-click works without BYOK.
@@ -3176,10 +3201,15 @@
       // progression, events, and lore. Run unconditionally, with no AI.
       const localCandidates = runLocalDetectors(text || "", chapterId, sessionId);
 
+      // Extraction preferences (user-controllable in Settings; default to
+      // high recall so a fresh project surfaces plenty to review).
+      const exPrefs = SettingsService.getSectionSync("extraction", { aggressiveness: "balanced", autoAdd95: true, showAutoAddedInReview: true, threshold: 50, scan: {} });
+      const exMinRecurrence = exPrefs.aggressiveness === "gentle" ? 3 : exPrefs.aggressiveness === "aggressive" ? 1 : 2;
+
       // Offline NER discovery (Pass 0): find brand-new named entities
       // (cast / locations / items / skills) so a fresh project's first
       // extraction is not empty. Deterministic, no AI, no text egress.
-      const discovery = discoverEntities(text || "", knownEntityIndex(), chapterId, sessionId);
+      const discovery = discoverEntities(text || "", knownEntityIndex(), chapterId, sessionId, { minRecurrence: exMinRecurrence });
       const discoveryCandidates = clusterAliases(discovery.candidates);
       report("detect", { candidates: [...discoveryCandidates, ...localCandidates] });
 
@@ -3309,23 +3339,33 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
         }, { deep, extractionSessionId: sessionId });
       });
 
-      const reviewItems = dedupeCandidates([...discoveryCandidates, ...localCandidates, ...aiCandidates]);
+      let reviewItems = dedupeCandidates([...discoveryCandidates, ...localCandidates, ...aiCandidates]);
+      // Honour the user's Settings → Extraction controls: skip disabled entity
+      // types and drop candidates below the confidence threshold.
+      const exMinConf = (exPrefs.threshold != null ? exPrefs.threshold : 50) / 100;
+      reviewItems = reviewItems.filter((c) => {
+        if (exPrefs.scan && exPrefs.scan[c.entityType] === false) return false;
+        const conf = typeof c.confidence === "number" ? c.confidence : 0;
+        return conf >= exMinConf;
+      });
       // Group candidates by the sentence that produced them (multi-entry).
       assignSentenceGroups(reviewItems, text || "", chapterId);
-      // Auto-apply blue (>=0.95) candidates: apply now but keep them in the
-      // queue (status "auto-added") so the user can review or undo. Local
-      // discovery is capped below blue, so this only fires for AI-boosted or
-      // exact matches — never a low-confidence local guess.
-      for (const ri of reviewItems) {
-        if (ri.confidenceBand !== "blue") continue;
-        try {
-          const saved = await autoApplyCandidate(ri);
-          if (saved && saved.id) {
-            ri.status = "auto-added";
-            ri.autoAddedEntityId = saved.id;
-            if (ri.matchType === "new") ri.existingEntityId = saved.id;
-          }
-        } catch (_) {}
+      // Auto-apply blue (>=0.95) candidates when the user allows it: apply now
+      // but keep them in the queue (status "auto-added") so they can review or
+      // undo. Local discovery is capped below blue, so this only fires for
+      // AI-boosted or exact matches — never a low-confidence local guess.
+      if (exPrefs.autoAdd95 !== false) {
+        for (const ri of reviewItems) {
+          if (ri.confidenceBand !== "blue") continue;
+          try {
+            const saved = await autoApplyCandidate(ri);
+            if (saved && saved.id) {
+              ri.status = exPrefs.showAutoAddedInReview === false ? "done" : "auto-added";
+              ri.autoAddedEntityId = saved.id;
+              if (ri.matchType === "new") ri.existingEntityId = saved.id;
+            }
+          } catch (_) {}
+        }
       }
       await ReviewService.addMany(reviewItems);
       // Tag occurrences for unknown candidates (`matchType: "new"`) so

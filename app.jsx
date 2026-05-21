@@ -359,7 +359,10 @@ const AppShell = () => {
         if (edited.suggestedChanges && Object.keys(edited.suggestedChanges).length) patch.data = { ...((existing && existing.data) || {}), ...edited.suggestedChanges };
         saved = await B.EntityService.update(type, existingId, patch);
       } else {
-        saved = await B.EntityService.save(type, { name: cand.name, aliases, summary: cand.summary }, { status: "active" });
+        const fields = { name: cand.name, aliases, summary: cand.summary };
+        if (edited.suggestedChanges && Object.keys(edited.suggestedChanges).length) fields.data = { ...(fields.data || {}), ...edited.suggestedChanges };
+        if (Array.isArray(edited.relatedEntityIds) && edited.relatedEntityIds.length) fields.data = { ...(fields.data || {}), relatedEntityIds: edited.relatedEntityIds };
+        saved = await B.EntityService.save(type, fields, { status: "active" });
       }
       if (saved && saved.id && edited.candidateId && B.OccurrenceService) {
         await B.OccurrenceService.linkCandidateToEntity(edited.candidateId, saved.id, type);

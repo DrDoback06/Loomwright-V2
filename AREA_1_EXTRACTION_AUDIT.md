@@ -42,6 +42,43 @@ CHROMIUM_PATH=/path/to/chrome npm run test:e2e -- 16-extraction-wizard 17-extrac
 5. In the queue: **Edit** opens a pre-filled modal; **Merge** opens the ranked merge modal; **Deny** removes it. Same actions in the margin and per-chapter context.
 6. Add a free local provider (Ollama) + set tier **Free** → Deep extraction enriches at zero cost; **Local-only** blocks all AI.
 
+## Audit pass (post-completion) — what the audit found & fixed
+
+A dedicated audit (Area 1 + everything that should link to it) found and **fixed**
+the following correctness gaps:
+
+- **Extraction settings were cosmetic.** `runExtraction` now reads Settings →
+  Extraction: `scan` per-type toggles skip disabled types, `threshold` drops
+  sub-threshold candidates, `aggressiveness` tunes discovery recurrence, and
+  `autoAdd95` / `showAutoAddedInReview` gate auto-apply. (smoke `[settings]`)
+- **`suggestedChanges` were dropped when creating a NEW entity** — so accepted
+  relationship / stat / quest / travel candidates landed as bare names.
+  `acceptQueueItem`, `autoApplyCandidate`, and the edit modal now merge
+  `suggestedChanges` + `relatedEntityIds` into the new entity's `data` (e.g. a
+  relationship lands with `fromId`/`toId`/`relationshipType`). (smoke + e2e `17`)
+- **Re-extraction duplicated data.** `runExtraction` is now idempotent per
+  chapter: it clears that chapter's prior occurrences + still-pending candidates
+  first (`OccurrenceService.deleteByChapter`, `ReviewService.removePendingByChapter`),
+  preserving accepted/denied/auto-added work. (smoke: run twice → counts stable)
+- **Only Cast had an extract entry point.** Every entity panel header now has a
+  type-focused "Extract from manuscript" button that opens the wizard scoped to
+  that type.
+
+Confirmed already-working links: Home review count, Today pending list, Command
+Palette indexing of queue items, Trash for denied/removed entities, adaptive
+wheel "Extract", live panel badges, occurrence highlights + double-click in the
+manuscript.
+
+### Cross-links deferred to their owning areas (data lands correctly now)
+- **Relationships tab live rendering** — accepted relationships now persist with
+  `fromId/toId/type`, but the Relationships *tab* still reads demo data
+  (`relationships.jsx`); rendering live relationships is **Area 4 (visual tabs)**.
+- **Skill-tree assignment selector on skill candidates** — depends on the skill
+  tree system + per-actor trees, which are **Skill Trees (Area 4/7)**; skills
+  currently land as entities to assign later.
+- **Travel/location + provenance display** — `cast.data.location` is set on
+  accept; showing it in the dossier + Atlas travel line is **Area 3 (Cast) / Atlas**.
+
 ## Intentionally NOT in Area 1 (later areas)
 - The **visual Atlas travel map** (travel is captured as candidates/links; the map canvas is the Atlas area).
 - **AI Writer suite** (revise/continue/write chapter) and its model picker — separate area (uses the same tier + `buildAuthorContext`).

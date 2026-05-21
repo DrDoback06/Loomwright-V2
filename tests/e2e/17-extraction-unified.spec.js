@@ -96,4 +96,27 @@ test.describe("T17. Unified extraction surfaces", () => {
     });
     expect(after).toBeGreaterThan(before);
   });
+
+  test("accepting a new relationship candidate lands its fromId/toId on the entity", async ({ page }) => {
+    await openFreshApp(page);
+    const id = await page.evaluate(async () => {
+      const RS = window.LoomwrightBackend.ReviewService;
+      const rid = "rq-rel-1";
+      await RS.add({
+        id: rid, entityType: "relationships", name: "Aelinor → Saren",
+        suggestedAction: "create", matchType: "new", confidence: 0.74, confidenceBand: "orange",
+        suggestedChanges: { fromId: "cast-a", toId: "cast-b", relationshipType: "ally" },
+        relatedEntityIds: ["cast-a", "cast-b"], status: "pending", candidateId: "c-rel-1",
+        payload: { name: "Aelinor → Saren" },
+      });
+      return rid;
+    });
+    await page.evaluate((i) => window.LoomwrightDispatchCallback("onAcceptQueueItem", { detail: { id: i } }), id);
+    await page.waitForTimeout(200);
+    const made = await page.evaluate(() =>
+      window.LoomwrightBackend.EntityService.listSync("relationships").find((r) => r.data && r.data.fromId === "cast-a"));
+    expect(made).toBeTruthy();
+    expect(made.data.toId).toBe("cast-b");
+    expect(made.data.relationshipType).toBe("ally");
+  });
 });
