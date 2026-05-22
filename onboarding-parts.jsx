@@ -147,7 +147,7 @@ const JsonImportBox = ({ label = "Paste filled JSON here", value, onParseSuccess
     onChange && onChange(val);
     if (!val.trim()) { setStatus({ kind: "idle", msg: "Awaiting paste" }); return; }
     try {
-      const obj = JSON.parse(val);
+      const obj = JSON.parse(stripJsonFence(val));
       const keys = Object.keys(obj).length;
       setStatus({ kind: "ok", msg: keys + " keys parsed" });
       onParseSuccess && onParseSuccess(obj);

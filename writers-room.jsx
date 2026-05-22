@@ -441,7 +441,7 @@ const ManuscriptToolbar = ({
 // ---------------------------------------------------------------------
 // SaveModeControls
 // ---------------------------------------------------------------------
-const SaveModeControls = ({ onSave, onSaveAndExtract, onSaveAndDeepExtract, syncing }) => {
+const SaveModeControls = ({ onSave, syncing }) => {
   return (
     <div className="wr-save" data-ui="SaveModeControls" role="group" aria-label="Save controls">
       <button
@@ -449,25 +449,9 @@ const SaveModeControls = ({ onSave, onSaveAndExtract, onSaveAndDeepExtract, sync
         data-callback="onSave"
         data-testid="wr-save"
         onClick={onSave}
-        title="Saves manuscript text and author edits only."
+        title="Saves manuscript text and author edits. Extract via right-click / long-press."
         disabled={syncing}
       ><Icon name="check" size={12}/>Save</button>
-      <button
-        className="wr-save__btn"
-        data-callback="onSaveAndExtract"
-        data-testid="wr-save-extract"
-        onClick={onSaveAndExtract}
-        title="Saves and runs a quick entity sweep."
-        disabled={syncing}
-      ><Icon name="sparkle" size={12}/>+ Extract</button>
-      <button
-        className="wr-save__btn"
-        data-callback="onSaveAndDeepExtract"
-        data-testid="wr-save-deep"
-        onClick={onSaveAndDeepExtract}
-        title="Saves and runs the deepest available scan."
-        disabled={syncing}
-      ><Icon name="bolt" size={12}/>+ Deep</button>
     </div>
   );
 };
@@ -539,9 +523,6 @@ const FloatingSelectionToolbar = ({ x, y, onAction, onCreateEntityFromSelection,
       <button className="wr-fst__btn" title="Add paragraph note" onClick={() => onAction("comment")}><Icon name="bell" size={13}/></button>
       <span className="wr-fst__sep"/>
       <button className="wr-fst__btn" data-callback="onLinkEntity" title="Link to entity" onClick={onLinkEntity}><Icon name="link" size={13}/></button>
-      <button className="wr-fst__btn" title="Extract entities from selection" onClick={() => onAction("extract-selection")}>
-        <Icon name="sparkle" size={12}/>Extract
-      </button>
       <button className="wr-fst__btn wr-fst__btn--strong" data-callback="onCreateEntityFromSelection" title="Create entity from selection" onClick={onCreateEntityFromSelection}>
         <Icon name="plus" size={11}/>New entity
       </button>
@@ -1251,6 +1232,34 @@ const WritersRoomScreen = ({
   const rightMarginVisible = !L.rightMarginCollapsed && (L.writingLayoutMode === "full" || L.writingLayoutMode === "review");
   const [typewriter, setTypewriter] = _wrUS(false);
 
+  // Mobile / compact layout — side margins become bottom-sheet drawers and the
+  // toolbar wraps. Driven by viewport width OR the onboarding `workspace.mobileCompact` pref.
+  const _wrCompactPref = () => { try { return !!window.LoomwrightBackend?.SettingsService?.getSectionSync?.("workspace", {})?.mobileCompact; } catch (_e) { return false; } };
+  const [isMobile, setIsMobile] = _wrUS(() => {
+    try {
+      if (_wrCompactPref()) return true;
+      return typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(max-width: 860px)").matches : false;
+    } catch (_e) { return false; }
+  });
+  const [mobileDrawer, setMobileDrawer] = _wrUS(null); // null | "left" | "right"
+  _wrUE(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(max-width: 860px)");
+    const apply = () => setIsMobile(mq.matches || _wrCompactPref());
+    apply();
+    try { mq.addEventListener("change", apply); } catch (_e) { mq.addListener && mq.addListener(apply); }
+    window.addEventListener("lw:settings-saved", apply);
+    window.addEventListener("lw:settings-updated", apply);
+    return () => {
+      try { mq.removeEventListener("change", apply); } catch (_e) { mq.removeListener && mq.removeListener(apply); }
+      window.removeEventListener("lw:settings-saved", apply);
+      window.removeEventListener("lw:settings-updated", apply);
+    };
+  }, []);
+  _wrUE(() => { if (!isMobile && mobileDrawer) setMobileDrawer(null); }, [isMobile, mobileDrawer]);
+  const showLeftMargin  = isMobile ? (mobileDrawer === "left")  : leftMarginVisible;
+  const showRightMargin = isMobile ? (mobileDrawer === "right") : rightMarginVisible;
+
   // Margins state
   const [noteFilter, setNoteFilter] = _wrUS("open");
   const [extFilter, setExtFilter] = _wrUS("all");
@@ -1476,7 +1485,6 @@ const WritersRoomScreen = ({
     onSetSyncState && onSetSyncState("saved");
   }, [activeId, chapters, manuscriptsByChapter, persistChapters, onSetSyncState]);
   const onSaveAndExtract = _wrUC(() => runExtractionFlow(false), [runExtractionFlow]);
-  const onSaveAndDeepExtract = _wrUC(() => runExtractionFlow(true), [runExtractionFlow]);
   const onCloseProgress = _wrUC(() => {
     setProgressOpen(false);
     setExtractionState("complete");
@@ -1608,32 +1616,7 @@ const WritersRoomScreen = ({
     }
   }, []);
 
-  // Chapter Extraction from a highlighted passage. Runs in the background
-  // off the local ExtractionService; discovered candidates carry this
-  // chapter's id, so they surface in the Current Chapter Context panel and
-  // the global review queue. No AI required.
-  const onExtractSelection = _wrUC(async () => {
-    let text = "";
-    try {
-      const sel = window.getSelection && window.getSelection();
-      if (sel && !sel.isCollapsed && bodyRef.current && bodyRef.current.contains(sel.anchorNode)) {
-        text = String(sel.toString()).replace(/\s+/g, " ").trim();
-      }
-    } catch (_e) {}
-    const toast = (message) => window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message } }));
-    if (!text) { toast("Highlight some text first to extract from it."); return; }
-    const B = window.LoomwrightBackend;
-    if (!B || !B.ExtractionService) return;
-    toast("Extracting from selection… results appear in the review queue.");
-    try {
-      window.__LW_WIZARD_SELECTION__ = { text, chapterId: activeId };
-      await B.ExtractionService.runExtraction({ chapterId: activeId, text, scope: "selection" });
-      toast("Selection extracted.");
-    } catch (_e) { toast("Selection extraction failed."); }
-  }, [activeId]);
-
   const onToolbarAction = _wrUC((action) => {
-    if (action === "extract-selection") { onExtractSelection(); return; }
     if (action === "create-entity") { onCreateEntityFromSelection(); return; }
     if (action === "link-entity") { onLinkEntity(); return; }
     if (action === "inline-note" || action === "comment") { onAddNote(); return; }
@@ -1643,7 +1626,7 @@ const WritersRoomScreen = ({
       if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
       return;
     }
-  }, [onExtractSelection, onCreateEntityFromSelection, onLinkEntity, onAddNote, canvasState, onSetSyncState]);
+  }, [onCreateEntityFromSelection, onLinkEntity, onAddNote, canvasState, onSetSyncState]);
 
   const onToggleFocusMode  = _wrUC(() => setL((p) => ({ ...p, writingLayoutMode: p.writingLayoutMode === "clean" ? "full" : "clean" })), [setL]);
   const onSelectAuthor     = _wrUC((id) => {
@@ -1725,11 +1708,63 @@ const WritersRoomScreen = ({
     });
   }, []);
 
-  // Optional context menu / long-press for chapter strip handled inside ChapterNode.
-  const wrContext = (e) => {
+  // Context-aware adaptive wheel — the standard surface for AI + extraction.
+  // Right-click (desktop) and long-press (touch) over the manuscript open the
+  // wheel with selection / chapter / entity context so the right actions show.
+  const openContextWheel = _wrUC((clientX, clientY, target) => {
+    let selectionText = "";
+    try {
+      const sel = window.getSelection && window.getSelection();
+      if (sel && !sel.isCollapsed && bodyRef.current && bodyRef.current.contains(sel.anchorNode)) {
+        selectionText = String(sel.toString()).replace(/\s+/g, " ").trim();
+      }
+    } catch (_e) {}
+    let entity = null;
+    try {
+      const span = target && target.closest && target.closest("[data-entity-id]");
+      if (span) entity = { id: span.getAttribute("data-entity-id"), type: span.getAttribute("data-entity-type"), label: span.textContent };
+    } catch (_e) {}
+    const inBody = !!(bodyRef.current && target && bodyRef.current.contains(target));
+    let context = null, contextLabel = "Manuscript";
+    if (entity) { context = { kind: "entity", entityId: entity.id, entityType: entity.type, label: entity.label }; contextLabel = entity.label || "Entity"; }
+    else if (selectionText) { window.__LW_WIZARD_SELECTION__ = { text: selectionText, chapterId: activeId }; context = { kind: "selection", selectionText, chapterId: activeId }; contextLabel = "Selection"; }
+    else if (inBody && activeId) { context = { kind: "chapter", chapterId: activeId }; contextLabel = "Chapter"; }
+    onOpenAdaptiveWheel && onOpenAdaptiveWheel({ x: clientX, y: clientY, contextLabel, context });
+  }, [activeId, onOpenAdaptiveWheel]);
+
+  const _wrLongPress = _wrUR({ timer: null, x: 0, y: 0, fired: false, t: 0 });
+  const wrContext = _wrUC((e) => {
     e.preventDefault();
-    onOpenAdaptiveWheel && onOpenAdaptiveWheel({ x: e.clientX, y: e.clientY, contextLabel: "Manuscript" });
-  };
+    // Don't re-open on the synthetic contextmenu a long-press may emit.
+    if (_wrLongPress.current.fired && (Date.now() - _wrLongPress.current.t) < 800) { _wrLongPress.current.fired = false; return; }
+    openContextWheel(e.clientX, e.clientY, e.target);
+  }, [openContextWheel]);
+  const wrPointerDown = _wrUC((e) => {
+    if (e.pointerType === "mouse") return; // right-click is handled by onContextMenu
+    const lp = _wrLongPress.current;
+    lp.x = e.clientX; lp.y = e.clientY; lp.fired = false;
+    if (lp.timer) clearTimeout(lp.timer);
+    const target = e.target;
+    lp.timer = setTimeout(() => {
+      lp.fired = true; lp.t = Date.now(); lp.timer = null;
+      openContextWheel(lp.x, lp.y, target);
+    }, 520);
+  }, [openContextWheel]);
+  const wrPointerMove = _wrUC((e) => {
+    const lp = _wrLongPress.current;
+    if (lp.timer && (Math.abs(e.clientX - lp.x) > 10 || Math.abs(e.clientY - lp.y) > 10)) { clearTimeout(lp.timer); lp.timer = null; }
+  }, []);
+  const wrPointerEnd = _wrUC(() => {
+    const lp = _wrLongPress.current;
+    if (lp.timer) { clearTimeout(lp.timer); lp.timer = null; }
+  }, []);
+
+  // Chapter extraction triggered from the adaptive wheel ("Extract chapter").
+  _wrUE(() => {
+    const onWheelExtract = (e) => { runExtractionFlow(!!(e && e.detail && e.detail.deep)); };
+    window.addEventListener("lw:wr-extract-chapter", onWheelExtract);
+    return () => window.removeEventListener("lw:wr-extract-chapter", onWheelExtract);
+  }, [runExtractionFlow]);
 
   return (
     <div
@@ -1743,7 +1778,13 @@ const WritersRoomScreen = ({
       data-writing-layout={L.writingLayoutMode}
       data-attribution={attribution ? "true" : "false"}
       data-typewriter={typewriter ? "true" : "false"}
+      data-mobile={isMobile ? "true" : "false"}
+      data-drawer={mobileDrawer || "none"}
       onContextMenu={wrContext}
+      onPointerDown={wrPointerDown}
+      onPointerMove={wrPointerMove}
+      onPointerUp={wrPointerEnd}
+      onPointerCancel={wrPointerEnd}
       style={{
         "--wr-left-w":  (leftMarginVisible  ? L.leftMarginWidth  : 0) + "px",
         "--wr-right-w": (rightMarginVisible ? L.rightMarginWidth : 0) + "px",
@@ -1778,12 +1819,16 @@ const WritersRoomScreen = ({
       />
 
       <div className="wr-stage" style={{
-        gridTemplateColumns:
-          (leftMarginVisible  ? L.leftMarginWidth  + "px" : "0") + " " +
-          "minmax(0,1fr) " +
-          (rightMarginVisible ? L.rightMarginWidth + "px" : "0"),
+        gridTemplateColumns: isMobile
+          ? "minmax(0,1fr)"
+          : (leftMarginVisible  ? L.leftMarginWidth  + "px" : "0") + " " +
+            "minmax(0,1fr) " +
+            (rightMarginVisible ? L.rightMarginWidth + "px" : "0"),
       }}>
-        {leftMarginVisible && <div className="wr-stage__col wr-stage__col--left">
+        {isMobile && mobileDrawer && (
+          <div className="wr-drawer-backdrop" data-ui="WrDrawerBackdrop" onClick={() => setMobileDrawer(null)}/>
+        )}
+        {showLeftMargin && <div className="wr-stage__col wr-stage__col--left">
           <LeftMargin
           notes={notes}
           authors={authorList}
@@ -1803,7 +1848,7 @@ const WritersRoomScreen = ({
         />
           <MarginResizer side="left" value={L.leftMarginWidth} min={LAYOUT_CONSTRAINTS.leftMarginMin} max={LAYOUT_CONSTRAINTS.leftMarginMax} onChange={(v) => setL({ leftMarginWidth: v })}/>
         </div>}
-        {!leftMarginVisible && L.writingLayoutMode !== "clean" && L.writingLayoutMode !== "manuscript-focus" && (
+        {!isMobile && !leftMarginVisible && L.writingLayoutMode !== "clean" && L.writingLayoutMode !== "manuscript-focus" && (
           <MarginEdgeTab side="left" label="Notes" count={notes.filter((n) => n.status !== "resolved").length} onClick={() => setL({ leftMarginCollapsed: false })}/>
         )}
 
@@ -1860,6 +1905,22 @@ const WritersRoomScreen = ({
               <span>Chapter {activeChapter?.num || "—"}</span>
             </div>
             <div className="wr-canvasbar__chips">
+              {isMobile && (
+                <>
+                  <Btn variant={mobileDrawer === "left" ? "primary" : "outline"} size="sm" icon="bell"
+                    data-testid="wr-mobile-notes"
+                    onClick={() => setMobileDrawer((d) => d === "left" ? null : "left")}
+                    title="Notes & comments">
+                    Notes
+                  </Btn>
+                  <Btn variant={mobileDrawer === "right" ? "primary" : "outline"} size="sm" icon="sparkle"
+                    data-testid="wr-mobile-reviews"
+                    onClick={() => setMobileDrawer((d) => d === "right" ? null : "right")}
+                    title="Extractions & reviews">
+                    Reviews
+                  </Btn>
+                </>
+              )}
               <AuthorSelector authors={authorList} activeId={activeAuthorId} onSelectAuthor={onSelectAuthor}/>
               <Btn variant={compositionOverlayOpen ? "primary" : "outline"} size="sm" icon="sparkle"
                 onClick={onOpenCompositionOverlay}
@@ -1883,8 +1944,6 @@ const WritersRoomScreen = ({
               <Btn variant="ghost" size="sm" icon="trash" onClick={onDeleteChapterRequest} data-callback="onDeleteChapterRequest" title="Delete chapter"/>
               <SaveModeControls
                 onSave={onSave}
-                onSaveAndExtract={onSaveAndExtract}
-                onSaveAndDeepExtract={onSaveAndDeepExtract}
                 syncing={canvasState === "saving" || extractionState === "running"}
               />
             </div>
@@ -1933,10 +1992,10 @@ const WritersRoomScreen = ({
           )}
         </div>
 
-        {!rightMarginVisible && L.writingLayoutMode !== "clean" && L.writingLayoutMode !== "manuscript-focus" && (
+        {!isMobile && !rightMarginVisible && L.writingLayoutMode !== "clean" && L.writingLayoutMode !== "manuscript-focus" && (
           <MarginEdgeTab side="right" label="Reviews" count={extractions.length} onClick={() => setL({ rightMarginCollapsed: false })}/>
         )}
-        {rightMarginVisible && <div className="wr-stage__col wr-stage__col--right">
+        {showRightMargin && <div className="wr-stage__col wr-stage__col--right">
           <MarginResizer side="right" value={L.rightMarginWidth} min={LAYOUT_CONSTRAINTS.rightMarginMin} max={LAYOUT_CONSTRAINTS.rightMarginMax} onChange={(v) => setL({ rightMarginWidth: v })}/>
           <CurrentChapterContext
             chapterId={activeId}

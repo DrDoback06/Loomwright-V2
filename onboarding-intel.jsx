@@ -100,7 +100,7 @@ const StepJsonTools = ({
     setText(val);
     if (!val.trim()) { setStatus({ kind: "empty" }); setParsed(null); return; }
     try {
-      const obj = JSON.parse(val);
+      const obj = JSON.parse(stripJsonFence(val));
       setParsed(obj);
       const keys = Object.keys(obj || {});
       const overlap = keys.filter((k) => current?.[k] !== undefined && current?.[k] !== "" && JSON.stringify(current?.[k]) !== JSON.stringify(obj[k]));

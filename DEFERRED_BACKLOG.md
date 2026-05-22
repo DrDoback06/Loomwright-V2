@@ -31,6 +31,21 @@ display/seed wiring, not a rebuild.
 - **Deeper AI style critique** of the voice sample beyond the local metrics
   (which are implemented). → **AI Writer area**.
 
+## From the pre-Area-3 fixes pass — adaptive wheel
+- **Full cross-app wheel context-awareness** — the wheel is now context-aware
+  over the manuscript (selection / chapter / entity-span) and exposes Standard
+  (free/local) + Deep (BYOK) AI/extraction actions. Extending contexts to map
+  nodes, relationship nodes, timeline events, and every tab's items is the rest
+  of → **Area 6 (adaptive wheel)**.
+- **Wheel "Tag" action** — currently a placeholder notice; real tagging lands
+  with the entity tabs/dossier. → **Area 7/8**.
+- **Deep (BYOK) model picker on the wheel** — Deep actions route through the
+  existing cost tier today; a per-action model chooser is the AI Writer model
+  picker. → **Area 5 (AI Writer)**.
+- **Apply remaining `workspace.*` prefs** — `workspace.mobileCompact` now drives
+  the Writer's Room mobile/compact layout; editorWidth/font/margins/panelStack
+  still aren't read (see Area 2 entry above). → **Writers Room polish (Area 8)**.
+
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).
 - **AI Writer model picker UI** (routing already supports per-task models).

@@ -2,6 +2,11 @@
 // onboarding-data.jsx — Step manifest, presets, defaults.
 // =====================================================================
 
+// Strip a markdown code fence (```json … ```, ```, ```js) and trim, so pasted
+// AI output parses. Mirrors the backend extraction pattern. Used by every
+// onboarding JSON-paste site.
+const stripJsonFence = (raw) => String(raw == null ? "" : raw).replace(/^\s*```(?:json|js|javascript)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+
 const ONBOARDING_STEPS = [
   { id: "welcome",     n: 1,  num: "01", title: "Welcome",                short: "Project setup",       lede: "Name your project, pick a format, and tell Loomwright what you’re carrying in.", optional: false, group: "begin" },
   { id: "foundation",  n: 2,  num: "02", title: "Story Foundation",       short: "Premise & shape",     lede: "The bones of the book — premise, conflict, themes, and what it isn’t.", optional: false, group: "shape" },

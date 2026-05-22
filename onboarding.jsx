@@ -181,7 +181,7 @@ const OnboardingWizard = ({ initial = {}, onCompleteOnboarding, onExitOnboarding
     },
     onQuickImportJson: (obj) => {
       try {
-        const parsed = typeof obj === "string" ? JSON.parse(obj) : obj;
+        const parsed = typeof obj === "string" ? JSON.parse(stripJsonFence(obj)) : obj;
         if (parsed && typeof parsed === "object") {
           setData((d) => {
             const next = { ...d, ...parsed };

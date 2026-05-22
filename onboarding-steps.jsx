@@ -573,7 +573,7 @@ const Step_Plot = ({ data, set }) => {
   const [importText, setImportText] = _us_st("");
   const importBeats = () => {
     try {
-      const parsed = JSON.parse(importText);
+      const parsed = JSON.parse(stripJsonFence(importText));
       const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.beats) ? parsed.beats : []);
       const beats = arr.filter(Boolean).map((b, i) => ({
         id: "b" + Date.now() + "-" + i,

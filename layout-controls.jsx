@@ -121,33 +121,39 @@ const WorkspaceLayoutMenu = ({ value, onChange }) => {
 // MarginResizer — thin draggable handle for column resize
 // ---------------------------------------------------------------------
 const MarginResizer = ({ side, value, min, max, onChange }) => {
-  const startRef = _lc_ur({ x: 0, w: value });
+  const startRef = _lc_ur({ x: 0, w: value, id: null });
+  // Pointer Events (not mouse-only) so drag-resize works on touch too.
   const onDown = (e) => {
     e.preventDefault();
-    startRef.current = { x: e.clientX, w: value };
-    const onMove = (ev) => {
-      const dx = ev.clientX - startRef.current.x;
-      const next = side === "left"
-        ? Math.max(min, Math.min(max, startRef.current.w + dx))
-        : Math.max(min, Math.min(max, startRef.current.w - dx));
-      onChange(next);
-    };
-    const onUp = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    startRef.current = { x: e.clientX, w: value, id: e.pointerId };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_e) {}
+  };
+  const onMove = (e) => {
+    if (startRef.current.id == null) return;
+    const dx = e.clientX - startRef.current.x;
+    const next = side === "left"
+      ? Math.max(min, Math.min(max, startRef.current.w + dx))
+      : Math.max(min, Math.min(max, startRef.current.w - dx));
+    onChange(next);
+  };
+  const onUp = (e) => {
+    if (startRef.current.id == null) return;
+    try { e.currentTarget.releasePointerCapture(startRef.current.id); } catch (_e) {}
+    startRef.current = { ...startRef.current, id: null };
   };
   return (
     <div
       className="wr-resize"
       data-ui="MarginResizer"
       data-side={side}
-      onMouseDown={onDown}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerCancel={onUp}
       role="separator"
       aria-orientation="vertical"
       title="Drag to resize"
+      style={{ touchAction: "none" }}
     />
   );
 };

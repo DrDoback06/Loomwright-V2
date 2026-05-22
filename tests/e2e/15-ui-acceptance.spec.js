@@ -210,7 +210,7 @@ test.describe("T. UI acceptance — rendered DOM reflects the live store", () =>
     await expect(page.locator("[data-testid='wr-manuscript-body']")).toContainText("salt flats were cold", { timeout: 8000 });
   });
 
-  test("Save & Extract runs against the typed body and creates an occurrence (#2/#11)", async ({ page }) => {
+  test("chapter extraction via the adaptive wheel runs against the typed body and creates an occurrence (#2/#11)", async ({ page }) => {
     await openFreshApp(page);
     // SETUP ONLY: seed a known cast entity so the local scanner can match it.
     await saveEntity(page, "cast", { name: "Aelinor", status: "active" }, { status: "active" });
@@ -222,8 +222,12 @@ test.describe("T. UI acceptance — rendered DOM reflects the live store", () =>
     await page.keyboard.type("Aelinor crossed the bridge as Aelinor always did.");
     await page.waitForTimeout(120);
     const chapterId = await page.locator("[data-ui='ManuscriptCanvas']").first().getAttribute("data-chapter-id");
-    // DOM action: Save & Extract.
-    await page.locator("[data-testid='wr-save-extract']").dispatchEvent("click");
+    // DOM action: right-click the body → adaptive wheel → Extract chapter.
+    // (The toolbar "Save & Extract" buttons were retired; extraction now lives
+    // on the wheel.)
+    await page.locator("[data-testid='wr-manuscript-body']").dispatchEvent("contextmenu");
+    await expect(page.locator("[data-testid='adaptive-wheel']")).toBeVisible({ timeout: 4000 });
+    await page.locator("[data-testid='wheel-extract-chapter-standard']").dispatchEvent("click");
     await page.waitForTimeout(1500);
     const occ = await listOccurrences(page, chapterId);
     expect(occ.length).toBeGreaterThan(0);

@@ -4,6 +4,80 @@
 
 const { useState: _us_a, useEffect: _ue_a, useCallback: _uc_a, useRef: _ur_a, useMemo: _um_a } = React;
 
+// Adaptive-wheel slots by context. The wheel is the standard surface for AI +
+// extraction actions; AI actions pair Standard (free/local) with Deep (BYOK).
+function wheelSlotsForContext(ctx, queueCount) {
+  const kind = (ctx && ctx.kind) || "default";
+  const review = { id: "review", icon: "bell", lbl: "Review", queue: queueCount || 0 };
+  if (kind === "selection") return [
+    { id: "extract-standard", icon: "sparkle", lbl: "Extract" },
+    { id: "extract-deep", icon: "bolt", lbl: "Deep · AI" },
+    { id: "create", icon: "plus", lbl: "New entity" },
+    { id: "copy", icon: "paper", lbl: "Copy" },
+    review,
+  ];
+  if (kind === "chapter") return [
+    { id: "extract-chapter-standard", icon: "sparkle", lbl: "Extract chapter" },
+    { id: "extract-chapter-deep", icon: "bolt", lbl: "Deep · AI" },
+    { id: "open-wizard", icon: "stack", lbl: "Wizard" },
+    { id: "create", icon: "plus", lbl: "Create" },
+    review,
+    { id: "speed", icon: "eye", lbl: "Speed" },
+  ];
+  if (kind === "entity") return [
+    { id: "open-entity", icon: "paper", lbl: "Open" },
+    { id: "edit-entity", icon: "more", lbl: "Edit" },
+    { id: "merge-entity", icon: "link", lbl: "Merge" },
+    review,
+  ];
+  return [
+    { id: "open-wizard", icon: "sparkle", lbl: "Extract" },
+    { id: "create", icon: "plus", lbl: "Create" },
+    { id: "tag", icon: "bookmark", lbl: "Tag" },
+    { id: "merge", icon: "link", lbl: "Merge" },
+    review,
+    { id: "speed", icon: "eye", lbl: "Speed" },
+    { id: "tangle", icon: "knot", lbl: "Tangle", disabled: true, reason: "Coming soon" },
+    { id: "more", icon: "more", lbl: "More…" },
+  ];
+}
+
+// Global toast host — surfaces `lw:backend-notice` messages app-wide (extraction
+// status, saves, merges, AI routing). Sits above every overlay incl. the wheel.
+function GlobalToastHost() {
+  const [toasts, setToasts] = _us_a([]);
+  const timersRef = _ur_a({});
+  _ue_a(() => {
+    const onNotice = (e) => {
+      const message = (e && e.detail && e.detail.message) || "";
+      if (!message) return;
+      const id = "t" + Date.now() + Math.random().toString(36).slice(2, 6);
+      setToasts((list) => [...list.slice(-3), { id, message }]);
+      timersRef.current[id] = setTimeout(() => {
+        setToasts((list) => list.filter((t) => t.id !== id));
+        delete timersRef.current[id];
+      }, 4200);
+    };
+    window.addEventListener("lw:backend-notice", onNotice);
+    const timers = timersRef.current;
+    return () => {
+      window.removeEventListener("lw:backend-notice", onNotice);
+      Object.values(timers).forEach(clearTimeout);
+    };
+  }, []);
+  if (!toasts.length) return null;
+  return (
+    <div data-ui="GlobalToastHost" style={{ position: "fixed", bottom: 18, right: 18, zIndex: 10000, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
+      {toasts.map((t) => (
+        <div key={t.id} role="status" data-testid="lw-toast" style={{ pointerEvents: "auto", display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "var(--bg-elev, #fff)", border: "1px solid var(--line-2, #ddd)", borderRadius: "var(--r-3, 8px)", boxShadow: "var(--shadow-3, 0 6px 20px rgba(0,0,0,0.18))", fontSize: 12, color: "var(--ink-1, #222)", maxWidth: 340 }}>
+          <span>{t.message}</span>
+          <button onClick={() => setToasts((list) => list.filter((x) => x.id !== t.id))} aria-label="Dismiss notice" style={{ marginLeft: 8, border: "none", background: "transparent", cursor: "pointer", color: "var(--ink-3, #888)", fontSize: 14, lineHeight: 1 }}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------
 // Tweaks defaults — persisted via __edit_mode_set_keys (host rewrites file)
 // ---------------------------------------------------------------------
@@ -980,14 +1054,44 @@ const AppShell = () => {
   const onSelectProject = _uc_a(() => {}, []);
   const onSelectBook = _uc_a(() => {}, []);
 
-  const onOpenAdaptiveWheel = _uc_a((opts) => setWheel({ open: true, ...opts }), []);
+  const wheelCtxRef = _ur_a(null);
+  const onOpenAdaptiveWheel = _uc_a((opts) => { wheelCtxRef.current = (opts && opts.context) || null; setWheel({ open: true, context: null, ...opts }); }, []);
   const onCloseAdaptiveWheel = _uc_a(() => setWheel((w) => ({ ...w, open: false })), []);
   const onRunWheelAction = _uc_a((id) => {
     setWheel((w) => ({ ...w, open: false }));
-    if (id === "review")  onOpenPanel("review");
-    if (id === "create")  onOpenPanel("demo");
-    if (id === "extract") setSyncState("syncing");
-  }, [onOpenPanel]);
+    const ctx = wheelCtxRef.current || {};
+    const sel = ctx.selectionText || (window.__LW_WIZARD_SELECTION__ && window.__LW_WIZARD_SELECTION__.text) || "";
+    const chapterId = ctx.chapterId || (window.__LW_WIZARD_SELECTION__ && window.__LW_WIZARD_SELECTION__.chapterId) || null;
+    const notify = (message) => window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message } }));
+    const runSel = async (deep) => {
+      const B = window.LoomwrightBackend;
+      if (!B || !B.ExtractionService) return;
+      if (!sel || !sel.trim()) { notify("Highlight some text first."); return; }
+      notify(deep ? "Deep extracting selection…" : "Extracting selection…");
+      try { await B.ExtractionService.runExtraction({ chapterId, text: sel, deep, scope: "selection" }); notify("Extraction complete — see the review queue."); }
+      catch (_e) { notify("Extraction failed."); }
+    };
+    switch (id) {
+      case "review": onOpenPanel("review"); break;
+      case "create": openEntityEditor({ type: ctx.entityType || (routeId !== "writers-room" ? routeId : "cast") }); break;
+      case "open-wizard": window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: ctx.kind === "selection" ? "selection" : "chapter", chapterId } })); break;
+      case "extract-standard": runSel(false); break;
+      case "extract-deep": runSel(true); break;
+      case "extract-chapter-standard": window.dispatchEvent(new CustomEvent("lw:wr-extract-chapter", { detail: { deep: false } })); break;
+      case "extract-chapter-deep": window.dispatchEvent(new CustomEvent("lw:wr-extract-chapter", { detail: { deep: true } })); break;
+      case "copy": try { navigator.clipboard && navigator.clipboard.writeText(sel); notify("Copied."); } catch (_e) {} break;
+      case "open-entity": if (ctx.entityId) onSelectEntity({ id: ctx.entityId, entityType: ctx.entityType }); break;
+      case "edit-entity": if (ctx.entityId) window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: ctx.entityType, initial: { id: ctx.entityId }, mode: "full" } })); break;
+      case "merge": case "merge-entity":
+        if (ctx.entityId) window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onMergeQueueItem", detail: { id: ctx.entityId } } }));
+        else onOpenPanel("review");
+        break;
+      case "speed": onOpenPanel("speedReader"); break;
+      case "tag": notify("Tagging is coming with the entity tabs."); break;
+      case "extract": window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "manuscript" } })); break;
+      default: break;
+    }
+  }, [onOpenPanel, openEntityEditor, onSelectEntity, routeId]);
 
   // Global keyboard
   _ue_a(() => {
@@ -1230,6 +1334,7 @@ const AppShell = () => {
         open={wheel.open}
         x={wheel.x}
         y={wheel.y}
+        slots={wheelSlotsForContext(wheel.context, globalQueueCount)}
         contextLabel={wheel.contextLabel}
         state={wheelDemoState === "loading" || wheelDemoState === "error" ? wheelDemoState : "ready"}
         busySlotId={wheelDemoState === "slot-loading" ? "extract" : null}
@@ -1424,6 +1529,8 @@ const AppShell = () => {
       </TweaksPanel>
 
       <div className="mobile-note">📱 On mobile: rails collapse to drawer/bottom nav. See specimen page.</div>
+
+      <GlobalToastHost/>
     </>
   );
 };

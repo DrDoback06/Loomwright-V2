@@ -247,6 +247,8 @@
   display: flex; align-items: center; gap: 1px;
   padding: 0 4px;
   border-right: 1px solid var(--line-2);
+  flex-wrap: wrap;
+  min-width: 0;
 }
 .wr-toolbar__group:last-child { border-right: 0; }
 .wr-toolbar__btn {
@@ -961,6 +963,7 @@
   display: flex; align-items: center; gap: var(--sp-4);
   width: min(720px, 100%);
   margin: 0 auto var(--sp-4);
+  flex-wrap: wrap;
 }
 .wr-canvasbar__crumb {
   flex: 1;
@@ -971,7 +974,7 @@
   display: flex; align-items: center; gap: 8px;
 }
 .wr-canvasbar__crumb__sep { color: var(--ink-5); }
-.wr-canvasbar__chips { display: flex; gap: 6px; align-items: center; }
+.wr-canvasbar__chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
 /* AI Writer entry buttons (below canvas) */
 .wr-ai-row {
@@ -1023,8 +1026,51 @@
   border: 1px solid var(--line-2);
   display: none;
 }
-@media (max-width: 1100px) {
-  .wr-stage { grid-template-columns: minmax(0,1fr); }
-  .wr-margin { display: none; }
-  .wr-mobile-note { display: block; }
+/* =====================================================================
+   Mobile / compact — driven by .wr[data-mobile="true"] (viewport <= 860px
+   OR the workspace.mobileCompact pref). Side margins become bottom-sheet
+   drawers toggled by the canvasbar "Notes" / "Reviews" chips; the toolbar
+   wraps to multiple rows. Above this, margins render inline (the canvas
+   column is minmax(0,1fr), so it shrinks rather than overflowing).
+   ===================================================================== */
+.wr[data-mobile="true"] .wr-mobile-note { display: block; }
+.wr[data-mobile="true"][data-drawer="left"] .wr-mobile-note,
+.wr[data-mobile="true"][data-drawer="right"] .wr-mobile-note { display: none; }
+
+.wr-drawer-backdrop {
+  position: fixed; inset: 0; z-index: 1150;
+  background: rgba(0, 0, 0, 0.32);
+  animation: wr-drawer-fade 160ms var(--ease-out, ease-out);
 }
+@keyframes wr-drawer-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.wr[data-mobile="true"] .wr-stage__col--left,
+.wr[data-mobile="true"] .wr-stage__col--right {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  width: 100%;
+  max-height: 72vh;
+  z-index: 1200;
+  background: var(--bg-paper);
+  border-top: 1px solid var(--line-2);
+  border-top-left-radius: var(--r-4);
+  border-top-right-radius: var(--r-4);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.22);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-top: 14px;
+  animation: wr-sheet-up 200ms var(--ease-out, ease-out);
+}
+/* Grab-handle affordance at the top of each sheet */
+.wr[data-mobile="true"] .wr-stage__col--left::before,
+.wr[data-mobile="true"] .wr-stage__col--right::before {
+  content: "";
+  position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  width: 36px; height: 4px; border-radius: 2px;
+  background: var(--line-3, #ccc);
+}
+@keyframes wr-sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.wr[data-mobile="true"] .wr-resize { display: none; }
+.wr[data-mobile="true"] .wr-margin-tab { display: none; }
+.wr[data-mobile="true"] .wr-stage__col--left > .wr-margin,
+.wr[data-mobile="true"] .wr-stage__col--right > .wr-margin { max-height: none; }

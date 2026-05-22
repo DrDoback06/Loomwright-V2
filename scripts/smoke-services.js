@@ -1359,6 +1359,25 @@ async function main() {
   await B.ProjectIntelService.mergeFromOnboarding({ voice: { profile: { avgSentenceLen: 14, register: "direct", pacing: "balanced", lexicalDiversity: 60, dialogueRatio: 20 } } });
   log("[ob] voice profile flows into the writing style guide", /Voice metrics/.test(B.ProjectIntelService.loadSync().writingStyleGuide || ""));
 
+  // --- Fix A: stripJsonFence lets pasted, fenced AI JSON parse cleanly ---
+  {
+    const obData = fs.readFileSync(path.join(ROOT, "onboarding-data.jsx"), "utf8");
+    const m = obData.match(/const\s+stripJsonFence\s*=\s*([^;]+);/);
+    let strip = null;
+    if (m) { try { strip = vm.runInNewContext("(" + m[1] + ")", {}); } catch (_e) {} }
+    log("[fixA] stripJsonFence defined in onboarding-data.jsx", typeof strip === "function");
+    if (typeof strip === "function") {
+      const fence = "```";
+      let okFenced = false, okBare = false, okPlain = false;
+      try { okFenced = JSON.parse(strip(fence + "json\n{ \"a\": 1 }\n" + fence)).a === 1; } catch (_e) {}
+      try { okBare = JSON.parse(strip(fence + "\n{ \"b\": 2 }\n" + fence)).b === 2; } catch (_e) {}
+      try { okPlain = JSON.parse(strip("{ \"c\": 3 }")).c === 3; } catch (_e) {}
+      log("[fixA] strips ```json fence before parse", okFenced);
+      log("[fixA] strips bare ``` fence before parse", okBare);
+      log("[fixA] leaves unfenced JSON intact", okPlain);
+    }
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);
