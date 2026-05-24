@@ -591,7 +591,6 @@ const CastRow = ({ c, isSelected, isMulti, multiMode, onSelect, onToggleMulti })
 // CastBrowse — the list with filters + group-by-role + multi-select bar
 // ---------------------------------------------------------------------
 const CastBrowse = ({ cast, suggestions = [], selectedId, multiSelected, multiMode, onSelect, onToggleMulti, onClearMulti, onMergeMulti, onTagMulti, onDeleteMulti, onCreate, onEnterMultiMode }) => {
-  const [tab, setTab] = _us_cast("browse"); // browse | review | suggestions
   const [statusFilter, setStatusFilter] = _us_cast("all"); // all | alive | dead | missing | unknown
   const [groupBy, setGroupBy] = _us_cast("role"); // role | none | status
 
@@ -612,87 +611,89 @@ const CastBrowse = ({ cast, suggestions = [], selectedId, multiSelected, multiMo
                      .filter((g) => g.items.length);
   }, [filtered, groupBy]);
 
-  const reviewCount = cast.reduce((a, c) => a + (c.queue || 0), 0);
-  const suggestionCount = suggestions.length;
+  // Pending cast candidates live in the central extractions review queue —
+  // surface a count chip that opens it scoped to Cast.
+  const pendingReviewCount = _um_cast(() => {
+    try {
+      const RS = window.LoomwrightBackend?.ReviewService;
+      return RS ? RS.listSync("cast").filter((q) => q.status === "pending").length : 0;
+    } catch (_) { return 0; }
+  }, [cast]);
+  const openReviewQueueForCast = () => {
+    try {
+      window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "review", entityType: "cast" } }));
+    } catch (_) {}
+  };
 
   return (
     <div className={"cast" + (multiMode ? " is-multi-mode" : "")}>
-      {/* Sub-tabs */}
-      <div className="cast__subtabs" role="tablist">
-        <button className={"cast__subtab" + (tab === "browse" ? " is-active" : "")} onClick={() => setTab("browse")}>
-          Browse <span className="cast__subtab__count">{cast.length}</span>
-        </button>
-        <button className={"cast__subtab" + (tab === "review" ? " is-active" : "")} onClick={() => setTab("review")}>
-          Review {reviewCount ? <span className="cast__subtab__count">{reviewCount}</span> : null}
-        </button>
-        <button className={"cast__subtab" + (tab === "suggestions" ? " is-active" : "")} onClick={() => setTab("suggestions")}>
-          Suggested <span className="cast__subtab__count">{suggestionCount}</span>
-        </button>
-      </div>
-
-      {tab === "browse" && (
-        <>
-          {/* Filter bar */}
-          <div className="cast__filterbar">
-            <span className="cast__filterbar__lbl">Status</span>
-            {["all", "alive", "missing", "unknown", "dead"].map((s) => (
-              <button key={s}
-                className={"cast__filter-chip" + (statusFilter === s ? " is-active" : "")}
-                onClick={() => setStatusFilter(s)}
-              >{s === "all" ? "All" : s[0].toUpperCase() + s.slice(1)}</button>
-            ))}
-            <span style={{ flex: 1 }}/>
-            <span className="cast__filterbar__lbl">Group</span>
-            {[["role","Role"], ["status","Status"], ["none","Flat"]].map(([k, l]) => (
-              <button key={k}
-                className={"cast__filter-chip" + (groupBy === k ? " is-active" : "")}
-                onClick={() => setGroupBy(k)}
-              >{l}</button>
-            ))}
-          </div>
-
-          {/* Groups & rows */}
-          {grouped.map((g) => (
-            <div key={g.key}>
-              {g.label && (
-                <div className="cast__group-label">
-                  <span>{g.label}</span>
-                  <span className="cast__group-label__count">{g.items.length}</span>
-                  <span className="cast__group-label__rule"/>
-                </div>
-              )}
-              <div className="cast__list">
-                {g.items.map((c) => (
-                  <CastRow key={c.id} c={c}
-                    isSelected={c.id === selectedId}
-                    isMulti={multiSelected && multiSelected.has(c.id)}
-                    multiMode={multiMode}
-                    onSelect={onSelect}
-                    onToggleMulti={(c, enterMulti) => {
-                      if (enterMulti && !multiMode) onEnterMultiMode && onEnterMultiMode();
-                      onToggleMulti && onToggleMulti(c);
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-
-          {/* Multi-select sticky action bar */}
-          {multiMode && multiSelected && multiSelected.size > 0 && (
-            <div className="cast-multibar" data-ui="CastMultiBar">
-              <div className="cast-multibar__count"><strong>{multiSelected.size}</strong> selected</div>
-              <Btn variant="outline" size="sm" icon="link" onClick={onMergeMulti} data-callback="onMergeEntity">Merge</Btn>
-              <Btn variant="outline" size="sm" icon="bookmark" onClick={onTagMulti} data-callback="onTagEntities">Tag</Btn>
-              <Btn variant="ghost" size="sm" icon="trash" onClick={onDeleteMulti} data-callback="onDeleteEntities">Delete</Btn>
-              <Btn variant="ghost" size="sm" icon="close" onClick={onClearMulti} title="Cancel multi-select"/>
-            </div>
-          )}
-        </>
+      {pendingReviewCount > 0 && (
+        <div className="cast__review-cta" data-ui="CastReviewCta"
+          style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", margin: "0 0 var(--sp-3)", border: "1px solid var(--line, #e3dac6)", borderRadius: 8, background: "rgba(46,95,168,0.04)", fontSize: 12 }}>
+          <Icon name="bell" size={11}/>
+          <span style={{ flex: 1 }}>
+            <strong>{pendingReviewCount}</strong> cast candidate{pendingReviewCount === 1 ? "" : "s"} pending in the extractions review queue.
+          </span>
+          <Btn variant="outline" size="sm" icon="arrow-right" onClick={openReviewQueueForCast}>Open review queue</Btn>
+        </div>
       )}
 
-      {tab === "review" && <CastReviewList cast={cast.filter((c) => c.queue)}/>}
-      {tab === "suggestions" && <CastSuggestionList items={suggestions}/>}
+      {/* Filter bar */}
+      <div className="cast__filterbar">
+        <span className="cast__filterbar__lbl">Status</span>
+        {["all", "alive", "missing", "unknown", "dead"].map((s) => (
+          <button key={s}
+            className={"cast__filter-chip" + (statusFilter === s ? " is-active" : "")}
+            onClick={() => setStatusFilter(s)}
+          >{s === "all" ? "All" : s[0].toUpperCase() + s.slice(1)}</button>
+        ))}
+        <span style={{ flex: 1 }}/>
+        <span className="cast__filterbar__lbl">Group</span>
+        {[["role","Role"], ["status","Status"], ["none","Flat"]].map(([k, l]) => (
+          <button key={k}
+            className={"cast__filter-chip" + (groupBy === k ? " is-active" : "")}
+            onClick={() => setGroupBy(k)}
+          >{l}</button>
+        ))}
+      </div>
+
+      {/* Groups & rows */}
+      {grouped.map((g) => (
+        <div key={g.key}>
+          {g.label && (
+            <div className="cast__group-label">
+              <span>{g.label}</span>
+              <span className="cast__group-label__count">{g.items.length}</span>
+              <span className="cast__group-label__rule"/>
+            </div>
+          )}
+          <div className="cast__list">
+            {g.items.map((c) => (
+              <CastRow key={c.id} c={c}
+                isSelected={c.id === selectedId}
+                isMulti={multiSelected && multiSelected.has(c.id)}
+                multiMode={multiMode}
+                onSelect={onSelect}
+                onToggleMulti={(c, enterMulti) => {
+                  if (enterMulti && !multiMode) onEnterMultiMode && onEnterMultiMode();
+                  onToggleMulti && onToggleMulti(c);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* Multi-select sticky action bar */}
+      {multiMode && multiSelected && multiSelected.size > 0 && (
+        <div className="cast-multibar" data-ui="CastMultiBar">
+          <div className="cast-multibar__count"><strong>{multiSelected.size}</strong> selected</div>
+          <Btn variant="outline" size="sm" icon="link" onClick={onMergeMulti} data-callback="onMergeEntity">Merge</Btn>
+          <Btn variant="outline" size="sm" icon="bookmark" onClick={onTagMulti} data-callback="onTagEntities">Tag</Btn>
+          <Btn variant="ghost" size="sm" icon="trash" onClick={onDeleteMulti} data-callback="onDeleteEntities">Delete</Btn>
+          <Btn variant="ghost" size="sm" icon="close" onClick={onClearMulti} title="Cancel multi-select"/>
+        </div>
+      )}
     </div>
   );
 };
@@ -1283,116 +1284,6 @@ const CastEdit = ({ c, onCancel, onSave }) => {
 };
 
 // ---------------------------------------------------------------------
-// CastReviewList — items already created but flagged for review
-// ---------------------------------------------------------------------
-const _castFireAction = (name, queueId) => {
-  if (!queueId) return;
-  try {
-    window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name, detail: { id: queueId } } }));
-  } catch (_) {}
-};
-
-// Resolve the pending review-queue rows linked to a given cast entity so
-// the dossier "Review" tab cards can drive Accept / Merge / Deny against
-// the actual queue (the dossier card only carries an entity id).
-const _castQueueIdsForEntity = (entityId) => {
-  const B = window.LoomwrightBackend;
-  if (!B || !entityId) return [];
-  const rows = (B.ReviewService?.listSync?.("cast") || [])
-    .filter((q) => q.status === "pending" && (q.existingEntityId === entityId || q.targetEntityId === entityId || q.entityId === entityId));
-  return rows.map((r) => r.id);
-};
-
-const CastReviewList = ({ cast }) => {
-  if (!cast || !cast.length) {
-    return (
-      <div className="cast-empty">
-        <div className="cast-empty__seal">✓</div>
-        <div className="cast-empty__title">Nothing to review</div>
-        <div className="cast-empty__body">Every cast member is confirmed. New extractions will surface here.</div>
-      </div>
-    );
-  }
-  const handle = (name, c) => {
-    const ids = _castQueueIdsForEntity(c.id);
-    if (!ids.length) {
-      _castNotice("No pending review items for " + (c.name || "this character") + ".");
-      return;
-    }
-    if (name === "onAcceptQueueItem" || name === "onDenyQueueItem") {
-      ids.forEach((id) => _castFireAction(name, id));
-    } else {
-      _castFireAction(name, ids[0]);
-    }
-  };
-  return (
-    <div className="cast-review">
-      {cast.map((c) => (
-        <div key={c.id} className="cast-review__card" data-entity-id={c.id} data-entity-type="cast">
-          <div className="cast-review__head">
-            <div className="cast-row__monogram">{c.initials}</div>
-            <div className="cast-review__name">{c.name}</div>
-            <ConfidenceBadge level="uncertain" value={62}/>
-          </div>
-          <div className="cast-review__excerpt" dangerouslySetInnerHTML={{
-            __html: '"' + (c.epithet || c.summary).replace(c.name, '<mark>' + c.name + '</mark>') + '"'
-          }}/>
-          <div className="cast-review__meta">
-            <Icon name="paper" size={10}/> {c.firstSeen}
-            <span style={{ flex: 1 }}/>
-            <span>queued by extractor · 2m ago</span>
-          </div>
-          <div className="cast-review__actions">
-            <Btn variant="primary" size="sm" data-callback="onAcceptQueueItem"
-              onClick={() => handle("onAcceptQueueItem", c)}>Accept</Btn>
-            <Btn variant="outline" size="sm" data-callback="onEditQueueItem"
-              onClick={() => handle("onEditQueueItem", c)}>Edit</Btn>
-            <Btn variant="outline" size="sm" icon="link" data-callback="onMergeQueueItem"
-              onClick={() => handle("onMergeQueueItem", c)}>Merge…</Btn>
-            <Btn variant="ghost" size="sm" data-callback="onDenyQueueItem"
-              onClick={() => handle("onDenyQueueItem", c)}>Deny</Btn>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-// ---------------------------------------------------------------------
-// CastSuggestionList — extraction-only suggestions, never committed
-// ---------------------------------------------------------------------
-const CastSuggestionList = ({ items }) => (
-  <div className="cast-review">
-    <div style={{ fontSize: "var(--fs-2xs)", color: "var(--ink-3)", fontStyle: "italic", marginBottom: 4 }}>
-      Detected in the current chapter. Nothing here has been added to your cast yet.
-    </div>
-    {items.map((s) => (
-      <div key={s.id} className="cast-review__card" data-queue-id={s.id}>
-        <div className="cast-review__head">
-          <div className="cast-row__monogram cast-row__monogram--unknown">{s.name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}</div>
-          <div className="cast-review__name">{s.name}</div>
-          <ConfidenceBadge level={s.level} value={s.value}/>
-        </div>
-        <div className="cast-review__excerpt" dangerouslySetInnerHTML={{ __html: '"' + s.excerpt + '"' }}/>
-        <div className="cast-review__meta">
-          <Icon name="paper" size={10}/> {s.cite}
-          <span style={{ flex: 1 }}/>
-          <span>{s.reason}</span>
-        </div>
-        <div className="cast-review__actions">
-          <Btn variant="primary" size="sm" data-callback="onAcceptQueueItem"
-            onClick={() => _castFireAction("onAcceptQueueItem", s.id)}>Add to Cast</Btn>
-          <Btn variant="outline" size="sm" icon="link" data-callback="onMergeQueueItem"
-            onClick={() => _castFireAction("onMergeQueueItem", s.id)}>Merge…</Btn>
-          <Btn variant="ghost" size="sm" data-callback="onDenyQueueItem"
-            onClick={() => _castFireAction("onDenyQueueItem", s.id)}>Dismiss</Btn>
-        </div>
-      </div>
-    ))}
-  </div>
-);
-
-// ---------------------------------------------------------------------
 // CastEmpty — no cast at all yet
 // ---------------------------------------------------------------------
 const CastEmpty = ({ onCreate, onExtract }) => (
@@ -1413,33 +1304,6 @@ const CastEmpty = ({ onCreate, onExtract }) => (
 // ---------------------------------------------------------------------
 const _castNotice = (message) => {
   try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message } })); } catch (_e) {}
-};
-
-// Build live "suggestion" cards from pending cast candidates in the review
-// queue. Replaces the old CAST_SUGGESTIONS_SAMPLE demo.
-const _buildCastSuggestions = (ctx) => {
-  const B = window.LoomwrightBackend;
-  if (!B) return [];
-  const queue = B.ReviewService?.listSync?.("cast") || [];
-  const chapterIndex = ctx?.chapterIndex || new Map();
-  return queue
-    .filter((q) => q.status === "pending")
-    .map((q) => {
-      const payload = q.payload || {};
-      const name = payload.name || q.name || "Unknown";
-      const conf = Math.round(((typeof q.confidence === "number" ? q.confidence : 0.55)) * 100);
-      const level = conf >= 80 ? "confident" : conf >= 60 ? "likely" : "uncertain";
-      const chNum = q.chapterId ? chapterIndex.get(q.chapterId)?.num : null;
-      return {
-        id: q.id,
-        name,
-        level,
-        value: conf,
-        excerpt: (payload.context || q.context || "").replace(name, "<mark>" + name + "</mark>"),
-        cite: chNum ? ("Ch. " + chNum) : (q.chapterId || ""),
-        reason: q.reason || q.matchType || "detected by extractor",
-      };
-    });
 };
 
 const CastPanelBody = ({ panel, onSelectEntity }) => {
@@ -1466,10 +1330,9 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
     () => liveEntities.map((e) => liveCastToDossier(e, dossierCtx)).filter(Boolean),
     [liveEntities, dossierCtx]
   );
-  const liveSuggestions = _um_cast(() => _buildCastSuggestions(dossierCtx), [dossierCtx, storeVersion]);
 
   // Local UI state.
-  const [view, setView] = _us_cast(incomingState); // overview | selected | edit | empty | loading | error | review | suggestion | multi
+  const [view, setView] = _us_cast(incomingState); // overview | selected | edit | empty | loading | error | multi
   const [selectedId, setSelectedId] = _us_cast(
     panel?.selected?.id
       || dossierList.find((c) => c.role === "protagonist")?.id
@@ -1559,8 +1422,13 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
     />;
   }
   if (view === "edit")    return <CastEdit c={selected} onCancel={() => setView("selected")} onSave={() => setView("selected")}/>;
-  if (view === "review")    return <div className="cast"><CastReviewList cast={dossierList.filter((c) => c.queue)}/></div>;
-  if (view === "suggestion")return <div className="cast"><CastSuggestionList items={liveSuggestions}/></div>;
+  // "review" / "suggestion" used to render cast-local triage lists; cast
+  // candidates now live exclusively in the central extractions review queue
+  // (open via the inline CTA on the dossier).
+  if (view === "review" || view === "suggestion") {
+    try { window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "review", entityType: "cast" } })); } catch (_) {}
+    return <div className="cast"/>;
+  }
   if (view === "selected" && selected) {
     return (
       <CastDetail
@@ -1588,7 +1456,6 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
   return (
     <CastBrowse
       cast={dossierList}
-      suggestions={liveSuggestions}
       selectedId={selectedId}
       multiSelected={multi}
       multiMode={view === "multi"}
@@ -1757,7 +1624,7 @@ const CastShowMore = ({ children, threshold = 3, more = "Show all", less = "Show
 };
 
 Object.assign(window, {
-  CastPanelBody, CastBrowse, CastDetail, CastEdit, CastReviewList, CastSuggestionList, CastEmpty,
+  CastPanelBody, CastBrowse, CastDetail, CastEdit, CastEmpty,
   CastStats, CastAbilities, CastSkillTree, CastInventory, CastEquipmentSlots, CastShowMore,
   CAST_SAMPLE, CAST_SUGGESTIONS_SAMPLE,
 });
