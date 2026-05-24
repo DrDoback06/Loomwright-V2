@@ -245,6 +245,291 @@ const REL_KIND_LABEL = {
   "sister":        "Sister",
   "sister-in-law": "Sister-in-law",
   "ward-of":       "Ward of",
+  "family":        "Family",
+  "lover":         "Lover",
+  "ally":          "Ally",
+  "mentor":        "Mentor",
+  "enemy":         "Enemy",
+};
+
+// =====================================================================
+// Live cast → dossier adapter
+//
+// A persisted cast entity from EntityService is shaped:
+//   { id, name, type, glyphChar, status, data: { role, summary, personality,
+//     stats, abilities, family, allies, ..., inventory, equippedItems, ... } }
+// CastBrowse + CastDetail render a flatter dossier shape with `initials`,
+// per-chapter `mentionsByChapter`, resolved `relationships`, etc. This
+// adapter maps one live entity → dossier shape, deriving per-chapter
+// mentions / quotes from OccurrenceService and resolving related-entity
+// pickers into actual names + initials through the precomputed index.
+// =====================================================================
+
+const _castInitials = (name) => {
+  if (!name) return "?";
+  const parts = String(name).trim().split(/\s+/).filter(Boolean);
+  const a = parts[0]?.[0] || "";
+  const b = parts[1]?.[0] || parts[0]?.[1] || "";
+  return (a + b).toUpperCase() || "?";
+};
+
+const _CAST_ROLE_NORM = {
+  protagonist: "protagonist", antagonist: "antagonist", supporting: "supporting", minor: "minor",
+  hero: "protagonist", pov: "protagonist", central: "protagonist",
+  villain: "antagonist", foil: "supporting", ally: "supporting", "supporting-cast": "supporting",
+  "walk-on": "minor", background: "minor",
+};
+const _normCastRole = (role) => _CAST_ROLE_NORM[String(role || "").toLowerCase()] || (role ? "supporting" : "minor");
+
+const _castEntityStatus = (e) => {
+  const s = String((e && e.data && e.data.status) || (e && e.status) || "").toLowerCase();
+  if (s === "deceased" || s === "dead") return "dead";
+  if (s === "missing") return "missing";
+  if (s === "unknown" || s === "draft") return "unknown";
+  return "alive";
+};
+
+// Resolve related / related-multi values. Picker stores `{id,name,type}`,
+// but older flows may store bare ids — handle both. Returns `[{id,name,type,_entity}]`.
+const _resolveRelatedList = (raw, entityIndex) => {
+  if (raw == null) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  const out = [];
+  for (const v of arr) {
+    const id = typeof v === "string" ? v : (v && v.id) || null;
+    const ent = id ? entityIndex.get(id) : null;
+    const name = (v && typeof v === "object" && v.name) || ent?.name || (id ? "Unknown" : null);
+    if (!name) continue;
+    const type = (v && typeof v === "object" && v.type) || ent?.type || null;
+    out.push({ id, name, type, _entity: ent || null });
+  }
+  return out;
+};
+
+// Build the per-render context once for a batch of dossiers — keeps
+// occurrence + entity lookups O(n) instead of O(n²).
+const buildCastDossierContext = () => {
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  const ctx = { occByEntity: new Map(), chapters: [], chapterIndex: new Map(), activeChapterId: null, entityIndex: new Map() };
+  if (!B) return ctx;
+  try {
+    const all = B.EntityService?.listAllSync?.() || {};
+    for (const byId of Object.values(all)) {
+      for (const ent of Object.values(byId || {})) {
+        if (ent && ent.id) ctx.entityIndex.set(ent.id, ent);
+      }
+    }
+  } catch (_e) {}
+  try {
+    const occs = B.OccurrenceService?.listAllSync?.() || [];
+    for (const o of occs) {
+      if (!o || !o.entityId) continue;
+      const list = ctx.occByEntity.get(o.entityId) || [];
+      list.push(o);
+      ctx.occByEntity.set(o.entityId, list);
+    }
+  } catch (_e) {}
+  try {
+    const state = B.ManuscriptChapterService?.loadSync?.() || {};
+    ctx.chapters = (state.chapters || []).filter((c) => !c.reserved);
+    ctx.chapters.forEach((c, i) => ctx.chapterIndex.set(c.id, { index: i, num: c.num || (i + 1), title: c.title || "", id: c.id }));
+    ctx.activeChapterId = state.activeChapterId || null;
+  } catch (_e) {}
+  return ctx;
+};
+
+// Map of related-multi field id → human-facing relationship kind. Order matters:
+// a person listed in `family` ranks ahead of the same id in `allies`.
+const _CAST_REL_FIELDS = [
+  ["family",  "family"],
+  ["lovers",  "lover"],
+  ["allies",  "ally"],
+  ["mentors", "mentor"],
+  ["rivals",  "rival"],
+  ["enemies", "enemy"],
+];
+
+const liveCastToDossier = (entity, ctx = {}) => {
+  if (!entity) return null;
+  const d = entity.data || {};
+  const chapterIndex = ctx.chapterIndex || new Map();
+  const chapters = ctx.chapters || [];
+  const entityIndex = ctx.entityIndex || new Map();
+
+  // Sort this character's occurrences by chapter order, then offset.
+  const myOccs = ((ctx.occByEntity && ctx.occByEntity.get(entity.id)) || [])
+    .slice()
+    .sort((a, b) => {
+      const ai = chapterIndex.get(a.chapterId)?.index ?? 9999;
+      const bi = chapterIndex.get(b.chapterId)?.index ?? 9999;
+      if (ai !== bi) return ai - bi;
+      return (a.startOffset || 0) - (b.startOffset || 0);
+    });
+
+  // Per-chapter mention counts + first/last seen + chapter range — derived
+  // live from occurrences whenever the manuscript has any.
+  let mentionsByChapter = null;
+  let firstSeen = d.firstAppearance || "";
+  let lastSeen  = d.lastAppearance || "";
+  let chapterRange = "";
+  if (chapters.length && myOccs.length) {
+    mentionsByChapter = new Array(chapters.length).fill(0);
+    for (const o of myOccs) {
+      const ix = chapterIndex.get(o.chapterId);
+      if (ix) mentionsByChapter[ix.index] = (mentionsByChapter[ix.index] || 0) + 1;
+    }
+    const f = chapterIndex.get(myOccs[0].chapterId);
+    const l = chapterIndex.get(myOccs[myOccs.length - 1].chapterId);
+    if (f) firstSeen = "Ch. " + f.num;
+    if (l) lastSeen  = "Ch. " + l.num;
+    if (f && l) chapterRange = f.num === l.num ? ("Ch. " + f.num) : ("Ch. " + f.num + "–" + l.num);
+  }
+  const currentChapter = (ctx.activeChapterId && chapterIndex.get(ctx.activeChapterId)?.num)
+    || (mentionsByChapter ? mentionsByChapter.length : null);
+
+  // Quotes from occurrences (exact text + chapter cite).
+  const quoteFor = (o) => ({
+    text: String(o.exactText || "").trim(),
+    cite: "Ch. " + (chapterIndex.get(o.chapterId)?.num ?? "?"),
+    chapterId: o.chapterId,
+    occurrenceId: o.occurrenceId,
+  });
+  const allQuotes = myOccs.map(quoteFor).filter((q) => q.text);
+  const quotes = allQuotes.slice(0, 3);
+
+  // Identity / faction / location lookups via the entity index.
+  const faction = _resolveRelatedList(d.faction, entityIndex)[0] || null;
+  const home    = _resolveRelatedList(d.homeLocation, entityIndex)[0] || null;
+  const cur     = _resolveRelatedList(d.currentLocation, entityIndex)[0] || null;
+  const aliasList = Array.isArray(d.aliases) ? d.aliases.map((a) => typeof a === "string" ? a : (a && (a.name || a.label || a.id))).filter(Boolean) : [];
+
+  // Traits — strengths(+) ∪ flaws(–) ∪ distinguishing marks ∪ tags.
+  const traits = [];
+  const pushChips = (v, tone) => {
+    if (!v) return;
+    const arr = Array.isArray(v) ? v : (typeof v === "string" ? v.split(/[,;]+/) : []);
+    for (const x of arr) {
+      const lbl = typeof x === "string" ? x.trim() : (x && (x.label || x.name));
+      if (lbl) traits.push(tone ? { label: lbl, tone } : { label: lbl });
+    }
+  };
+  pushChips(d.strengths, "positive");
+  pushChips(d.flaws, "negative");
+  pushChips(d.distinguishingMarks);
+  pushChips(d.tags);
+
+  // Relationships — gather from each related-multi field, dedupe.
+  const relationships = [];
+  const seenRel = new Set();
+  for (const [fieldId, kind] of _CAST_REL_FIELDS) {
+    for (const r of _resolveRelatedList(d[fieldId], entityIndex)) {
+      if (!r.id || seenRel.has(r.id)) continue;
+      seenRel.add(r.id);
+      relationships.push({
+        id: r.id,
+        name: r.name,
+        initials: r._entity?.glyphChar || _castInitials(r.name),
+        kind,
+        strength: 2,
+      });
+    }
+  }
+
+  // Stats — data.stats persisted as [{name,value,min,max}] by EEStatGrid.
+  const stats = (Array.isArray(d.stats) ? d.stats : []).map((s) => ({
+    k:   s.name || s.k || "Stat",
+    v:   typeof s.value === "number" ? s.value : (typeof s.v === "number" ? s.v : 0),
+    max: typeof s.max === "number" && s.max > 0 ? s.max : 10,
+  })).filter((s) => s.k);
+
+  // Abilities — chips of strings (or richer objects when seeded that way).
+  const abilities = (Array.isArray(d.abilities) ? d.abilities : []).map((a) => {
+    if (typeof a === "string") return { name: a, desc: "", source: "" };
+    if (a && typeof a === "object") return { name: a.name || a.label || "Ability", desc: a.desc || a.description || "", source: a.source || a.cite || "" };
+    return null;
+  }).filter(Boolean);
+
+  // Inventory — resolve linked items, attach kind/notable/note from the item entity.
+  const inventoryRaw = [
+    ..._resolveRelatedList(d.inventory, entityIndex),
+    ..._resolveRelatedList(d.equippedItems, entityIndex),
+  ];
+  const invSeen = new Set();
+  const inventory = inventoryRaw.filter((it) => { if (!it.id || invSeen.has(it.id)) return false; invSeen.add(it.id); return true; }).map((it) => {
+    const dd = (it._entity && it._entity.data) || {};
+    return {
+      id: it.id,
+      name: it.name,
+      kind: dd.kind || dd.itemType || "item",
+      notable: !!dd.notable || dd.rarity === "unique" || dd.rarity === "legendary",
+      note: dd.note || dd.notes || "",
+    };
+  });
+
+  // Equipped items keyed by slot id (when the item carries data.slot).
+  const equippedBySlot = {};
+  for (const it of _resolveRelatedList(d.equippedItems, entityIndex)) {
+    const dd = (it._entity && it._entity.data) || {};
+    const slot = dd.slot || dd.equipSlot || null;
+    if (!slot) continue;
+    equippedBySlot[slot] = {
+      name: it.name,
+      itemId: it.id,
+      condition: dd.condition || "",
+      chapter: null,
+      warning: dd.warning || "",
+    };
+  }
+
+  // Related-tab links: locations → Atlas, timeline events → Timeline.
+  const relatedAtlas = [];
+  const pushLoc = (loc) => { if (loc && loc.id && !relatedAtlas.some((r) => r.id === loc.id)) relatedAtlas.push({ id: loc.id, label: loc.name }); };
+  pushLoc(home); pushLoc(cur);
+  for (const loc of _resolveRelatedList(d.travelHistory, entityIndex)) pushLoc(loc);
+  const relatedTimeline = _resolveRelatedList(d.timelineEvents, entityIndex).map((e) => ({ id: e.id, label: e.name }));
+
+  return {
+    id: entity.id,
+    name: entity.name,
+    initials: entity.glyphChar || _castInitials(entity.name),
+    role: _normCastRole(d.role),
+    status: _castEntityStatus(entity),
+    queue: entity.reviewQueueCount || 0,
+    title: d.title || "",
+    epithet: aliasList[0] || d.epithet || "",
+    aliases: aliasList,
+    affiliation: faction?.name || d.affiliation || "",
+    origin: home?.name || cur?.name || d.origin || "",
+    currentLocation: cur?.name || "",
+    age: d.age || d.ageRange || "",
+    pronouns: d.pronouns || "",
+    summary: d.summary || d.description || "",
+    arcSummary: d.arcSummary || "",
+    backstory: d.backstory || "",
+    personality: d.personality || "",
+    voiceProfile: d.voiceProfile || "",
+    speechStyle: d.speechStyle || "",
+    goals: Array.isArray(d.goals) ? d.goals : [],
+    fears: Array.isArray(d.fears) ? d.fears : [],
+    writingInstructions: d.writingInstructions || "",
+    traits,
+    relationships,
+    mentionsByChapter,
+    currentChapter,
+    chapterRange,
+    firstSeen,
+    lastSeen,
+    quotes,
+    _allQuotes: allQuotes,
+    stats,
+    abilities,
+    skillTree: d.skillTree || null,
+    inventory,
+    equippedBySlot,
+    relatedAtlas,
+    relatedTimeline,
+    _entity: entity,
+  };
 };
 
 // Sparkline (12 chapters)
@@ -305,7 +590,7 @@ const CastRow = ({ c, isSelected, isMulti, multiMode, onSelect, onToggleMulti })
 // ---------------------------------------------------------------------
 // CastBrowse — the list with filters + group-by-role + multi-select bar
 // ---------------------------------------------------------------------
-const CastBrowse = ({ cast, selectedId, multiSelected, multiMode, onSelect, onToggleMulti, onClearMulti, onMergeMulti, onTagMulti, onDeleteMulti, onCreate, onEnterMultiMode }) => {
+const CastBrowse = ({ cast, suggestions = [], selectedId, multiSelected, multiMode, onSelect, onToggleMulti, onClearMulti, onMergeMulti, onTagMulti, onDeleteMulti, onCreate, onEnterMultiMode }) => {
   const [tab, setTab] = _us_cast("browse"); // browse | review | suggestions
   const [statusFilter, setStatusFilter] = _us_cast("all"); // all | alive | dead | missing | unknown
   const [groupBy, setGroupBy] = _us_cast("role"); // role | none | status
@@ -328,7 +613,7 @@ const CastBrowse = ({ cast, selectedId, multiSelected, multiMode, onSelect, onTo
   }, [filtered, groupBy]);
 
   const reviewCount = cast.reduce((a, c) => a + (c.queue || 0), 0);
-  const suggestionCount = CAST_SUGGESTIONS_SAMPLE.length;
+  const suggestionCount = suggestions.length;
 
   return (
     <div className={"cast" + (multiMode ? " is-multi-mode" : "")}>
@@ -407,7 +692,7 @@ const CastBrowse = ({ cast, selectedId, multiSelected, multiMode, onSelect, onTo
       )}
 
       {tab === "review" && <CastReviewList cast={cast.filter((c) => c.queue)}/>}
-      {tab === "suggestions" && <CastSuggestionList items={CAST_SUGGESTIONS_SAMPLE}/>}
+      {tab === "suggestions" && <CastSuggestionList items={suggestions}/>}
     </div>
   );
 };
@@ -415,11 +700,41 @@ const CastBrowse = ({ cast, selectedId, multiSelected, multiMode, onSelect, onTo
 // ---------------------------------------------------------------------
 // CastDetail — selected character page
 // ---------------------------------------------------------------------
-const CastDetail = ({ c, onBack, onEdit }) => {
+// Cite parser: pulls a chapter number out of strings like "Ch. 7" / "Ch. 1, p. 12".
+const _citeToChapterNum = (cite) => {
+  if (!cite) return null;
+  const m = String(cite).match(/Ch\.?\s*(\d+)/i);
+  return m ? Number(m[1]) : null;
+};
+
+const CastDetail = ({
+  c, chapters, onBack, onEdit,
+  onAddTrait, onAddRelationship, onAddAbility, onEditStats, onCastMore,
+  onJumpManuscript, onJumpQuote, onShowAllQuotes, showAllQuotes,
+  onSelectRelated, onOpenSkillTree, onOpenAtlasFor, onOpenTimelineFor,
+}) => {
   if (!c) return null;
+  const totalChapters = (chapters && chapters.length) || (c.mentionsByChapter ? c.mentionsByChapter.length : 0);
+  // Chapter scrubber: 1..totalChapters. Defaults to "now" (last chapter).
+  const [scrub, setScrub] = _us_cast(totalChapters || 1);
+  React.useEffect(() => { setScrub(totalChapters || 1); }, [c.id, totalChapters]);
+  const atEnd = !totalChapters || scrub === totalChapters;
+
+  // Mentions chart filtered to scrubbed chapter (later chapters dim out).
+  const mentionsForChart = c.mentionsByChapter ? c.mentionsByChapter.map((v, i) => (i + 1 <= scrub ? v : 0)) : null;
+  const totalMentions = (c.mentionsByChapter || []).reduce((a, b) => a + b, 0);
+
+  // Quotes filtered to scrubbed chapter, with optional "show all" expansion.
+  const allQuotes = c._allQuotes || c.quotes || [];
+  const scrubbedQuotes = allQuotes.filter((q) => {
+    const n = _citeToChapterNum(q.cite);
+    return n == null || n <= scrub;
+  });
+  const visibleQuotes = showAllQuotes ? scrubbedQuotes : scrubbedQuotes.slice(0, 3);
+
   return (
     <div className="cast cast-detail" data-ui="CastDetail" data-cast-id={c.id}>
-      <button className="cast-detail__back" onClick={onBack} data-callback="onBackToList">
+      <button className="cast-detail__back" onClick={onBack}>
         <Icon name="close" size={9}/> Back to all cast
       </button>
 
@@ -431,22 +746,59 @@ const CastDetail = ({ c, onBack, onEdit }) => {
           <div className="cast-detail__title-line">{c.epithet || c.title}</div>
           <div className="cast-detail__meta-row">
             <span className={"cast-row__role cast-row__role--" + c.role}>{ROLE_LABEL[c.role]}</span>
-            <span className="chip chip--neutral">{c.chapterRange}</span>
-            <span className="chip chip--neutral">{(c.mentionsByChapter || []).reduce((a, b) => a + b, 0)} mentions</span>
+            {c.chapterRange && <span className="chip chip--neutral">{c.chapterRange}</span>}
+            <span className="chip chip--neutral">{totalMentions} mention{totalMentions === 1 ? "" : "s"}</span>
+            {!atEnd && <span className="chip chip--neutral" data-testid="cast-scrub-state">As of Ch. {scrub}</span>}
             {c.queue ? <ReviewCountBadge count={c.queue}/> : null}
           </div>
         </div>
       </div>
+
+      {/* Chapter scrubber — only when there's more than one chapter to scrub */}
+      {totalChapters > 1 && (
+        <div className="cast-section" data-ui="CastChapterScrubber">
+          <div className="cast-section__head">
+            <span className="cast-section__title">Chapter history</span>
+            <span className="cast-section__hint" style={{ fontSize: 11, color: "var(--ink-4)" }}>
+              Drag to see this character as of any chapter.
+            </span>
+            <span className="cast-section__action" style={{ pointerEvents: "none" }}>Ch. {scrub} / {totalChapters}</span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={totalChapters}
+            value={scrub}
+            data-testid="cast-scrubber"
+            onChange={(e) => setScrub(Number(e.target.value))}
+            style={{ width: "100%", accentColor: "var(--accent, #9a7b3a)" }}
+            aria-label={"Scrub through chapters for " + c.name}
+          />
+        </div>
+      )}
 
       {/* Summary */}
       {c.summary && (
         <div className="cast-section">
           <div className="cast-section__head">
             <span className="cast-section__title">Summary</span>
-            <button className="cast-section__action" onClick={onEdit} data-callback="onEditEntity">Edit</button>
+            <button className="cast-section__action" onClick={onEdit}>Edit</button>
           </div>
           <div style={{ fontFamily: "var(--font-serif)", fontSize: "var(--fs-sm)", color: "var(--ink-2)", lineHeight: 1.55 }}>
             {c.summary}
+          </div>
+        </div>
+      )}
+
+      {/* Arc */}
+      {c.arcSummary && (
+        <div className="cast-section">
+          <div className="cast-section__head">
+            <span className="cast-section__title">Arc</span>
+            <button className="cast-section__action" onClick={onEdit}>Edit</button>
+          </div>
+          <div style={{ fontFamily: "var(--font-serif)", fontSize: "var(--fs-sm)", color: "var(--ink-2)", lineHeight: 1.55 }}>
+            {c.arcSummary}
           </div>
         </div>
       )}
@@ -455,15 +807,18 @@ const CastDetail = ({ c, onBack, onEdit }) => {
       <div className="cast-section">
         <div className="cast-section__head">
           <span className="cast-section__title">Identity</span>
+          <button className="cast-section__action" onClick={onEdit}>Edit</button>
         </div>
         <div className="cast-fields">
           {c.title       && (<><div className="cast-fields__k">Title</div><div className="cast-fields__v">{c.title}</div></>)}
           {c.affiliation && (<><div className="cast-fields__k">Affiliation</div><div className="cast-fields__v">{c.affiliation}</div></>)}
           {c.origin      && (<><div className="cast-fields__k">Origin</div><div className="cast-fields__v">{c.origin}</div></>)}
+          {c.currentLocation && (<><div className="cast-fields__k">Currently</div><div className="cast-fields__v">{c.currentLocation}</div></>)}
           {c.age         && (<><div className="cast-fields__k">Age</div><div className="cast-fields__v">{c.age}</div></>)}
           {c.pronouns    && (<><div className="cast-fields__k">Pronouns</div><div className="cast-fields__v">{c.pronouns}</div></>)}
-          <div className="cast-fields__k">First seen</div><div className="cast-fields__v">{c.firstSeen}</div>
-          <div className="cast-fields__k">Last seen</div><div className="cast-fields__v">{c.lastSeen}</div>
+          {c.aliases?.length > 1 && (<><div className="cast-fields__k">Aliases</div><div className="cast-fields__v">{c.aliases.slice(1).join(", ")}</div></>)}
+          {c.firstSeen && (<><div className="cast-fields__k">First seen</div><div className="cast-fields__v">{c.firstSeen}</div></>)}
+          {c.lastSeen && (<><div className="cast-fields__k">Last seen</div><div className="cast-fields__v">{c.lastSeen}</div></>)}
         </div>
       </div>
 
@@ -472,7 +827,7 @@ const CastDetail = ({ c, onBack, onEdit }) => {
         <div className="cast-section">
           <div className="cast-section__head">
             <span className="cast-section__title">Traits</span>
-            <button className="cast-section__action" data-callback="onAddTrait">+ Add</button>
+            <button className="cast-section__action" onClick={onAddTrait}>+ Add</button>
           </div>
           <div className="cast-traits">
             {c.traits.map((t, i) => (
@@ -487,11 +842,18 @@ const CastDetail = ({ c, onBack, onEdit }) => {
         <div className="cast-section">
           <div className="cast-section__head">
             <span className="cast-section__title">Relationships</span>
-            <button className="cast-section__action" data-callback="onAddRelationship">+ Link</button>
+            <button className="cast-section__action" onClick={onAddRelationship}>+ Link</button>
           </div>
           <div className="cast-rels">
             {c.relationships.map((r) => (
-              <div key={r.id} className="cast-rel" data-callback="onSelectRelated">
+              <button
+                key={r.id}
+                className="cast-rel"
+                data-testid={"cast-rel-" + r.id}
+                onClick={() => onSelectRelated && onSelectRelated(r)}
+                style={{ background: "none", border: 0, padding: 0, cursor: "pointer", textAlign: "inherit" }}
+                title={"Open " + r.name + "'s dossier"}
+              >
                 <div className="cast-rel__avatar">{r.initials}</div>
                 <div className="cast-rel__lbl">
                   <span className="cast-rel__name">{r.name}</span>
@@ -502,27 +864,27 @@ const CastDetail = ({ c, onBack, onEdit }) => {
                     <span key={i} className={"cast-rel__strength__pip" + (i <= r.strength ? " is-on" : "")}/>
                   ))}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
       )}
 
-      {/* Mention timeline */}
-      {c.mentionsByChapter && (
+      {/* Mention timeline (live, scrubber-aware) */}
+      {mentionsForChart && totalMentions > 0 && (
         <div className="cast-section">
           <div className="cast-section__head">
             <span className="cast-section__title">Mentions across the manuscript</span>
-            <button className="cast-section__action" data-callback="onJumpManuscript">Jump to first</button>
+            <button className="cast-section__action" onClick={onJumpManuscript}>Jump to first</button>
           </div>
           <div className="cast-mentions">
             <div className="cast-mentions__strip">
-              {c.mentionsByChapter.map((v, i) => {
-                const max = Math.max(1, ...c.mentionsByChapter);
+              {mentionsForChart.map((v, i) => {
+                const max = Math.max(1, ...mentionsForChart);
                 const h = v === 0 ? 8 : Math.max(8, (v / max) * 28);
                 return (
                   <div key={i}
-                    className={"cast-mentions__bar" + (v === 0 ? " is-empty" : "") + ((i + 1) === c.currentChapter ? " is-current" : "")}
+                    className={"cast-mentions__bar" + (v === 0 ? " is-empty" : "") + ((i + 1) === scrub ? " is-current" : "")}
                     style={{ height: h + "px" }}
                     title={"Ch. " + (i + 1) + " — " + v + " mention" + (v === 1 ? "" : "s")}
                   />
@@ -531,25 +893,35 @@ const CastDetail = ({ c, onBack, onEdit }) => {
             </div>
             <div className="cast-mentions__axis">
               <span>Ch. 1</span>
-              <span>Ch. {c.mentionsByChapter.length}</span>
+              <span>Ch. {mentionsForChart.length}</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Quotes */}
-      {c.quotes && c.quotes.length > 0 && (
+      {/* Quotes (live, scrubber-aware) */}
+      {visibleQuotes.length > 0 && (
         <div className="cast-section">
           <div className="cast-section__head">
             <span className="cast-section__title">Selected lines</span>
-            <button className="cast-section__action" data-callback="onShowAllQuotes">All ({c.quotes.length})</button>
+            {scrubbedQuotes.length > 3 && (
+              <button className="cast-section__action" onClick={onShowAllQuotes}>
+                {showAllQuotes ? "Show fewer" : "All (" + scrubbedQuotes.length + ")"}
+              </button>
+            )}
           </div>
           <div className="cast-quotes">
-            {c.quotes.map((q, i) => (
-              <div key={i} className="cast-quote" data-callback="onJumpQuote">
+            {visibleQuotes.map((q, i) => (
+              <button
+                key={i}
+                className="cast-quote"
+                onClick={() => onJumpQuote && onJumpQuote(q)}
+                style={{ background: "none", border: 0, padding: 0, cursor: "pointer", textAlign: "inherit", width: "100%" }}
+                title="Jump to this line in the manuscript"
+              >
                 "{q.text}"
                 <span className="cast-quote__cite">{q.cite}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -560,7 +932,7 @@ const CastDetail = ({ c, onBack, onEdit }) => {
         <div className="cast-section">
           <div className="cast-section__head">
             <span className="cast-section__title">Stats</span>
-            <button className="cast-section__action" data-callback="onEditStats">Edit</button>
+            <button className="cast-section__action" onClick={onEditStats}>Edit</button>
           </div>
           <CastStats stats={c.stats}/>
         </div>
@@ -571,7 +943,7 @@ const CastDetail = ({ c, onBack, onEdit }) => {
         <div className="cast-section">
           <div className="cast-section__head">
             <span className="cast-section__title">Abilities</span>
-            <button className="cast-section__action" data-callback="onAddAbility">+ Add</button>
+            <button className="cast-section__action" onClick={onAddAbility}>+ Add</button>
           </div>
           <CastShowMore threshold={2}>
             {c.abilities.map((a, i) => (
@@ -586,18 +958,18 @@ const CastDetail = ({ c, onBack, onEdit }) => {
         <div className="cast-section">
           <div className="cast-section__head">
             <span className="cast-section__title">Skill tree</span>
-            <button className="cast-section__action" data-callback="onOpenSkillTree">Open full tree →</button>
+            <button className="cast-section__action" onClick={onOpenSkillTree}>Open full tree →</button>
           </div>
           <CastSkillTree tree={c.skillTree}/>
         </div>
       )}
 
-      {/* Equipment Slots — RPG-style hookup for Items panel */}
+      {/* Equipment Slots — live equippedBySlot from item.data.slot */}
       <div className="cast-section">
         <div className="cast-section__head">
           <span className="cast-section__title">Equipment</span>
           <span className="cast-section__hint" style={{ fontSize: 11, color: "var(--ink-4)", fontStyle: "italic" }}>Drag items here</span>
-          <button className="cast-section__action" data-callback="onOpenItemsTab"
+          <button className="cast-section__action"
             onClick={() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "items" } }))}>
             Open in Items →
           </button>
@@ -610,7 +982,7 @@ const CastDetail = ({ c, onBack, onEdit }) => {
         <div className="cast-section">
           <div className="cast-section__head">
             <span className="cast-section__title">Carried inventory</span>
-            <button className="cast-section__action" data-callback="onOpenItemsTab"
+            <button className="cast-section__action"
               onClick={() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "items" } }))}>
               Open in Items →
             </button>
@@ -631,20 +1003,200 @@ const CastDetail = ({ c, onBack, onEdit }) => {
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {c.relatedAtlas && c.relatedAtlas.map((r) => (
-              <Btn key={"a-"+r.id} variant="outline" size="sm" icon="map" data-callback="onOpenAtlasFor">{r.label} in Atlas →</Btn>
+              <Btn key={"a-"+r.id} variant="outline" size="sm" icon="map" onClick={() => onOpenAtlasFor && onOpenAtlasFor(r)}>{r.label} in Atlas →</Btn>
             ))}
             {c.relatedTimeline && c.relatedTimeline.map((r) => (
-              <Btn key={"t-"+r.id} variant="outline" size="sm" icon="clock" data-callback="onOpenTimelineFor">{r.label} on Timeline →</Btn>
+              <Btn key={"t-"+r.id} variant="outline" size="sm" icon="clock" onClick={() => onOpenTimelineFor && onOpenTimelineFor(r)}>{r.label} on Timeline →</Btn>
             ))}
           </div>
         </div>
       )}
 
+      {/* Character brain / voice chat — BYOK with free-tier fallback */}
+      <CastBrain c={c} scrubChapter={scrub}/>
+
       {/* Footer actions */}
       <div style={{ display: "flex", gap: 6, paddingTop: "var(--sp-4)", borderTop: "1px dashed var(--line-2)" }}>
-        <Btn variant="primary" size="sm" icon="paper" data-callback="onJumpManuscript">Open in manuscript</Btn>
+        <Btn variant="primary" size="sm" icon="paper" onClick={onJumpManuscript}>Open in manuscript</Btn>
         <Btn variant="outline" size="sm" icon="link" data-callback="onLinkEntity">Link…</Btn>
-        <Btn variant="ghost" size="sm" icon="more" data-callback="onCastMore" title="More"/>
+        <Btn variant="ghost" size="sm" icon="more" onClick={onCastMore} title="More"/>
+      </div>
+    </div>
+  );
+};
+
+// =====================================================================
+// CastBrain — "Talk to character" chat. Builds an in-voice system prompt
+// from the dossier (personality, voice, goals, fears, recent lines, project
+// intel) and routes through AIService. Falls back to a configure-AI notice
+// if no provider is available (Free tier needs a local provider like
+// Ollama; BYOK needs an API key). Includes browser-native text-to-speech
+// for the "voice" side.
+// =====================================================================
+const CastBrain = ({ c, scrubChapter }) => {
+  const [messages, setMessages] = _us_cast([]);
+  const [draft, setDraft] = _us_cast("");
+  const [busy, setBusy] = _us_cast(false);
+  const [error, setError] = _us_cast(null);
+
+  React.useEffect(() => { setMessages([]); setError(null); }, [c.id]);
+
+  const buildSystem = () => {
+    const intel = (window.LoomwrightBackend?.ProjectIntelService?.loadSync?.()) || {};
+    const lines = [
+      "You are role-playing as the character below from a work-in-progress novel.",
+      "Stay in voice. Reply in 1–3 short sentences. Do not break character or explain.",
+      "If asked something your character couldn't know, deflect in voice.",
+      "",
+      "CHARACTER",
+      "Name: " + c.name,
+      c.title       && ("Title: " + c.title),
+      c.epithet     && ("Epithet / alias: " + c.epithet),
+      c.role        && ("Story role: " + c.role),
+      c.personality && ("Personality: " + c.personality),
+      c.voiceProfile && ("Voice: " + c.voiceProfile),
+      c.speechStyle && ("Speech style: " + c.speechStyle),
+      (c.goals && c.goals.length) && ("Goals: " + c.goals.join(", ")),
+      (c.fears && c.fears.length) && ("Fears: " + c.fears.join(", ")),
+      c.arcSummary  && ("Arc: " + c.arcSummary),
+      c.writingInstructions && ("Author's instructions: " + c.writingInstructions),
+      "State as of: Ch. " + (scrubChapter || "now"),
+      "",
+      intel.projectFoundation && "PROJECT",
+      intel.projectFoundation && intel.projectFoundation.slice(0, 600),
+      intel.writingStyleGuide && ("Style: " + String(intel.writingStyleGuide).slice(0, 400)),
+    ].filter(Boolean);
+    const quotes = (c._allQuotes || []).filter((q) => {
+      const n = _citeToChapterNum(q.cite);
+      return n == null || !scrubChapter || n <= scrubChapter;
+    }).slice(0, 5);
+    if (quotes.length) {
+      lines.push("", "RECENT LINES (from the manuscript)");
+      for (const q of quotes) lines.push('- "' + q.text + '" — ' + q.cite);
+    }
+    return lines.join("\n");
+  };
+
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || busy) return;
+    setError(null);
+    setMessages((m) => [...m, { role: "user", text }]);
+    setDraft("");
+    setBusy(true);
+    try {
+      const B = window.LoomwrightBackend;
+      if (!B || !B.AIService || !B.AIRoutingService) throw new Error("AI services unavailable");
+      const routing = B.AIRoutingService;
+      // Honour Local-only mode (hard block on external AI).
+      if (routing.isLocalOnly && routing.isLocalOnly()) {
+        setError("AI is disabled (Local-only mode). Enable a provider in Settings to chat with your characters.");
+        setBusy(false);
+        return;
+      }
+      const route = routing.resolveRoute ? routing.resolveRoute("characterChat") : null;
+      if (!route || !route.providerId) {
+        setError("Configure an AI provider in Settings to chat with your characters. Free tier needs a local provider (e.g. Ollama); BYOK needs an API key.");
+        setBusy(false);
+        return;
+      }
+      let cfg = null;
+      try { cfg = await B.AIService.getProviderConfig(route.providerId); } catch (_e) {}
+      if (!cfg || (cfg.needsKey && !cfg.apiKey)) {
+        setError("Add an API key for this provider in Settings (or switch to a local provider for the Free tier).");
+        setBusy(false);
+        return;
+      }
+      const convo = messages.map((m) => (m.role === "user" ? "Reader: " : c.name + ": ") + m.text).join("\n");
+      const prompt = (convo ? convo + "\n" : "") + "Reader: " + text + "\n" + c.name + ":";
+      const reply = await B.AIService.complete({
+        providerId: route.providerId,
+        model: route.model || cfg.model,
+        prompt,
+        system: buildSystem(),
+        purpose: "characterChat",
+      });
+      const clean = String(reply || "").trim();
+      setMessages((m) => [...m, { role: "char", text: clean || "(silence)" }]);
+    } catch (e) {
+      setError("Couldn't reach the AI provider" + (e && e.message ? (" — " + e.message) : "") + ".");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const speak = (text) => {
+    try {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.96; u.pitch = 1.0;
+      window.speechSynthesis.speak(u);
+    } catch (_e) {}
+  };
+
+  const styles = {
+    section: { display: "flex", flexDirection: "column", gap: 8 },
+    thread: { display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto", padding: 8, background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-3, 8px)" },
+    hint: { fontSize: "var(--fs-xs)", color: "var(--ink-3)", fontStyle: "italic" },
+    msg: (role) => ({ display: "flex", gap: 8, alignItems: "flex-start", flexDirection: role === "user" ? "row-reverse" : "row" }),
+    avatar: (role) => ({ width: 22, height: 22, borderRadius: 11, background: role === "user" ? "var(--accent-soft, #d8c89a)" : "var(--accent, #9a7b3a)", color: role === "user" ? "var(--ink-1)" : "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, flex: "0 0 auto" }),
+    body: (role) => ({ flex: 1, fontSize: "var(--fs-sm)", background: role === "user" ? "var(--bg-elev, #fff)" : "var(--bg-tint, #f5eede)", border: "1px solid var(--line-2)", borderRadius: 8, padding: "6px 10px", lineHeight: 1.45 }),
+    voice: { marginLeft: 8, fontSize: 10, color: "var(--ink-3)", background: "transparent", border: "1px solid var(--line-2)", borderRadius: 10, padding: "1px 6px", cursor: "pointer" },
+    compose: { display: "flex", gap: 6, alignItems: "stretch" },
+    input: { flex: 1, padding: "6px 10px", border: "1px solid var(--line-2)", borderRadius: "var(--r-2, 6px)", fontSize: "var(--fs-sm)", background: "var(--bg-elev, #fff)" },
+    error: { fontSize: "var(--fs-xs)", color: "var(--danger, #c14e3e)", display: "flex", alignItems: "center", gap: 8 },
+  };
+
+  return (
+    <div className="cast-section" data-ui="CastBrain" data-testid="cast-brain" style={styles.section}>
+      <div className="cast-section__head">
+        <span className="cast-section__title">Talk to {c.name}</span>
+        <span className="cast-section__hint" style={{ fontSize: 11, color: "var(--ink-4)", fontStyle: "italic" }}>In-character chat · voice readback</span>
+      </div>
+      <div style={styles.thread} role="log" aria-live="polite">
+        {messages.length === 0 && (
+          <div style={styles.hint}>
+            Ask {c.name} about a scene, their motives, or a choice. They answer in voice, using their personality, voice profile, and recent lines from the manuscript.
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} style={styles.msg(m.role)} data-msg-role={m.role}>
+            <div style={styles.avatar(m.role)} aria-hidden>{m.role === "user" ? "You" : c.initials}</div>
+            <div style={styles.body(m.role)}>
+              {m.text}
+              {m.role === "char" && typeof window !== "undefined" && window.speechSynthesis && (
+                <button onClick={() => speak(m.text)} style={styles.voice} title="Read aloud" aria-label={"Read " + c.name + "'s reply aloud"}>▶ Voice</button>
+              )}
+            </div>
+          </div>
+        ))}
+        {busy && (
+          <div style={styles.msg("char")}>
+            <div style={styles.avatar("char")} aria-hidden>{c.initials}</div>
+            <div style={{ ...styles.body("char"), color: "var(--ink-3)" }}>thinking…</div>
+          </div>
+        )}
+        {error && (
+          <div style={styles.error} role="alert">
+            <span>{error}</span>
+            <Btn size="xs" variant="ghost" onClick={() => window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "settings" } }))}>Configure AI →</Btn>
+          </div>
+        )}
+      </div>
+      <div style={styles.compose}>
+        <input
+          type="text"
+          style={styles.input}
+          placeholder={"Ask " + c.name + " a question…"}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+          disabled={busy}
+          data-testid="cast-brain-input"
+          aria-label={"Message " + c.name}
+        />
+        <Btn variant="primary" size="sm" icon="sparkle" onClick={send} disabled={busy || !draft.trim()} data-testid="cast-brain-send">Send</Btn>
       </div>
     </div>
   );
@@ -822,24 +1374,77 @@ const CastEmpty = ({ onCreate, onExtract }) => (
 // CastPanelBody — top-level dispatcher. Replaces the generic state
 // switch when entityType === "cast".
 // ---------------------------------------------------------------------
+const _castNotice = (message) => {
+  try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message } })); } catch (_e) {}
+};
+
+// Build live "suggestion" cards from pending cast candidates in the review
+// queue. Replaces the old CAST_SUGGESTIONS_SAMPLE demo.
+const _buildCastSuggestions = (ctx) => {
+  const B = window.LoomwrightBackend;
+  if (!B) return [];
+  const queue = B.ReviewService?.listSync?.("cast") || [];
+  const chapterIndex = ctx?.chapterIndex || new Map();
+  return queue
+    .filter((q) => q.status === "pending")
+    .map((q) => {
+      const payload = q.payload || {};
+      const name = payload.name || q.name || "Unknown";
+      const conf = Math.round(((typeof q.confidence === "number" ? q.confidence : 0.55)) * 100);
+      const level = conf >= 80 ? "confident" : conf >= 60 ? "likely" : "uncertain";
+      const chNum = q.chapterId ? chapterIndex.get(q.chapterId)?.num : null;
+      return {
+        id: q.id,
+        name,
+        level,
+        value: conf,
+        excerpt: (payload.context || q.context || "").replace(name, "<mark>" + name + "</mark>"),
+        cite: chNum ? ("Ch. " + chNum) : (q.chapterId || ""),
+        reason: q.reason || q.matchType || "detected by extractor",
+      };
+    });
+};
+
 const CastPanelBody = ({ panel, onSelectEntity }) => {
-  // Live cast only — never fall back to demo CAST_SAMPLE, or a fresh
-  // project shows Aelinor Vey / Saren of Hess. decoratePanel sets
-  // panel.cast from the live store (empty array when empty).
-  const cast = (panel && Array.isArray(panel.cast))
+  // Always render the LIVE store — never the CAST_SAMPLE demo. The decorator
+  // sets panel.cast from EntityService; we re-listSync as a fallback.
+  const liveEntities = (panel && Array.isArray(panel.cast))
     ? panel.cast
     : (window.LoomwrightBackend?.EntityService?.listSync("cast") || []);
   const incomingState = panel?.state || "overview";
 
-  // Local UI state for the panel (selection, multi-select, edit view).
+  // Bump on entity / occurrence / manuscript / review events so derived
+  // dossiers refresh in place (mentions, relationships, queue counts).
+  const [storeVersion, setStoreVersion] = _us_cast(0);
+  React.useEffect(() => {
+    const bump = () => setStoreVersion((v) => v + 1);
+    const evs = ["lw:entity-store-updated", "lw:manuscript-chapters-updated", "lw:occurrences-updated", "lw:review-queue-updated", "lw:set-active-chapter", "lw:backend-ready"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+
+  // Live dossier list (browse + detail share one shape).
+  const dossierCtx = _um_cast(() => buildCastDossierContext(), [storeVersion]);
+  const dossierList = _um_cast(
+    () => liveEntities.map((e) => liveCastToDossier(e, dossierCtx)).filter(Boolean),
+    [liveEntities, dossierCtx]
+  );
+  const liveSuggestions = _um_cast(() => _buildCastSuggestions(dossierCtx), [dossierCtx, storeVersion]);
+
+  // Local UI state.
   const [view, setView] = _us_cast(incomingState); // overview | selected | edit | empty | loading | error | review | suggestion | multi
-  const [selectedId, setSelectedId] = _us_cast(panel?.selected?.id || cast.find((c) => c.role === "protagonist")?.id || cast[0]?.id || null);
+  const [selectedId, setSelectedId] = _us_cast(
+    panel?.selected?.id
+      || dossierList.find((c) => c.role === "protagonist")?.id
+      || dossierList[0]?.id
+      || null
+  );
   const [multi, setMulti] = _us_cast(() => new Set());
 
-  // If host changes panel.state (e.g. via demo controls), follow.
+  // Follow host-driven panel.state.
   React.useEffect(() => { setView(incomingState); }, [incomingState]);
 
-  const selected = _um_cast(() => cast.find((c) => c.id === selectedId), [cast, selectedId]);
+  const selected = _um_cast(() => dossierList.find((c) => c.id === selectedId), [dossierList, selectedId]);
 
   const onSelect = (c) => {
     setSelectedId(c.id);
@@ -855,20 +1460,98 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
     setView("multi");
   };
 
-  // Routing — special states first, then default to browse list
+  // ----- Dossier action handlers (every button is wired live) ----------
+  const openFullEditor = (id, sectionId) => {
+    window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
+      detail: { type: "cast", initial: { id }, mode: "full", sectionId: sectionId || undefined },
+    }));
+  };
+  const onEditFromDossier   = () => selected && openFullEditor(selected.id);
+  const onAddTrait          = () => selected && openFullEditor(selected.id, "psychology");
+  const onAddRelationship   = () => selected && openFullEditor(selected.id, "relationships");
+  const onAddAbility        = () => selected && openFullEditor(selected.id, "rpg");
+  const onEditStats         = () => selected && openFullEditor(selected.id, "rpg");
+  const onCastMore          = () => selected && openFullEditor(selected.id, "review-save");
+
+  const onJumpToOccurrence = (chapterId, occurrenceId) => {
+    if (!chapterId) { _castNotice("This character has no manuscript mentions yet."); return; }
+    window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room", chapterId, occurrenceId } }));
+    window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId, occurrenceId } }));
+  };
+  const onJumpManuscript = () => {
+    if (!selected) return;
+    const first = selected._allQuotes?.[0] || (selected.quotes && selected.quotes[0]);
+    if (first) onJumpToOccurrence(first.chapterId, first.occurrenceId);
+    else _castNotice("This character has no manuscript mentions yet.");
+  };
+  const onJumpQuote   = (q) => onJumpToOccurrence(q && q.chapterId, q && q.occurrenceId);
+  const onShowAllQuotes = () => {
+    if (!selected) return;
+    setView("selected"); // ensure detail
+    setShowAllQuotes((v) => !v);
+  };
+  const [showAllQuotes, setShowAllQuotes] = _us_cast(false);
+  React.useEffect(() => { setShowAllQuotes(false); }, [selectedId]);
+
+  const onSelectRelated = (r) => {
+    if (!r || !r.id) return;
+    setSelectedId(r.id);
+    setView("selected");
+    onSelectEntity && onSelectEntity({ id: r.id, label: r.name, entityType: "cast" });
+  };
+
+  const onOpenSkillTree = () => {
+    window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "skillTrees" } }));
+  };
+  const onOpenAtlasFor = (loc) => {
+    if (loc && loc.id) window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "atlas", focus: { entityId: loc.id, entityType: "locations", label: loc.label } } }));
+    else window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "atlas" } }));
+  };
+  const onOpenTimelineFor = (ev) => {
+    if (ev && ev.id) window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "timeline", focus: { entityId: ev.id, entityType: "events", label: ev.label } } }));
+    else window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "timeline" } }));
+  };
+
+  // ----- Empty / error / loading states --------------------------------
   if (view === "loading") return <LoadingState title="Reading the cast register…" lines={5}/>;
   if (view === "error")   return <ErrorState title="Couldn't load cast" body="Local index unreachable. Your characters are safe." onRetry={() => setView("overview")}/>;
-  if (view === "empty")   return <CastEmpty onCreate={() => setView("edit")} onExtract={() => setView("loading")}/>;
+  if (view === "empty" || (!dossierList.length && view !== "edit")) {
+    return <CastEmpty
+      onCreate={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "cast", mode: "full" } }))}
+      onExtract={() => window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "manuscript", typeFocus: "cast" } }))}
+    />;
+  }
   if (view === "edit")    return <CastEdit c={selected} onCancel={() => setView("selected")} onSave={() => setView("selected")}/>;
-  if (view === "review")    return <div className="cast"><CastReviewList cast={cast.filter((c) => c.queue)}/></div>;
-  if (view === "suggestion")return <div className="cast"><CastSuggestionList items={CAST_SUGGESTIONS_SAMPLE}/></div>;
+  if (view === "review")    return <div className="cast"><CastReviewList cast={dossierList.filter((c) => c.queue)}/></div>;
+  if (view === "suggestion")return <div className="cast"><CastSuggestionList items={liveSuggestions}/></div>;
   if (view === "selected" && selected) {
-    return <CastDetail c={selected} onBack={() => setView("overview")} onEdit={() => setView("edit")}/>;
+    return (
+      <CastDetail
+        c={selected}
+        chapters={dossierCtx.chapters}
+        onBack={() => setView("overview")}
+        onEdit={onEditFromDossier}
+        onAddTrait={onAddTrait}
+        onAddRelationship={onAddRelationship}
+        onAddAbility={onAddAbility}
+        onEditStats={onEditStats}
+        onCastMore={onCastMore}
+        onJumpManuscript={onJumpManuscript}
+        onJumpQuote={onJumpQuote}
+        onShowAllQuotes={onShowAllQuotes}
+        showAllQuotes={showAllQuotes}
+        onSelectRelated={onSelectRelated}
+        onOpenSkillTree={onOpenSkillTree}
+        onOpenAtlasFor={onOpenAtlasFor}
+        onOpenTimelineFor={onOpenTimelineFor}
+      />
+    );
   }
   // Default: browse with optional multi-select
   return (
     <CastBrowse
-      cast={cast}
+      cast={dossierList}
+      suggestions={liveSuggestions}
       selectedId={selectedId}
       multiSelected={multi}
       multiMode={view === "multi"}
@@ -876,10 +1559,10 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
       onSelect={onSelect}
       onToggleMulti={onToggleMulti}
       onClearMulti={() => { setMulti(new Set()); setView("overview"); }}
-      onMergeMulti={() => {}}
-      onTagMulti={() => {}}
-      onDeleteMulti={() => {}}
-      onCreate={() => setView("edit")}
+      onMergeMulti={() => _castNotice("Merge multiple — coming with the Review queue tools.")}
+      onTagMulti={() => _castNotice("Tag multiple — coming with the entity tabs pass.")}
+      onDeleteMulti={() => _castNotice("Delete multiple — coming with the entity tabs pass.")}
+      onCreate={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "cast", mode: "full" } }))}
     />
   );
 };
@@ -952,32 +1635,15 @@ const CAST_EQUIP_SLOTS = [
 ];
 
 const CastEquipmentSlots = ({ cast }) => {
-  // Demo equipped items keyed by slot id. For Aelinor we wire up known items
-  // from the manuscript; other characters get an empty grid.
-  const demoEquipped = (() => {
-    if (cast && cast.id === "c1") {
-      return {
-        "body":      { name: "Travel cloak",     itemId: "i-cloak",  condition: "Worn",     chapter: 7 },
-        "main-hand": { name: "Bone Auger",       itemId: "i1",       condition: "Heirloom", chapter: 7, warning: "Loaned to Brec" },
-        "accessory": { name: "Vey Signet",       itemId: "i2",       condition: "Pristine", chapter: 7 },
-        "pack":      { name: "Auger case",       itemId: "i-case",   condition: "Used",     chapter: 7 },
-        "quest":     { name: "Saren's letter",   itemId: "i-letter", condition: "Sealed",   chapter: 7 },
-      };
-    }
-    if (cast && cast.id === "c3") {
-      return {
-        "body":      { name: "Salt-bitten Cloak", itemId: "i3",  condition: "Used",   chapter: 5, warning: "Not his" },
-        "off-hand":  { name: "Hess Letter-key",   itemId: "i4",  condition: "Lost",   chapter: 5, warning: "Lost in Brittlewood" },
-        "main-hand": { name: "Watch baton",       itemId: "i-baton", condition: "Worn", chapter: 5 },
-      };
-    }
-    return {};
-  })();
+  // Live equipment — items linked via data.equippedItems whose item entity
+  // carries data.slot are placed in their slot. Otherwise the slot stays
+  // empty (ready to accept a drag-drop, which the existing handler wires up).
+  const equipped = (cast && cast.equippedBySlot) || {};
 
   return (
     <div className="cast-equip" data-ui="CastEquipmentSlots">
       {CAST_EQUIP_SLOTS.map((slot) => {
-        const item = demoEquipped[slot.id];
+        const item = equipped[slot.id];
         return (
           <div
             key={slot.id}
