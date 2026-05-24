@@ -90,6 +90,68 @@ function groupCardItems(items) {
   });
 }
 
+// Bucket by clusterId (or normalised name + type as a fallback) so a
+// character mentioned across many chapters becomes a single expandable
+// group card instead of N separate rows. Each group carries the canonical
+// row and a mentions[] array harvested from either the cluster row itself
+// (post-onboarding cross-chapter pass) or synthesised from each member.
+function groupCardItemsByEntity(items) {
+  const byCluster = new Map();
+  const order = [];
+  const norm = (s) => String(s || "").toLowerCase().trim();
+  for (const it of items || []) {
+    const key = it.clusterId
+      || (it.entityType && it.candidate?.name ? (it.entityType + ":" + norm(it.candidate.name)) : null)
+      || ("__solo__:" + it.id);
+    if (!byCluster.has(key)) { byCluster.set(key, []); order.push(key); }
+    byCluster.get(key).push(it);
+  }
+  return order.map((key) => {
+    const members = byCluster.get(key);
+    const canonical = members.find((m) => Array.isArray(m.mentions) && m.mentions.length) || members[0];
+    const mentions = Array.isArray(canonical.mentions) && canonical.mentions.length
+      ? canonical.mentions
+      : members.map((m) => ({
+          chapterId: m.sourceChapter?.id || m.chapterId || null,
+          paragraphId: m.sourceParagraph || null,
+          occurrenceId: m.occurrenceId || null,
+          exactText: m.mention || "",
+          sourceQuote: m.mention || "",
+        }));
+    return {
+      key,
+      clusterId: canonical.clusterId || null,
+      canonical,
+      members,
+      ids: members.map((m) => m.id),
+      mentions,
+      chapterCount: new Set(mentions.map((m) => m.chapterId).filter(Boolean)).size,
+    };
+  });
+}
+
+// Bucket by chapter so the queue reads chronologically — each chapter
+// becomes a section header followed by its candidates (still sentence-
+// grouped inside the section).
+function groupCardItemsByChapter(items, chapters) {
+  const byChapter = new Map();
+  const order = [];
+  for (const it of items || []) {
+    const cid = it.sourceChapter?.id || it.chapterId || "__no-chapter__";
+    if (!byChapter.has(cid)) { byChapter.set(cid, []); order.push(cid); }
+    byChapter.get(cid).push(it);
+  }
+  if (Array.isArray(chapters) && chapters.length) {
+    const numById = new Map(chapters.map((c) => [c.id, c.num != null ? c.num : 9999]));
+    order.sort((a, b) => (numById.get(a) ?? 9999) - (numById.get(b) ?? 9999));
+  }
+  return order.map((cid) => ({
+    chapterId: cid,
+    chapter: (Array.isArray(chapters) ? chapters.find((c) => c.id === cid) : null) || null,
+    items: byChapter.get(cid),
+  }));
+}
+
 // ---------------------------------------------------------------------
 // QueueFilterBar
 // ---------------------------------------------------------------------
@@ -101,6 +163,7 @@ const QueueFilterBar = ({
   session, onSession,
   sortBy, onSortBy,
   view, onView,
+  groupBy, onGroupBy,
   chapters = [],
   sessions = [],
 }) => {
@@ -164,6 +227,23 @@ const QueueFilterBar = ({
           <option value="date">Sort: Date</option>
           <option value="name">Sort: Name</option>
         </select>
+        <div className="qfb__seg" role="group" aria-label="Group by">
+          {[
+            { k: "entity",   l: "By entity",   t: "One card per character/place, mentions grouped across chapters" },
+            { k: "chapter",  l: "By chapter",  t: "Read chronologically, chapter by chapter" },
+            { k: "sentence", l: "By sentence", t: "Cluster candidates that share a sentence" },
+          ].map((g) => (
+            <button
+              key={g.k}
+              type="button"
+              className={"qfb__seg__btn " + ((groupBy || "entity") === g.k ? "is-active" : "")}
+              onClick={() => onGroupBy && onGroupBy(g.k)}
+              title={g.t}
+              data-callback="onGroupQueueBy"
+              data-testid={"qfb-group-" + g.k}
+            >{g.l}</button>
+          ))}
+        </div>
         <div className="qfb__seg" role="group" aria-label="View toggle">
           <button type="button" className={"qfb__seg__btn " + (view === "list" ? "is-active" : "")} onClick={() => onView && onView("list")} title="List" data-callback="onToggleQueueView">
             <Icon name="bars" size={11}/>List
@@ -358,6 +438,129 @@ const ReviewGroupCard = ({ group, ...cardProps }) => (
 );
 
 // ---------------------------------------------------------------------
+// ReviewEntityGroupCard — one card per clustered entity, with the
+// mention list expandable so the user can drill into per-chapter sites.
+// Group-level Accept routes through onBulkAcceptQueueItems so every
+// occurrence resolves into a single entity.
+// ---------------------------------------------------------------------
+const ReviewEntityGroupCard = ({ group, chapters = [], onAcceptQueueItem, onDenyQueueItem, onMergeQueueItem, onEditQueueItem, onBulkAcceptQueueItems, onOpenSourceInManuscript, onOpenRelatedTab, onKeepAutoAddedItem, onRemoveAutoAddedItem }) => {
+  const [open, setOpen] = _rqUS(false);
+  const item = group.canonical;
+  const single = group.mentions.length <= 1 && group.members.length === 1;
+  if (single) {
+    return <ReviewQueueCard item={item}
+      onAcceptQueueItem={onAcceptQueueItem} onDenyQueueItem={onDenyQueueItem}
+      onMergeQueueItem={onMergeQueueItem} onEditQueueItem={onEditQueueItem}
+      onOpenSourceInManuscript={onOpenSourceInManuscript} onOpenRelatedTab={onOpenRelatedTab}
+      onKeepAutoAddedItem={onKeepAutoAddedItem} onRemoveAutoAddedItem={onRemoveAutoAddedItem}/>;
+  }
+  const chById = new Map((chapters || []).map((c) => [c.id, c]));
+  const chCount = group.chapterCount || new Set(group.mentions.map((m) => m.chapterId).filter(Boolean)).size;
+  const jump = (m) => {
+    if (!m || !m.chapterId) return;
+    try {
+      window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room", chapterId: m.chapterId, occurrenceId: m.occurrenceId } }));
+      window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: m.chapterId, occurrenceId: m.occurrenceId } }));
+    } catch (_) {}
+    if (onOpenSourceInManuscript) onOpenSourceInManuscript({ ...item, mention: m });
+  };
+  return (
+    <div className="rqg rqg--entity" data-ui="ReviewEntityGroupCard" data-testid="rqg-entity" data-cluster-id={group.clusterId || ""}
+      style={{ border: "1px solid var(--line, #e3dac6)", borderRadius: 12, padding: "8px 8px 4px", marginBottom: "var(--sp-3)", background: "var(--paper-2, rgba(120,90,40,0.04))" }}>
+      <div className="rqg__head" style={{ display: "flex", alignItems: "center", gap: 8, padding: "2px 4px 8px", flexWrap: "wrap" }}>
+        <EntityTypeBadge type={item.entityType} size="xs"/>
+        <span style={{ fontWeight: 600 }}>{item.candidate?.name || item.name}</span>
+        <ConfidenceBandBadge band={item.confidence?.band}/>
+        <span className="chip" style={{ fontSize: 10 }} data-testid="rqg-entity-count">
+          {group.mentions.length} mention{group.mentions.length === 1 ? "" : "s"} in {chCount} chapter{chCount === 1 ? "" : "s"}
+        </span>
+        <span style={{ flex: 1 }}/>
+        <Btn variant="primary" size="sm" icon="check" data-testid="rqg-entity-accept"
+          onClick={() => onBulkAcceptQueueItems && onBulkAcceptQueueItems(group.ids)}>Accept</Btn>
+        <Btn variant="outline" size="sm" icon="link" data-callback="onMergeQueueItem"
+          onClick={() => onMergeQueueItem && onMergeQueueItem(item)}>Merge…</Btn>
+        <Btn variant="outline" size="sm" data-callback="onEditQueueItem"
+          onClick={() => onEditQueueItem && onEditQueueItem(item)}>Edit</Btn>
+        <Btn variant="ghost" size="sm" icon="close" data-callback="onDenyQueueItem"
+          onClick={() => onDenyQueueItem && onDenyQueueItem(item)}>Deny</Btn>
+        <Btn variant="ghost" size="sm" icon={open ? "chevron-up" : "chevron-d"}
+          onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label="Toggle mentions" data-testid="rqg-entity-toggle"/>
+      </div>
+      {open && (
+        <div className="rqg__mentions" data-testid="rqg-entity-mentions" style={{ padding: "4px 8px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
+          {group.mentions.map((m, i) => {
+            const ch = chById.get(m.chapterId);
+            const label = ch ? "Ch. " + (ch.num || "—") : (m.chapterId ? "—" : "Unfiled");
+            return (
+              <div key={i} className="rqg__mention" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "4px 6px", background: "rgba(255,255,255,0.4)", borderRadius: 6 }}>
+                <Icon name="paper" size={10}/>
+                <span style={{ fontWeight: 500, whiteSpace: "nowrap" }}>{label}</span>
+                <span style={{ flex: 1, fontStyle: "italic", color: "var(--ink-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>"{m.sourceQuote || m.exactText || "—"}"</span>
+                <Btn variant="ghost" size="sm" icon="arrow-right"
+                  onClick={() => jump(m)} title="Jump to this mention">Jump</Btn>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// PostOnboardingBanner — dismissible summary above the queue after an
+// import-with-extraction onboarding run. Three actions: accept everything
+// confident, switch to the by-chapter flow, jump to a single type.
+// ---------------------------------------------------------------------
+const PostOnboardingBanner = ({ items = [], onAcceptAllConfident, onTriageByChapter, onFocusType }) => {
+  const [summary, setSummary] = _rqUS(null);
+  const [dismissed, setDismissed] = _rqUS(false);
+  React.useEffect(() => {
+    const onSummary = (e) => { if (e && e.detail) { setSummary(e.detail); setDismissed(false); } };
+    window.addEventListener("lw:onboarding-extraction-summary", onSummary);
+    return () => window.removeEventListener("lw:onboarding-extraction-summary", onSummary);
+  }, []);
+  if (!summary || dismissed) return null;
+  const types = Object.entries(summary.byType || {}).filter(([, n]) => n > 0).slice(0, 6);
+  return (
+    <div className="rqp__onboarding-banner" data-ui="PostOnboardingBanner" data-testid="rq-onboarding-banner"
+      style={{ border: "1px solid var(--line, #e3dac6)", borderRadius: 12, padding: "10px 12px", marginBottom: "var(--sp-3)", background: "linear-gradient(180deg, rgba(46,95,168,0.06), rgba(46,95,168,0.02))", display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Icon name="sparkle" size={12}/>
+        <strong style={{ flex: 1 }}>
+          {summary.totalCandidates} candidates from onboarding
+          {summary.collapsed ? <> · folded {summary.collapsed} duplicate{summary.collapsed === 1 ? "" : "s"}</> : null}
+          {summary.autoAdded ? <> · {summary.autoAdded} auto-added</> : null}
+        </strong>
+        <button type="button" aria-label="Dismiss" onClick={() => setDismissed(true)}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 4, opacity: 0.6 }}>
+          <Icon name="close" size={12}/>
+        </button>
+      </div>
+      <div style={{ fontSize: 12, opacity: 0.8 }}>
+        <strong>{summary.confident}</strong> confident
+        {summary.uncertain > 0 ? <> · <strong>{summary.uncertain}</strong> uncertain</> : null}
+        {summary.weak > 0 ? <> · <strong>{summary.weak}</strong> weak</> : null}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {summary.confident > 0 && (
+          <Btn variant="primary" size="sm" icon="check" data-testid="rq-banner-accept-confident"
+            onClick={() => onAcceptAllConfident && onAcceptAllConfident(items)}>Accept all confident</Btn>
+        )}
+        <Btn variant="outline" size="sm" icon="bars" data-testid="rq-banner-by-chapter"
+          onClick={() => onTriageByChapter && onTriageByChapter()}>Triage by chapter</Btn>
+        {types.map(([t, n]) => (
+          <Btn key={t} variant="ghost" size="sm" data-testid={"rq-banner-focus-" + t}
+            onClick={() => onFocusType && onFocusType(t)}>
+            {(ENTITY_TYPES[t] && ENTITY_TYPES[t].label) || t} ({n})
+          </Btn>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
 // AutoAddedHistoryCard — slim row for blue items in collapsible section
 // ---------------------------------------------------------------------
 const AutoAddedHistoryCard = ({ item: _rawItem, onKeepAutoAddedItem, onRemoveAutoAddedItem, onEditQueueItem, onOpenRelatedTab }) => {
@@ -412,6 +615,7 @@ const EntityReviewQueue = ({
 
   const set = (k, v) => setFilters && setFilters({ ...filters, [k]: v });
   const view = filters.view || "list";
+  const groupBy = filters.groupBy || "entity";
 
   // Normalise backend candidates → card shape so filtering/sorting/render all
   // see real data regardless of which surface fed the items.
@@ -444,8 +648,27 @@ const EntityReviewQueue = ({
   // Derive auto-added from the items when a dedicated list wasn't supplied
   // (the panel feeds a single `items` array containing every status).
   const autoAddedItems = (autoAdded && autoAdded.length) ? autoAdded : norm.filter((x) => x.status === "auto-added");
-  // Group the main list by groupId so multi-entry sentences cluster together.
-  const groups = _rqUM(() => groupCardItems(main), [main]);
+  // Compute groups in three shapes; the renderer picks one based on groupBy.
+  const sentenceGroups = _rqUM(() => groupCardItems(main), [main]);
+  const entityGroups   = _rqUM(() => groupCardItemsByEntity(main), [main]);
+  const chapterFlow    = _rqUM(() => groupCardItemsByChapter(main, chapters), [main, chapters]);
+
+  const cardProps = {
+    onAcceptQueueItem, onEditQueueItem, onMergeQueueItem, onDenyQueueItem,
+    onBulkAcceptQueueItems, onOpenSourceInManuscript, onOpenRelatedTab,
+    onKeepAutoAddedItem, onRemoveAutoAddedItem,
+  };
+
+  // Post-onboarding banner shortcuts — accept everything in the green/blue
+  // bands at once, or jump the user into a focused triage flow.
+  const acceptAllConfident = () => {
+    const ids = norm.filter((x) => x.status === "pending" && (x.confidence?.band === "confident" || x.confidence?.band === "high")).map((x) => x.id);
+    if (ids.length && onBulkAcceptQueueItems) onBulkAcceptQueueItems(ids);
+  };
+  const triageByChapter = () => set("groupBy", "chapter");
+  const focusType = (type) => {
+    try { window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: type } })); } catch (_) {}
+  };
 
   return (
     <div className="rqp" data-ui="EntityReviewQueue" data-entity={entityType} data-state={state} data-testid={"rqp-" + entityType}>
@@ -462,6 +685,13 @@ const EntityReviewQueue = ({
           </div>
         </div>
 
+        <PostOnboardingBanner
+          items={norm}
+          onAcceptAllConfident={acceptAllConfident}
+          onTriageByChapter={triageByChapter}
+          onFocusType={focusType}
+        />
+
         <QueueFilterBar
           query={filters.query}      onQuery={(v) => set("query", v)}
           confidence={filters.confidence || "all"} onConfidence={(v) => set("confidence", v)}
@@ -470,6 +700,7 @@ const EntityReviewQueue = ({
           session={filters.session}  onSession={(v) => set("session", v)}
           sortBy={filters.sortBy}    onSortBy={(v) => set("sortBy", v)}
           view={view}                onView={(v) => set("view", v)}
+          groupBy={groupBy}          onGroupBy={(v) => set("groupBy", v)}
           chapters={chapters}        sessions={sessions}
         />
 
@@ -482,40 +713,43 @@ const EntityReviewQueue = ({
         />
       </header>
 
-      <div className="rqp__body" data-grid={view === "grid"}>
+      <div className="rqp__body" data-grid={view === "grid"} data-group-by={groupBy}>
         {state === "loading" && <LoadingState title={"Reading the " + t.label.toLowerCase() + " queue…"} lines={4}/>}
         {state === "error"   && <ErrorState title="Couldn't load this queue" body="The local index didn't respond. Your candidates are safe."/>}
         {state === "default" && main.length === 0 && autoAddedItems.length === 0 && (
           <EmptyState icon="bell" title={"No " + t.label.toLowerCase() + " candidates"} body="Run an extraction to surface new entries here."/>
         )}
-        {state === "default" && groups.map((g) => (
+
+        {state === "default" && groupBy === "entity" && entityGroups.map((g) => (
+          <ReviewEntityGroupCard key={g.key} group={g} chapters={chapters} {...cardProps}/>
+        ))}
+
+        {state === "default" && groupBy === "chapter" && chapterFlow.map((section) => {
+          const sectionGroups = groupCardItems(section.items);
+          const label = section.chapter
+            ? "Chapter " + (section.chapter.num || "—") + (section.chapter.title ? " — " + section.chapter.title : "")
+            : "Unfiled";
+          return (
+            <section key={section.chapterId} data-testid={"rq-chapter-section-" + section.chapterId} style={{ marginBottom: "var(--sp-4)" }}>
+              <header style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "8px 4px 6px", borderBottom: "1px solid var(--line, #e3dac6)", marginBottom: 6 }}>
+                <strong style={{ fontSize: 13 }}>{label}</strong>
+                <span style={{ fontSize: 11, opacity: 0.6 }}>{section.items.length} candidate{section.items.length === 1 ? "" : "s"}</span>
+              </header>
+              {sectionGroups.map((g) => (
+                g.members.length > 1
+                  ? <ReviewGroupCard key={g.key} group={g} {...cardProps}/>
+                  : <ReviewQueueCard key={g.members[0].id} item={g.members[0]}
+                      selected={selectedIds.includes(g.members[0].id)} {...cardProps}/>
+              ))}
+            </section>
+          );
+        })}
+
+        {state === "default" && groupBy === "sentence" && sentenceGroups.map((g) => (
           g.members.length > 1
-            ? <ReviewGroupCard
-                key={g.key}
-                group={g}
-                onAcceptQueueItem={onAcceptQueueItem}
-                onEditQueueItem={onEditQueueItem}
-                onMergeQueueItem={onMergeQueueItem}
-                onDenyQueueItem={onDenyQueueItem}
-                onBulkAcceptQueueItems={onBulkAcceptQueueItems}
-                onOpenSourceInManuscript={onOpenSourceInManuscript}
-                onOpenRelatedTab={onOpenRelatedTab}
-                onKeepAutoAddedItem={onKeepAutoAddedItem}
-                onRemoveAutoAddedItem={onRemoveAutoAddedItem}
-              />
-            : <ReviewQueueCard
-                key={g.members[0].id}
-                item={g.members[0]}
-                selected={selectedIds.includes(g.members[0].id)}
-                onAcceptQueueItem={onAcceptQueueItem}
-                onEditQueueItem={onEditQueueItem}
-                onMergeQueueItem={onMergeQueueItem}
-                onDenyQueueItem={onDenyQueueItem}
-                onOpenSourceInManuscript={onOpenSourceInManuscript}
-                onOpenRelatedTab={onOpenRelatedTab}
-                onKeepAutoAddedItem={onKeepAutoAddedItem}
-                onRemoveAutoAddedItem={onRemoveAutoAddedItem}
-              />
+            ? <ReviewGroupCard key={g.key} group={g} {...cardProps}/>
+            : <ReviewQueueCard key={g.members[0].id} item={g.members[0]}
+                selected={selectedIds.includes(g.members[0].id)} {...cardProps}/>
         ))}
 
         {/* Auto-added collapsible at bottom */}
@@ -550,9 +784,10 @@ const EntityReviewQueue = ({
 };
 
 Object.assign(window, {
-  EntityReviewQueue, ReviewQueueCard, ReviewGroupCard, AutoAddedHistoryCard,
+  EntityReviewQueue, ReviewQueueCard, ReviewGroupCard, ReviewEntityGroupCard,
+  AutoAddedHistoryCard, PostOnboardingBanner,
   ConfidenceStrip, ConfidenceBandBadge,
   QueueFilterBar, QueueBulkActions,
-  candidateToCardItem, groupCardItems,
+  candidateToCardItem, groupCardItems, groupCardItemsByEntity, groupCardItemsByChapter,
   SUGGESTION_LABELS, CONFIDENCE_LABELS,
 });

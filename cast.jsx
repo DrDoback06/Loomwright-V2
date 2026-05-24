@@ -1285,6 +1285,24 @@ const CastEdit = ({ c, onCancel, onSave }) => {
 // ---------------------------------------------------------------------
 // CastReviewList — items already created but flagged for review
 // ---------------------------------------------------------------------
+const _castFireAction = (name, queueId) => {
+  if (!queueId) return;
+  try {
+    window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name, detail: { id: queueId } } }));
+  } catch (_) {}
+};
+
+// Resolve the pending review-queue rows linked to a given cast entity so
+// the dossier "Review" tab cards can drive Accept / Merge / Deny against
+// the actual queue (the dossier card only carries an entity id).
+const _castQueueIdsForEntity = (entityId) => {
+  const B = window.LoomwrightBackend;
+  if (!B || !entityId) return [];
+  const rows = (B.ReviewService?.listSync?.("cast") || [])
+    .filter((q) => q.status === "pending" && (q.existingEntityId === entityId || q.targetEntityId === entityId || q.entityId === entityId));
+  return rows.map((r) => r.id);
+};
+
 const CastReviewList = ({ cast }) => {
   if (!cast || !cast.length) {
     return (
@@ -1295,10 +1313,22 @@ const CastReviewList = ({ cast }) => {
       </div>
     );
   }
+  const handle = (name, c) => {
+    const ids = _castQueueIdsForEntity(c.id);
+    if (!ids.length) {
+      _castNotice("No pending review items for " + (c.name || "this character") + ".");
+      return;
+    }
+    if (name === "onAcceptQueueItem" || name === "onDenyQueueItem") {
+      ids.forEach((id) => _castFireAction(name, id));
+    } else {
+      _castFireAction(name, ids[0]);
+    }
+  };
   return (
     <div className="cast-review">
       {cast.map((c) => (
-        <div key={c.id} className="cast-review__card">
+        <div key={c.id} className="cast-review__card" data-entity-id={c.id} data-entity-type="cast">
           <div className="cast-review__head">
             <div className="cast-row__monogram">{c.initials}</div>
             <div className="cast-review__name">{c.name}</div>
@@ -1313,10 +1343,14 @@ const CastReviewList = ({ cast }) => {
             <span>queued by extractor · 2m ago</span>
           </div>
           <div className="cast-review__actions">
-            <Btn variant="primary" size="sm" data-callback="onAcceptQueueItem">Accept</Btn>
-            <Btn variant="outline" size="sm" data-callback="onEditQueueItem">Edit</Btn>
-            <Btn variant="outline" size="sm" icon="link" data-callback="onMergeQueueItem">Merge…</Btn>
-            <Btn variant="ghost" size="sm" data-callback="onDenyQueueItem">Deny</Btn>
+            <Btn variant="primary" size="sm" data-callback="onAcceptQueueItem"
+              onClick={() => handle("onAcceptQueueItem", c)}>Accept</Btn>
+            <Btn variant="outline" size="sm" data-callback="onEditQueueItem"
+              onClick={() => handle("onEditQueueItem", c)}>Edit</Btn>
+            <Btn variant="outline" size="sm" icon="link" data-callback="onMergeQueueItem"
+              onClick={() => handle("onMergeQueueItem", c)}>Merge…</Btn>
+            <Btn variant="ghost" size="sm" data-callback="onDenyQueueItem"
+              onClick={() => handle("onDenyQueueItem", c)}>Deny</Btn>
           </div>
         </div>
       ))}
@@ -1333,7 +1367,7 @@ const CastSuggestionList = ({ items }) => (
       Detected in the current chapter. Nothing here has been added to your cast yet.
     </div>
     {items.map((s) => (
-      <div key={s.id} className="cast-review__card">
+      <div key={s.id} className="cast-review__card" data-queue-id={s.id}>
         <div className="cast-review__head">
           <div className="cast-row__monogram cast-row__monogram--unknown">{s.name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}</div>
           <div className="cast-review__name">{s.name}</div>
@@ -1346,9 +1380,12 @@ const CastSuggestionList = ({ items }) => (
           <span>{s.reason}</span>
         </div>
         <div className="cast-review__actions">
-          <Btn variant="primary" size="sm" data-callback="onAcceptQueueItem">Add to Cast</Btn>
-          <Btn variant="outline" size="sm" icon="link" data-callback="onMergeQueueItem">Merge…</Btn>
-          <Btn variant="ghost" size="sm" data-callback="onDenyQueueItem">Dismiss</Btn>
+          <Btn variant="primary" size="sm" data-callback="onAcceptQueueItem"
+            onClick={() => _castFireAction("onAcceptQueueItem", s.id)}>Add to Cast</Btn>
+          <Btn variant="outline" size="sm" icon="link" data-callback="onMergeQueueItem"
+            onClick={() => _castFireAction("onMergeQueueItem", s.id)}>Merge…</Btn>
+          <Btn variant="ghost" size="sm" data-callback="onDenyQueueItem"
+            onClick={() => _castFireAction("onDenyQueueItem", s.id)}>Dismiss</Btn>
         </div>
       </div>
     ))}

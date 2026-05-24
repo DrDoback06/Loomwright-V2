@@ -1304,12 +1304,21 @@ const WritersRoomScreen = ({
     };
   }, [refreshNotes]);
 
+  // Tracks the user's current chapter selection synchronously so the cross-
+  // component reload listener below can preserve it across store-update bursts
+  // (e.g. entity commits firing lw:manuscript-chapters-updated before React
+  // has re-rendered the new activeId).
+  const activeIdRef = _wrUR(activeId);
+  _wrUE(() => { activeIdRef.current = activeId; }, [activeId]);
+
   const persistChapters = _wrUC((nextChapters, nextManuscripts, nextActiveId, nextNotes, nextExtractions) => {
     const svc = window.LoomwrightBackend?.ManuscriptChapterService;
     if (!svc) return;
+    const effectiveActiveId = nextActiveId ?? activeId;
+    activeIdRef.current = effectiveActiveId;
     svc.save({
       chapters: nextChapters ?? chapters,
-      activeChapterId: nextActiveId ?? activeId,
+      activeChapterId: effectiveActiveId,
       manuscripts: nextManuscripts ?? manuscriptsByChapter,
       notes: { default: nextNotes ?? notes },
       extractions: { default: nextExtractions ?? extractions },
@@ -1322,7 +1331,11 @@ const WritersRoomScreen = ({
       const s = loadStored();
       if (s?.chapters?.length) {
         setChapters(s.chapters);
-        setActiveId(s.activeChapterId || s.chapters[0]?.id);
+        const currentActive = activeIdRef.current;
+        const stillExists = currentActive && s.chapters.some((c) => c.id === currentActive);
+        if (!stillExists) {
+          setActiveId(s.activeChapterId || s.chapters[0]?.id);
+        }
         setManuscriptsByChapter(s.manuscripts || {});
         if (s.extractions?.default) setExtractions(s.extractions.default);
         else {
@@ -1337,13 +1350,11 @@ const WritersRoomScreen = ({
     window.addEventListener("lw:backend-ready", onReady);
     window.addEventListener("lw:manuscript-chapters-updated", onReady);
     window.addEventListener("lw:project-imported", onReady);
-    window.addEventListener("lw:entity-store-updated", onReady);
     if (window.LoomwrightBackend) onReady();
     return () => {
       window.removeEventListener("lw:backend-ready", onReady);
       window.removeEventListener("lw:manuscript-chapters-updated", onReady);
       window.removeEventListener("lw:project-imported", onReady);
-      window.removeEventListener("lw:entity-store-updated", onReady);
     };
   }, []);
 

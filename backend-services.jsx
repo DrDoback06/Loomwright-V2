@@ -534,6 +534,150 @@
       }
       return next;
     },
+    // Cross-chapter alias clustering for the post-onboarding queue. Each
+    // pending row maps 1:1 to a single occurrence today; this collapses
+    // candidates that share an entity (subset / near-name match) into one
+    // canonical row carrying a `mentions[]` array of every chapter site
+    // they came from. Optional repeated-mention auto-add applies when a
+    // cluster spans many chapters even at moderate confidence.
+    async clusterAcrossChapters(opts = {}) {
+      const allowRepeatedAutoAdd = opts.applyRepeatedAutoAdd !== false;
+      const repeatedThreshold = opts.repeatedConfidence != null ? opts.repeatedConfidence : 0.85;
+      const repeatedMinChapters = opts.repeatedMinChapters != null ? opts.repeatedMinChapters : 3;
+      const all = await StorageService.get(KEYS.reviewQueue, []);
+      const pending = all.filter((r) => r.status === "pending");
+      const summary = { totalCandidates: pending.length, collapsed: 0, autoAdded: 0, confident: 0, uncertain: 0, weak: 0, byType: {} };
+      if (pending.length < 2) {
+        for (const row of pending) {
+          const band = row.confidenceBand || confidenceBand(row.confidence);
+          if (band === "blue" || band === "green") summary.confident++;
+          else if (band === "orange") summary.uncertain++;
+          else summary.weak++;
+          const t = row.entityType || "unknown";
+          summary.byType[t] = (summary.byType[t] || 0) + 1;
+        }
+        return summary;
+      }
+      const exPrefs = SettingsService.getSectionSync("extraction", {});
+      const repeatedEnabled = allowRepeatedAutoAdd && exPrefs.autoAddRepeatedMentions !== false;
+      const tokens = (s) => String(s || "").toLowerCase().split(/\s+/).filter((t) => t && !NER_CONNECTORS.has(t));
+      const byType = {};
+      for (const r of pending) {
+        const t = r.entityType || "unknown";
+        (byType[t] || (byType[t] = [])).push(r);
+      }
+      const canonicalUpdates = new Map();
+      const absorbedTo = new Map();
+      for (const type of Object.keys(byType)) {
+        const arr = byType[type];
+        if (arr.length < 2) continue;
+        const used = new Set();
+        for (let i = 0; i < arr.length; i++) {
+          if (used.has(i)) continue;
+          const base = arr[i];
+          const baseName = base.name || (base.payload && base.payload.name) || "";
+          const baseTok = new Set(tokens(baseName));
+          if (!baseTok.size) { used.add(i); continue; }
+          const cluster = [base];
+          for (let j = i + 1; j < arr.length; j++) {
+            if (used.has(j)) continue;
+            const other = arr[j];
+            const otherName = other.name || (other.payload && other.payload.name) || "";
+            const otherTok = new Set(tokens(otherName));
+            if (!otherTok.size) continue;
+            const subset = [...baseTok].every((t) => otherTok.has(t)) || [...otherTok].every((t) => baseTok.has(t));
+            const near = levenshteinSimilarity(baseName, otherName) >= 0.88;
+            if (!subset && !near) continue;
+            used.add(j);
+            cluster.push(other);
+          }
+          used.add(i);
+          if (cluster.length < 2) continue;
+          const canonical = cluster.reduce((best, r) => {
+            const bc = best.confidence || 0;
+            const rc = r.confidence || 0;
+            if (rc > bc) return r;
+            if (rc === bc && (r.name || "").length > (best.name || "").length) return r;
+            return best;
+          }, cluster[0]);
+          const others = cluster.filter((r) => r !== canonical);
+          const aliasNames = [...new Set(others.map((r) => r.name).filter((n) => n && n !== canonical.name))];
+          const existingMentions = Array.isArray(canonical.mentions) ? canonical.mentions : [];
+          const seen = new Set(existingMentions.map((m) => (m.chapterId || "") + ":" + (m.paragraphId || m.occurrenceId || "")));
+          const newMentions = cluster.map((r) => ({
+            chapterId: r.chapterId || null,
+            occurrenceId: r.occurrenceId || null,
+            paragraphId: r.paragraphId || null,
+            queueId: r.id,
+            exactText: (r.payload && r.payload.context) || r.context || r.name || "",
+            sourceQuote: (Array.isArray(r.sourceQuotes) && r.sourceQuotes[0]) || (r.payload && r.payload.context) || "",
+          })).filter((m) => {
+            const k = (m.chapterId || "") + ":" + (m.paragraphId || m.occurrenceId || "");
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          });
+          const allAliases = [...new Set([...((canonical.suggestedChanges && canonical.suggestedChanges.aliases) || []), ...aliasNames])];
+          const allSourceQuotes = [...new Set([...(canonical.sourceQuotes || []), ...cluster.flatMap((r) => r.sourceQuotes || [])])].slice(0, 5);
+          const maxConfidence = cluster.reduce((m, r) => Math.max(m, r.confidence || 0), 0);
+          const mergedMentions = [...existingMentions, ...newMentions];
+          const updated = {
+            ...canonical,
+            confidence: maxConfidence,
+            confidenceBand: confidenceBand(maxConfidence),
+            sourceQuotes: allSourceQuotes,
+            mentions: mergedMentions,
+            clusterId: canonical.clusterId || uuid("clust"),
+            crossChapterCount: new Set(mergedMentions.map((m) => m.chapterId).filter(Boolean)).size,
+          };
+          if (allAliases.length) {
+            updated.suggestedChanges = { ...(canonical.suggestedChanges || {}), aliases: allAliases };
+            updated.payload = { ...(canonical.payload || {}), aliasCandidates: allAliases };
+          }
+          canonicalUpdates.set(canonical.id, updated);
+          others.forEach((r) => absorbedTo.set(r.id, updated.clusterId));
+        }
+      }
+      // Repeated-mention auto-add (applies after clustering so the cluster
+      // can promote a moderate-confidence candidate that recurs across many
+      // chapters into auto-added).
+      if (repeatedEnabled) {
+        for (const [id, row] of canonicalUpdates) {
+          if (row.status === "auto-added" || row.autoAddedEntityId) continue;
+          if (row.confidenceBand === "blue") continue;
+          if ((row.confidence || 0) < repeatedThreshold) continue;
+          if ((row.crossChapterCount || 0) < repeatedMinChapters) continue;
+          try {
+            const saved = await autoApplyCandidate(row);
+            if (saved && saved.id) {
+              row.status = exPrefs.showAutoAddedInReview === false ? "done" : "auto-added";
+              row.autoAddedEntityId = saved.id;
+              row.autoAddReason = "repeated-mention (" + row.crossChapterCount + " chapters)";
+              if (row.matchType === "new") row.existingEntityId = saved.id;
+              summary.autoAdded++;
+            }
+          } catch (_) {}
+        }
+      }
+      const next = all.map((row) => {
+        if (canonicalUpdates.has(row.id)) return canonicalUpdates.get(row.id);
+        if (absorbedTo.has(row.id)) return { ...row, status: "merged", updatedAt: nowIso(), mergedIntoCluster: absorbedTo.get(row.id) };
+        return row;
+      });
+      await StorageService.set(KEYS.reviewQueue, next);
+      summary.collapsed = absorbedTo.size;
+      const finalPending = next.filter((r) => r.status === "pending");
+      for (const row of finalPending) {
+        const band = row.confidenceBand || confidenceBand(row.confidence);
+        if (band === "blue" || band === "green") summary.confident++;
+        else if (band === "orange") summary.uncertain++;
+        else summary.weak++;
+        const t = row.entityType || "unknown";
+        summary.byType[t] = (summary.byType[t] || 0) + 1;
+      }
+      window.dispatchEvent(new CustomEvent("lw:review-queue-updated"));
+      return summary;
+    },
   };
 
   const ReferencesService = {
@@ -774,6 +918,18 @@
         for (const c of seededChapters.filter((ch) => ch.bodyText && ch.bodyText.trim())) {
           try { await ExtractionService.runExtraction({ chapterId: c.id, text: c.bodyText, deep: false }); } catch (_) {}
         }
+        // After every chapter has been extracted independently, fold
+        // cross-chapter duplicates ("Aelinor" in ch1, ch3 and ch7) into a
+        // single canonical queue row carrying mentions[] for every site,
+        // and auto-add the obvious repeats. Summary feeds the post-
+        // onboarding banner in the review queue.
+        try {
+          const extractionSummary = await ReviewService.clusterAcrossChapters();
+          window.dispatchEvent(new CustomEvent("lw:onboarding-extraction-summary", {
+            detail: { ...extractionSummary, sessionId: m.sessionId || null },
+          }));
+          seeded.extractionSummary = extractionSummary;
+        } catch (_) {}
       }
       const dest = data.__dest || (data.workspace && data.workspace.startTab) || "writers-room";
       window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));

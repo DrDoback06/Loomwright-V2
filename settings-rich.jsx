@@ -577,7 +577,7 @@ const SetPrivacy = () => {
 const SetExtraction = () => {
   const [s, setS] = useLWSettingState("extraction", {
     aggressiveness: "balanced",
-    autoAdd95: true, showAutoAddedInReview: true,
+    autoAdd95: true, showAutoAddedInReview: true, autoAddRepeatedMentions: true,
     scan: { cast: true, locations: true, items: true, quests: true, events: true, stats: true, relationships: true, lore: true, timeline: true, inventory: true },
     threshold: 80,
   });
@@ -591,6 +591,7 @@ const SetExtraction = () => {
       <SetRow label="Auto-add (high-confidence)">
         <div className="set-stack">
           <SetToggle checked={s.autoAdd95} onChange={(v) => up("autoAdd95", v)} label="Auto-add candidates ≥95% confidence" hint="Skip the review queue when very sure."/>
+          <SetToggle checked={s.autoAddRepeatedMentions !== false} onChange={(v) => up("autoAddRepeatedMentions", v)} label="Auto-add candidates that recur across 3+ chapters" hint="At ≥85% confidence — recurrence is a strong signal."/>
           <SetToggle checked={s.showAutoAddedInReview} onChange={(v) => up("showAutoAddedInReview", v)} label="Show auto-added in review queue anyway"/>
         </div>
       </SetRow>
