@@ -1332,7 +1332,12 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
   );
 
   // Local UI state.
-  const [view, setView] = _us_cast(incomingState); // overview | selected | edit | empty | loading | error | multi
+  // Map legacy "review" / "suggestion" panel states to "overview" — those
+  // states used to render cast-local triage lists, but all cast candidates
+  // now live in the central extractions review queue. The dossier always
+  // shows here; the review queue stays in its own panel.
+  const _normalizeView = (s) => (s === "review" || s === "suggestion") ? "overview" : s;
+  const [view, setView] = _us_cast(_normalizeView(incomingState)); // overview | selected | edit | empty | loading | error | multi
   const [selectedId, setSelectedId] = _us_cast(
     panel?.selected?.id
       || dossierList.find((c) => c.role === "protagonist")?.id
@@ -1342,7 +1347,7 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
   const [multi, setMulti] = _us_cast(() => new Set());
 
   // Follow host-driven panel.state.
-  React.useEffect(() => { setView(incomingState); }, [incomingState]);
+  React.useEffect(() => { setView(_normalizeView(incomingState)); }, [incomingState]);
 
   const selected = _um_cast(() => dossierList.find((c) => c.id === selectedId), [dossierList, selectedId]);
 
@@ -1422,13 +1427,6 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
     />;
   }
   if (view === "edit")    return <CastEdit c={selected} onCancel={() => setView("selected")} onSave={() => setView("selected")}/>;
-  // "review" / "suggestion" used to render cast-local triage lists; cast
-  // candidates now live exclusively in the central extractions review queue
-  // (open via the inline CTA on the dossier).
-  if (view === "review" || view === "suggestion") {
-    try { window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "review", entityType: "cast" } })); } catch (_) {}
-    return <div className="cast"/>;
-  }
   if (view === "selected" && selected) {
     return (
       <CastDetail

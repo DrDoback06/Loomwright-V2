@@ -262,7 +262,11 @@ const DockedPanel = ({
           // the panel body so Accept / Edit / Merge / Deny are clickable in
           // the actual UI — not only via the service layer.
           const _reviewItems = panel.reviewItems || [];
-          const reviewQueueEl = (panel.entityType && _reviewItems.length && typeof EntityReviewQueue !== "undefined")
+          // Cast extractions live exclusively in the central Review Queue
+          // panel (kind: "review"). The Cast dossier shows the actor
+          // roster only; a CTA chip inside CastBrowse links to the queue.
+          const _suppressReviewBlock = panel.entityType === "cast";
+          const reviewQueueEl = (!_suppressReviewBlock && panel.entityType && _reviewItems.length && typeof EntityReviewQueue !== "undefined")
             ? <EntityReviewQueue
                 entityType={panel.entityType}
                 items={_reviewItems}
