@@ -50,8 +50,8 @@ test.describe("T20. Cast dossier — live hub", () => {
     await expect(dossier).toContainText("twenty-nine winters");
     await expect(dossier).toContainText("she/her");
     // Traits — strengths render with the positive tone, flaws with negative.
-    await expect(dossier.locator(".cast-trait--positive")).toContainText("watchful");
-    await expect(dossier.locator(".cast-trait--negative")).toContainText("secret-keeping");
+    await expect(dossier.locator(".cast-trait--positive", { hasText: "watchful" })).toBeVisible();
+    await expect(dossier.locator(".cast-trait--negative", { hasText: "secret-keeping" })).toBeVisible();
     // Role chip uses the normalized role class.
     await expect(dossier.locator(".cast-row__role--protagonist")).toBeVisible();
   });
@@ -113,8 +113,15 @@ test.describe("T20. Cast dossier — live hub", () => {
     const scrubber = page.locator("[data-testid='cast-scrubber']");
     await expect(scrubber).toBeVisible();
     await expect(scrubber).toHaveAttribute("max", "3");
-    // Scrub back to Ch.1 — the "As of Ch. 1" state chip appears.
-    await scrubber.evaluate((el) => { el.value = "1"; el.dispatchEvent(new Event("change", { bubbles: true })); el.dispatchEvent(new Event("input", { bubbles: true })); });
+    // Scrub back to Ch.1. React tracks the input value internally, so a plain
+    // `el.value = ...` assignment is ignored — set via the native descriptor
+    // before dispatching "input" so React's onChange runs.
+    await scrubber.evaluate((el) => {
+      const proto = window.HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+      setter.call(el, "1");
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     await expect(page.locator("[data-testid='cast-scrub-state']")).toContainText("As of Ch. 1", { timeout: 3000 });
     // The first quote ("Brec rode in.") shows up (Ch.1).
     await expect(dossier.locator(".cast-quote")).toContainText("Brec rode in.");
