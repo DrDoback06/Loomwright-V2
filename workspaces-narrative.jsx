@@ -24,30 +24,49 @@ function _wnSearch(items, q, fields = ["name", "label", "title", "subtitle"]) {
 // =====================================================================
 // CAST DOSSIER WORKSPACE -----------------------------------------------
 // =====================================================================
-const CastDossierWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible, toast, onDismissToast }) => {
-  const cast = _wnSamples("cast");
-  const fallback = [
-    { id: "c-ael", name: "Aelinor Vey",   title: "Queen of the Pale Reach", initials: "AV", quote: "the small dark queen of the Pale Reach", chapters: "Ch.1–7" },
-    { id: "c-bre", name: "Captain Brec",  title: "Watchhouse Captain",      initials: "CB", quote: "the cold had settled into his face — not as colour but as architecture", chapters: "Ch.2–5" },
-    { id: "c-sar", name: "Saren of Hess", title: "Auger-keeper",            initials: "SH", quote: "Saren of Hess sent me to bring", chapters: "Ch.3–7" },
-    { id: "c-mar", name: "Mara of Hess",  title: "Saren's sister",          initials: "MH", chapters: "Ch.4" },
-    { id: "c-dav", name: "Dav the Quiet", title: "Drover",                  initials: "DQ", chapters: "Ch.6" },
-  ];
-  const items = cast.length ? cast.map((c, i) => ({ ...c, initials: (c.name || "C").split(/\s+/).map((w) => w[0]).slice(0,2).join("").toUpperCase() })) : fallback;
+// Small italic placeholder for sections without recorded data — the
+// fullscreen dossier used to fall back to hardcoded Aelinor/Brec text;
+// now it shows a clear empty state instead.
+const CdwEmpty = ({ children }) => (
+  <span style={{ color: "var(--ink-4)", fontStyle: "italic" }}>{children}</span>
+);
 
-  const [selectedId, setSelectedId] = _wn_us(items[0]?.id || null);
+const CastDossierWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible, toast, onDismissToast }) => {
+  // Resolve once per render — picks up live entity updates because the
+  // workspace re-renders on storeVersion changes via the outer app shell.
+  const liveEntities = _wn_um(() => {
+    try { return window.LoomwrightBackend?.EntityService?.listSync?.("cast") || []; }
+    catch (_) { return []; }
+  }, []);
+  const dossiers = _wn_um(() => {
+    const ctx = window.buildCastDossierContext ? window.buildCastDossierContext() : null;
+    if (!ctx || !window.liveCastToDossier) return [];
+    return liveEntities.map((e) => window.liveCastToDossier(e, ctx)).filter(Boolean);
+  }, [liveEntities]);
+
+  const [selectedId, setSelectedId] = _wn_us(dossiers[0]?.id || null);
   const [search, setSearch] = _wn_us("");
   const [filter, setFilter] = _wn_us("all");
   const [tab, setTab] = _wn_us("relationships");
 
-  const filtered = _wnSearch(items, search);
-  const selected = items.find((x) => x.id === selectedId) || filtered[0];
+  const filtered = _wnSearch(dossiers, search);
+  const selected = dossiers.find((x) => x.id === selectedId) || filtered[0] || dossiers[0] || null;
 
-  // Equipment slots (mock structure on selected.equipment)
-  const slots = selected?.equipment || {
-    Head: null, Body: "Salt-cloak", "Off Hand": "Auger of Hess", "Main Hand": "Felt-lined case",
-    Belt: "Brec's letter", Boots: "Mud-darkened boots",
-  };
+  // Equipment slots — derived from liveCastToDossier.equippedBySlot
+  // (built from item.data.slot links). Render the canonical six-slot
+  // layout regardless of which slots are filled, so the user can drop
+  // items into empty slots.
+  const SLOT_ORDER = ["Head", "Body", "Main Hand", "Off Hand", "Belt", "Boots"];
+  const slots = _wn_um(() => {
+    const out = Object.fromEntries(SLOT_ORDER.map((s) => [s, null]));
+    if (selected?.equippedBySlot) {
+      for (const [slot, arr] of Object.entries(selected.equippedBySlot)) {
+        const key = SLOT_ORDER.find((s) => s.toLowerCase() === slot.toLowerCase()) || slot;
+        out[key] = (arr && arr[0] && arr[0].name) || null;
+      }
+    }
+    return out;
+  }, [selected]);
 
   return (
     <WorkspaceShell
@@ -62,7 +81,7 @@ const CastDossierWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible,
         <>
           <div className="fws-section">
             <span className="fws-section__title">Roster</span>
-            <span className="fws-section__count">{items.length}</span>
+            <span className="fws-section__count">{dossiers.length}</span>
           </div>
           <div style={{ padding: "6px 10px 0" }}>
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search cast…"
@@ -70,7 +89,7 @@ const CastDossierWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible,
           </div>
           <WorkspaceFilters
             filters={[
-              { key: "all", label: "All", count: items.length },
+              { key: "all", label: "All", count: dossiers.length },
               { key: "leads", label: "Leads" },
               { key: "minor", label: "Minor" },
               { key: "review", label: "Review" },
@@ -78,7 +97,11 @@ const CastDossierWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible,
             active={filter} onChange={setFilter}
           />
           <div className="fws-roster">
-            {filtered.map((it) => (
+            {filtered.length === 0 ? (
+              <div style={{ padding: "16px 12px", fontSize: 12, color: "var(--ink-3)" }}>
+                No cast yet. Create one or extract from the manuscript.
+              </div>
+            ) : filtered.map((it) => (
               <WorkspaceRosterRow key={it.id}
                 item={{ ...it, entityType: "cast" }}
                 selected={selectedId === it.id}
@@ -86,8 +109,8 @@ const CastDossierWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible,
                 onDragStart={() => {}}
                 avatar={it.initials || (it.name || "?")[0]}
                 name={it.name}
-                sub={it.title || it.subtitle}
-                meta={it.chapters || it.meta}
+                sub={it.epithet || it.title || ""}
+                meta={it.chapterRange || ""}
               />
             ))}
           </div>
@@ -100,20 +123,22 @@ const CastDossierWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible,
               <div className="fws-dossier__portrait">{selected.initials || (selected.name || "?")[0]}</div>
               <div>
                 <h2 className="fws-dossier__name">{selected.name}</h2>
-                {selected.quote && <p className="fws-dossier__quote">"{selected.quote}"</p>}
+                {selected.quotes && selected.quotes[0] && selected.quotes[0].text && (
+                  <p className="fws-dossier__quote">"{selected.quotes[0].text}"</p>
+                )}
                 <div className="fws-dossier__chips">
-                  <span className="fws-chip">{selected.chapters || "Ch.1–7"}</span>
-                  <span className="fws-chip">{selected.title || "—"}</span>
-                  {selected.race && <span className="fws-chip">{selected.race}</span>}
-                  {selected.class && <span className="fws-chip">{selected.class}</span>}
+                  {selected.chapterRange && <span className="fws-chip">{selected.chapterRange}</span>}
+                  {selected.epithet && <span className="fws-chip">{selected.epithet}</span>}
+                  {selected.role && <span className="fws-chip">{selected.role}</span>}
+                  {selected.affiliation && <span className="fws-chip">{selected.affiliation}</span>}
                 </div>
               </div>
             </div>
 
             <WorkspaceCard title="Biography" sub="From manuscript + dossier"
-              action={<button className="fws-section__action" onClick={() => onRequest.openEntityEditor({ type: "cast", initial: selected })}>Edit</button>}>
+              action={<button className="fws-section__action" onClick={() => onRequest.openEntityEditor({ type: "cast", initial: { id: selected.id } })}>Edit</button>}>
               <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontSize: 14, color: "var(--ink-1)", lineHeight: 1.65 }}>
-                {selected.biography || "A coastal noblewoman of small house and stubborn habit, born to the Pale Reach and trained in the keeping of the Auger. Aelinor returned to her family seat when Captain Brec's letter brought news of an Auger Wake. She does not yet know the cost of carrying it."}
+                {selected.summary || selected.backstory || <CdwEmpty>No biography yet — click Edit to add a summary or backstory.</CdwEmpty>}
               </p>
             </WorkspaceCard>
 
@@ -122,19 +147,19 @@ const CastDossierWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible,
                 <div>
                   <div className="fws-section__title" style={{ marginBottom: 4 }}>Appearance</div>
                   <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontSize: 12, color: "var(--ink-2)", lineHeight: 1.55 }}>
-                    Small, dark, sharp-featured. Hands kept gloved. Coastal pallor.
+                    {selected.appearance || <CdwEmpty>Not yet recorded.</CdwEmpty>}
                   </p>
                 </div>
                 <div>
                   <div className="fws-section__title" style={{ marginBottom: 4 }}>Personality</div>
                   <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontSize: 12, color: "var(--ink-2)", lineHeight: 1.55 }}>
-                    Quiet, decisive, slow to forgive. Carries grief like a folded letter.
+                    {selected.personality || <CdwEmpty>Not yet recorded.</CdwEmpty>}
                   </p>
                 </div>
                 <div>
                   <div className="fws-section__title" style={{ marginBottom: 4 }}>Voice</div>
                   <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontSize: 12, color: "var(--ink-2)", lineHeight: 1.55 }}>
-                    Short, weighted sentences. Tends toward image, away from explanation.
+                    {selected.voiceProfile || selected.speechStyle || <CdwEmpty>Not yet recorded.</CdwEmpty>}
                   </p>
                 </div>
               </div>
@@ -164,18 +189,36 @@ const CastDossierWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible,
                   </div>
                 ))}
               </div>
+              {selected.inventory && selected.inventory.length > 0 && (
+                <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {selected.inventory.map((it) => (
+                    <span key={it.id} className="fws-chip" title={it.note || ""}>{it.name}</span>
+                  ))}
+                </div>
+              )}
             </WorkspaceCard>
 
             <WorkspaceCard title="Goals · Fears · Secrets">
-              <WorkspaceKV rows={[
-                { k: "Wants", v: "To deliver the Auger of Hess and survive Pale Reach." },
-                { k: "Needs", v: "To forgive what Saren did to her sister." },
-                { k: "Fears", v: "Becoming her mother. Sleep. The dreams." },
-                { k: "Secret", v: "She knows what the Auger does to the bearer. She did not tell Brec." },
-              ]}/>
+              {(selected.goals && selected.goals.length) || (selected.needs && selected.needs.length) || (selected.fears && selected.fears.length) || selected.secret || selected.arcSummary ? (
+                <WorkspaceKV rows={[
+                  { k: "Goals", v: selected.goals && selected.goals.length
+                    ? selected.goals.map((g) => typeof g === "string" ? g : (g.label || g.name)).join("; ")
+                    : <CdwEmpty>Not yet set.</CdwEmpty> },
+                  { k: "Needs", v: selected.needs && selected.needs.length
+                    ? selected.needs.map((g) => typeof g === "string" ? g : (g.label || g.name)).join("; ")
+                    : <CdwEmpty>Not yet set.</CdwEmpty> },
+                  { k: "Fears", v: selected.fears && selected.fears.length
+                    ? selected.fears.map((g) => typeof g === "string" ? g : (g.label || g.name)).join("; ")
+                    : <CdwEmpty>Not yet set.</CdwEmpty> },
+                  { k: "Secret", v: selected.secret || <CdwEmpty>Not yet set.</CdwEmpty> },
+                  { k: "Arc", v: selected.arcSummary || <CdwEmpty>Not yet set.</CdwEmpty> },
+                ]}/>
+              ) : (
+                <CdwEmpty>No goals, fears, or arc recorded yet — click Edit on the biography card to add them.</CdwEmpty>
+              )}
             </WorkspaceCard>
           </>
-        ) : <div className="fws-empty">Select a character.</div>
+        ) : <div className="fws-empty">No cast yet. Create one to see the dossier.</div>
       }
       right={
         <>
@@ -191,73 +234,96 @@ const CastDossierWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible,
           />
           <div className="fws-tab-body">
             {tab === "relationships" && (
-              <>
-                {[
-                  { who: "Captain Brec", how: "Trusts; old debt" },
-                  { who: "Saren of Hess", how: "Sister of an enemy; bound by oath" },
-                  { who: "Mara of Hess", how: "Owes vengeance" },
-                ].map((r, i) => (
-                  <div key={i} style={{ padding: "8px 10px", background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)", marginBottom: 4, fontSize: 12 }}>
-                    <div style={{ fontFamily: "var(--font-serif)", color: "var(--ink-1)" }}>{r.who}</div>
-                    <div style={{ color: "var(--ink-3)", fontSize: 11 }}>{r.how}</div>
+              selected && selected.relationships && selected.relationships.length ? (
+                <>
+                  {selected.relationships.map((r, i) => (
+                    <div key={r.id || i} style={{ padding: "8px 10px", background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)", marginBottom: 4, fontSize: 12 }}>
+                      <div style={{ fontFamily: "var(--font-serif)", color: "var(--ink-1)" }}>{r.name}</div>
+                      <div style={{ color: "var(--ink-3)", fontSize: 11 }}>{r.kind || "linked"}</div>
+                    </div>
+                  ))}
+                  <button className="fws-section__action" onClick={() => onRequest.openPanel("relationships")} style={{ marginTop: 6 }}>Open Relationship Map →</button>
+                </>
+              ) : (
+                <>
+                  <CdwEmpty>No relationships linked yet.</CdwEmpty>
+                  <div style={{ marginTop: 8 }}>
+                    <button className="fws-section__action" onClick={() => onRequest.openPanel("relationships")}>Open Relationship Map →</button>
                   </div>
-                ))}
-                <button className="fws-section__action" onClick={() => onRequest.openPanel("relationships")} style={{ marginTop: 6 }}>Open Relationship Map →</button>
-              </>
+                </>
+              )
             )}
             {tab === "stats" && (
-              <>
-                {[
-                  { name: "Sleep",   v: 4, max: 10 },
-                  { name: "Grief",   v: 6, max: 10 },
-                  { name: "Cunning", v: 8, max: 10 },
-                  { name: "Standing", v: 7, max: 10 },
-                ].map((s, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", fontSize: 12 }}>
-                    <span style={{ flex: 1, fontFamily: "var(--font-serif)" }}>{s.name}</span>
-                    <div style={{ flex: 1, height: 6, background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: 999, overflow: "hidden" }}>
-                      <div style={{ width: (s.v / s.max * 100) + "%", height: "100%", background: "var(--accent)" }}/>
+              selected && selected.stats && selected.stats.length ? (
+                <>
+                  {selected.stats.map((s, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", fontSize: 12 }}>
+                      <span style={{ flex: 1, fontFamily: "var(--font-serif)" }}>{s.k}</span>
+                      <div style={{ flex: 1, height: 6, background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: 999, overflow: "hidden" }}>
+                        <div style={{ width: (Math.max(0, Math.min(s.v, s.max)) / (s.max || 10) * 100) + "%", height: "100%", background: "var(--accent)" }}/>
+                      </div>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--ink-3)" }}>{s.v}/{s.max}</span>
                     </div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--ink-3)" }}>{s.v}/{s.max}</span>
+                  ))}
+                  <button className="fws-section__action" onClick={() => onRequest.openPanel("stats")} style={{ marginTop: 6 }}>Open Stat Lab →</button>
+                </>
+              ) : (
+                <>
+                  <CdwEmpty>No stats recorded.</CdwEmpty>
+                  <div style={{ marginTop: 8 }}>
+                    <button className="fws-section__action" onClick={() => onRequest.openPanel("stats")}>Open Stat Lab →</button>
                   </div>
-                ))}
-                <button className="fws-section__action" onClick={() => onRequest.openPanel("stats")} style={{ marginTop: 6 }}>Open Stat Lab →</button>
-              </>
+                </>
+              )
             )}
             {tab === "skills" && (
-              <>
-                {["Salt-walker", "Auger-reading", "Quiet step"].map((n, i) => (
-                  <span key={i} className="fws-chip" style={{ marginRight: 4, marginBottom: 4 }}>{n}</span>
-                ))}
-                <div style={{ marginTop: 10 }}>
-                  <button className="fws-section__action" onClick={() => onRequest.openPanel("skillTrees")}>Open Skill Tree Editor →</button>
-                </div>
-              </>
-            )}
-            {tab === "involvement" && (
-              <>
-                <div className="fws-section__title" style={{ marginBottom: 6 }}>Quests</div>
-                {["The Auger of Hess", "The Salt-bitten Cloak"].map((n, i) => (
-                  <button key={i} className="fws-chip" style={{ marginRight: 4, marginBottom: 4 }} onClick={() => onRequest.openPanel("quests")}>{n}</button>
-                ))}
-                <div className="fws-section__title" style={{ marginTop: 12, marginBottom: 6 }}>Events</div>
-                {["The Auger Wake", "Brec's Letter Arrives"].map((n, i) => (
-                  <button key={i} className="fws-chip" style={{ marginRight: 4, marginBottom: 4 }} onClick={() => onRequest.openPanel("events")}>{n}</button>
-                ))}
-              </>
-            )}
-            {tab === "source" && (
-              <>
-                {[
-                  { ch: "Ch.1", q: "…when Aelinor Vey came through the stockade gate." },
-                  { ch: "Ch.2", q: "She carried the Auger of Hess in a felt-lined case…" },
-                ].map((m, i) => (
-                  <div key={i} style={{ padding: 10, background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)", marginBottom: 6, fontSize: 12 }}>
-                    <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 4 }}>{m.ch}</div>
-                    <div style={{ fontFamily: "var(--font-serif)", fontStyle: "italic", color: "var(--ink-1)" }}>"{m.q}"</div>
+              selected && selected.abilities && selected.abilities.length ? (
+                <>
+                  {selected.abilities.map((a, i) => (
+                    <span key={i} className="fws-chip" style={{ marginRight: 4, marginBottom: 4 }} title={a.desc || ""}>{a.name}</span>
+                  ))}
+                  <div style={{ marginTop: 10 }}>
+                    <button className="fws-section__action" onClick={() => onRequest.openPanel("skillTrees")}>Open Skill Tree Editor →</button>
                   </div>
-                ))}
-              </>
+                </>
+              ) : (
+                <>
+                  <CdwEmpty>No abilities or skills recorded.</CdwEmpty>
+                  <div style={{ marginTop: 8 }}>
+                    <button className="fws-section__action" onClick={() => onRequest.openPanel("skillTrees")}>Open Skill Tree Editor →</button>
+                  </div>
+                </>
+              )
+            )}
+            {tab === "involvement" && (() => {
+              const quests = (selected && selected.relatedQuests) || [];
+              const events = (selected && selected.relatedEvents) || [];
+              return (
+                <>
+                  <div className="fws-section__title" style={{ marginBottom: 6 }}>Quests</div>
+                  {quests.length === 0 ? <CdwEmpty>None yet.</CdwEmpty> : quests.map((n, i) => (
+                    <button key={i} className="fws-chip" style={{ marginRight: 4, marginBottom: 4 }} onClick={() => onRequest.openPanel("quests")}>{n.label || n.name}</button>
+                  ))}
+                  <div className="fws-section__title" style={{ marginTop: 12, marginBottom: 6 }}>Events</div>
+                  {events.length === 0 ? <CdwEmpty>None yet.</CdwEmpty> : events.map((n, i) => (
+                    <button key={i} className="fws-chip" style={{ marginRight: 4, marginBottom: 4 }} onClick={() => onRequest.openPanel("events")}>{n.label || n.name}</button>
+                  ))}
+                </>
+              );
+            })()}
+            {tab === "source" && (
+              selected && selected._allQuotes && selected._allQuotes.length ? (
+                <>
+                  {selected._allQuotes.slice(0, 12).map((m, i) => (
+                    <div key={i} style={{ padding: 10, background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)", marginBottom: 6, fontSize: 12 }}>
+                      <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 4 }}>{m.cite}</div>
+                      <div style={{ fontFamily: "var(--font-serif)", fontStyle: "italic", color: "var(--ink-1)" }}>"{m.text}"</div>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <CdwEmpty>No manuscript mentions yet. Extract from the manuscript to populate.</CdwEmpty>
+              )
             )}
           </div>
         </>

@@ -262,29 +262,14 @@ const DockedPanel = ({
           // the panel body so Accept / Edit / Merge / Deny are clickable in
           // the actual UI — not only via the service layer.
           const _reviewItems = panel.reviewItems || [];
-          // Cast extractions live exclusively in the central Review Queue
-          // panel (kind: "review"). The Cast dossier shows the actor
-          // roster only; a CTA chip inside CastBrowse links to the queue.
-          const _suppressReviewBlock = panel.entityType === "cast";
-          const reviewQueueEl = (!_suppressReviewBlock && panel.entityType && _reviewItems.length && typeof EntityReviewQueue !== "undefined")
-            ? <EntityReviewQueue
-                entityType={panel.entityType}
-                items={_reviewItems}
-                state="default"
-                filters={{}} setFilters={() => {}}
-                selectedIds={[]} setSelectedIds={() => {}}
-                onAcceptQueueItem={bespokeProps.onAcceptQueueItem}
-                onEditQueueItem={bespokeProps.onEditQueueItem}
-                onMergeQueueItem={bespokeProps.onMergeQueueItem}
-                onDenyQueueItem={bespokeProps.onDenyQueueItem}
-                onKeepAutoAddedItem={bespokeProps.onKeepAutoAddedItem}
-                onRemoveAutoAddedItem={bespokeProps.onRemoveAutoAddedItem}
-                onBulkAcceptQueueItems={(ids) => window.LoomwrightDispatchCallback?.("onBulkAcceptQueueItems", { detail: { ids }, entityType: panel.entityType })}
-                onBulkDenyQueueItems={(ids) => window.LoomwrightDispatchCallback?.("onBulkDenyQueueItems", { detail: { ids }, entityType: panel.entityType })}
-                onBulkMergeQueueItems={(ids) => window.LoomwrightDispatchCallback?.("onBulkMergeQueueItems", { detail: { ids }, entityType: panel.entityType })}
-                onOpenRelatedTab={onSelectEntity}
-              />
-            : null;
+          // Extractions for every entity type live in the central Review
+          // Queue panel (kind: "review"). Entity tabs show their dossier
+          // only — never the review block. Each entity dossier surfaces
+          // a count chip linking to the queue.
+          const reviewQueueEl = null;
+          // Keep _reviewItems alive for tooling — referenced from CTA chips
+          // inside individual dossiers via ReviewService.listSync.
+          void _reviewItems;
           const body = (() => {
           if (panel.id === "p-speedReader" && typeof SpeedReaderPanelBody !== "undefined") return <SpeedReaderPanelBody {...bespokeProps}/>;
           if (panel.entityType === "atlas" && typeof AtlasPanelBody !== "undefined") return <AtlasPanelBody {...bespokeProps}/>;

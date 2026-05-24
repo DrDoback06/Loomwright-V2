@@ -506,11 +506,14 @@ const liveCastToDossier = (entity, ctx = {}) => {
     summary: d.summary || d.description || "",
     arcSummary: d.arcSummary || "",
     backstory: d.backstory || "",
+    appearance: d.appearance || "",
     personality: d.personality || "",
     voiceProfile: d.voiceProfile || "",
     speechStyle: d.speechStyle || "",
-    goals: Array.isArray(d.goals) ? d.goals : [],
-    fears: Array.isArray(d.fears) ? d.fears : [],
+    goals: Array.isArray(d.goals) ? d.goals : (typeof d.goals === "string" ? [d.goals] : []),
+    needs: Array.isArray(d.needs) ? d.needs : (typeof d.needs === "string" ? [d.needs] : []),
+    fears: Array.isArray(d.fears) ? d.fears : (typeof d.fears === "string" ? [d.fears] : []),
+    secret: d.secret || d.secrets || "",
     writingInstructions: d.writingInstructions || "",
     traits,
     relationships,
@@ -1624,5 +1627,9 @@ const CastShowMore = ({ children, threshold = 3, more = "Show all", less = "Show
 Object.assign(window, {
   CastPanelBody, CastBrowse, CastDetail, CastEdit, CastEmpty,
   CastStats, CastAbilities, CastSkillTree, CastInventory, CastEquipmentSlots, CastShowMore,
+  // Live-data helpers reused by the fullscreen Cast Dossier Workspace
+  // (workspaces-narrative.jsx) so it can bind to real entity data with
+  // the same shape the side panel uses — no placeholder Aelinor text.
+  buildCastDossierContext, liveCastToDossier,
   CAST_SAMPLE, CAST_SUGGESTIONS_SAMPLE,
 });
