@@ -485,3 +485,35 @@
   color: var(--tl-ink-1);
   cursor: pointer;
 }
+
+/* ---------------------------------------------------------------------
+   Empty states — designed parchment cards (live panel, no demo data)
+   --------------------------------------------------------------------- */
+.tl-empty {
+  margin: 18px auto;
+  max-width: 420px;
+  text-align: center;
+  padding: 28px 20px;
+  color: var(--tl-ink-2);
+  background: var(--tl-paper-2);
+  border: 1px dashed var(--tl-line-1);
+  border-radius: 6px;
+}
+.tl-empty__title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--tl-ink-1);
+  margin-bottom: 6px;
+}
+.tl-empty__body {
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.tl-empty__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}

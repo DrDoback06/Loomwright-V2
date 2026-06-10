@@ -1501,7 +1501,7 @@ const AppShell = () => {
             </div>
             <div><b>Skill Trees:</b> {(window.SKILL_TREES || []).length} trees · {(window.SKILL_ORPHANS || []).length} orphans · {(window.SKILL_REVIEW || []).length} review</div>
             <div><b>Relationships:</b> {(window.LoomwrightBackend?.LinkService?.listRelationshipEdgesSync?.() || []).length} edges · {(window.LoomwrightBackend?.ReviewService?.listSync?.("relationships") || []).length} review</div>
-            <div><b>Timeline:</b> {(window.TL_EVENTS || []).length} events · {(window.TL_ERAS || []).length} eras · {(window.TL_REVIEW || []).length} review</div>
+            <div><b>Timeline:</b> {((window.LoomwrightBackend?.EntityService?.listSync?.("events") || []).length + (window.LoomwrightBackend?.EntityService?.listSync?.("timeline") || []).length)} events · {((window.LoomwrightBackend?.ReviewService?.listSync?.("events") || []).length + (window.LoomwrightBackend?.ReviewService?.listSync?.("timeline") || []).length)} review</div>
             <div><b>Lore:</b> {(window.CANON_FACTS || []).length} facts · {(window.CANON_CONTRADICTIONS || []).length} contras · {(window.CANON_AI_INSTRUCTIONS || []).length} AI rules</div>
             <div><b>References:</b> {(window.REFERENCES || []).length} refs · {(window.REFERENCES || []).filter((r) => r.aiContext).length} in AI context</div>
           </div>

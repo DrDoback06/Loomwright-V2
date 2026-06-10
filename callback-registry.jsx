@@ -866,9 +866,10 @@
 
     // —— Entity Extraction Wizard (the big-extraction window) ——
     // These were previously unwired ("the wizard opens but does nothing").
-    if (name === "onOpenExtractionWizard" || name === "onExtractCast" || name === "onExtractLocations") {
+    if (name === "onOpenExtractionWizard" || name === "onExtractCast" || name === "onExtractLocations" || name === "onExtractEvents") {
       const typeFocus = name === "onExtractCast" ? "cast"
         : name === "onExtractLocations" ? "locations"
+        : name === "onExtractEvents" ? "events"
         : (ctx.detail?.typeFocus || null);
       window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", {
         detail: { scope: ctx.detail?.scope || "manuscript", typeFocus, chapterId: ctx.detail?.chapterId || null },
