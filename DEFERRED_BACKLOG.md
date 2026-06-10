@@ -1,10 +1,29 @@
 # Deferred backlog
 
-Updated after the full completion pass (Area 4 visual tabs → Phase 18).
+Updated after completion pass 2 (extraction upgrades + surface gaps).
 Everything below the line is **done and verified**; the short list at the
 bottom is what remains intentionally out of scope.
 
-## Completed in the full completion pass
+## Completed in completion pass 2
+
+### Day 1 — extraction model upgrades (E1–E6, spec 34, smoke [exq]/[pron]/[enrich])
+- AI deep-pass fields map onto real editor fields on accept (`mapAiPayloadToData`); owner/member names resolve to entity refs.
+- Fuzzy near-duplicate names (≥0.80) promote to merge suggestions instead of new records; discovery skips near-existing names.
+- Title/epithet alias clustering ("Captain Brec" ↔ "Brec").
+- Offline pronoun resolution (he/she/they → recent gender-compatible cast mention, flagged `isPronounResolution`); dossier mention counts benefit.
+- Detector confidence calibration + chunk-overlap dedupe by offsets.
+- "Fill from manuscript" per-entity enrichment (Cast dossier chip + entity editor footer; provider-gated with a useful local path).
+
+### Day 2 — every remaining demo surface live (S1–S7, spec 36)
+- Research Library: real linked-entity chips + inline Link-entity picker; AI/style/canon toggles persist.
+- Trash: workspace + docked panel fully live (real rows, preview, restore, double-confirmed purge).
+- Relationship workspace embeds the live graph + live health rail.
+- Command palette: demo rows deleted; real actions; designed empty state; index-update re-search.
+- System docked panels live: Review (cross-type queue), Today, Recent (audit activity), Active references; honest Notifications empty state.
+- Legacy purge: panels.jsx deleted; legacy settings fallback + demo Speed Reader workspace removed; Tangle workspace renders the real canvas; speed reader reads YOUR chapters (samples only with the sample project).
+- Settings ▸ Extraction: per-detector confidence sliders driving the live detectors.
+
+## Completed in the full completion pass (pass 1)
 
 ### Area 4 — every visual tab live (phases 1–7)
 - Relationships: all six designed modes live (`LinkService.listRelationshipEdgesSync`, spec 21).

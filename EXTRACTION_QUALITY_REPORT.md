@@ -1,6 +1,22 @@
-# Extraction Quality Pass 1 — Report
+# Extraction Quality — Report
 
-_Created: 2026-05-19, on branch `claude/extraction-quality-pass`._
+_Pass 1 created 2026-05-19; **Pass 2 added 2026-06-10** (Day 1 of
+completion pass 2)._
+
+## Pass 2 (2026-06-10) — "convert information better"
+
+| Item | What changed | Verified by |
+|------|--------------|-------------|
+| E1 field mapping | `mapAiPayloadToData(entityType, payload)` maps AI deep-pass fields onto the real editor field ids (cast role/tags, item type/rarity/owner, quest type/status/objectives→steps, event timeline position/significance, location & lore kind/significance, faction kind/goals/stance/members, skill effect/tier/learnedBy). `buildCandidate` lifts mapped fields into `suggestedChanges`; owner/member names resolve to `{id,name,type}` refs. Accepting a deep-pass item now lands its rich fields on `entity.data`. | spec 34 test 1; smoke [exq] |
+| E2 fuzzy dedupe | New-name candidates re-probe existing entities at ≥0.80: 0.80–0.85 promotes to `ambiguous` + `suggestedAction: "merge"` with `existingEntityId`; `discoverEntities` skips near-existing names (incl. after honorific strip). | spec 34 test 2; smoke [exq] |
+| E3 alias clustering | `clusterAliases` strips honorifics (Captain/Lord/Lady/…) and merges titled forms + shared-last-token epithets into one cluster with aliases. | smoke [exq] |
+| E4 pronoun resolution | `resolvePronounsInText` — sentence-local he/she/they to the most recent gender-compatible cast mention (cast `data.pronouns`/`gender` honoured, 2-sentence lookback), occurrences flagged `isPronounResolution` at reduced confidence; runs in `runExtraction` after the known-entity scan. Writer's Room highlights ignore pronoun rows; dossier mention counts include them. | spec 34 test 3; smoke [pron] |
+| E5 calibration + dedupe | `detectorConfidence(detectorId, opts)`: per-detector bases, Settings ▸ extraction.detectorConfidence overrides (now exposed as sliders), proximity boost; `dedupeCandidates` also keys on `startOffset:endOffset` to kill chunk-overlap duplicates. | smoke [exq]; spec 36 sliders test |
+| E6 Fill from manuscript | `enrichEntityFromManuscript` gathers the entity's occurrences + pending queue rows; with a provider routed, one focused AI call returns blanks-only field fills (pills snapped to allowed options, chips split) landed as `update`-shaped review candidates; local mode reports the pending count and routes to Review. Surfaced on the Cast dossier hero + entity editor footer. | spec 34 test 4; smoke [enrich] |
+
+_Pass 1 report below is unchanged._
+
+---
 
 ## Acceptance against `EXTRACTION_QUALITY_PLAN.md`
 

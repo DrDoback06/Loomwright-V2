@@ -1,7 +1,37 @@
 # Loomwright v2 — Implementation Status
 
-_Last updated: 2026-06-10 (full completion pass — Area 4 visual tabs,
-Alkemion features, deferred backlog cleared)._
+_Last updated: 2026-06-10 (completion pass 2 — extraction upgrades +
+final surface gaps; pass 1 covered Area 4 visual tabs, Alkemion
+features, deferred backlog)._
+
+## Completion pass 2 (2026-06-10)
+
+**Day 1 — extraction model ("convert information better"), spec 34 +
+smoke [exq] [pron] [enrich]:**
+- E1: AI deep-pass fields (role/traits, item type/rarity/owner, quest
+  objectives, faction members/goals, …) land on `entity.data` on accept;
+  names resolve to entity refs.
+- E2: near-duplicate names (fuzzy ≥0.80) become merge suggestions, not
+  new records; discovery skips near-existing names.
+- E3: honorific/epithet alias clustering ("Captain Brec" ↔ "Brec").
+- E4: offline pronoun resolution (sentence-local he/she/they, flagged
+  occurrences) enriches mention counts and derived views.
+- E5: per-detector confidence calibration + chunk-overlap dedupe.
+- E6: "Fill from manuscript" enrichment on the Cast dossier and entity
+  editor (provider-gated; local mode routes pending suggestions).
+
+**Day 2 — last demo surfaces went live (S1–S7), spec 36:**
+- Research Library inspector (real linked entities + Link-entity picker
+  + persisted toggles); Trash workspace AND docked panel (live rows,
+  preview, restore, purge); Relationship workspace (embedded live
+  graph + health rail); command palette (real actions, designed empty
+  state, index-refresh re-search); Review/Today/Recent/Active-refs
+  docked panels live; Settings ▸ Extraction detector sliders.
+- Legacy purge: panels.jsx (legacy renderer + demo state bodies)
+  deleted; unreachable settings fallback and demo Speed Reader
+  workspace removed; Tangle workspace renders the real canvas; speed
+  reader sources come from your chapters (samples only with the opt-in
+  sample project).
 
 ## Full completion milestone (2026-06-10)
 
