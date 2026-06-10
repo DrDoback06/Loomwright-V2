@@ -1459,6 +1459,43 @@ async function main() {
     log("[tangle] entity merge rebinds board nodes", rebound.entityId === castRow2.id);
   }
 
+  // --- [rt] RandomTableService — builtins, weighted rolls, copy-on-write ---
+  {
+    const RT = B.RandomTableService;
+    const builtins = RT.listSync().filter((t) => t.source === "builtin");
+    log("[rt] starter tables ship as builtins", builtins.length >= 3 && builtins.some((t) => t.name === "Plot twists"));
+    const mine = await RT.saveTable({
+      name: "Tavern rumours", category: "story",
+      rows: [{ text: "The miller pays in foreign coin.", weight: 1 }, { text: "Nobody has seen the ferryman in a week.", weight: 3 }],
+    });
+    log("[rt] saveTable persists a user table", RT.getSync(mine.id)?.rows.length === 2);
+    // Deterministic injectable RNG.
+    const seq = [0.05, 0.95];
+    let i = 0;
+    const rng = () => seq[(i++) % seq.length];
+    const rolled = RT.roll(mine.id, { count: 2, rng });
+    log("[rt] roll honours the injected RNG", rolled.length === 2 && rolled[0].text !== rolled[1].text);
+    // Weighting: weight 3 row dominates mid-range picks (total 4 → >0.25).
+    const mid = RT.roll(mine.id, { count: 1, rng: () => 0.6 });
+    log("[rt] weights skew the pick", mid[0].text === "Nobody has seen the ferryman in a week.");
+    // Unique never repeats within one roll.
+    const uniq = RT.roll(mine.id, { count: 5, unique: true, rng: () => 0.1 });
+    log("[rt] unique rolls never repeat", uniq.length === 2 && new Set(uniq.map((r) => r.text)).size === 2);
+    // Editing a builtin clones it (copy-on-write); the builtin stays.
+    const namesTable = builtins.find((t) => t.category === "names");
+    const copy = await RT.saveTable({ ...namesTable, name: "My names" });
+    log("[rt] builtin edits copy-on-write", copy.id !== namesTable.id && !!RT.getSync(namesTable.id));
+    log("[rt] builtins cannot be removed", (await RT.removeTable(namesTable.id)) === false);
+    // History logs and caps.
+    await RT.rollAndLog(mine.id, { count: 1, rng: () => 0.5 });
+    log("[rt] rollAndLog records history", RT.historySync().length >= 1 && RT.historySync()[0].tableName === "Tavern rumours");
+    // Export carries USER tables only (builtins are code, not data).
+    const rtExport = await B.ProjectArchiveService.buildExport({});
+    const exportedTables = (rtExport.randomTables && rtExport.randomTables.tables) || [];
+    log("[rt] export includes user tables and excludes builtins",
+      exportedTables.some((t) => t.id === mine.id) && !exportedTables.some((t) => t.source === "builtin"));
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

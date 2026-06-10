@@ -38,6 +38,7 @@ function wheelSlotsForContext(ctx, queueCount) {
     review,
     { id: "speed", icon: "eye", lbl: "Speed" },
     { id: "tangle", icon: "knot", lbl: "Tangle" },
+    { id: "roll", icon: "stack", lbl: "Roll" },
     { id: "more", icon: "more", lbl: "More…" },
   ];
 }
@@ -115,9 +116,10 @@ const PANEL_PRESETS = {
   trash:         { id: "p-trash",         kind: "system", icon: "trash",    title: "Trash",              subtitle: "30-day retention",          state: "empty" },
   notifs:        { id: "p-notifs",        kind: "system", icon: "warn",     title: "Notifications",      subtitle: "Warnings & alerts",         state: "empty" },
   settings:      { id: "p-settings",      kind: "system", icon: "gear",     title: "Settings",           subtitle: "Project & workspace",       state: "empty" },
-  tangle:        { id: "p-tangle",        kind: "system", icon: "knot",     title: "Tangle",             subtitle: "Plot-thread graph (soon)",  state: "empty" },
+  tangle:        { id: "p-tangle",        kind: "system", icon: "knot",     title: "Tangle",             subtitle: "Story board",               state: "empty" },
   speedReader:   { id: "p-speedReader",   kind: "system", icon: "eye",      title: "Speed Reader",       subtitle: "Skim the manuscript",       state: "empty" },
   aiWriter:      { id: "p-aiWriter",      kind: "system", icon: "sparkle",  title: "AI Writer",          subtitle: "Drafting assistant",        state: "overview" },
+  randomTables:  { id: "p-randomTables",  kind: "system", icon: "stack",    title: "Random Tables",      subtitle: "Generators",                state: "overview" },
 
   // Entity panels — render through CastPanelBody / AtlasPanelBody /
   // EntityFrameworkPanelBody depending on entityType. Each picks up its
@@ -1099,6 +1101,7 @@ const AppShell = () => {
         break;
       case "speed": onOpenPanel("speedReader"); break;
       case "tangle": onOpenPanel("tangle"); break;
+      case "roll": onOpenPanel("randomTables"); break;
       case "tag":
         if (ctx.entityId) window.dispatchEvent(new CustomEvent("lw:open-tag-modal", { detail: { targets: [{ id: ctx.entityId, type: ctx.entityType || "cast" }] } }));
         else notify("Select an entity to tag first.");

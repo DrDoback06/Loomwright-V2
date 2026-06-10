@@ -106,6 +106,7 @@ const NAV_ITEMS = [
   // Tools — also panels, separate group for clarity
   { id: "tangle",        label: "Tangle",        icon: "knot",     group: "tools",    kind: "panel", panelKind: "tangle" },
   { id: "speedReader",   label: "Speed Reader",  icon: "eye",      group: "tools",    kind: "panel", panelKind: "speedReader" },
+  { id: "randomTables",  label: "Random Tables", icon: "stack",    group: "tools",    kind: "panel", panelKind: "randomTables" },
   { id: "references",    label: "References",    icon: "paper",    group: "tools",    kind: "panel", entity: "references", panelKind: "references" },
 
   // Utilities — review queue & friends, demoted at bottom

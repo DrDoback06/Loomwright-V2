@@ -34,6 +34,7 @@
     sampleLoaded: "sample_project_loaded",
     occurrences: "entity_occurrences",
     tangle: "tangle_canvas",
+    randomTables: "random_tables",
     skillTrees: "skill_trees",
     searchIndex: "search_index",
     auditLog: "audit_log",
@@ -1820,6 +1821,156 @@
         return this.save({ ...state, nodes: next });
       }
       return state;
+    },
+  };
+
+  // -------------------------------------------------------------------
+  // RandomTableService — rollable tables (names, weather, twists, your
+  // own). Storage holds USER tables only; a small set of built-in
+  // starter tables (source: "builtin") is merged in at read time, never
+  // exported, and copy-on-write when edited. roll() is weighted and
+  // accepts an injectable RNG (deterministic in tests); rolls log into
+  // a capped history.
+  // -------------------------------------------------------------------
+  const BUILTIN_RANDOM_TABLES = [
+    {
+      id: "rt-builtin-names", source: "builtin", name: "Character names", category: "names", dice: "d12",
+      rows: ["Anwen", "Bram", "Cole", "Dara", "Edlyn", "Fenn", "Goran", "Hale", "Isolde", "Joss", "Kerr", "Lira"]
+        .map((text, i) => ({ id: "rtn-" + i, text, weight: 1 })),
+    },
+    {
+      id: "rt-builtin-weather", source: "builtin", name: "Weather", category: "scene", dice: "d10",
+      rows: [
+        "A thin rain that never quite commits.", "Fog off the water; sound carries strangely.",
+        "Hard frost — every step is loud.", "Heat that makes the road shimmer.",
+        "A wind that slams every door in the street.", "Low cloud; the light is flat and shadowless.",
+        "First snow, melting where it lands.", "A bright, hard morning after a storm.",
+        "Drizzle becoming sleet by evening.", "Still air, heavy, before thunder.",
+      ].map((text, i) => ({ id: "rtw-" + i, text, weight: 1 })),
+    },
+    {
+      id: "rt-builtin-twists", source: "builtin", name: "Plot twists", category: "story", dice: "d10",
+      rows: [
+        "An ally has been reporting to the other side — out of fear, not malice.",
+        "The object everyone wants is a decoy; the real one never left home.",
+        "A message arrives addressed to someone presumed dead.",
+        "The deadline moves up: what was a week is now tonight.",
+        "Two enemies need the same thing and must cooperate for one scene.",
+        "A debt from the protagonist's past is called in at the worst moment.",
+        "The safe place isn't: someone got there first.",
+        "A rumor the cast dismissed turns out to be half-true — the wrong half.",
+        "Someone confesses to a crime they didn't commit, to protect another.",
+        "The way back is gone; the only road is forward.",
+      ].map((text, i) => ({ id: "rtt-" + i, text, weight: 1 })),
+    },
+    {
+      id: "rt-builtin-objects", source: "builtin", name: "Found objects", category: "items", dice: "d10",
+      rows: [
+        "A key with a tooth missing.", "A letter, half-burned, the signature intact.",
+        "A child's toy soldier with real military insignia.", "A coin from a country that no longer exists.",
+        "A ledger with one page razored out.", "A locket holding a portrait of a stranger.",
+        "A knife too fine for its sheath.", "A map annotated in two different hands.",
+        "A bottle of medicine, full, past its time.", "A ring of keys — and one that matches nothing.",
+      ].map((text, i) => ({ id: "rto-" + i, text, weight: 1 })),
+    },
+  ];
+
+  const RandomTableService = {
+    defaultState() {
+      return { tables: [], history: [], updatedAt: nowIso() };
+    },
+    loadSync() {
+      const raw = StorageService.getSync(KEYS.randomTables, null);
+      if (!raw || !Array.isArray(raw.tables)) return this.defaultState();
+      return { history: [], ...raw };
+    },
+    async save(state) {
+      const next = { ...this.loadSync(), ...clone(state), updatedAt: nowIso() };
+      await StorageService.set(KEYS.randomTables, next);
+      window.dispatchEvent(new CustomEvent("lw:random-tables-updated", { detail: next }));
+      return next;
+    },
+    // Builtins + user tables (user tables may shadow nothing — ids differ).
+    listSync() {
+      return [...BUILTIN_RANDOM_TABLES, ...this.loadSync().tables];
+    },
+    getSync(id) {
+      return this.listSync().find((t) => t.id === id) || null;
+    },
+    isBuiltin(id) {
+      return BUILTIN_RANDOM_TABLES.some((t) => t.id === id);
+    },
+    historySync() {
+      return this.loadSync().history || [];
+    },
+    async saveTable(table = {}) {
+      const state = this.loadSync();
+      // Editing a builtin clones it into a user copy.
+      const editingBuiltin = table.id && this.isBuiltin(table.id);
+      const id = editingBuiltin || !table.id ? uuid("rt") : table.id;
+      const rows = (Array.isArray(table.rows) ? table.rows : []).map((r, i) =>
+        typeof r === "string"
+          ? { id: uuid("rtr"), text: r, weight: 1 }
+          : { id: r.id || uuid("rtr"), text: r.text || "", weight: Number(r.weight) > 0 ? Number(r.weight) : 1, entityRef: r.entityRef || null });
+      const row = {
+        id,
+        name: table.name || "New table",
+        category: table.category || "custom",
+        dice: table.dice || ("d" + Math.max(2, rows.length)),
+        rows,
+        createdAt: table.createdAt && !editingBuiltin ? table.createdAt : nowIso(),
+        updatedAt: nowIso(),
+      };
+      const exists = state.tables.some((t) => t.id === id);
+      await this.save({
+        ...state,
+        tables: exists ? state.tables.map((t) => (t.id === id ? row : t)) : [...state.tables, row],
+      });
+      return row;
+    },
+    async removeTable(id) {
+      if (this.isBuiltin(id)) return false;
+      const state = this.loadSync();
+      await this.save({ ...state, tables: state.tables.filter((t) => t.id !== id) });
+      return true;
+    },
+    // Weighted roll. opts: { count, unique, rng } — rng injectable for tests.
+    roll(tableId, opts = {}) {
+      const table = this.getSync(tableId);
+      if (!table || !table.rows.length) return [];
+      const count = Math.max(1, Math.min(20, Number(opts.count) || 1));
+      const unique = !!opts.unique;
+      const rng = typeof opts.rng === "function" ? opts.rng : Math.random;
+      const pool = table.rows.map((r) => ({ ...r, weight: Number(r.weight) > 0 ? Number(r.weight) : 1 }));
+      const out = [];
+      for (let i = 0; i < count && pool.length; i++) {
+        const total = pool.reduce((s, r) => s + r.weight, 0);
+        let pick = rng() * total;
+        let ix = 0;
+        for (; ix < pool.length; ix++) {
+          pick -= pool[ix].weight;
+          if (pick <= 0) break;
+        }
+        const row = pool[Math.min(ix, pool.length - 1)];
+        out.push({ rowId: row.id, text: row.text, entityRef: row.entityRef || null });
+        if (unique) pool.splice(Math.min(ix, pool.length - 1), 1);
+      }
+      return out;
+    },
+    async rollAndLog(tableId, opts = {}) {
+      const table = this.getSync(tableId);
+      const results = this.roll(tableId, opts);
+      if (!results.length) return { results, entry: null };
+      const entry = {
+        id: uuid("rtl"),
+        tableId,
+        tableName: table?.name || "Table",
+        results: results.map((r) => r.text),
+        at: nowIso(),
+      };
+      const state = this.loadSync();
+      await this.save({ ...state, history: [entry, ...(state.history || [])].slice(0, 30) });
+      return { results, entry };
     },
   };
 
@@ -4698,6 +4849,8 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       const tangle = await StorageService.get(KEYS.tangle, TangleService.defaultState());
       const speedReader = await StorageService.get(KEYS.speedReader, null);
       const extractionSession = await StorageService.get(KEYS.extractionSession, null);
+      // User-created random tables only (builtins are code, not data).
+      const randomTables = await StorageService.get(KEYS.randomTables, null);
 
       // Atlas state is derived: locations whose data.placed===true.
       const atlasPlaced = (entities.locations || []).filter((l) => l?.data?.placed === true).map((l) => ({
@@ -4730,6 +4883,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
         skillTrees,
         atlas: { placed: atlasPlaced },
         tangle,
+        randomTables,
         occurrences,
         reviewQueue: opts.includeReviewQueue ? reviewQueueAll : [],
         handoffLog,
@@ -4963,6 +5117,18 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       }
 
       // Tangle — id-based merge.
+      if (payload.randomTables) {
+        if (mode === "replace") await StorageService.set(KEYS.randomTables, payload.randomTables);
+        else {
+          const cur = await StorageService.get(KEYS.randomTables, RandomTableService.defaultState());
+          const tableMap = new Map((cur.tables || []).map((t) => [t.id, t]));
+          for (const t of (payload.randomTables.tables || [])) {
+            if (tableMap.has(t.id) && !overwrite) continue;
+            tableMap.set(t.id, t);
+          }
+          await StorageService.set(KEYS.randomTables, { ...cur, tables: [...tableMap.values()] });
+        }
+      }
       if (payload.tangle) {
         if (mode === "replace") await StorageService.set(KEYS.tangle, payload.tangle);
         else {
@@ -6208,6 +6374,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     HandoffService,
     TrashService,
     TangleService,
+    RandomTableService,
     AtlasService,
     SkillTreeService,
     SpeedReaderService,
