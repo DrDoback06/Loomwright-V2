@@ -1073,18 +1073,62 @@ const ControlField = ({ label, value, placeholder }) => (
 // =====================================================================
 // TRASH MANAGER --------------------------------------------------------
 // =====================================================================
+const _wsAgo = (iso) => {
+  if (!iso) return "recently";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "recently";
+  const mins = Math.round(ms / 60000);
+  if (mins < 2) return "just now";
+  if (mins < 60) return mins + " min ago";
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago");
+  const days = Math.round(hours / 24);
+  if (days < 31) return days + (days === 1 ? " day ago" : " days ago");
+  return Math.round(days / 30) + " months ago";
+};
+
 const TrashManagerWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible, toast, onDismissToast }) => {
-  const items = [
-    { id: "t1", name: "The Glass Court",  type: "locations", deleted: "2 days ago",   author: "EM" },
-    { id: "t2", name: "Old Mara",         type: "cast",      deleted: "5 days ago",   author: "EM" },
-    { id: "t3", name: "Bone Augerlet",    type: "items",     deleted: "11 days ago",  author: "AN" },
-    { id: "t4", name: "Greyhound clause", type: "lore",      deleted: "1 month ago",  author: "EM" },
-    { id: "t5", name: "Chapter 4 draft 1", type: "manuscript", deleted: "20 days ago", author: "EM" },
-  ];
+  // The LIVE TrashService is the only source — a project with no
+  // deletions shows the designed empty state, never demo rows.
+  const [trashVersion, setTrashVersion] = _ws_us(0);
+  void trashVersion;
+  const items = (window.LoomwrightBackend?.TrashService?.listSync() || [])
+    .map((t) => ({
+      id: t.id,
+      name: t.name || t.title || "Untitled",
+      type: t.type || "entity",
+      summary: t.summary || (t.data && (t.data.summary || t.data.description)) || "",
+      deleted: _wsAgo(t.deletedAt),
+      deletedAt: t.deletedAt,
+      raw: t,
+    }));
+
   const [filter, setFilter] = _ws_us("all");
   const [search, setSearch] = _ws_us("");
   const [selectedId, setSelectedId] = _ws_us(items[0]?.id || null);
   const [confirmingDelete, setConfirmingDelete] = _ws_us(false);
+  const [showFullRecord, setShowFullRecord] = _ws_us(false);
+
+  _ws_ue(() => {
+    const refresh = () => setTrashVersion(Date.now());
+    window.addEventListener("lw:entity-store-updated", refresh);
+    window.addEventListener("lw:project-imported", refresh);
+    window.addEventListener("lw:backend-ready", refresh);
+    return () => {
+      window.removeEventListener("lw:entity-store-updated", refresh);
+      window.removeEventListener("lw:project-imported", refresh);
+      window.removeEventListener("lw:backend-ready", refresh);
+    };
+  }, []);
+
+  const typeRows = (() => {
+    const counts = new Map();
+    items.forEach((i) => counts.set(i.type, (counts.get(i.type) || 0) + 1));
+    const rows = Array.from(counts.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([type, count]) => ({ id: type, label: type.charAt(0).toUpperCase() + type.slice(1), count }));
+    return [{ id: "all", label: "All", count: items.length }, ...rows];
+  })();
 
   const filtered = items.filter((i) => {
     if (filter !== "all" && i.type !== filter) return false;
@@ -1092,6 +1136,42 @@ const TrashManagerWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible
     return true;
   });
   const selected = items.find((x) => x.id === selectedId) || filtered[0];
+
+  const notify = (message) => window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message } }));
+  const restoreSelected = async () => {
+    if (!selected) return;
+    await window.LoomwrightBackend?.TrashService?.restore(selected.id);
+    setSelectedId(null);
+    setConfirmingDelete(false);
+    setShowFullRecord(false);
+    setTrashVersion(Date.now());
+    notify('"' + selected.name + '" restored.');
+  };
+  const purgeSelected = async () => {
+    if (!selected) return;
+    await window.LoomwrightBackend?.TrashService?.purge(selected.id);
+    setSelectedId(null);
+    setConfirmingDelete(false);
+    setShowFullRecord(false);
+    setTrashVersion(Date.now());
+    notify('"' + selected.name + '" permanently deleted.');
+  };
+
+  // First paragraph / key fields of the deleted record, for the preview.
+  const previewFields = (() => {
+    if (!selected) return [];
+    const d = (selected.raw && selected.raw.data) || {};
+    return Object.entries(d)
+      .filter(([, v]) => (typeof v === "string" && v.trim()) || typeof v === "number" || (Array.isArray(v) && v.length))
+      .slice(0, 6)
+      .map(([k, v]) => ({
+        label: k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()),
+        value: Array.isArray(v)
+          ? v.map((x) => (x && typeof x === "object" ? (x.name || x.id || "") : String(x))).filter(Boolean).join(", ")
+          : String(v),
+      }))
+      .filter((f) => f.value);
+  })();
 
   return (
     <WorkspaceShell
@@ -1104,14 +1184,7 @@ const TrashManagerWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible
         <>
           <div className="fws-section"><span className="fws-section__title">Filter by type</span></div>
           <div className="fws-settings-nav">
-            {[
-              { id: "all",        label: "All",           count: items.length },
-              { id: "cast",       label: "Cast",          count: items.filter((i) => i.type === "cast").length },
-              { id: "locations",  label: "Locations",     count: items.filter((i) => i.type === "locations").length },
-              { id: "items",      label: "Items",         count: items.filter((i) => i.type === "items").length },
-              { id: "lore",       label: "Lore / Canon",  count: items.filter((i) => i.type === "lore").length },
-              { id: "manuscript", label: "Manuscripts",   count: items.filter((i) => i.type === "manuscript").length },
-            ].map((f) => (
+            {typeRows.map((f) => (
               <button key={f.id}
                 className={"fws-settings-nav__row " + (filter === f.id ? "is-on" : "")}
                 onClick={() => setFilter(f.id)}>
@@ -1139,22 +1212,27 @@ const TrashManagerWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible
                 <span/>
                 <span>Name</span>
                 <span>Type</span>
-                <span>Author</span>
+                <span>Detail</span>
                 <span>Deleted</span>
               </div>
               {filtered.map((i) => (
                 <div key={i.id}
-                  className={"fws-trash-row " + (selectedId === i.id ? "is-selected" : "")}
-                  onClick={() => setSelectedId(i.id)}>
+                  data-testid={"tmw-row-" + i.id}
+                  className={"fws-trash-row " + (selected && selected.id === i.id ? "is-selected" : "")}
+                  onClick={() => { setSelectedId(i.id); setConfirmingDelete(false); setShowFullRecord(false); }}>
                   <Icon name="trash" size={11}/>
                   <span className="fws-trash-row__name">{i.name}</span>
                   <span className="fws-trash-row__meta">{i.type}</span>
-                  <span className="fws-trash-row__meta">{i.author}</span>
+                  <span className="fws-trash-row__meta" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.summary || "—"}</span>
                   <span className="fws-trash-row__meta">{i.deleted}</span>
                 </div>
               ))}
               {filtered.length === 0 && (
-                <div className="fws-empty" style={{ padding: 20 }}>Trash is empty for this filter.</div>
+                <div className="fws-empty" style={{ padding: 20 }}>
+                  {items.length === 0
+                    ? "Trash is empty — deleted entities wait here for 30 days before they vanish."
+                    : "Trash is empty for this filter."}
+                </div>
               )}
             </div>
           </WorkspaceCard>
@@ -1167,27 +1245,54 @@ const TrashManagerWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible
               <span className="fws-section__title">Preview</span>
             </div>
             <div className="fws-tab-body">
-              <div className="fws-card" style={{ padding: 12 }}>
+              <div className="fws-card" style={{ padding: 12 }} data-testid="tmw-preview">
                 <div className="fws-card__title">{selected.name}</div>
                 <div className="fws-card__sub">{selected.type} · deleted {selected.deleted}</div>
                 <hr className="hr" style={{ margin: "10px 0" }}/>
-                <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", color: "var(--ink-2)", fontSize: 12, lineHeight: 1.55 }}>
-                  Preview placeholder — first paragraph or key fields of the deleted record will appear here.
-                </p>
+                {selected.summary ? (
+                  <p style={{ margin: 0, fontFamily: "var(--font-serif)", color: "var(--ink-2)", fontSize: 12, lineHeight: 1.55 }}>
+                    {selected.summary}
+                  </p>
+                ) : previewFields.length === 0 ? (
+                  <p style={{ margin: 0, fontFamily: "var(--font-serif)", fontStyle: "italic", color: "var(--ink-3)", fontSize: 12, lineHeight: 1.55 }}>
+                    No summary on this record — restore it to see the full sheet, or preview the raw record below.
+                  </p>
+                ) : null}
+                {previewFields.length > 0 && (
+                  <div style={{ marginTop: selected.summary ? 10 : 0, display: "flex", flexDirection: "column", gap: 5 }}>
+                    {previewFields.map((f) => (
+                      <div key={f.label} style={{ fontSize: 11.5, lineHeight: 1.45 }}>
+                        <span style={{ color: "var(--ink-4)", textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 9.5, fontWeight: 600 }}>{f.label}</span>
+                        <div style={{ color: "var(--ink-2)" }}>{f.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 6 }}>
-                <button className="fws-topbar__primary" data-callback="onRestoreFromTrash">
+                <button className="fws-topbar__primary" data-callback="onRestoreFromTrash"
+                  data-testid="tmw-restore" onClick={restoreSelected}>
                   <Icon name="check" size={11}/> Restore
                 </button>
-                <button className="fws-section__action">Preview full record</button>
+                <button className="fws-section__action" data-callback="onPreviewTrashItem"
+                  data-testid="tmw-full-record"
+                  onClick={() => setShowFullRecord((v) => !v)}>
+                  {showFullRecord ? "Hide full record" : "Preview full record"}
+                </button>
+                {showFullRecord && (
+                  <pre data-testid="tmw-record-json" style={{ margin: 0, padding: 10, maxHeight: 240, overflow: "auto", background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)", fontSize: 10.5, lineHeight: 1.5, color: "var(--ink-2)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                    {JSON.stringify(selected.raw, null, 2)}
+                  </pre>
+                )}
                 {!confirmingDelete ? (
                   <button className="fws-section__action" style={{ color: "#a84a3a" }} onClick={() => setConfirmingDelete(true)}>Delete forever…</button>
                 ) : (
                   <div className="fws-card" style={{ padding: 10, borderColor: "rgba(168, 74, 58, 0.4)" }}>
                     <div style={{ fontSize: 12, color: "var(--ink-1)", marginBottom: 8 }}>This cannot be undone.</div>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button className="fws-topbar__primary" style={{ background: "#a84a3a", borderColor: "#a84a3a" }} data-callback="onDeleteForever">Delete forever</button>
+                      <button className="fws-topbar__primary" style={{ background: "#a84a3a", borderColor: "#a84a3a" }}
+                        data-callback="onDeleteForever" data-testid="tmw-delete-forever" onClick={purgeSelected}>Delete forever</button>
                       <button className="fws-section__action" onClick={() => setConfirmingDelete(false)}>Cancel</button>
                     </div>
                   </div>

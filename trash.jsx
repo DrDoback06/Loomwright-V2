@@ -23,29 +23,32 @@ const TRASH_TYPES = {
   settings:      { label: "Settings snapshot", icon: "gear",  color: "#76684c" },
 };
 
-const INITIAL_TRASH = [
-  { id: "tr1",  type: "chapter",      name: "Ch. 4 — old draft",                from: "Manuscript",            deletedAt: "2 days ago",  by: "E. Marlowe" },
-  { id: "tr2",  type: "entity",       name: "The Auger (old entity)",          from: "Cast",                  deletedAt: "Today, 09:12",by: "E. Marlowe", note: "Merged into Bone Auger." },
-  { id: "tr3",  type: "note",         name: "Inline note: 'Brec's voice'",     from: "Writer's Room · Ch. 3", deletedAt: "Yesterday",   by: "Ann (co-writer)" },
-  { id: "tr4",  type: "reference",    name: "Mapsheet draft — Reach v1",       from: "References",            deletedAt: "5 days ago",  by: "E. Marlowe" },
-  { id: "tr5",  type: "canvas",       name: "Acts II planning board (sketch)", from: "Tangle",                deletedAt: "1 week ago",  by: "E. Marlowe" },
-  { id: "tr6",  type: "relationship", name: "Aelinor ↔ Mara (old)",            from: "Relationships",         deletedAt: "Today, 14:02",by: "E. Marlowe", note: "Replaced by Aelinor ↔ Saren." },
-  { id: "tr7",  type: "map",          name: "Pin: 'Old Auger Cliffs'",         from: "Atlas",                 deletedAt: "3 days ago",  by: "E. Marlowe" },
-  { id: "tr8",  type: "skill",        name: "Tier IV 'Bind a Treaty'",          from: "Skill Trees · Diplomacy",deletedAt: "Today, 10:31", by: "E. Marlowe" },
-  { id: "tr9",  type: "tangle",       name: "Note: 'Vraska boar motif'",       from: "Tangle · Acts II–III",  deletedAt: "4 days ago",  by: "E. Marlowe" },
-  { id: "tr10", type: "settings",     name: "Type set: workhorse",             from: "Settings",              deletedAt: "Yesterday",   by: "E. Marlowe" },
-  { id: "tr11", type: "entity",       name: "Hess wolfhound (duplicate)",      from: "Bestiary",              deletedAt: "2 days ago",  by: "E. Marlowe", note: "Merged into canon entry." },
-  { id: "tr12", type: "note",         name: "Comment thread: 'Tone of arrival'",from: "Writer's Room · Ch. 7",deletedAt: "5 hours ago", by: "Ann (co-writer)", resolved: true },
-];
+const _trAgo = (iso) => {
+  if (!iso) return "recently";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "recently";
+  const mins = Math.round(ms / 60000);
+  if (mins < 2) return "just now";
+  if (mins < 60) return mins + " min ago";
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago");
+  const days = Math.round(hours / 24);
+  if (days < 31) return days + (days === 1 ? " day ago" : " days ago");
+  return Math.round(days / 30) + " months ago";
+};
 
+// Trash holds full entity records whose `type` is the ENTITY type
+// ("cast", "locations", …) — normalise anything outside TRASH_TYPES to
+// the generic "entity" bucket and keep the real type as the origin label.
 const mapTrashItem = (it) => ({
   id: it.id,
-  type: it.type || "entity",
+  type: TRASH_TYPES[it.type] ? it.type : "entity",
   name: it.name || it.title || "Untitled",
   from: it.type ? (it.type.charAt(0).toUpperCase() + it.type.slice(1)) : "Entity",
-  deletedAt: it.deletedAt || "Recently",
+  deletedAt: _trAgo(it.deletedAt),
   by: it.by || "",
   note: it.summary || it.note || "",
+  raw: it,
 });
 
 const TrashPanelBody = ({ panel }) => {
@@ -58,6 +61,7 @@ const TrashPanelBody = ({ panel }) => {
   const [search, setSearch] = _tr_us("");
   const [sortBy, setSortBy] = _tr_us("recent");
   const [confirming, setConfirming] = _tr_us(null); // item id pending double-confirm
+  const [previewing, setPreviewing] = _tr_us(null); // item id with open preview
 
   let visible = items;
   if (typeFilter !== "all") visible = visible.filter((it) => it.type === typeFilter);
@@ -140,11 +144,19 @@ const TrashPanelBody = ({ panel }) => {
                   </div>
                 </div>
                 <div className="trash__row-actions">
-                  <button className="rpg-btn rpg-btn--small" data-callback="onPreviewTrashItem" title="Preview">Preview</button>
+                  <button className="rpg-btn rpg-btn--small" data-callback="onPreviewTrashItem" title="Preview"
+                    onClick={() => setPreviewing(previewing === it.id ? null : it.id)}>
+                    {previewing === it.id ? "Hide" : "Preview"}
+                  </button>
                   <button className="rpg-btn rpg-btn--small rpg-btn--primary" data-callback="onRestoreTrashItem" onClick={() => onRestore(it)}>Restore</button>
                   <button className="rpg-btn rpg-btn--small rpg-btn--ghost" data-callback="onDeleteTrashItemForever" onClick={() => onDeleteForever(it)}>Delete forever</button>
                 </div>
               </div>
+              {previewing === it.id && (
+                <pre style={{ margin: "0 0 8px", padding: 10, maxHeight: 200, overflow: "auto", background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)", fontSize: 10.5, lineHeight: 1.5, color: "var(--ink-2)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  {JSON.stringify(it.raw, null, 2)}
+                </pre>
+              )}
               {confirming === it.id && (
                 <div className="trash__confirm">
                   <div className="trash__confirm-title">Permanently delete "{it.name}"?</div>
@@ -165,6 +177,5 @@ const TrashPanelBody = ({ panel }) => {
   );
 };
 
-window.TRASH_ITEMS = INITIAL_TRASH;
 window.TRASH_TYPES = TRASH_TYPES;
 Object.assign(window, { TrashPanelBody });
