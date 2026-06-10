@@ -559,8 +559,58 @@ const SAMPLE_REFERENCES = [
     content: "No epigraphs. Avoid prophesy unless filtered through dialogue. Keep chapters under 4k words." },
 ];
 
+// ---------------------------------------------------------------------
+// ActiveRefsPanelBody — the docked "Active references" panel (p-refs).
+//
+// The compact at-a-glance view: only references currently feeding the
+// AI context (aiContext !== false). Click-through opens the full
+// References panel; toggling in/out lives there.
+// ---------------------------------------------------------------------
+const ActiveRefsPanelBody = ({ panel }) => {
+  const [tick, setTick] = React.useState(0);
+  void tick;
+  React.useEffect(() => {
+    const refresh = () => setTick((t) => t + 1);
+    window.addEventListener("lw:references-updated", refresh);
+    window.addEventListener("lw:backend-ready", refresh);
+    return () => {
+      window.removeEventListener("lw:references-updated", refresh);
+      window.removeEventListener("lw:backend-ready", refresh);
+    };
+  }, []);
+
+  const active = buildRefList().filter((r) => r.aiContext);
+
+  if (active.length === 0) {
+    return (
+      <EmptyState icon="paper" title="No active references"
+        body="References marked 'Include in AI context' appear here — they shape what the AI knows."
+        action={<Btn variant="outline" size="sm" icon="paper" data-callback="onOpenPanel"
+          onClick={() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "references" } }))}>
+          Open References</Btn>}/>
+    );
+  }
+
+  return (
+    <div className="panel__list" data-ui="ActiveRefsPanelBody">
+      {active.map((r) => (
+        <div key={r.id} className="panel__list-row" data-callback="onSelectEntity"
+          title={r.title}
+          onClick={() => window.dispatchEvent(new CustomEvent("lw:open-search-result", {
+            detail: { type: "reference", referenceId: r.id },
+          }))}>
+          <Icon name={REF_TYPE_META[r.type]?.icon || "paper"} size={12}/>
+          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</span>
+          {r.canonSource && <span className="chip chip--neutral">canon</span>}
+          {r.styleSource && <span className="chip chip--neutral">style</span>}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 Object.assign(window, {
   CANON_SCOPES, REF_TYPE_META, SAMPLE_REFERENCES,
-  LorePanelBody, ReferencesPanelBody,
+  LorePanelBody, ReferencesPanelBody, ActiveRefsPanelBody,
   buildLoreContext, buildRefList,
 });

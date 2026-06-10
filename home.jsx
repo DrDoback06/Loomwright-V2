@@ -661,7 +661,90 @@ const HomeScreen = ({
   );
 };
 
+// ---------------------------------------------------------------------
+// RecentPanelBody — the docked "Recent entities" panel (p-recent).
+//
+// Live AuditService events grouped by target: the most recent touch per
+// entity/chapter, newest first. Clicking a row jumps to the record.
+// ---------------------------------------------------------------------
+const RecentPanelBody = ({ panel }) => {
+  const [tick, setTick] = React.useState(0);
+  void tick;
+  React.useEffect(() => {
+    const refresh = () => setTick((t) => t + 1);
+    window.addEventListener("lw:audit-log-updated", refresh);
+    window.addEventListener("lw:audit-undo-applied", refresh);
+    window.addEventListener("lw:audit-log-cleared", refresh);
+    window.addEventListener("lw:backend-ready", refresh);
+    return () => {
+      window.removeEventListener("lw:audit-log-updated", refresh);
+      window.removeEventListener("lw:audit-undo-applied", refresh);
+      window.removeEventListener("lw:audit-log-cleared", refresh);
+      window.removeEventListener("lw:backend-ready", refresh);
+    };
+  }, []);
+
+  const rows = (() => {
+    const Audit = window.LoomwrightBackend?.AuditService;
+    if (!Audit) return [];
+    const seen = new Set();
+    const out = [];
+    for (const e of Audit.getRecentSync(60)) {
+      const key = e.targetId ? e.targetType + ":" + e.targetId : e.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        id: e.id,
+        name: e.targetName || e.label || e.action,
+        detail: e.label || e.action,
+        when: _homeFormatRelative(e.createdAt),
+        targetType: e.targetType,
+        targetId: e.targetId,
+        entityType: e.entityType,
+      });
+      if (out.length >= 20) break;
+    }
+    return out;
+  })();
+
+  const openRow = (r) => {
+    if (r.targetType === "entity" && r.targetId) {
+      window.dispatchEvent(new CustomEvent("lw:open-search-result", {
+        detail: { type: "entity", entityId: r.targetId, entityType: r.entityType },
+      }));
+    } else if (r.targetType === "chapter" && r.targetId) {
+      window.dispatchEvent(new CustomEvent("lw:open-search-result", {
+        detail: { type: "chapter", chapterId: r.targetId },
+      }));
+    }
+  };
+
+  if (rows.length === 0) {
+    return (
+      <EmptyState icon="clock" title="No recent activity"
+        body="Entities and chapters you create, edit, or extract show up here — newest first."/>
+    );
+  }
+
+  return (
+    <div className="panel__list" data-ui="RecentPanelBody">
+      {rows.map((r) => (
+        <div key={r.id} className="panel__list-row" data-callback="onSelectEntity"
+          onClick={() => openRow(r)}
+          title={r.detail}>
+          {r.entityType && typeof EntityTypeBadge !== "undefined" && (
+            <EntityTypeBadge type={r.entityType} size="xs" showLabel={false}/>
+          )}
+          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+          <span className="panel__list-row__sub">{r.when}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 Object.assign(window, {
   HomeScreen,
   HOME_QUICK_LAUNCH,
+  RecentPanelBody,
 });

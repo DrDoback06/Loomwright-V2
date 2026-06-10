@@ -4,6 +4,8 @@
 //      "+ Link entity" picker + persisted AI/style/canon toggles.
 // S2 — Trash Manager workspace: live TrashService rows, real preview,
 //      Restore + Delete forever; docked panel renders real entity types.
+// S5 — system docked panels (Review / Today / Recent / Active refs) render
+//      live bodies instead of legacy demo states.
 
 const { test, expect } = require("@playwright/test");
 const { openFreshApp, saveEntity } = require("./helpers");
@@ -137,5 +139,58 @@ test.describe("U36. System workspaces live", () => {
     await expect(row).toContainText("Cast");
     await row.locator("button", { hasText: "Preview" }).click();
     await expect(page.locator("[data-ui='TrashPanelBody'] pre")).toContainText('"role": "minor"');
+  });
+
+  test("docked Review panel shows live queue items and accepts through them", async ({ page }) => {
+    await openFreshApp(page);
+    await page.evaluate(async () => {
+      const B = window.LoomwrightBackend;
+      const cand = B.buildCandidate({
+        entityType: "cast", name: "Queued Stranger",
+        sourceQuote: "A stranger waited at the gate.",
+      });
+      cand.id = "rq-u36r";
+      await B.ReviewService.add(cand);
+      window.dispatchEvent(new CustomEvent("lw:review-queue-updated"));
+    });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "review" } })));
+    const body = page.locator("[data-ui='ReviewPanelBody']");
+    await expect(body).toBeVisible();
+    // Live card, not the legacy demo rows.
+    await expect(body).toContainText("Queued Stranger");
+    await expect(body).not.toContainText("Captain Brec (Cast)");
+    await page.locator("[data-testid='rqc-accept-rq-u36r']").click();
+    await page.waitForTimeout(500);
+    const saved = await page.evaluate(() =>
+      window.LoomwrightBackend.EntityService.listSync("cast").some((e) => e.name === "Queued Stranger"));
+    expect(saved).toBe(true);
+    // Queue drained → designed empty state.
+    await expect(page.locator("[data-panel-id='p-review']")).toContainText("Nothing waiting on you");
+  });
+
+  test("docked Recent panel lists live audit activity and opens the entity", async ({ page }) => {
+    await openFreshApp(page);
+    await saveEntity(page, "cast", { name: "Freshly Minted" });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "recent" } })));
+    const body = page.locator("[data-ui='RecentPanelBody']");
+    await expect(body).toBeVisible();
+    await expect(body).toContainText("Freshly Minted");
+    await expect(body).not.toContainText("Aelinor Vey"); // demo rows gone
+  });
+
+  test("docked Today + Active references panels render live bodies", async ({ page }) => {
+    await openFreshApp(page);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "today" } })));
+    await expect(page.locator("[data-ui='TodayPanelBody']")).toBeVisible();
+
+    await page.evaluate(async () => {
+      await window.LoomwrightBackend.ReferencesService.save({
+        id: "ref-u36c", title: "Always-on canon sheet", kind: "research", aiContext: true,
+      });
+      window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "refs" } }));
+    });
+    const refs = page.locator("[data-ui='ActiveRefsPanelBody']");
+    await expect(refs).toBeVisible();
+    await expect(refs).toContainText("Always-on canon sheet");
   });
 });

@@ -285,6 +285,14 @@ const DockedPanel = ({
           if (panel.id === "p-speedReader" && typeof SpeedReaderPanelBody !== "undefined") return <SpeedReaderPanelBody {...bespokeProps}/>;
           if (panel.id === "p-aiWriter" && typeof AiWriterPanelBody !== "undefined") return <AiWriterPanelBody {...bespokeProps}/>;
           if (panel.id === "p-trash" && typeof TrashPanelBody !== "undefined") return <TrashPanelBody {...bespokeProps}/>;
+          if (panel.id === "p-review" && typeof ReviewPanelBody !== "undefined") return <ReviewPanelBody {...bespokeProps}/>;
+          if (panel.id === "p-today" && typeof TodayPanelBody !== "undefined") return <TodayPanelBody {...bespokeProps}/>;
+          if (panel.id === "p-recent" && typeof RecentPanelBody !== "undefined") return <RecentPanelBody {...bespokeProps}/>;
+          if (panel.id === "p-refs" && typeof ActiveRefsPanelBody !== "undefined") return <ActiveRefsPanelBody {...bespokeProps}/>;
+          if (panel.id === "p-notifs") return (
+            <EmptyState icon="warn" title="No notifications"
+              body="Continuity warnings, failed jobs, and review alerts surface here as they happen."/>
+          );
           if (panel.id === "p-tangle" && typeof TanglePanelBody !== "undefined") return <TanglePanelBody {...bespokeProps}/>;
           if (panel.id === "p-randomTables" && typeof RandomTablesPanelBody !== "undefined") return <RandomTablesPanelBody {...bespokeProps}/>;
           if (panel.entityType === "atlas" && typeof AtlasPanelBody !== "undefined") return <AtlasPanelBody {...bespokeProps}/>;

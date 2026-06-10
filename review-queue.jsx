@@ -4,7 +4,7 @@
 // All presentational; emits hook-ready callbacks.
 // =====================================================================
 
-const { useState: _rqUS, useMemo: _rqUM } = React;
+const { useState: _rqUS, useMemo: _rqUM, useEffect: _rqUE } = React;
 
 // ---------------------------------------------------------------------
 // Suggestion label helper
@@ -549,8 +549,87 @@ const EntityReviewQueue = ({
   );
 };
 
+// ---------------------------------------------------------------------
+// ReviewPanelBody — the docked "Review Queue" panel (p-review).
+//
+// Every pending decision across the whole project, grouped by entity
+// type, rendered with the same live EntityReviewQueue used inside the
+// per-type panels — one review surface, one card system.
+// ---------------------------------------------------------------------
+const ReviewPanelBody = ({ panel }) => {
+  const [version, setVersion] = _rqUS(0);
+  void version;
+  const [filtersByType, setFiltersByType] = _rqUS({});
+  const [selectedByType, setSelectedByType] = _rqUS({});
+
+  _rqUE(() => {
+    const refresh = () => setVersion(Date.now());
+    window.addEventListener("lw:review-queue-updated", refresh);
+    window.addEventListener("lw:backend-ready", refresh);
+    return () => {
+      window.removeEventListener("lw:review-queue-updated", refresh);
+      window.removeEventListener("lw:backend-ready", refresh);
+    };
+  }, []);
+
+  const byType = (() => {
+    const all = window.LoomwrightBackend?.ReviewService?.listSync() || [];
+    const m = new Map();
+    for (const item of all) {
+      if (item.status === "done" || item.status === "denied") continue;
+      const t = item.entityType || item.type || "cast";
+      if (!m.has(t)) m.set(t, []);
+      m.get(t).push(item);
+    }
+    return Array.from(m.entries()).sort((a, b) => b[1].length - a[1].length);
+  })();
+
+  const dispatch = (name, item, entityType) =>
+    window.LoomwrightDispatchCallback?.(name, { detail: item, entityId: item?.entityId, entityType });
+  const dispatchBulk = (name, ids, entityType) =>
+    window.LoomwrightDispatchCallback?.(name, { detail: { ids }, entityType });
+
+  if (byType.length === 0) {
+    return (
+      <EmptyState icon="bell" title="Nothing waiting on you"
+        body="Extraction suggestions, merges, and auto-added entries land here for your decision."/>
+    );
+  }
+
+  return (
+    <div data-ui="ReviewPanelBody" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {byType.map(([entityType, items]) => (
+        <EntityReviewQueue
+          key={entityType}
+          entityType={entityType}
+          items={items}
+          state="default"
+          filters={filtersByType[entityType] || {}}
+          setFilters={(f) => setFiltersByType((prev) => ({ ...prev, [entityType]: f }))}
+          selectedIds={selectedByType[entityType] || []}
+          setSelectedIds={(ids) => setSelectedByType((prev) => ({ ...prev, [entityType]: ids }))}
+          onAcceptQueueItem={(item) => dispatch("onAcceptQueueItem", item, entityType)}
+          onEditQueueItem={(item) => dispatch("onEditQueueItem", item, entityType)}
+          onMergeQueueItem={(item) => dispatch("onMergeQueueItem", item, entityType)}
+          onDenyQueueItem={(item) => dispatch("onDenyQueueItem", item, entityType)}
+          onKeepAutoAddedItem={(item) => dispatch("onKeepAutoAddedItem", item, entityType)}
+          onRemoveAutoAddedItem={(item) => dispatch("onRemoveAutoAddedItem", item, entityType)}
+          onBulkAcceptQueueItems={(ids) => dispatchBulk("onBulkAcceptQueueItems", ids, entityType)}
+          onBulkDenyQueueItems={(ids) => dispatchBulk("onBulkDenyQueueItems", ids, entityType)}
+          onBulkMergeQueueItems={(ids) => dispatchBulk("onBulkMergeQueueItems", ids, entityType)}
+          onOpenSourceInManuscript={(m) => window.dispatchEvent(new CustomEvent("lw:open-source-mention", { detail: m }))}
+          onOpenRelatedTab={(r) => window.dispatchEvent(new CustomEvent("lw:open-search-result", {
+            detail: { type: "entity", entityId: r?.id, entityType: r?.type || entityType },
+          }))}
+        />
+      ))}
+    </div>
+  );
+};
+
 Object.assign(window, {
   EntityReviewQueue, ReviewQueueCard, ReviewGroupCard, AutoAddedHistoryCard,
+  ReviewPanelBody,
   ConfidenceStrip, ConfidenceBandBadge,
   QueueFilterBar, QueueBulkActions,
   candidateToCardItem, groupCardItems,

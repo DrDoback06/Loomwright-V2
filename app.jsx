@@ -107,11 +107,7 @@ const PANEL_PRESETS = {
   // Utility / system panels
   review:        { id: "p-review",        kind: "system", icon: "bell",     title: "Review Queue",       subtitle: "Pending decisions",         state: "review" },
   today:         { id: "p-today",         kind: "system", icon: "sparkle",  title: "Today",              subtitle: "Suggestions for today",     state: "suggestion" },
-  recent:        { id: "p-recent",        kind: "system", icon: "clock",    title: "Recent entities",    subtitle: "Last 24 hours",             state: "overview", rows: [
-    { id: "r1", label: "Aelinor Vey",   meta: "2m ago" },
-    { id: "r2", label: "Pale Reach",    meta: "11m ago" },
-    { id: "r3", label: "Auger of Hess", meta: "1h ago" },
-  ]},
+  recent:        { id: "p-recent",        kind: "system", icon: "clock",    title: "Recent entities",    subtitle: "Latest activity",           state: "overview" },
   refs:          { id: "p-refs",          kind: "system", icon: "paper",    title: "Active references",  subtitle: "Linked sources",            state: "empty" },
   trash:         { id: "p-trash",         kind: "system", icon: "trash",    title: "Trash",              subtitle: "30-day retention",          state: "empty" },
   notifs:        { id: "p-notifs",        kind: "system", icon: "warn",     title: "Notifications",      subtitle: "Warnings & alerts",         state: "empty" },
