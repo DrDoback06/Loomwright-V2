@@ -307,23 +307,52 @@ const OnboardingJsonPanel = ({ answers, onCopyJson, onPasteJson, onValidateJson,
 // RESEARCH LIBRARY (References) ----------------------------------------
 // =====================================================================
 const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible, toast, onDismissToast }) => {
-  // Reference library — pulls window.REFERENCES if available, else mock.
+  // Reference library — the LIVE ReferencesService is the only source;
+  // a fresh project shows the designed empty state, never demo rows.
   const [refsVersion, setRefsVersion] = _ws_us(0);
-  const live = window.LoomwrightBackend?.ReferencesService?.listSync() || window.REFERENCES || [];
-  const fallback = [
-    { id: "r-1", kind: "upload",   title: "Loomwright field journal.pdf",       sub: "Uploaded · 14 pages", aiContext: true, style: false, canon: false },
-    { id: "r-2", kind: "url",      title: "Atlas of the Pale Reach (atlas.org)",  sub: "Web · referenced 4×", aiContext: true, style: false, canon: false },
-    { id: "r-3", kind: "style",    title: "Voice study: ‘Quiet Cold' (excerpt)",  sub: "Style sample · 1,800 words", aiContext: true, style: true, canon: false },
-    { id: "r-4", kind: "canon",    title: "House of Hess — heraldry & oaths",     sub: "Canon source", aiContext: true, style: false, canon: true },
-    { id: "r-5", kind: "research", title: "Norse salt-rites (research note)",     sub: "Note · 480 words", aiContext: false, style: false, canon: false },
-    { id: "r-6", kind: "onboarding", title: "Onboarding · style influences",      sub: "Captured during onboarding", aiContext: true, style: true, canon: false },
-    { id: "r-7", kind: "onboarding", title: "Onboarding · project intelligence",  sub: "Project rules, tone, taboos", aiContext: true, style: false, canon: true },
-  ];
-  const refs = live.length ? live : fallback;
+  void refsVersion;
+  const refs = (window.LoomwrightBackend?.ReferencesService?.listSync() || [])
+    .filter((r) => r && r.status !== "archived");
 
   const [filter, setFilter] = _ws_us("all");
   const [selectedId, setSelectedId] = _ws_us(refs[0]?.id || null);
   const selected = refs.find((r) => r.id === selectedId) || refs[0];
+
+  // Inline "+ Link entity" picker for the inspector.
+  const [linkPickerOpen, setLinkPickerOpen] = _ws_us(false);
+  const [linkQuery, setLinkQuery] = _ws_us("");
+
+  const allEntities = (() => {
+    const out = [];
+    const all = window.LoomwrightBackend?.EntityService?.listAllSync?.() || {};
+    for (const byId of Object.values(all)) {
+      for (const e of Object.values(byId || {})) {
+        if (e && e.id) out.push({ id: e.id, name: e.name || e.id, type: e.type });
+      }
+    }
+    return out;
+  })();
+  const entityNameById = new Map(allEntities.map((e) => [e.id, e.name]));
+
+  const linkedIdsOf = (r) => {
+    const v = r && (r.linkedEntities || r.linkedEntityIds);
+    if (v == null) return [];
+    return (Array.isArray(v) ? v : [v])
+      .map((x) => (typeof x === "string" ? x : x && x.id))
+      .filter(Boolean);
+  };
+  const linkedIds = linkedIdsOf(selected);
+
+  const saveSelectedRef = async (patch) => {
+    if (!selected) return;
+    await window.LoomwrightBackend?.ReferencesService?.save({ ...selected, ...patch });
+  };
+  const toggleLinkedEntity = async (entityId) => {
+    const next = linkedIds.includes(entityId)
+      ? linkedIds.filter((id) => id !== entityId)
+      : linkedIds.concat(entityId);
+    await saveSelectedRef({ linkedEntities: next });
+  };
 
   // View modes: "library" (default) vs. "onboarding" (full editor).
   // The onboarding editor lives inside the same workspace so users stay
@@ -370,8 +399,8 @@ const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisi
     if (filter === "all") return true;
     if (filter === "uploads") return r.kind === "upload";
     if (filter === "urls") return r.kind === "url";
-    if (filter === "style") return r.kind === "style" || r.style;
-    if (filter === "canon") return r.kind === "canon" || r.canon;
+    if (filter === "style") return r.kind === "style" || r.styleSource || r.isStyleInfluence;
+    if (filter === "canon") return r.kind === "canon" || r.canonSource || r.isCanonSource;
     if (filter === "research") return r.kind === "research";
     if (filter === "onboarding") return r.kind === "onboarding";
     return true;
@@ -656,9 +685,9 @@ const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisi
                   </div>
                 </div>
                 <div className="fws-tile__badges">
-                  {r.aiContext && <span className="fws-chip fws-chip--accent">AI</span>}
-                  {(r.style || r.kind === "style") && <span className="fws-chip">style</span>}
-                  {(r.canon || r.kind === "canon") && <span className="fws-chip">canon</span>}
+                  {r.aiContext !== false && <span className="fws-chip fws-chip--accent">AI</span>}
+                  {(r.styleSource || r.isStyleInfluence || r.kind === "style") && <span className="fws-chip">style</span>}
+                  {(r.canonSource || r.isCanonSource || r.kind === "canon") && <span className="fws-chip">canon</span>}
                 </div>
               </div>
             ))}
@@ -679,29 +708,95 @@ const ResearchLibraryWorkspace = ({ workspace, onExit, onRequest, dragTargetVisi
                   <hr className="hr" style={{ margin: "10px 0" }}/>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                      <input type="checkbox" defaultChecked={selected.aiContext} data-callback="onToggleReferenceAIContext"/>
+                      <input type="checkbox" checked={selected.aiContext !== false} data-callback="onToggleReferenceAIContext"
+                        onChange={() => saveSelectedRef({ aiContext: selected.aiContext === false })}/>
                       <span>Include in AI context</span>
                     </label>
                     <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                      <input type="checkbox" defaultChecked={selected.style} data-callback="onToggleReferenceStyleInfluence"/>
+                      <input type="checkbox" checked={!!(selected.styleSource || selected.isStyleInfluence)} data-callback="onToggleReferenceStyleInfluence"
+                        onChange={() => {
+                          const next = !(selected.styleSource || selected.isStyleInfluence);
+                          saveSelectedRef({ styleSource: next, isStyleInfluence: next });
+                        }}/>
                       <span>Use as writing-style influence</span>
                     </label>
                     <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                      <input type="checkbox" defaultChecked={selected.canon} data-callback="onToggleReferenceCanonSource"/>
+                      <input type="checkbox" checked={!!(selected.canonSource || selected.isCanonSource)} data-callback="onToggleReferenceCanonSource"
+                        onChange={() => {
+                          const next = !(selected.canonSource || selected.isCanonSource);
+                          saveSelectedRef({ canonSource: next, isCanonSource: next });
+                        }}/>
                       <span>Treat as canon source</span>
                     </label>
                   </div>
                 </div>
 
-                <div style={{ marginTop: 12 }}>
+                <div style={{ marginTop: 12 }} data-testid="rlw-linked-entities">
                   <div className="fws-section__title" style={{ marginBottom: 6 }}>Linked entities</div>
-                  {["Aelinor Vey", "Pale Reach"].map((n, i) => (
-                    <button key={i} className="fws-chip" style={{ marginRight: 4, marginBottom: 4 }}>{n}</button>
+                  {linkedIds.length === 0 && (
+                    <div style={{ fontSize: 11.5, color: "var(--ink-3)", fontStyle: "italic" }}>
+                      None yet — link the entities this reference informs.
+                    </div>
+                  )}
+                  {linkedIds.map((id) => (
+                    <button key={id} className="fws-chip" style={{ marginRight: 4, marginBottom: 4, cursor: "pointer" }}
+                      data-callback="onOpenRelatedEntity" title="Open this entity"
+                      onClick={() => window.dispatchEvent(new CustomEvent("lw:open-search-result", {
+                        detail: { type: "entity", entityId: id, entityType: window.LoomwrightBackend?.EntityService?.getSync?.(id)?.type },
+                      }))}>
+                      {entityNameById.get(id) || id}
+                    </button>
                   ))}
                 </div>
 
                 <div style={{ marginTop: 12 }}>
-                  <button className="fws-section__action" data-callback="onLinkReferenceToEntity">+ Link entity</button>
+                  <button className="fws-section__action" data-callback="onLinkReferenceToEntity"
+                    data-testid="rlw-link-entity"
+                    onClick={() => { setLinkPickerOpen((v) => !v); setLinkQuery(""); }}>
+                    {linkPickerOpen ? "Done linking" : "+ Link entity"}
+                  </button>
+                  {linkPickerOpen && (
+                    <div className="fws-card" style={{ padding: 8, marginTop: 6 }} data-testid="rlw-link-picker">
+                      <input
+                        autoFocus
+                        value={linkQuery}
+                        onChange={(e) => setLinkQuery(e.target.value)}
+                        placeholder="Search entities…"
+                        style={{ width: "100%", boxSizing: "border-box", padding: "5px 8px", fontSize: 12, background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)", color: "var(--ink-1)", marginBottom: 6 }}
+                      />
+                      {(() => {
+                        const q = linkQuery.trim().toLowerCase();
+                        const rows = allEntities
+                          .filter((e) => !q || e.name.toLowerCase().includes(q))
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .slice(0, 8);
+                        if (allEntities.length === 0) return (
+                          <div style={{ fontSize: 11.5, color: "var(--ink-3)", fontStyle: "italic", padding: 4 }}>
+                            No entities in this project yet.
+                          </div>
+                        );
+                        if (rows.length === 0) return (
+                          <div style={{ fontSize: 11.5, color: "var(--ink-3)", fontStyle: "italic", padding: 4 }}>
+                            No entities match "{linkQuery}".
+                          </div>
+                        );
+                        return rows.map((e) => {
+                          const isLinked = linkedIds.includes(e.id);
+                          return (
+                            <button key={e.id} type="button"
+                              data-callback="onLinkReferenceToEntity"
+                              data-testid={"rlw-pick-" + e.id}
+                              onClick={() => toggleLinkedEntity(e.id)}
+                              title={isLinked ? "Unlink this entity" : "Link this entity"}
+                              style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "5px 6px", background: "transparent", border: "none", borderRadius: "var(--r-2)", cursor: "pointer", color: "var(--ink-1)", fontSize: 12, textAlign: "left" }}>
+                              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</span>
+                              <span className={"fws-chip " + (isLinked ? "fws-chip--ok" : "")}>{isLinked ? "linked ✓" : e.type}</span>
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
                 </div>
 
                 {selected.kind === "onboarding" && (
