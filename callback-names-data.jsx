@@ -223,6 +223,7 @@ window.__LW_CALLBACK_NAMES = [
   "onExtractCast",
   "onExtractEvents",
   "onFailQuestStep",
+  "onFillEntityFromManuscript",
   "onFilterChapter",
   "onFilterConfidence",
   "onFilterLocationType",

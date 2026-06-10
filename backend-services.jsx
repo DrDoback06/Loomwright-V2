@@ -4706,6 +4706,141 @@
     return null;
   }
 
+  // -------------------------------------------------------------------
+  // E6 — per-entity enrichment ("Fill from manuscript"). Collects the
+  // entity's manuscript evidence, asks the routed model to fill ONLY the
+  // missing editor fields, and lands the result as an update-shaped
+  // review candidate — the normal accept flow applies it. Pure shaping
+  // helpers are exported for the no-AI smoke tests.
+  // -------------------------------------------------------------------
+  function collectEnrichmentEvidence(entityId, { maxSnippets = 8, pad = 200 } = {}) {
+    const out = [];
+    let chState = null;
+    try { chState = ManuscriptChapterService.loadSync(); } catch (_) { chState = {}; }
+    const chapterText = (cid) => {
+      const m = (chState.manuscripts || {})[cid];
+      if (m && m.text) return m.text;
+      const ch = (chState.chapters || []).find((c) => c.id === cid);
+      return (ch && (ch.bodyText || "")) || "";
+    };
+    let occs = [];
+    try { occs = OccurrenceService.listByEntitySync ? OccurrenceService.listByEntitySync(entityId) : OccurrenceService.listAllSync().filter((o) => o.entityId === entityId); } catch (_) {}
+    for (const o of occs) {
+      if (out.length >= maxSnippets) break;
+      if (o.isPronounResolution) continue;
+      const text = chapterText(o.chapterId);
+      if (!text) { if (o.exactText) out.push(String(o.exactText)); continue; }
+      const start = Math.max(0, (o.startOffset || 0) - pad);
+      const end = Math.min(text.length, (o.endOffset || 0) + pad);
+      const snip = text.slice(start, end).replace(/\s+/g, " ").trim();
+      if (snip) out.push(snip);
+    }
+    return out;
+  }
+  // The fillable field schema for a type, from the editor configs when
+  // present (browser); falls back to a generic pair otherwise (smoke).
+  function enrichmentFieldSchema(entityType) {
+    const cfg = (typeof window !== "undefined" && window.ENTITY_EDITOR_CONFIGS) ? window.ENTITY_EDITOR_CONFIGS[normaliseType(entityType)] : null;
+    const fields = [];
+    const FILLABLE = new Set(["text", "textarea", "longtext", "chips", "pills"]);
+    if (cfg && Array.isArray(cfg.sections)) {
+      for (const sec of cfg.sections) {
+        for (const f of (sec.fields || [])) {
+          if (!FILLABLE.has(f.kind)) continue;
+          if (["name", "title", "aliases", "status", "customKind", "customType"].includes(f.id)) continue;
+          fields.push({ id: f.id, label: f.label || f.id, kind: f.kind, options: f.options || null });
+          if (fields.length >= 18) return fields;
+        }
+      }
+    }
+    if (!fields.length) {
+      fields.push({ id: "summary", label: "Summary", kind: "textarea", options: null });
+      fields.push({ id: "description", label: "Description", kind: "longtext", options: null });
+    }
+    return fields;
+  }
+  // Sanitize a model's {fieldId: value} reply against the schema and the
+  // entity's CURRENT data (only fills blanks; never overwrites).
+  function shapeEnrichmentChanges(entity, parsed, schema) {
+    const out = {};
+    if (!parsed || typeof parsed !== "object") return out;
+    const current = (entity && entity.data) || {};
+    const byId = new Map((schema || []).map((f) => [f.id, f]));
+    for (const [k, v] of Object.entries(parsed)) {
+      const f = byId.get(k);
+      if (!f) continue;
+      const existing = current[k];
+      const isBlank = existing == null || existing === "" || (Array.isArray(existing) && !existing.length);
+      if (!isBlank) continue;
+      if (f.kind === "chips") {
+        const arr = Array.isArray(v) ? v : (typeof v === "string" ? v.split(/[,;]+/) : []);
+        const clean = arr.map((x) => String(x).trim()).filter(Boolean).slice(0, 12);
+        if (clean.length) out[k] = clean;
+      } else if (f.kind === "pills") {
+        const sv = String(Array.isArray(v) ? v[0] : v).trim();
+        if (!sv) continue;
+        if (f.options && !f.options.some((o) => String(o).toLowerCase() === sv.toLowerCase())) continue;
+        out[k] = f.options ? f.options.find((o) => String(o).toLowerCase() === sv.toLowerCase()) : sv;
+      } else {
+        const sv = typeof v === "string" ? v.trim() : (typeof v === "number" ? String(v) : "");
+        if (sv) out[k] = sv.slice(0, 2000);
+      }
+    }
+    return out;
+  }
+  async function enrichEntityFromManuscript(entityId, entityType, { route } = {}) {
+    const type = normaliseType(entityType);
+    const entity = EntityService.getSync(entityId, type);
+    if (!entity) return { ok: false, message: "Entity not found." };
+    const pending = ReviewService.listSync(type).filter((q) =>
+      q.status === "pending" && (q.existingEntityId === entityId || q.targetEntityId === entityId)).length;
+    if (!route) return { ok: false, mode: "local", pending };
+    const evidence = collectEnrichmentEvidence(entityId);
+    if (!evidence.length) return { ok: false, mode: "no-evidence", pending };
+    const schema = enrichmentFieldSchema(type);
+    const known = {};
+    for (const f of schema) { const v = (entity.data || {})[f.id]; if (v != null && v !== "" && !(Array.isArray(v) && !v.length)) known[f.id] = v; }
+    const prompt = `Fill in MISSING profile fields for the ${type} record "${entity.name}" using ONLY what the manuscript evidence supports. Do not invent.
+
+Already known (do not repeat): ${JSON.stringify(known)}
+Fields you may fill (id — label${""}): ${schema.map((f) => f.id + " — " + f.label + (f.options ? " (one of: " + f.options.join(", ") + ")" : "")).join("; ")}
+
+Manuscript evidence:
+${evidence.map((e, i) => (i + 1) + ". " + e).join("\n")}
+
+Return a JSON object mapping fieldId to value for ONLY clearly-evidenced fields. Return JSON only.`;
+    let parsed = null;
+    try {
+      const raw = await AIService.complete({
+        providerId: route.providerId, model: route.model,
+        prompt, system: "Return valid JSON only. No markdown fences.", maxTokens: 900,
+        purpose: "entityEnrichment",
+      });
+      parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim());
+    } catch (e) {
+      return { ok: false, mode: "ai-error", message: e.message, pending };
+    }
+    const changes = shapeEnrichmentChanges(entity, parsed, schema);
+    if (!Object.keys(changes).length) return { ok: false, mode: "nothing-new", pending };
+    const cand = buildCandidate({
+      entityType: type,
+      name: entity.name,
+      existingEntityId: entityId,
+      suggestedAction: "update",
+      suggestedChanges: changes,
+      confidence: 0.75,
+      matchType: "exact",
+      sourceQuote: evidence[0] ? evidence[0].slice(0, 180) : "",
+      summary: "Field fill from manuscript evidence (" + Object.keys(changes).length + " field" + (Object.keys(changes).length === 1 ? "" : "s") + ").",
+    }, {});
+    await ReviewService.add(cand);
+    window.dispatchEvent(new CustomEvent("lw:review-queue-updated"));
+    try {
+      AuditService.log({ action: "ai.entityEnrichment", label: "Field-fill suggestions for " + entity.name, targetType: "entity", targetId: entityId, entityType: type, source: "AIService", metadata: { fields: Object.keys(changes) }, reversible: false });
+    } catch (_) {}
+    return { ok: true, mode: "ai", fields: Object.keys(changes), candidateId: cand.id };
+  }
+
   const ExtractionService = {
     loadSessionSync() {
       return StorageService.getSync(KEYS.extractionSession, { status: "idle", items: [] });
@@ -7148,6 +7283,10 @@ Only evidenced pairs. Return JSON only.`;
     mapAiPayloadToData,
     detectorConfidence,
     resolvePronounsInText,
+    enrichEntityFromManuscript,
+    shapeEnrichmentChanges,
+    enrichmentFieldSchema,
+    collectEnrichmentEvidence,
     analyzeWritingStyle,
     autoApplyCandidate,
     OccurrenceService,

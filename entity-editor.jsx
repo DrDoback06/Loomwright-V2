@@ -1135,6 +1135,13 @@ const EntityEditor = ({
           </div>
           <div className="ee-foot__actions">
             <button type="button" className="ee-btn ee-btn--ghost" onClick={onClose}>Cancel</button>
+            {data.id && (
+              <button type="button" className="ee-btn ee-btn--outline" data-callback="onFillEntityFromManuscript" data-testid="ee-fill-from-ms"
+                title="Suggest values for empty fields from this entity's manuscript mentions (lands in Review)"
+                onClick={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onFillEntityFromManuscript", detail: { entityId: data.id, entityType: type } } }))}>
+                <Icon name="sparkle" size={11}/> Fill from manuscript
+              </button>
+            )}
             <button type="button" className="ee-btn ee-btn--outline" data-testid="ee-save-template"
               disabled={!(data.name || data.title)}
               title="Snapshot these fields (minus the name) as a reusable template for this type"

@@ -1679,6 +1679,46 @@ async function main() {
     log("[pron] pronouns with no antecedent are skipped", lonely.length === 0);
   }
 
+  // --- [enrich] E6 — "Fill from manuscript" shaping (no provider needed) ---
+  {
+    await B.StorageService.clear();
+    const hero = await B.EntityService.save("cast", {
+      name: "Anwen Hale",
+      data: { role: "protagonist", personality: "" },
+    }, { status: "active" });
+    await B.ManuscriptChapterService.save({
+      chapters: [{ id: "en-c1", num: 1, title: "One" }],
+      activeChapterId: "en-c1",
+      manuscripts: { "en-c1": { html: "", text: "Anwen Hale held the gate alone through the night, wry and unhurried even as the torches failed." } },
+    });
+    await B.OccurrenceService.save({ entityId: hero.id, entityType: "cast", chapterId: "en-c1", startOffset: 0, endOffset: 10, exactText: "Anwen Hale" });
+    // Evidence collection pads context around the occurrence.
+    const ev = B.collectEnrichmentEvidence(hero.id);
+    log("[enrich] evidence snippets carry surrounding prose", ev.length === 1 && ev[0].includes("held the gate alone"));
+    // Schema falls back when editor configs aren't loaded (node).
+    const schema = B.enrichmentFieldSchema("cast");
+    log("[enrich] field schema available without browser configs", schema.length >= 2 && schema.some((f) => f.id === "summary"));
+    // Shaping: fills blanks only, sanitizes kinds, never overwrites.
+    const shaped = B.shapeEnrichmentChanges(
+      { data: { role: "protagonist", personality: "" } },
+      { summary: "Holds the north gate.", role: "antagonist", personality: "Wry, unhurried.", bogusField: "x" },
+      [{ id: "summary", kind: "textarea" }, { id: "role", kind: "text" }, { id: "personality", kind: "textarea" }]
+    );
+    log("[enrich] fills blanks, skips filled fields and unknown ids",
+      shaped.summary === "Holds the north gate." && shaped.personality === "Wry, unhurried." && !("role" in shaped) && !("bogusField" in shaped));
+    const shapedPills = B.shapeEnrichmentChanges(
+      { data: {} },
+      { danger: "RISKY", tags: "northern, suspect" },
+      [{ id: "danger", kind: "pills", options: ["safe", "risky", "forbidden"] }, { id: "tags", kind: "chips" }]
+    );
+    log("[enrich] pills snap to allowed options; chips split",
+      shapedPills.danger === "risky" && JSON.stringify(shapedPills.tags) === JSON.stringify(["northern", "suspect"]));
+    // Local mode (no route) reports pending suggestions instead of failing.
+    await B.ReviewService.add({ id: "rq-en", entityType: "cast", name: "Anwen Hale", existingEntityId: hero.id, status: "pending", suggestedAction: "update", suggestedChanges: { role: "protagonist" } });
+    const local = await B.enrichEntityFromManuscript(hero.id, "cast", {});
+    log("[enrich] local mode surfaces the pending count", local.ok === false && local.mode === "local" && local.pending === 1);
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

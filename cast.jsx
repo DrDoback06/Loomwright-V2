@@ -757,6 +757,11 @@ const CastDetail = ({
             <span className="chip chip--neutral">{totalMentions} mention{totalMentions === 1 ? "" : "s"}</span>
             {!atEnd && <span className="chip chip--neutral" data-testid="cast-scrub-state">As of Ch. {scrub}</span>}
             {c.queue ? <ReviewCountBadge count={c.queue}/> : null}
+            <button className="chip chip--action" data-callback="onFillEntityFromManuscript" data-testid="cast-fill-from-ms"
+                    title="Read this character's manuscript mentions and suggest values for empty profile fields (lands in Review)"
+                    onClick={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onFillEntityFromManuscript", detail: { entityId: c.id, entityType: "cast" } } }))}>
+              ✦ Fill from manuscript
+            </button>
           </div>
         </div>
       </div>

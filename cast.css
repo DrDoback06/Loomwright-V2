@@ -851,3 +851,13 @@
   cursor: pointer;
 }
 .cast-fields__atlas:hover { color: var(--ink-1, #2a2218); }
+
+/* "Fill from manuscript" hero chip */
+.chip--action {
+  cursor: pointer;
+  border: 1px dashed var(--line-2, rgba(74,56,28,0.3));
+  background: transparent;
+  color: var(--accent-deep, #7a5a3a);
+  font: inherit;
+}
+.chip--action:hover { border-style: solid; color: var(--ink-1, #2a2218); }

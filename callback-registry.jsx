@@ -917,6 +917,36 @@
       } catch (e) { notify(e.message); }
       return;
     }
+    if (name === "onFillEntityFromManuscript") {
+      const entityId = ctx.detail?.entityId || id;
+      const entityType = ctx.detail?.entityType || type || "cast";
+      if (!entityId) { notify("Open an entity first."); return; }
+      const routing = B().AIRoutingService;
+      const route = (routing && !routing.isLocalOnly()) ? routing.resolveRoute("entityEnrichment") : null;
+      if (!route?.providerId) {
+        const local = await B().enrichEntityFromManuscript(entityId, entityType, {});
+        notify(local.pending
+          ? `No AI provider configured — but ${local.pending} pending suggestion(s) for this entity are already in Review.`
+          : "Configure an AI provider in Settings to auto-fill fields from the manuscript.");
+        if (local.pending) openPanel("review");
+        return;
+      }
+      const evidenceProbe = B().collectEnrichmentEvidence(entityId, { maxSnippets: 1 });
+      if (!aiPrivacyGuard({ task: "entityEnrichment", providerId: route.providerId, model: route.model, context: { includesManuscript: evidenceProbe.length > 0, approxChars: 2000 } })) return;
+      notify("Reading the manuscript for field suggestions…");
+      const res = await B().enrichEntityFromManuscript(entityId, entityType, { route });
+      if (res.ok) {
+        notify(`Field-fill suggestions added to Review (${res.fields.length} field${res.fields.length === 1 ? "" : "s"}).`);
+        openPanel("review");
+      } else if (res.mode === "no-evidence") {
+        notify("No manuscript mentions found for this entity yet — write or extract first.");
+      } else if (res.mode === "nothing-new") {
+        notify("Nothing new to fill — the evidence only repeats what's already recorded.");
+      } else {
+        notify(res.message || "Field fill failed.");
+      }
+      return;
+    }
     if (name === "onRunAIStyleCritique") {
       const route = await requireProviderOrNotice("AI style critique", "styleCritique");
       if (!route) return;
