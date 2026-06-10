@@ -1598,6 +1598,68 @@ async function main() {
     log("[rel2] accepted pass-2 bond renders with its rich meters", !!relEdge && relEdge.type === "rival" && relEdge.strength === 100 && relEdge.conflict === 80 && relEdge.secret === true);
   }
 
+  // --- [exq] extraction quality 2 — field mapping, dedupe, aliases, calibration ---
+  {
+    await B.StorageService.clear();
+    const owner = await B.EntityService.save("cast", { name: "Anwen Hale" }, { status: "active" });
+    // E1: deep-pass rich fields survive into suggestedChanges (and thus data).
+    const itemCand = B.buildCandidate({
+      entityType: "items", name: "Iron Seal",
+      payload: { name: "Iron Seal", type: "relic", rarity: "rare", owner: "Anwen Hale", confidence: 0.8 },
+    });
+    log("[exq] AI item fields map to real editor ids",
+      itemCand.suggestedChanges?.itemType === "relic" && itemCand.suggestedChanges?.rarity === "rare");
+    log("[exq] owner names resolve to live entity refs",
+      itemCand.suggestedChanges?.owner?.id === owner.id && itemCand.suggestedChanges?.owner?.type === "cast");
+    const castCand = B.buildCandidate({
+      entityType: "cast", name: "Bram Iron",
+      payload: { name: "Bram Iron", role: "antagonist", traits: "stubborn, loyal", confidence: 0.8 },
+    });
+    log("[exq] cast traits land as trait chips (data.tags)",
+      castCand.suggestedChanges?.role === "antagonist" && JSON.stringify(castCand.suggestedChanges?.tags) === JSON.stringify(["stubborn", "loyal"]));
+    const questCand = B.buildCandidate({
+      entityType: "quests", name: "Hold the gate",
+      payload: { title: "Hold the gate", type: "defense", status: "active", objectives: ["Man the wall", "Signal the keep"], confidence: 0.8 },
+    });
+    log("[exq] quest objectives become real steps",
+      questCand.suggestedChanges?.steps?.length === 2 && questCand.suggestedChanges.steps[0].title === "Man the wall");
+    // Category-bucket guard: quick-pass rows reuse `type` as the bucket.
+    const locCand = B.buildCandidate({ entityType: "locations", name: "Toll Gate", payload: { type: "locations", name: "Toll Gate" } });
+    log("[exq] category bucket never leaks in as a field value", !(locCand.suggestedChanges && locCand.suggestedChanges.kind === "locations"));
+    // E1 end-to-end: accepting (autoApply path) lands the mapped data.
+    const savedItem = await B.autoApplyCandidate(itemCand);
+    log("[exq] accepted candidate carries the mapped fields",
+      savedItem.data?.itemType === "relic" && savedItem.data?.rarity === "rare" && savedItem.data?.owner?.id === owner.id);
+    // E2: 0.80–0.85 near-duplicates become merge suggestions, not new records.
+    const nearDup = B.buildCandidate({ entityType: "cast", name: "Anwem Hales" });
+    log("[exq] near-duplicate names promote to merge",
+      nearDup.matchType === "ambiguous" && nearDup.existingEntityId === owner.id && nearDup.suggestedAction === "merge");
+    // E3: title + epithet alias clustering.
+    const clustered = B.clusterAliases([
+      B.buildCandidate({ entityType: "cast", name: "Captain Brec", confidence: 0.7 }),
+      B.buildCandidate({ entityType: "cast", name: "Brec", confidence: 0.7 }),
+    ]);
+    log("[exq] 'Captain Brec' clusters with 'Brec' (title alias)",
+      clustered.length === 1 && (clustered[0].suggestedChanges?.aliases || []).includes("Brec"));
+    const epithets = B.clusterAliases([
+      B.buildCandidate({ entityType: "cast", name: "the Silent Reaper", confidence: 0.7 }),
+      B.buildCandidate({ entityType: "cast", name: "the Reaper", confidence: 0.7 }),
+    ]);
+    log("[exq] epithet variants cluster on the shared last token", epithets.length === 1);
+    // E5: calibrated detector confidence honours Settings overrides + proximity.
+    log("[exq] detector confidence defaults hold", B.detectorConfidence("travel", {}) === 0.8);
+    log("[exq] tight constructions earn the proximity boost", B.detectorConfidence("travel", { proximity: 20 }) === 0.86);
+    await B.SettingsService.saveSection("extraction", { detectorConfidence: { travel: 0.7 } });
+    log("[exq] Settings overrides re-base a detector", B.detectorConfidence("travel", {}) === 0.7);
+    // E5: chunk-overlap exact-offset duplicates collapse without losing distinct spans.
+    const d1 = B.buildCandidate({ entityType: "cast", name: "Cole Fenn", startOffset: 10, endOffset: 19, sourceQuote: "alpha" });
+    const d2 = B.buildCandidate({ entityType: "cast", name: "Cole Fenn", startOffset: 10, endOffset: 19, sourceQuote: "alpha-overlap" });
+    const d3 = B.buildCandidate({ entityType: "cast", name: "Cole Fenn", startOffset: 400, endOffset: 409, sourceQuote: "beta" });
+    const deduped = B.dedupeCandidates([d1, d2, d3]);
+    log("[exq] same-span chunk duplicates skip; distinct spans still merge quotes",
+      deduped.length === 1 && deduped[0].sourceQuotes.includes("alpha") && deduped[0].sourceQuotes.includes("beta") && !deduped[0].sourceQuotes.includes("alpha-overlap"));
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

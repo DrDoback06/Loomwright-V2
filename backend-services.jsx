@@ -3633,6 +3633,88 @@
   // back-compat: legacy keys (`reason`, `targetEntityId`) are populated
   // alongside the new keys (`summary`, `existingEntityId`) so existing
   // review-queue consumers keep working.
+  // -------------------------------------------------------------------
+  // E1 — AI payload → entity fields. The deep pass returns rich
+  // per-category fields (traits, role, rarity, owner, objectives,
+  // members, goals, significance…). Map them onto the REAL editor field
+  // ids and lift them into suggestedChanges so (a) the queue card can
+  // show what will land and (b) both accept paths merge them into
+  // entity.data instead of dropping them.
+  // -------------------------------------------------------------------
+  function resolveEntityRefByName(name, types = null) {
+    const raw = typeof name === "string" ? name.trim() : "";
+    if (!raw) return null;
+    const hit = findKnownEntityMention(raw, { threshold: 0.85 });
+    if (hit && (!types || types.includes(hit.type))) {
+      return { id: hit.entity.id, name: hit.entity.name, type: hit.type };
+    }
+    return raw; // keep the prose name — still useful in the editor
+  }
+  function mapAiPayloadToData(entityType, payload = {}) {
+    const p = payload || {};
+    const out = {};
+    const asList = (v) => {
+      if (Array.isArray(v)) return v.map((x) => (typeof x === "string" ? x.trim() : x)).filter(Boolean);
+      if (typeof v === "string" && v.trim()) return v.split(/[,;]+/).map((s) => s.trim()).filter(Boolean);
+      return [];
+    };
+    const set = (k, v) => { if (v != null && v !== "" && !(Array.isArray(v) && !v.length)) out[k] = v; };
+    // Quick-pass rows reuse `type` as the CATEGORY bucket ("locations",
+    // "items"…) — never treat that as a field value.
+    const typeVal = (typeof p.type === "string" && normaliseType(p.type) !== normaliseType(entityType)) ? p.type : null;
+    switch (normaliseType(entityType)) {
+      case "cast":
+        set("role", typeof p.role === "string" ? p.role : null);
+        set("tags", asList(p.traits)); // trait chips render in the dossier
+        break;
+      case "items":
+        set("itemType", typeVal);
+        set("rarity", typeof p.rarity === "string" ? p.rarity : null);
+        if (p.owner) set("owner", resolveEntityRefByName(p.owner, ["cast"]));
+        break;
+      case "skills":
+        set("effect", typeof p.action === "string" ? p.action : null);
+        if (p.level != null && isFinite(Number(p.level))) set("tier", Math.max(1, Math.min(4, Math.round(Number(p.level)))));
+        if (p.user) {
+          const ref = resolveEntityRefByName(p.user, ["cast"]);
+          if (ref && typeof ref === "object") set("learnedBy", [ref]);
+        }
+        break;
+      case "quests":
+        set("questType", typeVal);
+        set("status", typeof p.status === "string" ? p.status : null);
+        if (asList(p.objectives).length) {
+          set("objectives", asList(p.objectives));
+          set("steps", asList(p.objectives).map((title) => ({ title, status: "Active", chapter: "", location: "" })));
+        }
+        break;
+      case "events":
+      case "timeline":
+        set("timelinePosition", typeof p.timestamp === "string" ? p.timestamp : null);
+        set("significance", typeof p.significance === "string" ? p.significance : null);
+        break;
+      case "locations":
+        set("kind", typeVal ? typeVal.toLowerCase() : null);
+        set("significance", typeof p.significance === "string" ? p.significance : null);
+        break;
+      case "factions":
+        set("kind", typeVal);
+        set("goals", asList(p.goals));
+        set("stance", typeof p.stance === "string" ? p.stance : null);
+        if (asList(p.members).length) {
+          set("members", asList(p.members).map((m) => resolveEntityRefByName(m, ["cast"])).filter(Boolean));
+        }
+        break;
+      case "lore":
+        set("kind", typeof p.category === "string" ? p.category : null);
+        set("significance", typeof p.significance === "string" ? p.significance : null);
+        break;
+      default:
+        break;
+    }
+    return out;
+  }
+
   function buildCandidate(input, opts = {}) {
     const entityType = normaliseType(input.entityType || input.type || "references");
     const name = String(input.name || input.title || "").trim() || "Suggestion";
@@ -3652,14 +3734,32 @@
         matchType = "new";
       }
     }
+    // E2 — near-duplicate guard: a "new" candidate that fuzzy-matches an
+    // existing record in the 0.80–0.85 band is probably the same thing
+    // misspelled or re-titled. Offer a merge instead of a duplicate.
+    let nearDupAction = null;
+    if (matchType === "new" && !existingEntityId) {
+      const near = findKnownEntityMention(name, { threshold: 0.80 });
+      if (near && near.matchType === "fuzzy" && normaliseType(near.type) === entityType) {
+        matchType = "ambiguous";
+        existingEntityId = near.entity.id;
+        nearDupAction = "merge";
+      }
+    }
     const previousState = input.previousState
       || (existingEntityId ? (EntityService.getSync(existingEntityId, entityType) || null) : null);
     const baseConfidence = typeof input.confidence === "number"
       ? (input.confidence > 1 ? input.confidence / 100 : input.confidence)
       : (opts.defaultConfidence != null ? opts.defaultConfidence : 0.7);
     const confidence = match ? Math.max(baseConfidence, match.confidence) : baseConfidence;
-    const suggestedChanges = input.suggestedChanges || null;
-    const suggestedAction = input.suggestedAction || (
+    // E1 — when the caller didn't shape suggestedChanges, derive them
+    // from the AI payload's rich fields so they survive acceptance.
+    let suggestedChanges = input.suggestedChanges || null;
+    if (!suggestedChanges) {
+      const mapped = mapAiPayloadToData(entityType, input.payload || input);
+      if (Object.keys(mapped).length) suggestedChanges = mapped;
+    }
+    const suggestedAction = nearDupAction || input.suggestedAction || (
       existingEntityId
         ? (suggestedChanges && Object.keys(suggestedChanges).length ? "update"
             : (previousState && diffEntity(previousState, input.payload || input).length ? "update" : "link"))
@@ -3751,6 +3851,24 @@
     return null;
   }
 
+  // E5 — detector confidence calibration. Base values are user-tunable
+  // (Settings ▸ extraction.detectorConfidence), and tight constructions
+  // (both parties within `near` chars of the verb) earn a small boost.
+  const DETECTOR_BASE_CONFIDENCE = {
+    itemTransfer: 0.78, itemLoss: 0.72, travel: 0.8, relationships: 0.74,
+    statChange: 0.7, questProgression: 0.66, events: 0.7, lore: 0.62,
+  };
+  function detectorConfidence(detectorId, opts = {}) {
+    let base = DETECTOR_BASE_CONFIDENCE[detectorId] ?? 0.7;
+    try {
+      const overrides = SettingsService.getSectionSync("extraction", {}).detectorConfidence || {};
+      const o = Number(overrides[detectorId]);
+      if (isFinite(o) && o > 0 && o <= 1) base = o;
+    } catch (_) {}
+    if (opts.proximity != null && opts.proximity <= (opts.near || 60)) base = Math.min(0.9, Math.round((base + 0.06) * 100) / 100);
+    return base;
+  }
+
   // -------------------------------------------------------------------
   // Phrase detectors. Each takes (text, index, chapterId, sessionId)
   // and returns an array of candidates in the standardised shape.
@@ -3789,7 +3907,7 @@
         existingEntityId: item.id,
         suggestedAction: "update",
         suggestedChanges,
-        confidence: 0.78,
+        confidence: detectorConfidence("itemTransfer", { proximity: Math.abs((item.offset || 0) - verbStart) }),
         matchType: "exact",
         sourceQuote,
         chapterId,
@@ -3857,7 +3975,7 @@
         existingEntityId: actor.id,
         suggestedAction: "update",
         suggestedChanges: { location: place.id },
-        confidence: 0.8,
+        confidence: detectorConfidence("travel", { proximity: Math.abs((place.offset || 0) - verbEnd) }),
         matchType: "exact",
         sourceQuote: makeSourceQuote(text, verbStart, verbEnd),
         chapterId,
@@ -3889,7 +4007,7 @@
         entityType: "relationships",
         name: `${subject.name} → ${object.name}`,
         suggestedAction: "create",
-        confidence: 0.74,
+        confidence: detectorConfidence("relationships", { proximity: Math.abs((object.offset || 0) - verbEnd) }),
         matchType: "new",
         sourceQuote: makeSourceQuote(text, verbStart, verbEnd),
         chapterId,
@@ -4103,8 +4221,19 @@
       ].join("|");
       const existing = byKey.get(key);
       if (!existing) {
-        byKey.set(key, { ...c, sourceQuotes: c.sourceQuotes && c.sourceQuotes.length ? c.sourceQuotes.slice(0, 3) : (c.sourceQuote ? [c.sourceQuote] : []) });
+        byKey.set(key, {
+          ...c,
+          sourceQuotes: c.sourceQuotes && c.sourceQuotes.length ? c.sourceQuotes.slice(0, 3) : (c.sourceQuote ? [c.sourceQuote] : []),
+          _seenOffsets: new Set(c.startOffset != null ? [c.startOffset + ":" + c.endOffset] : []),
+        });
         continue;
+      }
+      // Chunk-overlap guard: the exact same span already produced this
+      // candidate — skip instead of re-merging.
+      if (c.startOffset != null) {
+        const offKey = c.startOffset + ":" + c.endOffset;
+        if (existing._seenOffsets && existing._seenOffsets.has(offKey)) continue;
+        if (existing._seenOffsets) existing._seenOffsets.add(offKey);
       }
       // Merge: keep highest confidence; union sourceQuotes (max 3);
       // union relatedEntityIds; union suggestedChanges.
@@ -4118,7 +4247,7 @@
       existing.relatedEntityIds = [...new Set([...(existing.relatedEntityIds || []), ...(c.relatedEntityIds || [])])];
       existing.suggestedChanges = { ...(existing.suggestedChanges || {}), ...(c.suggestedChanges || {}) };
     }
-    return [...byKey.values()];
+    return [...byKey.values()].map((c) => { const { _seenOffsets, ...row } = c; return row; });
   }
 
   // -------------------------------------------------------------------
@@ -4260,6 +4389,15 @@
       let matchType = "new";
       if (known && (known.matchType === "exact" || known.matchType === "nickname")) continue;
       if (known) matchType = "ambiguous";
+      // E2 — a discovery surface that fuzzy-matches an existing record at
+      // ≥0.80 (or equals one after stripping a leading honorific) is a
+      // MENTION of that entity, not a new one. Skip it; the known-entity
+      // scan already records its occurrences.
+      if (matchType === "new") {
+        const nearExisting = findKnownEntityMention(surface, { threshold: 0.80 })
+          || findKnownEntityMention(stripHonorific(surface), { threshold: 0.9 });
+        if (nearExisting) continue;
+      }
       const cls = classifyProperNoun(text, surface, g.occ);
       let type, signal, confidence;
       if (cls) {
@@ -4311,11 +4449,18 @@
   // Cluster near-duplicate discovery candidates of the same type (typo-level
   // Levenshtein, or token-subset like "Saren" ⊂ "Saren of Hess"). Keeps the
   // longer/more-frequent name canonical and records the rest as aliases.
+  // E3 — honorifics/titles that prefix a name without changing identity
+  // ("Captain Brec" = "Brec"). Stripped form is used for clustering;
+  // the titled form survives as an alias.
+  const NER_HONORIFICS = /^(?:captain|lord|lady|sir|dame|king|queen|prince|princess|master|mistress|doctor|dr|general|commander|sergeant|brother|sister|father|mother|elder|the)\s+/i;
+  const stripHonorific = (s) => String(s || "").replace(NER_HONORIFICS, "").trim();
+
   function clusterAliases(candidates) {
     if (!Array.isArray(candidates) || candidates.length < 2) return candidates || [];
     const used = new Set();
     const result = [];
     const tokens = (s) => String(s || "").toLowerCase().split(/\s+/).filter((t) => t && !NER_CONNECTORS.has(t));
+    const lastToken = (s) => { const t = tokens(s); return t[t.length - 1] || ""; };
     for (let i = 0; i < candidates.length; i++) {
       if (used.has(i)) continue;
       const base = candidates[i];
@@ -4328,7 +4473,16 @@
         const otherTok = new Set(tokens(other.name));
         const subset = [...baseTok].every((t) => otherTok.has(t)) || [...otherTok].every((t) => baseTok.has(t));
         const near = levenshteinSimilarity(base.name, other.name) >= 0.88;
-        if (!subset && !near) continue;
+        // Title form: stripping a leading honorific from one side yields
+        // the other ("Captain Brec" ↔ "Brec").
+        const titleMerge = stripHonorific(base.name).toLowerCase() === String(other.name).toLowerCase().trim()
+          || stripHonorific(other.name).toLowerCase() === String(base.name).toLowerCase().trim();
+        // Epithet form: multi-word names sharing the same significant
+        // last token near-exactly ("the Silent Reaper" ↔ "the Reaper").
+        const epithetMerge = baseTok.size > 1 && otherTok.size > 1
+          && lastToken(base.name).length > 3
+          && levenshteinSimilarity(lastToken(base.name), lastToken(other.name)) >= 0.95;
+        if (!subset && !near && !titleMerge && !epithetMerge) continue;
         used.add(j);
         const longer = base.name.length >= other.name.length ? base.name : other.name;
         const shorter = longer === base.name ? other.name : base.name;
@@ -6898,6 +7052,11 @@ Only evidenced pairs. Return JSON only.`;
     extractProperNounSpans,
     buildAuthorContext,
     buildRelationshipPassCandidates,
+    buildCandidate,
+    clusterAliases,
+    dedupeCandidates,
+    mapAiPayloadToData,
+    detectorConfidence,
     analyzeWritingStyle,
     autoApplyCandidate,
     OccurrenceService,
