@@ -1571,9 +1571,34 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
       onSelect={onSelect}
       onToggleMulti={onToggleMulti}
       onClearMulti={() => { setMulti(new Set()); setView("overview"); }}
-      onMergeMulti={() => _castNotice("Merge multiple — coming with the Review queue tools.")}
-      onTagMulti={() => _castNotice("Tag multiple — coming with the entity tabs pass.")}
-      onDeleteMulti={() => _castNotice("Delete multiple — coming with the entity tabs pass.")}
+      onMergeMulti={async () => {
+        const ids = [...multi];
+        if (ids.length < 2) { _castNotice("Select at least two characters to merge."); return; }
+        const B = window.LoomwrightBackend;
+        const target = B?.EntityService?.getSync?.(ids[0], "cast");
+        if (!target || !B?.LinkService) return;
+        const names = ids.slice(1).map((mid) => B.EntityService.getSync(mid, "cast")?.name || mid).join(", ");
+        if (window.confirm && !window.confirm(`Merge ${names} into "${target.name}"? Every reference rebinds to ${target.name}; the merged records are removed.`)) return;
+        await B.LinkService.mergeEntities(ids[0], "cast", ids.slice(1));
+        setMulti(new Set()); setView("overview");
+        _castNotice(`Merged ${ids.length - 1} into ${target.name}.`);
+        window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      }}
+      onTagMulti={() => {
+        const ids = [...multi];
+        if (!ids.length) { _castNotice("Select characters to tag first."); return; }
+        window.dispatchEvent(new CustomEvent("lw:open-tag-modal", { detail: { targets: ids.map((mid) => ({ id: mid, type: "cast" })) } }));
+      }}
+      onDeleteMulti={async () => {
+        const ids = [...multi];
+        if (!ids.length) { _castNotice("Select characters to delete first."); return; }
+        if (window.confirm && !window.confirm(`Move ${ids.length} character${ids.length === 1 ? "" : "s"} to the trash? (30-day recovery)`)) return;
+        const B = window.LoomwrightBackend;
+        for (const mid of ids) await B?.EntityService?.delete("cast", mid);
+        setMulti(new Set()); setView("overview");
+        _castNotice(`${ids.length} moved to trash.`);
+        window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      }}
       onCreate={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "cast", mode: "full" } }))}
     />
   );

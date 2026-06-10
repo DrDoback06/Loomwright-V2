@@ -443,6 +443,17 @@ const AppShell = () => {
     };
   }, []);
 
+  // ----- Bulk tag modal (cast multi-select bar + wheel Tag action) -----
+  const [tagModal, setTagModal] = _us_a({ open: false, targets: [] });
+  _ue_a(() => {
+    const onOpen = (e) => {
+      const targets = Array.isArray(e?.detail?.targets) ? e.detail.targets.filter((t) => t && t.id) : [];
+      if (targets.length) setTagModal({ open: true, targets });
+    };
+    window.addEventListener("lw:open-tag-modal", onOpen);
+    return () => window.removeEventListener("lw:open-tag-modal", onOpen);
+  }, []);
+
   // ----- Entity Extraction Wizard (global big-extraction window) -----
   const [exWizard, setExWizard] = _us_a({ open: false, scope: "manuscript", typeFocus: null, chapterId: null });
   const closeExWizard = _uc_a(() => setExWizard((s) => ({ ...s, open: false })), []);
@@ -1088,7 +1099,10 @@ const AppShell = () => {
         break;
       case "speed": onOpenPanel("speedReader"); break;
       case "tangle": onOpenPanel("tangle"); break;
-      case "tag": notify("Tagging is coming with the entity tabs."); break;
+      case "tag":
+        if (ctx.entityId) window.dispatchEvent(new CustomEvent("lw:open-tag-modal", { detail: { targets: [{ id: ctx.entityId, type: ctx.entityType || "cast" }] } }));
+        else notify("Select an entity to tag first.");
+        break;
       case "extract": window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "manuscript" } })); break;
       default: break;
     }
@@ -1391,6 +1405,13 @@ const AppShell = () => {
       )}
 
       {/* Review queue merge modal */}
+      {tagModal.open && typeof TagEntitiesModal !== "undefined" && (
+        <TagEntitiesModal
+          open={tagModal.open}
+          targets={tagModal.targets}
+          onClose={() => setTagModal({ open: false, targets: [] })}
+        />
+      )}
       {mergeModal.open && typeof MergeCandidateModal !== "undefined" && (
         <MergeCandidateModal
           open={mergeModal.open}

@@ -275,4 +275,69 @@ const DenyConfirmation = ({ open, candidate, onConfirm, onCancel }) => {
   );
 };
 
-Object.assign(window, { MergeCandidateModal, EditCandidateModal, DenyConfirmation });
+// ---------------------------------------------------------------------
+// TagEntitiesModal — bulk tagging. Writes data.tags on every target
+// entity (the chips render as traits in dossiers and index in search).
+// Opened via lw:open-tag-modal { targets: [{ id, type }] } — from the
+// cast multi-select bar and the adaptive wheel's Tag action.
+// ---------------------------------------------------------------------
+const TagEntitiesModal = ({ open, targets = [], onClose }) => {
+  if (!open || !targets.length) return null;
+  const B = window.LoomwrightBackend;
+  const resolved = targets
+    .map((t) => B?.EntityService?.getSync?.(t.id, t.type))
+    .filter(Boolean);
+  const union = [...new Set(resolved.flatMap((e) => (Array.isArray(e.data?.tags) ? e.data.tags : [])))];
+  const [value, setValue] = _rmUS(union.join(", "));
+
+  const apply = async () => {
+    const tags = value.split(/[,;]+/).map((s) => s.trim()).filter(Boolean);
+    for (const e of resolved) {
+      await B.EntityService.update(e.type, e.id, { data: { ...(e.data || {}), tags } });
+    }
+    try {
+      window.dispatchEvent(new CustomEvent("lw:backend-notice", {
+        detail: { message: tags.length ? `Tagged ${resolved.length} entr${resolved.length === 1 ? "y" : "ies"}.` : `Tags cleared on ${resolved.length} entr${resolved.length === 1 ? "y" : "ies"}.` },
+      }));
+    } catch (_e) {}
+    onClose();
+  };
+
+  return (
+    <div className="mc-backdrop" role="dialog" aria-modal="true" aria-labelledby="tag-title">
+      <div className="mc" data-ui="TagEntitiesModal" data-testid="tag-entities-modal" style={{ maxWidth: 480 }}>
+        <div className="mc__head">
+          <div>
+            <div className="mc__title" id="tag-title">Tag {resolved.length === 1 ? (resolved[0].name || "entry") : resolved.length + " entries"}</div>
+            <div className="mc__sub">Comma-separated. Tags show as trait chips and are searchable.</div>
+          </div>
+        </div>
+        <div style={{ padding: "var(--sp-5)" }}>
+          {resolved.length > 1 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+              {resolved.map((e) => (
+                <span key={e.id} className="rpg-chip">{e.name}</span>
+              ))}
+            </div>
+          )}
+          <input
+            autoFocus
+            className="loc-body__filter"
+            style={{ width: "100%" }}
+            data-testid="tag-input"
+            value={value}
+            placeholder="e.g. northern, act-two, suspect"
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") apply(); if (e.key === "Escape") onClose(); }}
+          />
+          <div className="rpg-actions" style={{ marginTop: 12, justifyContent: "flex-end" }}>
+            <button className="rpg-btn rpg-btn--small rpg-btn--ghost" onClick={onClose}>Cancel</button>
+            <button className="rpg-btn rpg-btn--small rpg-btn--primary" data-testid="tag-apply" onClick={apply}>Apply tags</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+Object.assign(window, { MergeCandidateModal, EditCandidateModal, DenyConfirmation, TagEntitiesModal });
