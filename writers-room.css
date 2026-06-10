@@ -1015,19 +1015,6 @@
   box-shadow: var(--shadow-2);
 }
 
-/* Mobile collapse note */
-.wr-mobile-note {
-  position: absolute; bottom: 8px; left: 50%;
-  transform: translateX(-50%);
-  font-size: var(--fs-3xs);
-  color: var(--ink-4);
-  font-family: var(--font-mono);
-  background: var(--bg-paper-2);
-  padding: 4px 10px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--line-2);
-  display: none;
-}
 /* =====================================================================
    Mobile / compact — driven by .wr[data-mobile="true"] (viewport <= 860px
    OR the workspace.mobileCompact pref). Side margins become bottom-sheet
@@ -1035,9 +1022,6 @@
    wraps to multiple rows. Above this, margins render inline (the canvas
    column is minmax(0,1fr), so it shrinks rather than overflowing).
    ===================================================================== */
-.wr[data-mobile="true"] .wr-mobile-note { display: block; }
-.wr[data-mobile="true"][data-drawer="left"] .wr-mobile-note,
-.wr[data-mobile="true"][data-drawer="right"] .wr-mobile-note { display: none; }
 
 .wr-drawer-backdrop {
   position: fixed; inset: 0; z-index: 1150;

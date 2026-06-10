@@ -199,7 +199,7 @@ const TanglePanelBody = ({ panel }) => {
       </div>
 
       <div style={{ display: "flex", gap: 6, marginTop: "auto" }}>
-        <button className="rpg-btn rpg-btn--primary rpg-btn--small" data-callback="onCreateTangleNode" style={{ flex: 1 }}>New note</button>
+        <button className="rpg-btn rpg-btn--primary rpg-btn--small" data-callback="onCreateTangleNode" data-testid="tangle-tap-add" style={{ flex: 1 }}>New note</button>
         <button className="rpg-btn rpg-btn--small" data-callback="onSendTangleItemToWriter" style={{ flex: 1 }}
                 onClick={() => {
                   const n = noteish[0];
@@ -220,15 +220,18 @@ const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnec
   const ref = _tn_ur(null);
   const t = _tnType(node.kind);
 
-  const onMouseDown = (e) => {
-    if (e.button !== 0) return;
+  // Pointer events so the same drag works for mouse, pen, and touch.
+  const onPointerDown = (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
     if (e.target.classList && e.target.classList.contains("tan-node__handle")) return; // handled below
     e.stopPropagation();
     onSelect && onSelect(node.id);
+    const pointerId = e.pointerId;
     const startX = e.clientX, startY = e.clientY;
     const startNodeX = node.x, startNodeY = node.y;
     let lastX = startNodeX, lastY = startNodeY, moved = false;
     const onMove = (ev) => {
+      if (ev.pointerId !== pointerId) return;
       const dx = (ev.clientX - startX) / scale;
       const dy = (ev.clientY - startY) / scale;
       moved = moved || Math.abs(dx) > 1 || Math.abs(dy) > 1;
@@ -236,13 +239,16 @@ const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnec
       lastY = startNodeY + dy;
       onDrag && onDrag(node.id, lastX, lastY);
     };
-    const onUp = () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup",   onUp);
+    const onUp = (ev) => {
+      if (ev.pointerId !== pointerId) return;
+      document.removeEventListener("pointermove",   onMove);
+      document.removeEventListener("pointerup",     onUp);
+      document.removeEventListener("pointercancel", onUp);
       if (moved && onDragEnd) onDragEnd(node.id, lastX, lastY);
     };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup",   onUp);
+    document.addEventListener("pointermove",   onMove);
+    document.addEventListener("pointerup",     onUp);
+    document.addEventListener("pointercancel", onUp);
   };
 
   return (
@@ -251,7 +257,7 @@ const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnec
       className={"tan-node" + (selected ? " is-selected" : "") + (node.unlinked ? " is-unlinked" : "")}
       data-ui="TangleNode"
       style={{ left: node.x, top: node.y, "--ec": t.color }}
-      onMouseDown={onMouseDown}
+      onPointerDown={onPointerDown}
     >
       <div className="tan-node__head">
         <span style={{ fontFamily: "var(--font-display)", fontSize: 12, color: t.color }}>{t.glyph}</span>
@@ -263,11 +269,11 @@ const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnec
       <span
         className="tan-node__handle tan-node__handle--r"
         data-callback="onConnectTangleNodes"
-        onMouseDown={(e) => { e.stopPropagation(); onStartConnect && onStartConnect(node.id, e); }}
+        onPointerDown={(e) => { e.stopPropagation(); onStartConnect && onStartConnect(node.id, e); }}
       />
       <span
         className="tan-node__handle tan-node__handle--l"
-        onMouseDown={(e) => { e.stopPropagation(); onStartConnect && onStartConnect(node.id, e); }}
+        onPointerDown={(e) => { e.stopPropagation(); onStartConnect && onStartConnect(node.id, e); }}
       />
     </div>
   );
@@ -304,22 +310,66 @@ const TangleFullScreen = ({ onClose }) => {
   const selected = nodes.find((n) => n.id === selectedId);
   const selectedEdge = edges.find((e) => e.id === selectedEdgeId);
 
-  // ---- Pan handler -------------------------------------------------
-  const onCanvasMouseDown = (e) => {
-    if (e.button !== 0) return;
+  // ---- Pan + pinch (pointer events: mouse, pen, touch) -------------
+  // Active pointers on the canvas background; two touch pointers pinch.
+  const activePointers = _tn_ur(new Map());
+  const pinchRef = _tn_ur(null); // { startDist, startScale, startPan, cx, cy }
+
+  const onCanvasPointerDown = (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
     if (e.target.closest(".tan-node")) return;
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.current.size === 2) {
+      // Second finger down → switch from pan to pinch.
+      const [a, b] = [...activePointers.current.values()];
+      const rect = canvasRef.current?.getBoundingClientRect();
+      pinchRef.current = {
+        startDist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+        startScale: scale,
+        startPan: { ...pan },
+        cx: (a.x + b.x) / 2 - (rect ? rect.left : 0),
+        cy: (a.y + b.y) / 2 - (rect ? rect.top : 0),
+      };
+      return;
+    }
+
     setSelectedEdgeId(null);
     setPanning(true);
+    const pointerId = e.pointerId;
     const startX = e.clientX, startY = e.clientY;
     const startPan = { ...pan };
-    const onMove = (ev) => setPan({ x: startPan.x + (ev.clientX - startX), y: startPan.y + (ev.clientY - startY) });
-    const onUp = () => {
-      setPanning(false);
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup",   onUp);
+    const onMove = (ev) => {
+      if (activePointers.current.has(ev.pointerId)) {
+        activePointers.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      }
+      if (pinchRef.current && activePointers.current.size >= 2) {
+        const [a, b] = [...activePointers.current.values()];
+        const p = pinchRef.current;
+        const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+        const next = Math.max(0.3, Math.min(2.5, p.startScale * (dist / p.startDist)));
+        // Keep the pinch centre stationary in canvas space.
+        const px = (p.cx - p.startPan.x) / p.startScale;
+        const py = (p.cy - p.startPan.y) / p.startScale;
+        setScale(next);
+        setPan({ x: p.cx - px * next, y: p.cy - py * next });
+        return;
+      }
+      if (ev.pointerId !== pointerId) return;
+      setPan({ x: startPan.x + (ev.clientX - startX), y: startPan.y + (ev.clientY - startY) });
     };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup",   onUp);
+    const onUp = (ev) => {
+      activePointers.current.delete(ev.pointerId);
+      if (activePointers.current.size < 2) pinchRef.current = null;
+      if (ev.pointerId !== pointerId) return;
+      setPanning(false);
+      document.removeEventListener("pointermove",   onMove);
+      document.removeEventListener("pointerup",     onUp);
+      document.removeEventListener("pointercancel", onUp);
+    };
+    document.addEventListener("pointermove",   onMove);
+    document.addEventListener("pointerup",     onUp);
+    document.addEventListener("pointercancel", onUp);
   };
 
   // ---- Wheel zoom --------------------------------------------------
@@ -337,17 +387,20 @@ const TangleFullScreen = ({ onClose }) => {
     setPan({ x: mx - px * next, y: my - py * next });
   };
 
-  // ---- Connect drag ----------------------------------------------
+  // ---- Connect drag (pointer events) -------------------------------
   const onStartConnect = (fromId, e) => {
     setConnectFrom(fromId);
+    const pointerId = e.pointerId;
     const rect = canvasRef.current?.getBoundingClientRect();
     const onMove = (ev) => {
+      if (pointerId != null && ev.pointerId !== pointerId) return;
       if (!rect) return;
       const x = (ev.clientX - rect.left - pan.x) / scale;
       const y = (ev.clientY - rect.top  - pan.y) / scale;
       setConnectPos({ x, y });
     };
     const onUp = async (ev) => {
+      if (pointerId != null && ev.pointerId !== pointerId) return;
       const dropEl = document.elementFromPoint(ev.clientX, ev.clientY);
       const nodeEl = dropEl?.closest && dropEl.closest("[data-tn-id]");
       if (nodeEl) {
@@ -359,11 +412,13 @@ const TangleFullScreen = ({ onClose }) => {
       }
       setConnectFrom(null);
       setConnectPos(null);
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup",   onUp);
+      document.removeEventListener("pointermove",   onMove);
+      document.removeEventListener("pointerup",     onUp);
+      document.removeEventListener("pointercancel", onUp);
     };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup",   onUp);
+    document.addEventListener("pointermove",   onMove);
+    document.addEventListener("pointerup",     onUp);
+    document.addEventListener("pointercancel", onUp);
   };
 
   // ---- Drag node (optimistic; persisted on release) ----------------
@@ -398,6 +453,32 @@ const TangleFullScreen = ({ onClose }) => {
   const onEntityDrop = async (ent, e) => {
     const p = canvasPoint(e);
     const row = await B()?.TangleService?.addEntityNode(live.activeBoardId, ent, p);
+    if (row) setSelectedId(row.id);
+  };
+
+  // ---- Touch fallback: HTML5 drag never fires on coarse pointers, so
+  // a TAP on a tray tile drops the card at the canvas centre instead.
+  const coarsePointer = typeof window !== "undefined" && window.matchMedia
+    && window.matchMedia("(pointer: coarse)").matches;
+  const canvasCentre = () => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    return rect
+      ? { x: (rect.width / 2 - pan.x) / scale - 80, y: (rect.height / 2 - pan.y) / scale - 30 }
+      : { x: 200, y: 200 };
+  };
+  const onTrayTapEntity = async (ent) => {
+    if (!coarsePointer) return;
+    const row = await B()?.TangleService?.addEntityNode(live.activeBoardId, ent, canvasCentre());
+    if (row) { setSelectedId(row.id); _tnNotice((ent.name || "Entity") + " added to the board."); }
+  };
+  const onTrayTapKind = async (kind) => {
+    if (!coarsePointer) return;
+    const t = _tnType(kind);
+    const p = canvasCentre();
+    const row = await B()?.TangleService?.addNode({
+      boardId: live.activeBoardId, kind, x: p.x, y: p.y,
+      title: "New " + (t?.label || "node"), preview: "",
+    });
     if (row) setSelectedId(row.id);
   };
 
@@ -503,7 +584,8 @@ const TangleFullScreen = ({ onClose }) => {
                 <div key={ent.id} className="tan-fs__tray-tile" data-testid={"tan-tray-" + ent.id}
                      draggable
                      onDragEnd={(e) => onEntityDrop(ent, e)}
-                     title={"Drag " + (ent.name || "entity") + " onto the board"}>
+                     onClick={() => onTrayTapEntity(ent)}
+                     title={coarsePointer ? "Tap to add " + (ent.name || "entity") + " to the board" : "Drag " + (ent.name || "entity") + " onto the board"}>
                   <span style={{ color: t.color, fontFamily: "var(--font-display)" }}>{t.glyph}</span>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ent.name}</span>
                 </div>
@@ -522,7 +604,8 @@ const TangleFullScreen = ({ onClose }) => {
             <div key={t.id} className="tan-fs__tray-tile"
                  draggable
                  onDragEnd={(e) => onTrayDrop(t.id, e)}
-                 title={"Drag to add a " + t.label}>
+                 onClick={() => onTrayTapKind(t.id)}
+                 title={coarsePointer ? "Tap to add a " + t.label : "Drag to add a " + t.label}>
               <span style={{ color: t.color, fontFamily: "var(--font-display)" }}>{t.glyph}</span>
               <span>{t.label}</span>
             </div>
@@ -592,7 +675,7 @@ const TangleFullScreen = ({ onClose }) => {
       <div
         ref={canvasRef}
         className={"tan-fs__canvas" + (panning ? " is-panning" : "")}
-        onMouseDown={onCanvasMouseDown}
+        onPointerDown={onCanvasPointerDown}
         onWheel={onWheel}
         onDragOver={(e) => e.preventDefault()}
       >

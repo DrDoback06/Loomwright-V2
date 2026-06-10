@@ -122,9 +122,14 @@ const AtlasPin = ({ loc, focused, dim, onClick, scaleLabel = 1, showLabel = true
   const { x, y } = _amPx(loc);
   const conf = PIN_BY_TYPE[loc.type] || PIN_BY_TYPE.building;
   const opacity = dim ? 0.28 : 1;
+  // Coarse pointers (touch) get an invisible enlarged hit circle so a
+  // fingertip can land a small village pin.
+  const coarse = typeof window !== "undefined" && window.matchMedia
+    && window.matchMedia("(pointer: coarse)").matches;
   return (
     <g className={"atm-pin" + (focused ? " is-focused" : "")} transform={`translate(${x}, ${y})`} opacity={opacity}
        onClick={(e) => { e.stopPropagation(); onClick && onClick(loc); }} style={{ cursor: "pointer" }}>
+      {coarse && <circle r={Math.max(16, conf.r + 10)} fill="transparent"/>}
       {focused && (
         <g>
           <circle r={conf.r + 8} fill="rgba(255, 200, 80, 0.18)"/>

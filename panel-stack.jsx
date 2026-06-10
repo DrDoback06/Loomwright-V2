@@ -391,18 +391,24 @@ const PanelStack = ({
       detail: { type: panel?.entityType, mode: "json" },
     })),
   };
+  // Phone: ONE full-screen sheet at a time. Pinning has no meaning on a
+  // single-surface screen, so pinned panels join the ordinary stack and
+  // everything but the front panel waits in the collapsed strip.
+  const isMobile = typeof useIsMobile !== "undefined" ? useIsMobile() : false;
+
   if (!panels || panels.length === 0) return null;
 
   // Sort by 'order' for deterministic render
   const sorted = [...panels].sort((a, b) => (a.order || 0) - (b.order || 0));
 
-  const pinned       = sorted.filter((p) => p.pinned && !p.collapsed);
-  const unpinnedAll  = sorted.filter((p) => !p.pinned && !p.collapsed);
+  const pinned       = isMobile ? [] : sorted.filter((p) => p.pinned && !p.collapsed);
+  const unpinnedAll  = isMobile ? sorted.filter((p) => !p.collapsed) : sorted.filter((p) => !p.pinned && !p.collapsed);
   const userCollapsed = sorted.filter((p) => p.collapsed);
 
-  // Cap visible unpinned at MAX_VISIBLE_UNPINNED. Oldest (lowest order) overflows.
-  const overflow = unpinnedAll.slice(0, Math.max(0, unpinnedAll.length - MAX_VISIBLE_UNPINNED));
-  const visible  = unpinnedAll.slice(Math.max(0, unpinnedAll.length - MAX_VISIBLE_UNPINNED));
+  // Cap visible unpinned. Oldest (lowest order) overflows to the rail.
+  const maxVisible = isMobile ? 1 : MAX_VISIBLE_UNPINNED;
+  const overflow = unpinnedAll.slice(0, Math.max(0, unpinnedAll.length - maxVisible));
+  const visible  = unpinnedAll.slice(Math.max(0, unpinnedAll.length - maxVisible));
 
   const railTabs = [...overflow, ...userCollapsed];
 

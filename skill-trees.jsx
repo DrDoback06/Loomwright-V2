@@ -530,7 +530,18 @@ const SkillTreeCanvas = ({
     e.preventDefault();
     setView((v) => ({ ...v, k: Math.max(0.5, Math.min(2.5, v.k * (e.deltaY < 0 ? 1.1 : 0.9))) }));
   };
+  // Two-pointer pinch zoom (touch). Pointers tracked alongside dragRef.
+  const pinchPointers = _st_ur(new Map());
+  const pinchRef = _st_ur(null); // { startDist, startK }
   const onPointerDownBg = (e) => {
+    pinchPointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinchPointers.current.size === 2) {
+      const [a, b] = [...pinchPointers.current.values()];
+      pinchRef.current = { startDist: Math.hypot(a.x - b.x, a.y - b.y) || 1, startK: view.k };
+      dragRef.current = null;
+      svgRef.current.setPointerCapture?.(e.pointerId);
+      return;
+    }
     if (e.target.closest && e.target.closest("[data-st-node]")) return;
     if (tool === "pan" || e.button === 1) {
       dragRef.current = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: view.x, oy: view.y };
@@ -543,6 +554,7 @@ const SkillTreeCanvas = ({
   };
   const onPointerDownNode = (e, n) => {
     e.stopPropagation();
+    pinchPointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (tool === "select") {
       dragRef.current = { kind: "node", id: n.id, moved: false };
       svgRef.current.setPointerCapture?.(e.pointerId);
@@ -551,6 +563,16 @@ const SkillTreeCanvas = ({
     }
   };
   const onPointerMove = (e) => {
+    if (pinchPointers.current.has(e.pointerId)) {
+      pinchPointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (pinchRef.current && pinchPointers.current.size >= 2) {
+      const [a, b] = [...pinchPointers.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      const k = Math.max(0.5, Math.min(2.5, pinchRef.current.startK * (dist / pinchRef.current.startDist)));
+      setView((v) => ({ ...v, k }));
+      return;
+    }
     const d = dragRef.current;
     if (!d) return;
     if (d.kind === "pan") {
@@ -561,7 +583,11 @@ const SkillTreeCanvas = ({
       setDragPos({ id: d.id, x: p.x, y: p.y });
     }
   };
-  const onPointerUp = () => {
+  const onPointerUp = (e) => {
+    if (e) {
+      pinchPointers.current.delete(e.pointerId);
+      if (pinchPointers.current.size < 2) pinchRef.current = null;
+    }
     const d = dragRef.current;
     dragRef.current = null;
     if (d && d.kind === "node") {
@@ -579,7 +605,7 @@ const SkillTreeCanvas = ({
     <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="stc__svg" preserveAspectRatio="xMidYMid meet"
          data-tool={tool}
          onWheel={onWheel} onPointerDown={onPointerDownBg}
-         onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+         onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
       <defs>
         <radialGradient id={"stc-vault-" + tree.id} cx="50%" cy="55%" r="65%">
           <stop offset="0%"  stopColor="#1a1814" stopOpacity="0.04"/>

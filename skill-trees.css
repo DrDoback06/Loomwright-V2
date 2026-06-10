@@ -585,6 +585,7 @@
   background: linear-gradient(to bottom, var(--st-paper), var(--st-paper-2));
 }
 .stc__svg {
+  touch-action: none; /* pointer-event pan/drag/pinch own the gesture */
   width: 100%; height: 100%;
   display: block;
 }

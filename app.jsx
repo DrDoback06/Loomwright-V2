@@ -192,6 +192,10 @@ const AppShell = () => {
   // App view: shell or design system
   const [view, setView] = _us_a("shell");
 
+  // Phone layout (≤700px): bottom nav replaces the rail; panels open as
+  // ONE full-screen sheet at a time (panel-stack reads the same hook).
+  const isMobile = typeof useIsMobile !== "undefined" ? useIsMobile() : false;
+
   // Routing — only true full-screen routes live here.
   // Valid: home, today, writers-room, settings.
   const [routeId, setRouteId] = _us_a("writers-room");
@@ -1198,6 +1202,7 @@ const AppShell = () => {
         className="app-shell"
         data-ui="AppShell"
         data-leftrail={leftExpanded ? "expanded" : "collapsed"}
+        data-mobile={isMobile ? "true" : "false"}
       >
         <div className="app-topbar">
           <TopBar
@@ -1342,6 +1347,19 @@ const AppShell = () => {
             canvasZoom={routeId === "tangle" ? 1 : null}
           />
         </div>
+
+        {/* Phone bottom navigation — replaces the left rail ≤700px. */}
+        {isMobile && view === "shell" && typeof MobileBottomNav !== "undefined" && (
+          <MobileBottomNav
+            routeId={routeId}
+            navItems={liveNavItems}
+            openPanelKinds={new Set(panels.map((p) => PANELKIND_BY_ID[p.id]).filter(Boolean))}
+            onSetRoute={(r) => setRouteId(r)}
+            onOpenPanel={onOpenPanel}
+            onOpenSettings={onOpenSettings}
+            onOpenCommandPalette={onOpenCommandPalette}
+          />
+        )}
       </div>
 
       <CommandPalette
@@ -1595,8 +1613,6 @@ const AppShell = () => {
           />
         </TweakSection>
       </TweaksPanel>
-
-      <div className="mobile-note">📱 On mobile: rails collapse to drawer/bottom nav. See specimen page.</div>
 
       <GlobalToastHost/>
     </>

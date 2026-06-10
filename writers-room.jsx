@@ -2007,8 +2007,6 @@ const WritersRoomScreen = ({
             </div>
           )}
 
-          <div className="wr-mobile-note">📱 On mobile: margins collapse to bottom sheets. Adaptive wheel via long-press.</div>
-
           {/* Floating selection toolbar (demo: shown above an example paragraph) */}
           {selToolbar.visible && !focusMode && activeChapter && !activeChapter.reserved && (
             <div style={{ position: "relative" }}>

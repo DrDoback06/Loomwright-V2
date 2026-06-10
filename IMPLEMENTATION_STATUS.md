@@ -20,6 +20,29 @@ smoke [exq] [pron] [enrich]:**
 - E6: "Fill from manuscript" enrichment on the Cast dossier and entity
   editor (provider-gated; local mode routes pending suggestions).
 
+**Day 3 — mobile app version (M1–M5), spec 35 + preview PWA tests:**
+- M1 shell: ≤700px the left rail + status strip give way to a 5-slot
+  bottom nav (Home · Write · Browse · Search · More) with Browse/More
+  bottom sheets listing every tab/utility from NAV_ITEMS; docked panels
+  open as ONE full-screen sheet (panel-stack caps visible panels at 1;
+  older panels wait in a horizontal strip above the nav); workspaces
+  collapse to a single column. Same handlers as the rail — no parallel
+  mobile logic.
+- M2 PWA: responsive viewport + theme-color in dev & production shells;
+  manifest.json + maskable SVG icon + cache-first sw.js stamped with the
+  real asset list at build time; SW registered in production only;
+  7 new build checks. Installable + offline on Android/desktop Chrome.
+- M3 touch: tangle node-drag / canvas-pan / connect-drag converted to
+  pointer events with two-finger pinch zoom (tangle + skill-tree
+  canvases, touch-action: none); coarse-pointer tap-to-add on tangle
+  tray tiles (HTML5 drag never fires on touch); atlas pins get an
+  invisible ≥16px hit circle on coarse pointers.
+- M4 small screens: topbar slims to brand + privacy + queue (the rest
+  forced a zoomed-out layout viewport); design-era "📱 on mobile…"
+  placeholder notes deleted; onboarding/palette/home single-column rules.
+- M5 tests: tests/e2e/35-mobile.spec.js (390×844 + touch, 5 tests) and
+  production-preview PWA assertions (manifest/SW/phone boot).
+
 **Day 2 — last demo surfaces went live (S1–S7), spec 36:**
 - Research Library inspector (real linked entities + Link-entity picker
   + persisted toggles); Trash workspace AND docked panel (live rows,

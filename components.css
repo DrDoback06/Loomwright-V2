@@ -1343,18 +1343,6 @@
 /* Tweaks-related */
 .tweaks-host { font-family: var(--font-sans); }
 
-/* Mobile note */
-.mobile-note {
-  position: fixed; right: 12px; bottom: 36px;
-  background: var(--bg-elev); border: 1px solid var(--line-2);
-  border-radius: var(--r-3);
-  padding: 6px 10px;
-  font-size: var(--fs-2xs); color: var(--ink-3);
-  box-shadow: var(--shadow-2);
-  display: none;
-}
-@media (max-width: 720px) { .mobile-note { display: block; } }
-
 /* View switcher tabs in topbar */
 .view-tabs { display: flex; align-items: center; gap: 2px; padding: 2px; background: var(--bg-sunken); border-radius: var(--r-3); border: 1px solid var(--line-2); }
 .view-tabs__btn {

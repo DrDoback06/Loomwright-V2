@@ -1149,6 +1149,7 @@
 
 .tan-fs__canvas {
   position: relative;
+  touch-action: none; /* pointer-event drags own the gesture (pan/pinch) */
   background:
     linear-gradient(rgba(58,44,18,0.05) 1px, transparent 1px) 0 0 / 24px 24px,
     linear-gradient(90deg, rgba(58,44,18,0.05) 1px, transparent 1px) 0 0 / 24px 24px,
@@ -1165,6 +1166,7 @@
 }
 .tan-node {
   position: absolute;
+  touch-action: none; /* node drag owns the gesture on touch */
   min-width: 130px;
   max-width: 220px;
   padding: 10px 12px;

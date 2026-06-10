@@ -14,6 +14,14 @@ bottom is what remains intentionally out of scope.
 - Detector confidence calibration + chunk-overlap dedupe by offsets.
 - "Fill from manuscript" per-entity enrichment (Cast dossier chip + entity editor footer; provider-gated with a useful local path).
 
+### Day 3 — mobile app version (M1–M5, spec 35 + preview PWA tests)
+- Phone shell (≤700px): bottom nav + Browse/More sheets replace the rail;
+  panels are one full-screen sheet at a time with a collapsed strip.
+- Installable PWA: manifest + maskable icon + build-stamped cache-first
+  service worker (production only); responsive viewport everywhere.
+- Touch: pointer-event drags + pinch zoom on tangle & skill-tree
+  canvases; tap-to-add tray fallback; enlarged atlas pin hit-targets.
+
 ### Day 2 — every remaining demo surface live (S1–S7, spec 36)
 - Research Library: real linked-entity chips + inline Link-entity picker; AI/style/canon toggles persist.
 - Trash: workspace + docked panel fully live (real rows, preview, restore, double-confirmed purge).

@@ -16,26 +16,47 @@
    --------------------------------------------------------------------- */
 .app-shell[data-mobile="true"] {
   grid-template-columns: 1fr;
-  grid-template-rows: var(--topbar-h) 1fr calc(54px + env(safe-area-inset-bottom, 0px));
+  /* minmax(0,1fr): the work row SHRINKS to the viewport — content can
+     never push the nav row off-screen. Definite height: dvh tracks the
+     browser chrome on phones (vh fallback first). */
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr) calc(54px + env(safe-area-inset-bottom, 0px));
   grid-template-areas:
     "topbar"
     "work"
     "mnav";
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 .app-shell[data-mobile="true"] .app-left,
 .app-shell[data-mobile="true"] .app-status { display: none; }
-.app-shell[data-mobile="true"] .app-work { grid-area: work; min-width: 0; }
+.app-shell[data-mobile="true"] .app-work {
+  grid-area: work;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden; /* the work area never bleeds over the nav row */
+}
 
-/* Topbar: keep brand + privacy + search; hide desktop-only selectors. */
+/* Topbar: brand + privacy + queue only. Search lives in the bottom nav,
+   Settings in the More sheet — everything else would force the layout
+   viewport wider than the phone and zoom the whole app out. */
 .app-shell[data-mobile="true"] .topbar__selector,
 .app-shell[data-mobile="true"] .topbar__divider,
-.app-shell[data-mobile="true"] .topbar__brand-tag { display: none; }
+.app-shell[data-mobile="true"] .topbar__brand-tag,
+.app-shell[data-mobile="true"] .topbar__search,
+.app-shell[data-mobile="true"] .view-tabs,
+.app-shell[data-mobile="true"] .topbar__entity-context,
+.app-shell[data-mobile="true"] .topbar__avatar,
+.app-shell[data-mobile="true"] [data-testid="topbar-settings"] { display: none; }
+.app-shell[data-mobile="true"] .topbar { min-width: 0; padding: 0 10px; gap: 6px; }
+.app-shell[data-mobile="true"] .topbar__right { min-width: 0; }
 
 /* ---------------------------------------------------------------------
    2. Bottom navigation
    --------------------------------------------------------------------- */
 .mnav {
   grid-area: mnav;
+  position: relative; /* z-index needs a positioned box to beat overflowing content */
   display: flex;
   align-items: stretch;
   justify-content: space-around;
@@ -177,9 +198,10 @@
   border-left: none;
   border-right: none;
 }
-/* If both a pinned and an unpinned zone exist, the LAST zone wins the
-   screen; earlier zones hide (one surface at a time on a phone). */
-.app-shell[data-mobile="true"] .pstk__zone:not(:last-of-type) { display: none; }
+/* One surface at a time: only the FRONT panel renders (panel-stack caps
+   visible unpinned panels at 1 on mobile, this is the belt to that
+   suspenders — e.g. when a pinned zone would also render). */
+.app-shell[data-mobile="true"] .pstk__panel:not(.is-front) { display: none; }
 
 /* Collapsed/overflow tabs: horizontal strip above the bottom nav. */
 .app-shell[data-mobile="true"] .pstk__rail {
