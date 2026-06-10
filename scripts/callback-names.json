@@ -215,6 +215,8 @@
   "onExportPrivacyProfile",
   "onExportProfile",
   "onExportProjectData",
+  "onExportProjectHtml",
+  "onExportProjectMarkdown",
   "onExportSettingsProfile",
   "onExportStyleInfluencePack",
   "onExtractCast",

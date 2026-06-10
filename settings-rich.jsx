@@ -733,10 +733,22 @@ const SetReferences = ({ onRequest }) => {
 // =====================================================================
 // IMPORT / EXPORT
 // =====================================================================
-const SetImport = () => (
+const SetImport = () => {
+  const [scope, setScope] = React.useState({ manuscript: true, codex: true });
+  return (
   <SetGroupCard title="Import / Export" hint="Move your project in and out.">
     <div className="set-grid-2">
       <button className="set-btn set-btn--outline" data-callback="onExportProjectData"><Icon name="download" size={11}/> Export project</button>
+      <button className="set-btn set-btn--outline" data-callback="onExportProjectMarkdown" data-testid="set-export-md"
+              data-scope-manuscript={String(scope.manuscript)} data-scope-codex={String(scope.codex)}>
+        <Icon name="scroll" size={11}/> Export as Markdown</button>
+      <button className="set-btn set-btn--outline" data-callback="onExportProjectHtml" data-testid="set-export-html"
+              data-scope-manuscript={String(scope.manuscript)} data-scope-codex={String(scope.codex)}>
+        <Icon name="paper" size={11}/> Export as HTML</button>
+      <div className="set-scope" data-ui="SetExportScope">
+        <label><input type="checkbox" checked={scope.manuscript} onChange={() => setScope((s) => ({ ...s, manuscript: !s.manuscript }))}/> Manuscript</label>
+        <label><input type="checkbox" checked={scope.codex} onChange={() => setScope((s) => ({ ...s, codex: !s.codex }))}/> Codex (entities, canon, references)</label>
+      </div>
       <button className="set-btn set-btn--outline" data-callback="onImportProjectData"><Icon name="paper" size={11}/> Import project</button>
       <button className="set-btn set-btn--outline" data-callback="onExportEntityLibrary"><Icon name="download" size={11}/> Export entity library</button>
       <button className="set-btn set-btn--outline" data-callback="onImportEntityLibrary"><Icon name="paper" size={11}/> Import entity library</button>
@@ -747,7 +759,8 @@ const SetImport = () => (
       <button className="set-btn set-btn--primary" data-callback="onLoadSampleProject"><Icon name="sparkle" size={11}/> Load sample project</button>
     </div>
   </SetGroupCard>
-);
+  );
+};
 
 // =====================================================================
 // SHORTCUTS

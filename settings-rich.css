@@ -409,3 +409,14 @@ select.set-input {
 @media (max-width: 900px) {
   .set-row { grid-template-columns: 1fr; gap: 4px; }
 }
+
+/* Export scope checkboxes (Markdown/HTML world-bible export) */
+.set-scope {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--set-ink-3, #76684c);
+  padding: 2px 2px 0;
+}
+.set-scope label { display: flex; align-items: center; gap: 5px; cursor: pointer; }

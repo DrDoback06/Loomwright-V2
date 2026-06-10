@@ -216,6 +216,8 @@ window.__LW_CALLBACK_NAMES = [
   "onExportPrivacyProfile",
   "onExportProfile",
   "onExportProjectData",
+  "onExportProjectHtml",
+  "onExportProjectMarkdown",
   "onExportSettingsProfile",
   "onExportStyleInfluencePack",
   "onExtractCast",

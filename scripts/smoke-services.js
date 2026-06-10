@@ -1496,6 +1496,44 @@ async function main() {
       exportedTables.some((t) => t.id === mine.id) && !exportedTables.some((t) => t.source === "builtin"));
   }
 
+  // --- [md] Markdown / HTML world-bible export ---
+  {
+    await B.StorageService.clear();
+    const keep = await B.EntityService.save("locations", { name: "Toll Gate", summary: "A fortified crossing." }, { status: "active" });
+    await B.EntityService.save("cast", {
+      name: "Anwen Hale", summary: "Holds the north road.",
+      data: { role: "protagonist", homeLocation: { id: keep.id, name: "Toll Gate", type: "locations" }, goals: ["Keep the gate open"] },
+    }, { status: "active" });
+    await B.EntityService.save("lore", { name: "Iron sinks in mist.", data: { band: "canon" } }, { status: "active" });
+    const mdCastA = B.EntityService.listSync("cast")[0];
+    const mdCastB = await B.EntityService.save("cast", { name: "Bram Iron" }, { status: "active" });
+    await B.EntityService.save("relationships", {
+      name: "Anwen → Bram", summary: "Border rivals.",
+      data: { fromId: mdCastA.id, toId: mdCastB.id, bondType: "rival" },
+    }, { status: "active" });
+    await B.ReferencesService.save({ title: "Coastal forts dossier", kind: "research", content: "Fort spacing follows the beacon line." });
+    await B.ManuscriptChapterService.save({
+      chapters: [{ id: "md-c1", num: 1, title: "The Gate" }],
+      activeChapterId: "md-c1",
+      manuscripts: { "md-c1": { html: "", text: "Anwen walked the toll road in the rain." } },
+    });
+    const md = B.ProjectArchiveService.buildMarkdownExport({});
+    log("[md] project header present", /^# Loomwright Project/m.test(md));
+    log("[md] manuscript chapter + body included", md.includes("### Ch. 1 — The Gate") && md.includes("toll road in the rain"));
+    log("[md] entity sections render with summaries", md.includes("## Cast") && md.includes("### Anwen Hale") && md.includes("Holds the north road."));
+    log("[md] linked records resolve to names (no ids)", md.includes("**Home Location:** Toll Gate") && !md.includes(keep.id));
+    log("[md] relationships table renders", md.includes("| From | Bond | To | Notes |") && md.includes("| Anwen Hale | rival | Bram Iron |"));
+    log("[md] canon facts listed with band", md.includes("## Canon") && md.includes("**[CANON]** Iron sinks in mist."));
+    log("[md] references indexed", md.includes("## References") && md.includes("**Coastal forts dossier** (research)"));
+    log("[md] no [object Object] anywhere", !md.includes("[object Object]"));
+    const mdNoMs = B.ProjectArchiveService.buildMarkdownExport({ scope: { manuscript: false } });
+    log("[md] scope can exclude the manuscript", !mdNoMs.includes("## Manuscript") && mdNoMs.includes("## Cast"));
+    const html = B.ProjectArchiveService.buildHtmlExport({});
+    log("[md] html export is a standalone document", html.startsWith("<!doctype html>") && html.includes("<h1>Loomwright Project</h1>"));
+    log("[md] html renders the relationships table", html.includes("<table>") && html.includes("<td>Anwen Hale</td>"));
+    log("[md] html leaves no raw markdown bold", !/\*\*/.test(html));
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

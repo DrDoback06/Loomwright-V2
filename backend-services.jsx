@@ -4746,6 +4746,17 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
   }
 
+  async function downloadTextFile(filename, mime, text) {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+  }
+
   function pickJsonFile() {
     return new Promise((resolve, reject) => {
       const input = document.createElement("input");
@@ -4917,6 +4928,209 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       const stamp = (payload.exportedAt || nowIso()).replace(/[:.]/g, "-");
       await downloadJson(`${slug}-${stamp}.json`, payload);
       return payload;
+    },
+
+    // -----------------------------------------------------------------
+    // Readable exports — the world bible as Markdown (Obsidian-friendly)
+    // or a standalone HTML document. Walks the same live stores as the
+    // JSON export but renders prose: project header, chapters, one
+    // section per entity type with humanized fields (linked records
+    // resolve to their names), a relationships table, the timeline,
+    // canon facts and a references index. options.scope:
+    // { manuscript: true, codex: true }.
+    // -----------------------------------------------------------------
+    buildMarkdownExport(options = {}) {
+      const scope = { manuscript: true, codex: true, ...(options.scope || {}) };
+      const includeSample = options.includeSampleData !== false;
+      const humanKey = (k) => String(k)
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/[_-]+/g, " ")
+        .replace(/^./, (c) => c.toUpperCase());
+      const SKIP_KEYS = new Set([
+        "relatedEntityIds", "draftNodes", "orphanDismissed", "coords", "polygon",
+        "placed", "atlasMap", "layout", "sourceMentions", "doNotSuggest", "color",
+      ]);
+
+      // Name resolution across every store (linked fields render as names).
+      const allEntities = EntityService.listAllSync();
+      const nameById = new Map();
+      for (const byId of Object.values(allEntities)) {
+        for (const e of Object.values(byId || {})) {
+          if (e && e.id) nameById.set(e.id, e.name || e.id);
+        }
+      }
+      const valueOf = (v) => {
+        if (v == null || v === "") return null;
+        if (typeof v === "string") return nameById.get(v) || v;
+        if (typeof v === "number" || typeof v === "boolean") return String(v);
+        if (Array.isArray(v)) {
+          const parts = v.map(valueOf).filter(Boolean);
+          return parts.length ? parts.join(", ") : null;
+        }
+        if (typeof v === "object") {
+          if (v.name || v.label || v.title) return v.name || v.label || v.title;
+          if (v.id && nameById.has(v.id)) return nameById.get(v.id);
+          return null; // structured internals stay out of prose
+        }
+        return null;
+      };
+      const rowsOf = (type) => Object.values(allEntities[type] || {})
+        .filter((e) => e && e.status !== "deleted" && (includeSample || e.source !== "sample"))
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+
+      const title = (SettingsService.getSectionSync("project", {}) || {}).title || "Loomwright Project";
+      const md = [];
+      md.push("# " + title);
+      const chState = ManuscriptChapterService.loadSync();
+      const chapters = (chState.chapters || []).filter((c) => !c.reserved);
+      const totalWords = ManuscriptChapterService.totalWordsSync();
+      md.push("");
+      md.push("_Exported " + new Date().toISOString().slice(0, 10) + " · " + chapters.length + " chapter" + (chapters.length === 1 ? "" : "s") + " · " + totalWords.toLocaleString() + " words_");
+
+      if (scope.manuscript && chapters.length) {
+        md.push("", "## Manuscript");
+        chapters.forEach((c, i) => {
+          md.push("", "### Ch. " + (c.num || i + 1) + (c.title ? " — " + c.title : ""));
+          const body = ((chState.manuscripts || {})[c.id] || {}).text || c.bodyText || "";
+          if (body.trim()) md.push("", body.trim());
+          else md.push("", "_(no text yet)_");
+        });
+      }
+
+      if (scope.codex) {
+        const SECTIONS = [
+          ["cast", "Cast"], ["locations", "Locations"], ["items", "Items"],
+          ["quests", "Quests"], ["events", "Events"], ["bestiary", "Bestiary"],
+          ["factions", "Factions"], ["classes", "Classes"], ["races", "Races"],
+          ["stats", "Stats"], ["abilities", "Abilities"], ["skills", "Skills"],
+        ];
+        for (const [type, label] of SECTIONS) {
+          const rows = rowsOf(type);
+          if (!rows.length) continue;
+          md.push("", "## " + label);
+          for (const e of rows) {
+            md.push("", "### " + (e.name || "Untitled"));
+            const summary = e.summary || (e.data && e.data.summary) || "";
+            if (summary) md.push("", summary);
+            const fields = [];
+            for (const [k, v] of Object.entries(e.data || {})) {
+              if (SKIP_KEYS.has(k) || k === "summary") continue;
+              const rendered = valueOf(v);
+              if (rendered) fields.push("- **" + humanKey(k) + ":** " + rendered);
+            }
+            if (fields.length) { md.push(""); md.push(...fields); }
+          }
+        }
+
+        // Relationships — one table from the live edge normalizer.
+        const edges = LinkService.listRelationshipEdgesSync();
+        if (edges.length) {
+          md.push("", "## Relationships", "");
+          md.push("| From | Bond | To | Notes |");
+          md.push("| --- | --- | --- | --- |");
+          for (const r of edges) {
+            md.push("| " + (nameById.get(r.a) || r.a) + " | " + (r.rawType || r.type) + " | " + (nameById.get(r.b) || r.b) + " | " + (r.summary || "").replace(/\|/g, "/") + " |");
+          }
+        }
+
+        // Canon facts.
+        const lore = rowsOf("lore");
+        if (lore.length) {
+          md.push("", "## Canon");
+          for (const f of lore) {
+            const band = String((f.data && f.data.band) || "canon").toUpperCase();
+            md.push("", "- **[" + band + "]** " + (f.name || "") + (f.summary ? " — " + f.summary : ""));
+          }
+        }
+
+        // References index.
+        const refs = ReferencesService.listSync().filter((r) => r && r.status !== "archived" && (includeSample || r.source !== "sample"));
+        if (refs.length) {
+          md.push("", "## References");
+          for (const r of refs) {
+            const excerpt = typeof r.content === "string" ? r.content.replace(/\s+/g, " ").slice(0, 110) : "";
+            md.push("", "- **" + (r.title || "Untitled") + "** (" + (r.kind || "note") + ")" + (excerpt ? " — " + excerpt : ""));
+          }
+        }
+      }
+
+      return md.join("\n") + "\n";
+    },
+
+    // Minimal converter for OUR generated markdown subset (headings,
+    // bold/italic, lists, tables, paragraphs) — not a general parser.
+    _mdToHtml(mdText) {
+      const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const inline = (s) => esc(s)
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/(^|\s)_([^_]+)_(?=\s|$|[.,;:])/g, "$1<em>$2</em>");
+      const out = [];
+      let para = [], list = null, table = null;
+      const flushPara = () => { if (para.length) { out.push("<p>" + para.map(inline).join("<br/>") + "</p>"); para = []; } };
+      const flushList = () => { if (list) { out.push("<ul>" + list.map((li) => "<li>" + inline(li) + "</li>").join("") + "</ul>"); list = null; } };
+      const flushTable = () => {
+        if (!table) return;
+        const [head, ...body] = table;
+        out.push("<table><thead><tr>" + head.map((c) => "<th>" + inline(c) + "</th>").join("")
+          + "</tr></thead><tbody>" + body.map((r) => "<tr>" + r.map((c) => "<td>" + inline(c) + "</td>").join("") + "</tr>").join("") + "</tbody></table>");
+        table = null;
+      };
+      const flushAll = () => { flushPara(); flushList(); flushTable(); };
+      for (const raw of mdText.split("\n")) {
+        const line = raw.replace(/\s+$/, "");
+        if (/^### /.test(line)) { flushAll(); out.push("<h3>" + inline(line.slice(4)) + "</h3>"); continue; }
+        if (/^## /.test(line)) { flushAll(); out.push("<h2>" + inline(line.slice(3)) + "</h2>"); continue; }
+        if (/^# /.test(line)) { flushAll(); out.push("<h1>" + inline(line.slice(2)) + "</h1>"); continue; }
+        if (/^- /.test(line)) { flushPara(); flushTable(); (list = list || []).push(line.slice(2)); continue; }
+        if (/^\|/.test(line)) {
+          flushPara(); flushList();
+          if (/^\|(\s*-+\s*\|)+\s*$/.test(line)) continue; // separator row
+          (table = table || []).push(line.split("|").slice(1, -1).map((c) => c.trim()));
+          continue;
+        }
+        if (!line.trim()) { flushAll(); continue; }
+        para.push(line);
+      }
+      flushAll();
+      return out.join("\n");
+    },
+
+    buildHtmlExport(options = {}) {
+      const mdText = this.buildMarkdownExport(options);
+      const title = (SettingsService.getSectionSync("project", {}) || {}).title || "Loomwright Project";
+      return [
+        "<!doctype html>",
+        "<html><head><meta charset=\"utf-8\"/>",
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>",
+        "<title>" + title.replace(/</g, "&lt;") + "</title>",
+        "<style>",
+        "body{max-width:760px;margin:40px auto;padding:0 20px;background:#faf2dd;color:#2a2218;font-family:Georgia,'Times New Roman',serif;line-height:1.65}",
+        "h1{border-bottom:2px solid rgba(74,56,28,.35);padding-bottom:8px}",
+        "h2{border-bottom:1px solid rgba(74,56,28,.18);padding-bottom:4px;margin-top:38px}",
+        "h3{margin-top:24px;margin-bottom:4px}",
+        "em{color:#76684c}",
+        "ul{padding-left:20px}",
+        "table{border-collapse:collapse;width:100%;font-size:14px}",
+        "td,th{border:1px solid rgba(74,56,28,.25);padding:5px 8px;text-align:left;vertical-align:top}",
+        "th{background:#f3e8c6}",
+        "</style></head><body>",
+        this._mdToHtml(mdText),
+        "</body></html>",
+      ].join("\n");
+    },
+
+    async downloadMarkdownExport(options = {}) {
+      const text = this.buildMarkdownExport(options);
+      const stamp = nowIso().replace(/[:.]/g, "-");
+      await downloadTextFile(`loomwright-world-bible-${stamp}.md`, "text/markdown", text);
+      return text;
+    },
+
+    async downloadHtmlExport(options = {}) {
+      const html = this.buildHtmlExport(options);
+      const stamp = nowIso().replace(/[:.]/g, "-");
+      await downloadTextFile(`loomwright-world-bible-${stamp}.html`, "text/html", html);
+      return html;
     },
 
     /** Create a recovery backup before a destructive replace. */
@@ -6062,6 +6276,20 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
           e.preventDefault();
           await ProjectArchiveService.downloadProjectExport();
           notify("Project export downloaded.");
+        }
+        if (cb === "onExportProjectMarkdown" || cb === "onExportProjectHtml") {
+          e.preventDefault();
+          const scope = {
+            manuscript: el.getAttribute("data-scope-manuscript") !== "false",
+            codex: el.getAttribute("data-scope-codex") !== "false",
+          };
+          if (cb === "onExportProjectMarkdown") {
+            await ProjectArchiveService.downloadMarkdownExport({ scope });
+            notify("World bible downloaded as Markdown.");
+          } else {
+            await ProjectArchiveService.downloadHtmlExport({ scope });
+            notify("World bible downloaded as HTML.");
+          }
         }
         if (cb === "onBackupNow" || cb === "onCreateProjectBackup") {
           e.preventDefault();
