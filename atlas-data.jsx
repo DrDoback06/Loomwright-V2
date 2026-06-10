@@ -1,7 +1,8 @@
 // =====================================================================
 // atlas-data.jsx — sample atlas world (Pale Reach / Hess setting).
-// Pure presentational placeholder data; mirrors the shapes documented
-// at the bottom of atlas.jsx.
+// Sample-project fixture + static Atlas UI config. NOT live data: the
+// panel renders AtlasService.buildAtlasDataSync(); these shapes are
+// seeded into real entities when the user loads the sample project.
 //
 // Hierarchy (up to 6 levels):
 //   world > continent > country > region > city > town > village
@@ -17,7 +18,7 @@
 //   chapters[], characters[], queue, summary, fields, optional polygon
 //   (SVG path string in canvas px) and optional `kind` for story types.
 // ---------------------------------------------------------------------
-const ATLAS_LOCATIONS = [
+const SAMPLE_ATLAS_LOCATIONS = [
   // ── Continents / countries (regional polygons) ───────────────────
   { id: "north",      type: "country",   name: "Pale Reach",        parent: "world",  x: 24, y: 30, entityKind: "locations",
     polygon: "M 60 110 L 280 80 L 360 200 L 320 360 L 100 380 L 50 260 Z",
@@ -161,7 +162,7 @@ const ATLAS_LOCATIONS = [
 // ---------------------------------------------------------------------
 // TRAVEL ROUTES — characters + waypoints (locationId references)
 // ---------------------------------------------------------------------
-const ATLAS_ROUTES = [
+const SAMPLE_ATLAS_ROUTES = [
   {
     id: "r-aelinor", characterId: "aelinor", characterName: "Aelinor Vey",
     color: "#7a6aa3", initials: "AV",
@@ -203,7 +204,7 @@ const ATLAS_ROUTES = [
 // ---------------------------------------------------------------------
 // CHAPTERS — manuscript timeline anchors with diff data per chapter.
 // ---------------------------------------------------------------------
-const ATLAS_CHAPTERS = [
+const SAMPLE_ATLAS_CHAPTERS = [
   { id: "ch1", label: "Ch. 1", title: "The Auger Wake",      events: 1, locations: ["pr","wd","wd-cap","rk","pr-sea","pr-old"],   added: ["wd-cap"],  warnings: 0 },
   { id: "ch2", label: "Ch. 2", title: "Salt Watch",          events: 0, locations: ["pr","sw","salt-hq"],                          added: ["salt-hq"], warnings: 0 },
   { id: "ch3", label: "Ch. 3", title: "Cliffs",              events: 2, locations: ["pr","ac","ao","gc","gc-gard"],                added: ["ao"],      warnings: 1 },
@@ -218,7 +219,7 @@ const ATLAS_CHAPTERS = [
 // ---------------------------------------------------------------------
 // QUESTS / EVENTS — each binds a step-list of locationIds.
 // ---------------------------------------------------------------------
-const ATLAS_QUESTS = [
+const SAMPLE_ATLAS_QUESTS = [
   { id: "q1", name: "The Auger's Walk",    type: "quests",  status: "active",
     steps: [ {locationId:"pr",chapter:3,label:"Plan"}, {locationId:"ac",chapter:3,label:"Reach the cliffs"}, {locationId:"ao",chapter:3,label:"The Stone"}, {locationId:"wh",chapter:6,label:"Wraith Hollow"} ],
   },
@@ -236,7 +237,7 @@ const ATLAS_QUESTS = [
 // ---------------------------------------------------------------------
 // BESTIARY — habitat by locationIds (for region overlay).
 // ---------------------------------------------------------------------
-const ATLAS_BEASTS = [
+const SAMPLE_ATLAS_BEASTS = [
   { id: "b-saltwraith", name: "Salt-wraith",  habitat: ["ac","ow","as"],   chapters: [3,6], color: "#8a3a4f", icon: "claw",
     summary: "Salt-borne shade. Hunts the Auger Cliffs at neap tides." },
   { id: "b-stag",       name: "Brittle-stag", habitat: ["bw","tg"],        chapters: [5],   color: "#6b8a4a", icon: "claw",
@@ -250,7 +251,7 @@ const ATLAS_BEASTS = [
 // ---------------------------------------------------------------------
 // ITEMS — found / used / lost locations per item (story object).
 // ---------------------------------------------------------------------
-const ATLAS_ITEMS = [
+const SAMPLE_ATLAS_ITEMS = [
   { id: "i-augerstone", name: "Auger Stone",          icon: "gem",  color: "#b78a52",
     found: { locationId: "ao", chapter: 3 },
     used:  { locationId: "wh", chapter: 6 },
@@ -274,7 +275,7 @@ const ATLAS_ITEMS = [
 // ---------------------------------------------------------------------
 // FACTIONS — territory by locationIds (overlay polygon stack).
 // ---------------------------------------------------------------------
-const ATLAS_FACTIONS = [
+const SAMPLE_ATLAS_FACTIONS = [
   { id: "f-vey",     name: "House Vey",           color: "#324a1f", territory: ["north","pr","wd","rk","sw","kr"], hq: "rk",
     summary: "Ruling house of the Reach." },
   { id: "f-glass",   name: "The Glass Throne",    color: "#7a6aa3", territory: ["hess","gc","gc-throne","gc-gard","hh","hh-docks","bm"], hq: "gc-throne",
@@ -288,7 +289,7 @@ const ATLAS_FACTIONS = [
 // ---------------------------------------------------------------------
 // LAYERS — toggle visibility groups
 // ---------------------------------------------------------------------
-const ATLAS_LAYERS = [
+const SAMPLE_ATLAS_LAYERS = [
   // Geo (place layers)
   { id: "base",        label: "Base map",            kind: "geo", color: "#9a8c6e", count: null, visible: true,  locked: true },
   { id: "regions",     label: "Continents / Countries / Regions", kind: "geo", color: "#6b8a4a", count: 6,  visible: true },
@@ -321,7 +322,7 @@ const ATLAS_LAYERS = [
 // ---------------------------------------------------------------------
 // CAST — characters available for atlas overlay
 // ---------------------------------------------------------------------
-const ATLAS_CAST = [
+const SAMPLE_ATLAS_CAST = [
   { id: "aelinor", name: "Aelinor Vey",   initials: "AV", color: "#7a6aa3", role: "protagonist" },
   { id: "saren",   name: "Saren of Hess", initials: "SH", color: "#a8553f", role: "antagonist"  },
   { id: "brec",    name: "Captain Brec",  initials: "CB", color: "#5d6d4e", role: "supporting"  },
@@ -333,7 +334,7 @@ const ATLAS_CAST = [
 // ---------------------------------------------------------------------
 // REVIEW QUEUE — Atlas-specific extraction candidates.
 // ---------------------------------------------------------------------
-const ATLAS_QUEUE = [
+const SAMPLE_ATLAS_QUEUE = [
   { id: "qa1", name: "The Glass Court",    level: "uncertain", value: 58, action: "Place on map?", excerpt: "...the Glass Court rose on a hill the colour of bone...",      cite: "Ch. 3, p. 76",  reason: "Found in prose; no atlas placement.",                  relatedEntity: "House Hess (Faction)" },
   { id: "qa2", name: "Auger Cliffs",       level: "strong",    value: 84, action: "Add as Region",  excerpt: "...up where the Auger Cliffs cut the sky open like a knife...", cite: "Ch. 3, p. 88",  reason: "New region candidate; parent: Pale Reach.",            relatedEntity: "Salt-wraith (Bestiary)" },
   { id: "qa3", name: "Salt Watch",         level: "high",      value: 96, action: "Auto-added",     excerpt: "...the watch at Salt was already lit when she came down...",   cite: "Ch. 2, p. 41",  reason: "High-confidence; auto-added, still reviewable.",       relatedEntity: "Order of Salt (Faction)" },
@@ -344,39 +345,6 @@ const ATLAS_QUEUE = [
   { id: "qa8", name: "Hess Negotiation site", level: "strong", value: 73, action: "Place event",   excerpt: "...the table at the Court was set for both crowns...",         cite: "Ch. 3, p. 80",  reason: "Event needs a map location.",                          relatedEntity: "Hess Negotiation (Event)" },
 ];
 
-// ---------------------------------------------------------------------
-// COMPARISON / CONTEXT PRESETS — drives the Atlas's "show selected"
-// demo states. The Tweaks panel cycles these so the user can see how
-// the Atlas reacts when other panels select an entity.
-// ---------------------------------------------------------------------
-const ATLAS_CONTEXT_PRESETS = [
-  { id: "free",       label: "Free",                source: null,
-    description: "Nothing selected. Atlas shows the world plate." },
-  { id: "char-aeli",  label: "Cast: Aelinor",       source: { panel: "Cast", entityType: "cast", id: "aelinor", label: "Aelinor Vey" },
-    show: { routeIds: ["r-aelinor"], focusLocId: "vp" },
-    description: "Cast → Atlas: shows Aelinor's route across all chapters." },
-  { id: "char-saren", label: "Cast: Saren",         source: { panel: "Cast", entityType: "cast", id: "saren", label: "Saren of Hess" },
-    show: { routeIds: ["r-saren"], focusLocId: "gc" },
-    description: "Cast → Atlas: Saren's route." },
-  { id: "char-pair",  label: "Cast: Aelinor + Saren", source: { panel: "Cast", entityType: "cast", id: "pair", label: "Aelinor + Saren" },
-    show: { routeIds: ["r-aelinor","r-saren"], focusLocId: "vp", intersect: ["vp","gc","bw"] },
-    description: "Two characters: shows intersecting route segments and meeting points." },
-  { id: "beast-wraith", label: "Bestiary: Salt-wraith", source: { panel: "Bestiary", entityType: "bestiary", id: "b-saltwraith", label: "Salt-wraith" },
-    show: { beastId: "b-saltwraith", focusLocId: "ac" },
-    description: "Bestiary → Atlas: highlights Salt-wraith habitat polygons." },
-  { id: "item-stone", label: "Items: Auger Stone",  source: { panel: "Items", entityType: "items", id: "i-augerstone", label: "Auger Stone" },
-    show: { itemId: "i-augerstone", focusLocId: "ao" },
-    description: "Items → Atlas: shows where the Auger Stone is found, used, lost." },
-  { id: "quest-walk", label: "Quests: Auger's Walk",source: { panel: "Quests", entityType: "quests", id: "q1", label: "The Auger's Walk" },
-    show: { questId: "q1", focusLocId: "ac" },
-    description: "Quests → Atlas: shows step locations in order." },
-  { id: "fac-glass",  label: "Factions: Glass Throne", source: { panel: "Factions", entityType: "factions", id: "f-glass", label: "The Glass Throne" },
-    show: { factionId: "f-glass", focusLocId: "gc" },
-    description: "Factions → Atlas: shows controlled territory." },
-  { id: "ch-diff",    label: "Chapter diff: Ch. 6", source: { panel: "Manuscript", entityType: "chapter", id: "ch6", label: "Ch. 6 — Wraiths" },
-    show: { chapterDiff: "ch6", focusLocId: "wh" },
-    description: "Manuscript → Atlas: highlights what changed in this chapter." },
-];
 
 // ---------------------------------------------------------------------
 // TOOLBAR DEFINITIONS — core (always-visible) + flyout groups
@@ -425,8 +393,24 @@ const ATLAS_FLYOUT_GROUPS = [
   ]},
 ];
 
+// Designed sample fixture — exposed ONLY as the sample-project source
+// (SampleProjectService seeds real location entities/placements from it)
+// plus the static UI config (layer definitions + toolbar declarations).
+// The LIVE Atlas data comes from AtlasService.buildAtlasDataSync(),
+// mirrored onto window.ATLAS_* by AtlasPanelBody.
+window.ATLAS_SAMPLE_DATA = {
+  LOCATIONS: SAMPLE_ATLAS_LOCATIONS,
+  ROUTES: SAMPLE_ATLAS_ROUTES,
+  CHAPTERS: SAMPLE_ATLAS_CHAPTERS,
+  QUESTS: SAMPLE_ATLAS_QUESTS,
+  QUEUE: SAMPLE_ATLAS_QUEUE,
+  CAST: SAMPLE_ATLAS_CAST,
+  BEASTS: SAMPLE_ATLAS_BEASTS,
+  ITEMS: SAMPLE_ATLAS_ITEMS,
+  FACTIONS: SAMPLE_ATLAS_FACTIONS,
+};
 Object.assign(window, {
-  ATLAS_LOCATIONS, ATLAS_ROUTES, ATLAS_CHAPTERS, ATLAS_QUESTS, ATLAS_QUEUE,
-  ATLAS_LAYERS, ATLAS_CAST, ATLAS_BEASTS, ATLAS_ITEMS, ATLAS_FACTIONS,
-  ATLAS_CONTEXT_PRESETS, ATLAS_CORE_TOOLS, ATLAS_FLYOUT_GROUPS,
+  ATLAS_LAYER_DEFS: SAMPLE_ATLAS_LAYERS,
+  ATLAS_CORE_TOOLS,
+  ATLAS_FLYOUT_GROUPS,
 });

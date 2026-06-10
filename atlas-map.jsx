@@ -337,9 +337,51 @@ const AtlasMap = ({
   context = null, scrubChapter = null,
   showLabels = true, showIso = true, showGrid = false, showTexture = true,
   variant = "side", className = "",
+  // Live editing (editor variant): active tool + placement callbacks.
+  tool = "select", onMapPoint = null, onMovePin = null,
 }) => {
   const locById = _um_am(() => Object.fromEntries(locations.map((l) => [l.id, l])), [locations]);
   const ctxShow = context && context.show;
+  const roads = window.ATLAS_ROADS || [];
+
+  // ---- Editing interactions (click-to-place, pin dragging) ----------
+  const svgRef = React.useRef(null);
+  const dragRef = React.useRef(null);            // { id, moved }
+  const [dragPos, setDragPos] = React.useState(null); // { id, x, y } pct override
+  const toPct = (evt) => {
+    const rect = svgRef.current.getBoundingClientRect();
+    const scale = Math.min(rect.width / 1200, rect.height / 700) || 1;
+    const ox = (rect.width - 1200 * scale) / 2;
+    const oy = (rect.height - 700 * scale) / 2;
+    return {
+      x: Math.max(0, Math.min(100, ((evt.clientX - rect.left - ox) / scale / 1200) * 100)),
+      y: Math.max(0, Math.min(100, ((evt.clientY - rect.top - oy) / scale / 700) * 100)),
+    };
+  };
+  const onSvgClick = (e) => {
+    if (!onMapPoint) return;
+    if (e.target.closest && e.target.closest("[data-atm-pin]")) return;
+    onMapPoint(toPct(e), tool);
+  };
+  const onPinPointerDown = (e, loc) => {
+    if (!onMovePin || variant !== "editor" || tool !== "select" || loc.placed === false) return;
+    e.stopPropagation();
+    dragRef.current = { id: loc.id, moved: false };
+    svgRef.current.setPointerCapture?.(e.pointerId);
+  };
+  const onSvgPointerMove = (e) => {
+    const d = dragRef.current;
+    if (!d) return;
+    d.moved = true;
+    setDragPos({ id: d.id, ...toPct(e) });
+  };
+  const onSvgPointerUp = () => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (d && d.moved && dragPos && dragPos.id === d.id) onMovePin(d.id, { x: dragPos.x, y: dragPos.y });
+    setDragPos(null);
+  };
+  const pinLoc = (loc) => (dragPos && dragPos.id === loc.id) ? { ...loc, x: dragPos.x, y: dragPos.y } : loc;
 
   // Determine which routes/items to emphasise
   const emphRouteIds = ctxShow && ctxShow.routeIds || [];
@@ -383,11 +425,27 @@ const AtlasMap = ({
   }, [emphFaction]);
 
   return (
-    <svg className={"atm__svg " + className} viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet" data-variant={variant}>
+    <svg ref={svgRef} className={"atm__svg " + className} viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet" data-variant={variant}
+         data-tool={tool}
+         onClick={onSvgClick} onPointerMove={onSvgPointerMove} onPointerUp={onSvgPointerUp}>
       <AtlasPlate showIso={showIso} showGrid={showGrid} showTexture={showTexture}/>
 
       {/* Region polygons under everything */}
       <AtlasRegions locations={locations} layers={layers} highlight={regionHighlight}/>
+
+      {/* Road / connection lines between placed locations */}
+      {layers.routes !== false && roads.length > 0 && (
+        <g className="atm-roads">
+          {roads.map((rd) => {
+            const a = locById[rd.from], b = locById[rd.to];
+            if (!a || !b || a.placed === false || b.placed === false) return null;
+            const pa = _amPx(pinLoc(a)), pb = _amPx(pinLoc(b));
+            return <line key={rd.id} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
+                         stroke="#8a6b58" strokeWidth="1.6" strokeOpacity="0.55"
+                         strokeDasharray={rd.kind === "river" ? "1 4" : "6 4"}/>;
+          })}
+        </g>
+      )}
 
       {/* Faction territory overlay */}
       {emphFaction && layers.factions !== false && <AtlasFactionOverlay faction={emphFaction} locById={locById}/>}
@@ -416,19 +474,37 @@ const AtlasMap = ({
       {/* Pins last (on top) */}
       <g>
         {locations.map((loc) => {
+          if (loc.placed === false) return null;
           if (!_pinIsVisible(loc, layers)) return null;
           const dim = (ctxLocs && !ctxLocs.has(loc.id)) || scrubFn(loc);
           const focused = loc.id === focusId;
           // Queue badge
           const badge = loc.queue ? { text: String(loc.queue), color: loc.queueLevel === "high" ? "#5d6d4e" : "#c98a2c" } : null;
           return (
-            <AtlasPin key={loc.id} loc={loc} focused={focused} dim={dim} badge={badge}
-                      scaleLabel={variant === "side" ? 1 : 0.95}
-                      showLabel={showLabels && (variant === "editor" || ["country","city","town","region"].includes(loc.type))}
-                      onClick={onSelect}/>
+            <g key={loc.id} data-atm-pin={loc.id} onPointerDown={(e) => onPinPointerDown(e, loc)}>
+              <AtlasPin loc={pinLoc(loc)} focused={focused} dim={dim} badge={badge}
+                        scaleLabel={variant === "side" ? 1 : 0.95}
+                        showLabel={showLabels && (variant === "editor" || ["country","city","town","region"].includes(loc.type))}
+                        onClick={onSelect}/>
+            </g>
           );
         })}
       </g>
+
+      {/* Empty plate prompt — no placed locations yet */}
+      {locations.every((l) => l.placed === false) && (
+        <g data-ui="AtlasEmptyPlate">
+          <rect x="350" y="290" width="500" height="120" rx="8" fill="rgba(250,242,221,0.92)" stroke="rgba(74,56,28,0.35)" strokeWidth="1" strokeDasharray="6 4"/>
+          <text x="600" y="340" textAnchor="middle" fontFamily="var(--font-display)" fontStyle="italic" fontSize="19" fill="#4a3a22">
+            {locations.length === 0 ? "No locations yet" : "Nothing placed on the map yet"}
+          </text>
+          <text x="600" y="368" textAnchor="middle" fontFamily="var(--font-sans)" fontSize="12.5" fill="#76684c">
+            {locations.length === 0
+              ? "Create a location, or extract them from your chapters."
+              : "Open the editor, pick “Add Location”, and tap the parchment."}
+          </text>
+        </g>
+      )}
     </svg>
   );
 };

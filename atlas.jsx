@@ -33,32 +33,124 @@ const _initLegendState = () => ({
 // Hosts the side panel + editor overlay + tweaks panel together.
 // ---------------------------------------------------------------------
 const AtlasPanelBody = ({ panel }) => {
-  // -------- Pull data from globals (with optional panel override) ----
-  const locations = (panel && panel.atlas?.locations) || (window.ATLAS_LOCATIONS || []);
-  const routes    = (panel && panel.atlas?.routes)    || (window.ATLAS_ROUTES   || []);
-  const chapters  = (panel && panel.atlas?.chapters)  || (window.ATLAS_CHAPTERS || []);
-  const layers    = (panel && panel.atlas?.layers)    || (window.ATLAS_LAYERS   || []);
-  const beasts    = window.ATLAS_BEASTS   || [];
-  const items     = window.ATLAS_ITEMS    || [];
-  const factions  = window.ATLAS_FACTIONS || [];
-  const queue     = window.ATLAS_QUEUE    || [];
-  const cast      = window.ATLAS_CAST     || [];
-  const quests    = window.ATLAS_QUESTS   || [];
-  const presets   = window.ATLAS_CONTEXT_PRESETS || [];
+  // -------- Live data ------------------------------------------------
+  // AtlasService.buildAtlasDataSync() produces the exact shapes the
+  // designed Atlas components consume, from the live stores. The result
+  // is mirrored onto the window.ATLAS_* globals the sub-components read
+  // directly (focus picker, editor tray, quick panel), so one snapshot
+  // drives every surface.
+  const [storeVersion, setStoreVersion] = _us_atx(0);
+  _ue_atx(() => {
+    const bump = () => setStoreVersion((v) => v + 1);
+    const evs = ["lw:entity-store-updated", "lw:review-queue-updated", "lw:occurrences-updated",
+                 "lw:manuscript-chapters-updated", "lw:backend-ready", "lw:project-imported"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+  const live = _um_atx(() => {
+    const B = window.LoomwrightBackend;
+    const data = B?.AtlasService?.buildAtlasDataSync?.()
+      || { locations: [], routes: [], roads: [], chapters: [], quests: [], beasts: [], items: [], factions: [], cast: [], queue: [], counts: {} };
+    // Layer defs keep their designed structure; counts come live.
+    const layerDefs = (window.ATLAS_LAYER_DEFS || []).map((l) => ({
+      ...l,
+      count: l.count === null ? null : (data.counts[l.id] ?? 0),
+      warnings: (l.id === "warnings" || l.id === "extracts") ? data.queue.length : l.warnings,
+    }));
+    const payload = { ...data, layers: layerDefs };
+    Object.assign(window, {
+      ATLAS_LOCATIONS: payload.locations,
+      ATLAS_ROUTES: payload.routes,
+      ATLAS_ROADS: payload.roads || [],
+      ATLAS_CHAPTERS: payload.chapters,
+      ATLAS_QUESTS: payload.quests,
+      ATLAS_BEASTS: payload.beasts,
+      ATLAS_ITEMS: payload.items,
+      ATLAS_FACTIONS: payload.factions,
+      ATLAS_CAST: payload.cast,
+      ATLAS_QUEUE: payload.queue,
+      ATLAS_LAYERS: payload.layers,
+    });
+    return payload;
+  }, [storeVersion]);
+
+  const locations = live.locations;
+  const routes    = live.routes;
+  const chapters  = live.chapters;
+  const layers    = live.layers;
+  const beasts    = live.beasts;
+  const items     = live.items;
+  const factions  = live.factions;
+  const queue     = live.queue;
+  const cast      = live.cast;
+  const quests    = live.quests;
+
+  // Cross-panel context presets, generated from the live world so the
+  // Tweaks preview always references real entities.
+  const presets = _um_atx(() => {
+    const out = [{ id: "free", label: "Free", source: null, description: "Nothing selected. Atlas shows the world plate." }];
+    for (const r of routes.slice(0, 2)) {
+      out.push({
+        id: "char-" + r.characterId, label: "Cast: " + (r.characterName || "").split(" ")[0],
+        source: { panel: "Cast", entityType: "cast", id: r.characterId, label: r.characterName },
+        show: { routeIds: [r.id], focusLocId: r.waypoints[0]?.locationId },
+        description: "Cast → Atlas: " + r.characterName + "'s route across the chapters.",
+      });
+    }
+    if (routes.length >= 2) {
+      out.push({
+        id: "char-pair", label: "Cast: pair",
+        source: { panel: "Cast", entityType: "cast", id: "pair", label: routes[0].characterName + " + " + routes[1].characterName },
+        show: { routeIds: [routes[0].id, routes[1].id], focusLocId: routes[0].waypoints[0]?.locationId },
+        description: "Two characters: intersecting route segments and meeting points.",
+      });
+    }
+    if (beasts[0]) out.push({ id: "beast-0", label: "Bestiary: " + beasts[0].name, source: { panel: "Bestiary", entityType: "bestiary", id: beasts[0].id, label: beasts[0].name }, show: { beastId: beasts[0].id, focusLocId: beasts[0].habitat[0] }, description: "Bestiary → Atlas: habitat highlight." });
+    if (items[0]) out.push({ id: "item-0", label: "Items: " + items[0].name, source: { panel: "Items", entityType: "items", id: items[0].id, label: items[0].name }, show: { itemId: items[0].id, focusLocId: items[0].found?.locationId }, description: "Items → Atlas: found / used / lost." });
+    if (factions[0]) out.push({ id: "fac-0", label: "Factions: " + factions[0].name, source: { panel: "Factions", entityType: "factions", id: factions[0].id, label: factions[0].name }, show: { factionId: factions[0].id, focusLocId: factions[0].hq }, description: "Factions → Atlas: controlled territory." });
+    const firstQuest = quests.find((q) => q.type === "quests" && (q.steps || []).length);
+    if (firstQuest) out.push({ id: "quest-0", label: "Quests: " + firstQuest.name, source: { panel: "Quests", entityType: "quests", id: firstQuest.id, label: firstQuest.name }, show: { questId: firstQuest.id, focusLocId: firstQuest.steps[0]?.locationId }, description: "Quests → Atlas: step locations in order." });
+    return out;
+  }, [routes, beasts, items, factions, quests]);
 
   // -------- Focus / overlay state ------------------------------------
-  // Demo seed: Aelinor selected by default so the panel doesn't open empty.
+  // Seed: the protagonist (or first cast member) so the panel opens focused.
   const [focusEntities, setFocusEntities] = _us_atx(() => {
-    const aeli = cast.find((c) => c.id === "aelinor");
-    return aeli ? [{ type: "cast", id: aeli.id, label: aeli.name, color: aeli.color, sub: aeli.role, kind: "character" }] : [];
+    const lead = cast.find((c) => /^protagonist/i.test(c.role || "")) || null;
+    return lead ? [{ type: "cast", id: lead.id, label: lead.name, color: lead.color, sub: lead.role, kind: "character" }] : [];
   });
   const [draftFocusEntities, setDraftFocusEntities] = _us_atx(focusEntities);
   const [focusPopoverOpen,   setFocusPopoverOpen]   = _us_atx(false);
   const [overlayMode,        setOverlayMode]        = _us_atx("travel");
   const [lastFocusChange,    setLastFocusChange]    = _us_atx({ at: Date.now(), via: "init" });
 
-  // -------- Cross-panel context preset (legacy) ----------------------
-  const [currentChapter, setCurrentChapter] = _us_atx(6); // 0-indexed: ch7
+  // Seed the focus once the live cast arrives (the panel can mount
+  // before the backend hydrates), and prune chips whose entity is gone.
+  const seededRef = React.useRef(false);
+  _ue_atx(() => {
+    if (focusEntities.length) { seededRef.current = true; }
+    const valid = focusEntities.filter((f) => f.type !== "cast" || cast.some((c) => c.id === f.id));
+    if (valid.length !== focusEntities.length) { setFocusEntities(valid); return; }
+    if (!seededRef.current && cast.length) {
+      const lead = cast.find((c) => /^protagonist/i.test(c.role || ""));
+      if (lead) {
+        seededRef.current = true;
+        setFocusEntities([{ type: "cast", id: lead.id, label: lead.name, color: lead.color, sub: lead.role, kind: "character" }]);
+      }
+    }
+  }, [cast]);
+
+  // -------- Cross-panel context preset --------------------------------
+  // Current chapter = the manuscript's active chapter (index into the
+  // live chapter list); the scrubber overrides it transiently.
+  const currentChapter = _um_atx(() => {
+    try {
+      const st = window.LoomwrightBackend?.ManuscriptChapterService?.loadSync?.() || {};
+      const ix = chapters.findIndex((c) => c.id === st.activeChapterId);
+      if (ix >= 0) return ix;
+    } catch (_e) {}
+    return Math.max(0, chapters.length - 1);
+  }, [chapters]);
   const [presetId, setPresetId] = _us_atx("free");
   const context = _um_atx(() => presets.find((p) => p.id === presetId) || presets[0],
                          [presetId, presets]);
@@ -372,7 +464,7 @@ const AtlasTweaksPanel = ({
               <Row k="activeAtlasFocusEntities" v={focusEntities.length ? focusEntities.map((f) => f.type + ":" + f.id).join(", ") : "—"}/>
               <Row k="activeAtlasFocusTypes" v={focusTypes.join(", ") || "—"}/>
               <Row k="activeOverlayMode" v={overlayMode}/>
-              <Row k="activeAtlasChapter" v={"Ch. 7 (current)"}/>
+              <Row k="activeAtlasChapter" v={(window.ATLAS_CHAPTERS || []).length ? ((window.ATLAS_CHAPTERS || [])[(window.ATLAS_CHAPTERS || []).length - 1].label + " (latest)") : "—"}/>
               <Row k="visibleAtlasLayers" v={Object.entries(layerState).filter(([_, v]) => v).map(([k]) => k).join(", ")}/>
               <Row k="miniMapVisible" v={miniMapVisible ? "true" : "false"}/>
               <Row k="inspectorCollapsed" v={inspectorCollapsed ? "true" : "false"}/>

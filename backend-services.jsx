@@ -51,6 +51,7 @@
   window.__LW_SAMPLE_SOURCES__ = {
     ENTITY_SAMPLES: { ...(window.ENTITY_SAMPLES || {}) },
     CAST_SAMPLE: Array.isArray(window.CAST_SAMPLE) ? window.CAST_SAMPLE.slice() : [],
+    ATLAS: { ...(window.ATLAS_SAMPLE_DATA || {}) },
   };
   try {
     const raw = window.localStorage && window.localStorage.getItem(PREFIX + KEYS.sampleLoaded);
@@ -1071,6 +1072,317 @@
     },
     listAllSync() {
       return EntityService.listSync("locations");
+    },
+
+    // -----------------------------------------------------------------
+    // buildAtlasDataSync — the live data source for the Atlas panel.
+    // Produces the exact shapes the designed Atlas components consume
+    // (locations / travel routes / chapters / quests+events / beasts /
+    // items / factions / cast / review queue / layer counts), all read
+    // from the live stores. Coordinates are percent (0–100) of the map
+    // plate, persisted via placeLocation/updatePlacement.
+    // -----------------------------------------------------------------
+    buildAtlasDataSync() {
+      const norm = (v) => (v == null ? [] : (Array.isArray(v) ? v : [v]));
+      const rid = (v) => { for (const x of norm(v)) { const id = typeof x === "string" ? x : x && x.id; if (id) return id; } return null; };
+      const rids = (v) => norm(v).map((x) => (typeof x === "string" ? x : x && x.id)).filter(Boolean);
+      const active = (e) => e && e.status !== "deleted";
+
+      const locEntities = EntityService.listSync("locations").filter(active);
+      const castEntities = EntityService.listSync("cast").filter(active);
+      const beastEntities = EntityService.listSync("bestiary").filter(active);
+      const itemEntities = EntityService.listSync("items").filter(active);
+      const factionEntities = EntityService.listSync("factions").filter(active);
+      const questEntities = EntityService.listSync("quests").filter(active);
+      const eventEntities = EntityService.listSync("events").filter(active);
+
+      // Chapters + occurrence indexes.
+      let chapterRows = [];
+      try { chapterRows = (ManuscriptChapterService.loadSync().chapters || []); } catch (_) {}
+      const nonReserved = chapterRows.filter((c) => !c.reserved);
+      const chapterNumById = new Map();
+      nonReserved.forEach((c, i) => chapterNumById.set(c.id, c.num || i + 1));
+      const locIdSet = new Set(locEntities.map((l) => l.id));
+      const entityChapters = new Map();        // entityId -> Set(chapterNum)
+      const locMentionsByChapter = new Map();  // chapterNum -> Map(locId -> n)
+      let occRows = [];
+      try { occRows = OccurrenceService.listAllSync() || []; } catch (_) {}
+      for (const o of occRows) {
+        const num = chapterNumById.get(o.chapterId);
+        if (num == null || !o.entityId) continue;
+        let set = entityChapters.get(o.entityId);
+        if (!set) entityChapters.set(o.entityId, set = new Set());
+        set.add(num);
+        if (locIdSet.has(o.entityId)) {
+          let m = locMentionsByChapter.get(num);
+          if (!m) locMentionsByChapter.set(num, m = new Map());
+          m.set(o.entityId, (m.get(o.entityId) || 0) + 1);
+        }
+      }
+      const chaptersOf = (id) => [...(entityChapters.get(id) || [])].sort((a, b) => a - b);
+
+      const palette = ["#7a6aa3", "#a8553f", "#5d6d4e", "#b78a52", "#324a1f", "#8a3a4f", "#6b6f7a", "#8a6b58"];
+      const hash = (s) => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+      const colorOf = (e) => (e.data && e.data.color) || palette[hash(e.id) % palette.length];
+      const initialsOf = (e) => e.glyphChar || String(e.name || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+
+      const castViews = castEntities.map((e) => ({
+        id: e.id, name: e.name || "Unnamed", initials: initialsOf(e), color: colorOf(e),
+        role: (e.data && e.data.role) || "",
+      }));
+      const castById = Object.fromEntries(castViews.map((c) => [c.id, c]));
+
+      // Reverse index: which cast members are AT a location (home/current).
+      const castAtLoc = new Map();
+      for (const c of castEntities) {
+        const cd = c.data || {};
+        for (const lid of [rid(cd.currentLocation), rid(cd.homeLocation), rid(cd.location)]) {
+          if (!lid) continue;
+          const arr = castAtLoc.get(lid) || [];
+          if (!arr.includes(c.id)) arr.push(c.id);
+          castAtLoc.set(lid, arr);
+        }
+      }
+
+      // Review queue (locations).
+      const queueRows = ReviewService.listSync("locations").filter((q) => q.status === "pending" || q.status === "auto-added");
+      const confOf = (q) => (typeof q.confidence === "number" ? q.confidence : (typeof q.value === "number" ? q.value / 100 : 0.6));
+      const lvlOf = (q) => { const c = confOf(q); return c >= 0.95 ? "high" : c >= 0.75 ? "strong" : c >= 0.5 ? "uncertain" : "weak"; };
+      const queueFor = (loc) => queueRows.filter((q) =>
+        q.existingEntityId === loc.id || String(q.name || "").toLowerCase() === String(loc.name || "").toLowerCase());
+
+      // Locations.
+      const ATLAS_TYPES = new Set(["world", "continent", "country", "region", "city", "town", "village", "district", "building", "room", "forest", "road", "ruin", "hidden", "battlefield", "waterway", "mountain", "river"]);
+      const STORY_KINDS = new Set(["forest", "road", "ruin", "hidden", "battlefield", "waterway", "item-site", "faction-hq", "river", "mountain"]);
+      const locById = Object.fromEntries(locEntities.map((l) => [l.id, l]));
+      const typeOf = (d) => {
+        const raw = String(d.kind || d.customKind || d.locationType || "").toLowerCase().trim();
+        if (ATLAS_TYPES.has(raw)) return raw;
+        if (/pass|mountain/.test(raw)) return "region";
+        if (/sea|ocean|strait|lake|bay/.test(raw)) return "waterway";
+        if (/keep|castle|hall|tower|inn|temple/.test(raw)) return "building";
+        return raw ? "city" : "city";
+      };
+      const labelOf = (s) => String(s || "").charAt(0).toUpperCase() + String(s || "").slice(1);
+      const locations = locEntities.map((e) => {
+        const d = e.data || {};
+        const type = typeOf(d);
+        const coords = d.coords || {};
+        const x = Number(coords.x), y = Number(coords.y);
+        const placed = d.placed === true && isFinite(x) && isFinite(y);
+        const parentId = rid(d.parentId != null ? d.parentId : d.parent);
+        const chs = chaptersOf(e.id);
+        const q = queueFor(e);
+        const fields = [["Type", labelOf(d.customKind || type)]];
+        const parentName = parentId && locById[parentId] ? locById[parentId].name : null;
+        if (parentName) fields.push(["Parent", parentName]);
+        if (d.population) fields.push(["Population", String(d.population)]);
+        if (d.climate) fields.push(["Climate", String(d.climate)]);
+        if (d.danger) fields.push(["Danger", labelOf(d.danger)]);
+        if (d.currentStatus) fields.push(["Status", String(d.currentStatus)]);
+        if (chs.length) fields.push(["First seen", "Ch. " + chs[0]]);
+        return {
+          id: e.id,
+          entityKind: "locations",
+          type,
+          kind: STORY_KINDS.has(type) ? type : (STORY_KINDS.has(String(d.kind || "").toLowerCase()) ? String(d.kind).toLowerCase() : undefined),
+          name: e.name || "Unnamed place",
+          parent: parentId || "world",
+          x: placed ? x : undefined,
+          y: placed ? y : undefined,
+          placed,
+          polygon: typeof d.polygon === "string" ? d.polygon : undefined,
+          chapters: chs,
+          characters: castAtLoc.get(e.id) || [],
+          queue: q.length,
+          queueLevel: q.length ? lvlOf(q[0]) : undefined,
+          summary: e.summary || d.summary || "",
+          fields,
+        };
+      });
+
+      // Character travel routes, derived from shared-chapter occurrences
+      // with placed locations (deferred Area-1 "travel" item).
+      const routes = [];
+      for (const c of castEntities) {
+        const chs = chaptersOf(c.id);
+        if (!chs.length) continue;
+        const waypoints = [];
+        for (const num of chs) {
+          const mentions = locMentionsByChapter.get(num);
+          if (!mentions) continue;
+          let best = null, bestN = 0;
+          for (const [lid, n] of mentions) {
+            const ld = (locById[lid] && locById[lid].data) || {};
+            if (ld.placed !== true) continue;
+            if (n > bestN) { best = lid; bestN = n; }
+          }
+          if (!best) continue;
+          waypoints.push({
+            locationId: best,
+            chapter: num,
+            kind: "stop",
+            label: "Ch. " + num + " — " + (locById[best].name || ""),
+            confirmed: (castAtLoc.get(best) || []).includes(c.id) || bestN > 1,
+          });
+        }
+        if (waypoints.length < 2) continue;
+        waypoints[0] = { ...waypoints[0], kind: "depart" };
+        waypoints[waypoints.length - 1] = { ...waypoints[waypoints.length - 1], kind: "arrive" };
+        const v = castById[c.id];
+        routes.push({
+          id: "r-" + c.id,
+          characterId: c.id,
+          characterName: v.name,
+          color: v.color,
+          initials: v.initials,
+          summary: "Ch. " + chs[0] + "–" + chs[chs.length - 1] + " · " + waypoints.length + " waypoints",
+          waypoints,
+        });
+      }
+
+      // Chapters (scrubber anchors).
+      const chapters = nonReserved.map((c, i) => {
+        const num = c.num || i + 1;
+        const locs = [...((locMentionsByChapter.get(num) || new Map()).keys())];
+        const events = eventEntities.filter((ev) => {
+          const m = String(((ev.data || {}).chapter) ?? "").match(/\d+/);
+          if (m) return parseInt(m[0], 10) === num;
+          return ev.chapterId ? chapterNumById.get(ev.chapterId) === num : false;
+        }).length;
+        return { id: c.id, label: "Ch. " + num, title: c.title || "", events, locations: locs, added: [], warnings: 0 };
+      });
+
+      // Quests (+ events) with step locations.
+      const findLocByName = (name) => {
+        const n = String(name || "").toLowerCase().trim();
+        if (!n) return null;
+        const hit = locEntities.find((l) => String(l.name || "").toLowerCase() === n);
+        return hit ? hit.id : null;
+      };
+      const quests = questEntities.map((q) => {
+        const d = q.data || {};
+        let steps = [];
+        const routeIds = rids(d.atlasRoute);
+        if (routeIds.length) {
+          steps = routeIds.map((lid, i) => ({ locationId: lid, chapter: null, label: "Step " + (i + 1) }));
+        } else if (Array.isArray(d.steps) && d.steps.length) {
+          steps = d.steps.map((s, i) => {
+            const lid = s && typeof s === "object" ? (rid(s.location) || findLocByName(s.location)) : null;
+            const chm = s ? String(s.chapter ?? "").match(/\d+/) : null;
+            return { locationId: lid, chapter: chm ? parseInt(chm[0], 10) : null, label: (s && (s.title || s.label)) || "Step " + (i + 1) };
+          });
+        } else {
+          steps = rids(d.locations).map((lid, i) => ({ locationId: lid, chapter: null, label: "Location " + (i + 1) }));
+        }
+        return { id: q.id, name: q.name || "Quest", type: "quests", status: d.status || q.status || "active", steps: steps.filter((s) => s.locationId && locById[s.locationId]) };
+      });
+      const eventRows = eventEntities.map((ev) => {
+        const d = ev.data || {};
+        const lid = rid(d.location) || rid(d.locations);
+        const chm = String(d.chapter ?? "").match(/\d+/);
+        return {
+          id: ev.id, name: ev.name || "Event", type: "events", status: "past",
+          locationId: lid,
+          chapter: chm ? parseInt(chm[0], 10) : (ev.chapterId ? chapterNumById.get(ev.chapterId) ?? null : null),
+        };
+      }).filter((e) => e.locationId && locById[e.locationId]);
+
+      // Beasts / items / factions overlays.
+      const beasts = beastEntities.map((b) => {
+        const d = b.data || {};
+        return {
+          id: b.id, name: b.name || "Creature",
+          habitat: rids(d.relatedLocations).filter((lid) => locById[lid]),
+          chapters: chaptersOf(b.id), color: colorOf(b), icon: "claw",
+          summary: b.summary || d.summary || "",
+        };
+      });
+      const stopFor = (v) => { const lid = rid(v); return lid && locById[lid] ? { locationId: lid, chapter: null } : null; };
+      const items = itemEntities.map((it) => {
+        const d = it.data || {};
+        return {
+          id: it.id, name: it.name || "Item", icon: "gem", color: colorOf(it),
+          found: stopFor(d.foundLocation),
+          used: stopFor(rids(d.usedLocations)[0]),
+          lost: stopFor(d.lostLocation) || stopFor(d.destroyedLocation),
+          summary: it.summary || "",
+        };
+      });
+      const factions = factionEntities.map((f) => {
+        const d = f.data || {};
+        return {
+          id: f.id, name: f.name || "Faction", color: colorOf(f),
+          territory: rids(d.controlsLocations).filter((lid) => locById[lid]),
+          hq: rid(d.headquarters),
+          summary: f.summary || "",
+        };
+      });
+
+      // Road / connection lines between placed locations (data.routes —
+      // written by AtlasService.setRoute, or location-name chips from the
+      // editor's "Routes / Roads / Connections" field).
+      const roads = [];
+      const roadSeen = new Set();
+      for (const e of locEntities) {
+        const d = e.data || {};
+        if (d.placed !== true) continue;
+        for (const r of (Array.isArray(d.routes) ? d.routes : [])) {
+          const toId = typeof r === "string" ? (locById[r] ? r : findLocByName(r)) : (r && r.to);
+          if (!toId || !locById[toId]) continue;
+          if (((locById[toId].data || {}).placed) !== true) continue;
+          const key = e.id < toId ? e.id + "::" + toId : toId + "::" + e.id;
+          if (roadSeen.has(key)) continue;
+          roadSeen.add(key);
+          roads.push({ id: "road-" + key, from: e.id, to: toId, kind: (r && typeof r === "object" && r.kind) || "road" });
+        }
+      }
+
+      // Review queue cards (designed shape).
+      const queue = queueRows.map((q) => ({
+        id: q.id,
+        name: q.name || "Location candidate",
+        level: lvlOf(q),
+        value: Math.round(confOf(q) * 100),
+        action: q.status === "auto-added" ? "Auto-added"
+          : q.suggestedAction === "create" ? "Place on map?"
+          : q.suggestedAction === "update" ? "Update location"
+          : (q.action || "Review"),
+        excerpt: q.sourceQuote || (q.payload && q.payload.sourceQuote) || q.summary || "",
+        cite: q.chapterId && chapterNumById.get(q.chapterId) ? "Ch. " + chapterNumById.get(q.chapterId) : "",
+        reason: q.reason || q.summary || "",
+        relatedEntity: null,
+      }));
+
+      // Layer counts for the layer rail definitions.
+      const tcount = (...types) => locations.filter((l) => types.includes(l.type)).length;
+      const counts = {
+        regions: tcount("world", "continent", "country", "region"),
+        settlements: tcount("city", "town", "village"),
+        buildings: tcount("building", "room"),
+        natural: tcount("forest", "waterway", "mountain", "river"),
+        districts: tcount("district"),
+        story: locations.filter((l) => l.kind).length,
+        routes: routes.length,
+        characters: castViews.length,
+        beasts: beasts.length,
+        items: items.length,
+        quests: quests.length,
+        events: eventRows.length,
+        factions: factions.length,
+        notes: 0,
+        mentions: occRows.filter((o) => locIdSet.has(o.entityId)).length,
+        extracts: queue.length,
+        warnings: queue.length,
+        diff: 0,
+      };
+
+      return {
+        locations, routes, roads, chapters,
+        quests: [...quests, ...eventRows],
+        beasts, items, factions,
+        cast: castViews, queue, counts,
+      };
     },
     async placeLocation(id, coords, opts = {}) {
       const existing = EntityService.getSync(id, "locations");
@@ -3865,6 +4177,51 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
         merged[type] = merged[type] || {};
         for (const [id, sampleRow] of Object.entries(byId || {})) {
           if (!merged[type][id]) merged[type][id] = sampleRow;
+        }
+      }
+      // Atlas sample: seed placements (coords / kind / polygon / hierarchy)
+      // onto real location entities so the live Atlas map is populated after
+      // a sample load. Find-or-create by name; existing rows keep their own
+      // placement if they already have one.
+      const atlasFix = (window.__LW_SAMPLE_SOURCES__ && window.__LW_SAMPLE_SOURCES__.ATLAS) || {};
+      const fixLocs = Array.isArray(atlasFix.LOCATIONS) ? atlasFix.LOCATIONS : [];
+      if (fixLocs.length) {
+        merged.locations = merged.locations || {};
+        const byName = new Map(Object.values(merged.locations).map((l) => [String(l.name || "").toLowerCase(), l]));
+        const idMap = new Map(); // fixture id -> real entity id
+        for (const row of fixLocs) {
+          const key = String(row.name || "").toLowerCase();
+          let ent = byName.get(key);
+          if (!ent) {
+            ent = {
+              id: uuid("loc"), type: "locations", name: row.name,
+              glyphChar: initialsFor(row.name), status: "active", source: "sample",
+              summary: row.summary || "", sourceMentions: [], reviewQueueCount: 0,
+              createdAt: nowIso(), updatedAt: nowIso(), data: {},
+            };
+            merged.locations[ent.id] = ent;
+            byName.set(key, ent);
+          }
+          const d = { ...(ent.data || {}) };
+          if (d.placed !== true && typeof row.x === "number" && typeof row.y === "number") {
+            d.placed = true;
+            d.coords = { x: row.x, y: row.y };
+          }
+          if (!d.kind) d.kind = row.kind || row.type;
+          if (!d.polygon && row.polygon) d.polygon = row.polygon;
+          if (!ent.summary && row.summary) ent.summary = row.summary;
+          ent.data = d;
+          idMap.set(row.id, ent.id);
+        }
+        // Second pass: hierarchy (parent links) within the fixture set.
+        for (const row of fixLocs) {
+          const realId = idMap.get(row.id);
+          const parentReal = row.parent ? idMap.get(row.parent) : null;
+          if (!realId || !parentReal) continue;
+          const ent = merged.locations[realId];
+          if (ent && !(ent.data && ent.data.parentId)) {
+            ent.data = { ...(ent.data || {}), parentId: { id: parentReal, name: merged.locations[parentReal].name, type: "locations" } };
+          }
         }
       }
       await StorageService.set(KEYS.entities, merged);

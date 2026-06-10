@@ -529,9 +529,15 @@ const AtlasEdQueueCard = ({ item }) => {
           <div className="ae-queue__preview__lbl">Hierarchy</div>
           <div className="ae-queue__hier">
             <div className="ae-queue__hier__row"><Icon name="compass" size={9}/><span>World</span></div>
-            <div className="ae-queue__hier__row" style={{ paddingLeft: 10 }}>
-              <Icon name="branch" size={9}/><span>Pale Reach</span>
-            </div>
+            {(() => {
+              const top = (window.ATLAS_LOCATIONS || []).find((l) =>
+                (l.type === "country" || l.type === "continent" || l.type === "region") && (l.parent === "world" || !l.parent));
+              return top ? (
+                <div className="ae-queue__hier__row" style={{ paddingLeft: 10 }}>
+                  <Icon name="branch" size={9}/><span>{top.name}</span>
+                </div>
+              ) : null;
+            })()}
             <div className="ae-queue__hier__row ae-queue__hier__new" style={{ paddingLeft: 20 }}>
               <Icon name="plus" size={9}/><span>{q.name}</span>
             </div>
@@ -785,7 +791,54 @@ const AtlasEditor = ({
   const [tool, setTool]           = _us_ae("select");
   const [flyoutOpen, setFlyout]   = _us_ae(null);
   const [query, setQuery]         = _us_ae("");
+  const [routeFrom, setRouteFrom] = _us_ae(null);
   const locById = _um_ae(() => Object.fromEntries(locations.map((l) => [l.id, l])), [locations]);
+
+  // ---- Live tool actions (persist through AtlasService) -------------
+  const _aeNotice = (message) => {
+    try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message } })); } catch (_e) {}
+  };
+  const onMapPoint = async (pct, activeTool) => {
+    const B = window.LoomwrightBackend;
+    if (!B) return;
+    if (activeTool === "addLoc" || activeTool === "label-mark") {
+      // If an unplaced location is selected, pin IT here; otherwise
+      // create a fresh location at the tapped point and open its editor.
+      if (selected && selected.placed === false) {
+        await B.AtlasService.placeLocation(selected.id, pct);
+        _aeNotice(selected.name + " pinned to the map.");
+        return;
+      }
+      const ent = await B.EntityService.save("locations", {
+        name: "New location",
+        data: { placed: true, coords: { x: pct.x, y: pct.y }, kind: "city" },
+      }, { status: "active" });
+      window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations", initial: ent, mode: "full" } }));
+    }
+  };
+  const onMovePin = async (locId, pct) => {
+    const B = window.LoomwrightBackend;
+    if (!B) return;
+    await B.AtlasService.updatePlacement(locId, { coords: pct });
+  };
+  const handleSelect = (loc) => {
+    // Two-tap road drawing when the Add Route tool is armed.
+    if ((tool === "addRoute" || tool === "path-road" || tool === "path-route" || tool === "path-river") && loc) {
+      const B = window.LoomwrightBackend;
+      if (!routeFrom) {
+        setRouteFrom(loc.id);
+        _aeNotice("Route from " + loc.name + " — tap the destination.");
+        return;
+      }
+      if (routeFrom !== loc.id && B) {
+        const kind = tool === "path-river" ? "river" : "road";
+        B.AtlasService.setRoute(routeFrom, loc.id, kind).then(() => _aeNotice("Connection drawn."));
+      }
+      setRouteFrom(null);
+      return;
+    }
+    onSelect && onSelect(loc);
+  };
 
   // Build legend chips (shared with side panel format)
   const legendChips = _um_ae(() => ([
@@ -826,7 +879,8 @@ const AtlasEditor = ({
             layers={layerState} selectedId={selected?.id}
             context={context} scrubChapter={scrubChapter}
             showLabels={showLabels} showIso={showIso} showGrid={showGrid} showTexture={showTexture}
-            variant="editor" onSelect={onSelect}/>
+            variant="editor" onSelect={handleSelect}
+            tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin}/>
           {miniMapVisible && <AtlasMiniMap locations={locations} routes={routes} selectedId={selected?.id} context={context}/>}
           {context && context.source && (
             <div className="atlas-editor__ctxbanner">

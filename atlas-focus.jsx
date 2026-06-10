@@ -430,13 +430,15 @@ const AtlasFocusMiniMap = ({
                    M 380 290 C 460 260, 620 230, 690 360 S 540 480, 380 420 Z
                    M 740 200 C 820 170, 1100 170, 1140 320 S 980 510, 880 480 S 720 360, 740 200 Z"
             fill="#d4c089" stroke="#4a381c" strokeWidth="2"/>
-          {/* Major region labels */}
-          <text x="180" y="260" fontFamily="var(--font-display)" fontSize="40"
-                fill="rgba(74,56,28,0.55)" textAnchor="middle" fontWeight="600">Pale Reach</text>
-          <text x="540" y="360" fontFamily="var(--font-display)" fontSize="34"
-                fill="rgba(74,56,28,0.55)" textAnchor="middle" fontWeight="600">Vraska</text>
-          <text x="940" y="340" fontFamily="var(--font-display)" fontSize="40"
-                fill="rgba(74,56,28,0.55)" textAnchor="middle" fontWeight="600">Hessmark</text>
+          {/* Major region labels — the live world's top-level regions */}
+          {(window.ATLAS_LOCATIONS || [])
+            .filter((l) => (l.type === "country" || l.type === "continent" || l.type === "region") && l.placed !== false && (l.parent === "world" || !l.parent))
+            .slice(0, 3)
+            .map((l, i) => (
+              <text key={l.id} x={[180, 540, 940][i]} y={[260, 360, 340][i]}
+                    fontFamily="var(--font-display)" fontSize={i === 1 ? 34 : 40}
+                    fill="rgba(74,56,28,0.55)" textAnchor="middle" fontWeight="600">{l.name}</text>
+            ))}
           {/* Viewport rectangle */}
           <rect x={vp.x} y={vp.y} width={vp.w} height={vp.h}
                 fill="rgba(201,138,44,0.18)" stroke="#c98a2c" strokeWidth="6"/>

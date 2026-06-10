@@ -97,7 +97,7 @@ const EE_LOCATION = {
       fields: [
         { id: "placed",      label: "Placed on Atlas", kind: "toggle",  hint: "Toggle on if pinned to a map." },
         { id: "coords",      label: "Coordinates",     kind: "dual-number", hint: "X / Y on the Atlas grid (decimals)" },
-        { id: "atlasMap",    label: "On which Atlas map?", kind: "select", options: ["Salt-Coast (default)","Hessmark interior","Glass Court"] },
+        { id: "atlasMap",    label: "On which Atlas map?", kind: "select", options: ["Main map (default)","Region detail","City detail"] },
         { id: "routes",      label: "Routes / Roads / Connections", kind: "chips", hint: "Other location names this place connects to" },
       ] },
     { id: "links", title: "Linked entities",
