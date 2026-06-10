@@ -380,6 +380,7 @@
   "onReopenOnboardingWizard",
   "onRerunExtraction",
   "onReserveChapter",
+  "onResetDetectorConfidence",
   "onResetIntel",
   "onResetLayout",
   "onResetProjectData",

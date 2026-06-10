@@ -381,6 +381,7 @@ window.__LW_CALLBACK_NAMES = [
   "onReopenOnboardingWizard",
   "onRerunExtraction",
   "onReserveChapter",
+  "onResetDetectorConfidence",
   "onResetIntel",
   "onResetLayout",
   "onResetProjectData",

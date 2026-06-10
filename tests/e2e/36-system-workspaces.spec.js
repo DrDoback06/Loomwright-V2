@@ -271,6 +271,30 @@ test.describe("U36. System workspaces live", () => {
     await expect(page.locator("[data-ui='SpeedReaderPanelBody'] select")).toContainText("The Crossing");
   });
 
+  test("Settings ▸ Extraction: detector confidence sliders drive the backend", async ({ page }) => {
+    await openFreshApp(page);
+    await openWorkspace(page, "control-centre", "settings", "p-settings");
+    await page.locator(".fws-settings-nav__row", { hasText: "Extraction settings" }).click();
+    const sliders = page.locator("[data-testid='set-detector-confidence']");
+    await expect(sliders).toBeVisible();
+
+    // Raise travel 80% → 90%; the live detector reads the override.
+    await page.locator("[data-testid='set-detector-travel'] input[type='range']").fill("90");
+    await page.waitForTimeout(250);
+    const tuned = await page.evaluate(() => ({
+      stored: window.LoomwrightBackend.SettingsService.getSectionSync("extraction", {}).detectorConfidence,
+      effective: window.LoomwrightBackend.detectorConfidence("travel"),
+    }));
+    expect(tuned.stored.travel).toBeCloseTo(0.9, 5);
+    expect(tuned.effective).toBeCloseTo(0.9, 5);
+
+    // Reset returns the detector to its shipped base.
+    await page.locator("button", { hasText: "Reset to defaults" }).click();
+    await page.waitForTimeout(250);
+    const reset = await page.evaluate(() => window.LoomwrightBackend.detectorConfidence("travel"));
+    expect(reset).toBeCloseTo(0.8, 5);
+  });
+
   test("Tangle Canvas workspace renders the live full-screen canvas", async ({ page }) => {
     await openFreshApp(page);
     await page.evaluate(async () => {

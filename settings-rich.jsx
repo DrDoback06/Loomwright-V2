@@ -624,6 +624,40 @@ const SetExtraction = () => {
           ))}
         </div>
       </SetRow>
+      <SetRow label="Detector confidence" hint="Per-detector starting confidence. Lower = more suggestions reach review; higher = detectors only speak when sure.">
+        <div className="set-stack" data-testid="set-detector-confidence">
+          {[
+            { id: "travel",           label: "Travel & arrival" },
+            { id: "itemTransfer",     label: "Item changes hands" },
+            { id: "itemLoss",         label: "Item lost / destroyed" },
+            { id: "relationships",    label: "Relationship beats" },
+            { id: "statChange",       label: "Trait / stat shifts" },
+            { id: "questProgression", label: "Quest progression" },
+            { id: "events",           label: "Events" },
+            { id: "lore",             label: "Lore statements" },
+          ].map((d) => {
+            const defaults = { itemTransfer: 78, itemLoss: 72, travel: 80, relationships: 74, statChange: 70, questProgression: 66, events: 70, lore: 62 };
+            const overrides = s.detectorConfidence || {};
+            const val = Number.isFinite(Number(overrides[d.id])) && Number(overrides[d.id]) > 0
+              ? Math.round(Number(overrides[d.id]) * 100)
+              : defaults[d.id];
+            return (
+              <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10 }} data-testid={"set-detector-" + d.id}>
+                <span style={{ width: 150, fontSize: 12, color: "var(--ink-2)" }}>{d.label}</span>
+                <div style={{ flex: 1 }}>
+                  <SetSlider value={val} min={50} max={95} unit="%"
+                    onChange={(v) => up("detectorConfidence", { ...overrides, [d.id]: v / 100 })}/>
+                </div>
+              </div>
+            );
+          })}
+          <button type="button" className="set-btn set-btn--ghost" data-callback="onResetDetectorConfidence"
+            onClick={() => up("detectorConfidence", {})}
+            style={{ alignSelf: "flex-start" }}>
+            Reset to defaults
+          </button>
+        </div>
+      </SetRow>
     </SetGroupCard>
   );
 };
