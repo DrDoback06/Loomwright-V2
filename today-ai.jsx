@@ -4,8 +4,9 @@
 // Today: a side-panel dashboard of suggestions (writing prompts,
 // dangling threads, characters not seen, etc.) with filter chips.
 // AI Writer: tabbed modes (Revise / Continue / Write Chapter / etc.)
-// with bespoke layouts per mode. Previews use static, hand-written
-// prose samples in the Pale Reach voice.
+// with bespoke layouts per mode. Generation is provider-gated and
+// routed through the callback registry; previews render the live
+// completion (or the configure-provider notice path).
 // =====================================================================
 
 const { useState: _td_us, useMemo: _td_um, useCallback: _td_uc, useEffect: _td_ue } = React;
@@ -50,83 +51,6 @@ function buildTodaySuggestions() {
 // ---------------------------------------------------------------------
 // Today data
 // ---------------------------------------------------------------------
-const TODAY_SUGGESTIONS = [
-  // -- writing prompts --
-  { id: "ts1", section: "prompts", title: "Open Ch. 8 in Brec's voice.",
-    why: "Brec hasn't held POV since Ch. 5. The negotiation break is his moment to come back.",
-    related: [{ id: "c3", type: "cast", label: "Captain Brec" }, { id: "e1", type: "events", label: "Negotiation break" }],
-    action: "Open Writer's Room · Ch. 8", chapter: "Ch. 8", confidence: "high" },
-  { id: "ts2", section: "prompts", title: "Show what Aelinor sees in the salt-cold.",
-    why: "She's been carrying the Auger four chapters. A quiet moment would re-centre Acts III.",
-    related: [{ id: "c1", type: "cast", label: "Aelinor Vey" }, { id: "i1", type: "items", label: "Bone Auger" }],
-    action: "Send to AI Writer", chapter: "Ch. 8", confidence: "strong" },
-
-  // -- unfinished quests --
-  { id: "ts3", section: "quests", title: "The Auger Wake — step 4 unwritten.",
-    why: "Steps 1–3 done. Step 4 ('Return the Auger to the vault') is not on the page.",
-    related: [{ id: "q1", type: "quests", label: "The Auger Wake" }],
-    action: "Open Quest in Quests panel", chapter: "Ch. 7", confidence: "high" },
-  { id: "ts4", section: "quests", title: "The Hess negotiation — day three open.",
-    why: "Day three of the audience is active. The branch is undecided.",
-    related: [{ id: "q3", type: "quests", label: "The Hess negotiation" }],
-    action: "Open in Quests panel", chapter: "Ch. 7", confidence: "high" },
-
-  // -- dangling plot threads --
-  { id: "ts5", section: "threads", title: "The Hess Letter-key — lost or not?",
-    why: "Ch. 5 says lost. Ch. 6 has Brec using it. Pick canon.",
-    related: [{ id: "i4", type: "items", label: "Hess Letter-key" }],
-    action: "Open contradiction in Lore", chapter: "Ch. 5–6", confidence: "uncertain" },
-  { id: "ts6", section: "threads", title: "Salt Watch is unplaced on the Atlas.",
-    why: "Mentioned twice. No coordinates. Locate or remove.",
-    related: [{ id: "sw", type: "locations", label: "Salt Watch" }],
-    action: "Open in Atlas editor", chapter: "Ch. 2, 6", confidence: "strong" },
-
-  // -- characters not seen --
-  { id: "ts7", section: "untouched", title: "Mara of Hess — last seen Ch. 4.",
-    why: "Mentioned in Ch. 7 review queue (possible witness). She hasn't been on the page in 80 pages.",
-    related: [{ id: "c5", type: "cast", label: "Mara of Hess" }],
-    action: "Open in Cast", chapter: "Ch. 4", confidence: "strong" },
-
-  // -- items introduced but unused --
-  { id: "ts8", section: "untouched", title: "Vey Signet — has rules, no uses.",
-    why: "Affix 'sealing wax' is defined; no chapter has actually used it.",
-    related: [{ id: "i2", type: "items", label: "Vey Signet" }],
-    action: "Send to Tangle", chapter: "—", confidence: "uncertain" },
-
-  // -- locations mentioned but unexplored --
-  { id: "ts9", section: "untouched", title: "Auger Cliffs — not on Atlas yet.",
-    why: "Five mentions. No placement. Place or merge with Pale Reach.",
-    related: [{ id: "loc-auger-cliffs", type: "locations", label: "Auger Cliffs" }],
-    action: "Open in Locations", chapter: "Ch. 4, 6", confidence: "strong" },
-
-  // -- continuity warnings --
-  { id: "ts10", section: "continuity", title: "House Vey banner — hard canon broken.",
-    why: "Bk I says 'never lowered.' Ch. 7 of Bk II lowers it.",
-    related: [{ id: "f1", type: "factions", label: "House Vey" }],
-    action: "Open contradiction in Lore", chapter: "Ch. 7", confidence: "high" },
-  { id: "ts11", section: "continuity", title: "Outer wall breaches — 1 or 2?",
-    why: "Ch. 2 says one breach. Ch. 5 says two. Decide.",
-    related: [{ id: "a1", type: "locations", label: "Pale Reach Hold" }],
-    action: "Open contradiction", chapter: "Ch. 2, 5", confidence: "strong" },
-
-  // -- callbacks / motifs --
-  { id: "ts12", section: "callbacks", title: "Motif: salt.",
-    why: "Salt has carried four chapters of weight. Worth a callback in the close of Ch. 7.",
-    related: [],
-    action: "Add to Tangle", chapter: "—", confidence: "uncertain" },
-
-  // -- review queue reminders --
-  { id: "ts13", section: "queue", title: "11 review queue items pending across panels.",
-    why: "Lore has 7. Cast has 3. Items has 1. Triage before drafting more.",
-    related: [],
-    action: "Open Review Queue", chapter: "—", confidence: "high" },
-
-  // -- project intelligence gaps --
-  { id: "ts14", section: "intel", title: "No style sample from Ch. 1 yet.",
-    why: "Project Intelligence wants 1 style reference per book. None linked.",
-    related: [],
-    action: "Open References", chapter: "Ch. 1", confidence: "uncertain" },
-];
 
 const TODAY_SECTIONS = [
   { id: "prompts",   title: "Writing prompts",    sub: "Where the page wants to go next." },
@@ -289,26 +213,6 @@ const TodayScreen = ({ onSelectEntity }) => {
 // =====================================================================
 
 // Static prose previews per mode — in the Pale Reach voice.
-const AI_PREVIEWS = {
-  "Revise Passage":
-    "The light over Pale Reach was the colour of cooled tin, and Aelinor Vey came through the stockade gate the way salt comes off the sea — without warning, without invitation, and impossible to argue with afterwards.",
-  "Continue Writing":
-    "She set the case on the table and did not open it. Brec waited. The brazier coughed once, and the room smelled — for a moment — of the chapel three nights ago, when she had told herself she had not made up her mind. She put her hand on the lid and left it there.",
-  "Write Chapter":
-    "Chapter Eight\n\nThe road from the Watchhouse to the Glass Court had been measured once in a wedding-march and once in a march of mourners, and the difference between the two ran through Brec's shoulders the whole way. The salt was thinner here, this far south of the Hold; the air did not so much cut as press. He walked behind Aelinor without speaking, the Bone Auger in its felt case across his back. Twice the road turned past a cairn he did not recognise, and twice she stopped, and twice she walked on without saying what she had seen.",
-  "Write Paragraphs":
-    "The wind off the salt flats turned each flake into a small, deliberate cut. Aelinor did not lift her hood. She had been wearing the cold long enough to know which parts of her face it had architecture in, and which parts it would not bother with.",
-  "Write Add-In":
-    "(between paragraphs two and three) — She had not slept since Brec's letter, and three nights of refusing the dreams had given her hands a fine, undignified tremor. The Auger pressed against her shoulder like a second pulse.",
-  "Style Match":
-    "The room smelled of pitch and coriander, and the brazier had been pulled close to the lieutenant's table. There were three cups, and only one of them had been touched.",
-  "Tone Shift":
-    "[Shifted toward bleaker] The light over Pale Reach was the colour of cooled tin, and the gulls would not call to her.",
-  "Dialogue Polish":
-    "\"You're the wrong shape for this weather,\" Brec said. \"You always were. I just thought, this time, you'd come dressed for it.\"",
-  "Continuity Check":
-    "Continuity:\n  • Ch. 5: 'two gaps in the outer wall.'\n  • Ch. 2: 'a breach in the outer wall.' — singular.\n  → Possible canon break. Resolve before Ch. 8.\n\n  • Letter-key: lost Ch. 5; used Ch. 6 (Brec seals second letter). Reconcile.\n",
-};
 
 const AI_MODES = [
   "Revise Passage",
@@ -343,31 +247,105 @@ const AiEntityDropZone = ({ chips, onDropEntity }) => (
 );
 
 const AiWriterPanelBody = ({ panel }) => {
+  const B = () => window.LoomwrightBackend;
   const [mode, setMode] = _td_us("Write Chapter");
-  const [chips, setChips] = _td_us([
-    { id: "c1", type: "cast", label: "Aelinor Vey" },
-    { id: "c3", type: "cast", label: "Captain Brec" },
-    { id: "i1", type: "items", label: "Bone Auger" },
-    { id: "a3", type: "locations", label: "Glass Court" },
-  ]);
-  const [instruction, setInstruction] = _td_us(mode === "Write Chapter"
-    ? "Write Chapter 8 in Brec's POV. He walks behind Aelinor on the road from the Watchhouse to the Glass Court. Cold has thinned; salt has thinned with it. Use the established voice."
-    : "");
-  const [style, setStyle]   = _td_us("Pale Reach prose");
-  const [pov, setPov]       = _td_us("Brec — close third");
+  const [chips, setChips] = _td_us([]);
+  const [instruction, setInstruction] = _td_us("");
+  const [style, setStyle]   = _td_us("Project voice");
+  const [pov, setPov]       = _td_us("Close third");
   const [length, setLength] = _td_us("Short chapter (~1,400w)");
-  const [beats, setBeats]   = _td_us([
-    "Brec follows Aelinor along the salt-thinned road.",
-    "Twice she stops at a cairn and does not name it.",
-    "End on the gate of the Glass Court.",
-  ]);
-  const [avoid, setAvoid]   = _td_us("Don't open the Bone Auger case on the page.");
-  const [generated, setGenerated] = _td_us(true);
+  const [beats, setBeats]   = _td_us([]);
+  const [avoid, setAvoid]   = _td_us("");
+  const [generated, setGenerated] = _td_us(null); // null | { text, mode }
+  const [conflicts, setConflicts] = _td_us(null); // continuity results
+
+  // Live context: active chapter + the manuscript's current selection.
+  const [storeVersion, setStoreVersion] = _td_us(0);
+  React.useEffect(() => {
+    const bump = () => setStoreVersion((v) => v + 1);
+    const evs = ["lw:entity-store-updated", "lw:manuscript-chapters-updated", "lw:set-active-chapter", "lw:backend-ready"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    const onDraft = (e) => { if (e?.detail?.text) setGenerated({ text: e.detail.text, mode: "live" }); };
+    const onConflicts = (e) => setConflicts(e?.detail?.conflicts || []);
+    window.addEventListener("lw:composition-draft-generated", onDraft);
+    window.addEventListener("lw:continuity-check", onConflicts);
+    return () => {
+      evs.forEach((e) => window.removeEventListener(e, bump));
+      window.removeEventListener("lw:composition-draft-generated", onDraft);
+      window.removeEventListener("lw:continuity-check", onConflicts);
+    };
+  }, []);
+  const live = _td_um(() => {
+    const Bk = window.LoomwrightBackend;
+    const out = { chapterId: null, chapterNum: null, excerpt: "", styleRefs: [], castNames: [] };
+    if (!Bk) return out;
+    try {
+      const st = Bk.ManuscriptChapterService?.loadSync?.() || {};
+      const chapters = (st.chapters || []).filter((c) => !c.reserved);
+      const ix = chapters.findIndex((c) => c.id === st.activeChapterId);
+      const active = ix >= 0 ? chapters[ix] : chapters[chapters.length - 1];
+      if (active) {
+        out.chapterId = active.id;
+        out.chapterNum = active.num || (ix >= 0 ? ix + 1 : chapters.length);
+        const text = ((st.manuscripts || {})[active.id]?.text || active.bodyText || "").trim();
+        if (text) {
+          const tail = text.replace(/\s+/g, " ").slice(-160);
+          out.excerpt = "…" + tail;
+        }
+      }
+      out.styleRefs = (Bk.ReferencesService?.listSync?.() || [])
+        .filter((r) => r.styleSource || r.isStyleInfluence)
+        .map((r) => r.title);
+      out.castNames = (Bk.EntityService?.listSync?.("cast") || [])
+        .filter((e) => e.status !== "deleted")
+        .map((e) => e.name);
+    } catch (_e) {}
+    return out;
+  }, [storeVersion]);
+
+  // Drag-in entities from any panel (application/x-loom-entity payloads).
+  const onDropEntity = (e) => {
+    e.preventDefault();
+    try {
+      const raw = e.dataTransfer.getData("application/x-loom-entity");
+      if (!raw) return;
+      const p = JSON.parse(raw);
+      const id = p.id || p.entityId;
+      if (!id) return;
+      const type = p.entityType || p.type || "cast";
+      const label = p.name || p.label || (B()?.EntityService?.getSync?.(id, type)?.name) || "Entity";
+      setChips((curr) => curr.some((c) => c.id === id) ? curr : [...curr, { id, type, label }]);
+    } catch (_e) {}
+  };
 
   // Reset preview content when mode changes
-  React.useEffect(() => { setGenerated(true); }, [mode]);
+  React.useEffect(() => { setGenerated(null); setConflicts(null); }, [mode]);
 
-  const previewText = AI_PREVIEWS[mode] || "";
+  // Compose the full instruction the registry's provider-gated branch
+  // sends to the model (it appends the bounded project context).
+  const composePrompt = () => {
+    const parts = [];
+    parts.push("Task: " + mode + ".");
+    if (instruction.trim()) parts.push(instruction.trim());
+    if (chips.length) parts.push("Entities in focus: " + chips.map((c) => c.label).join(", ") + ".");
+    if (mode === "Write Chapter") {
+      parts.push("Style: " + style + ". POV: " + pov + ". Length: " + length + ".");
+      if (beats.length) parts.push("Required beats, in order:\n" + beats.map((b, i) => (i + 1) + ". " + b).join("\n"));
+      if (avoid.trim()) parts.push("Avoid: " + avoid.trim());
+    }
+    return parts.join("\n\n");
+  };
+  const onGenerate = () => {
+    if (mode === "Continuity Check") {
+      window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onRunContinuityCheck" } }));
+      return;
+    }
+    window.dispatchEvent(new CustomEvent("lw:dispatch-callback", {
+      detail: { name: "onGenerateAIWriterDraft", detail: { prompt: composePrompt(), chapterId: live.chapterId, entityIds: chips.map((c) => c.id) } },
+    }));
+  };
+
+  const previewText = generated ? generated.text : "";
 
   return (
     <div className="aiw" data-ui="AiWriterPanelBody">
@@ -387,16 +365,15 @@ const AiWriterPanelBody = ({ panel }) => {
           <div className="aiw__section-title">Selected context</div>
           <div className="aiw__context">
             <div style={{ fontFamily: "var(--font-sans)", fontSize: "var(--fs-2xs)", color: "var(--ink-4)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-              {mode === "Write Add-In" ? "Selection · Ch. 7, ¶ 2–3" :
-               mode === "Continue Writing" ? "Cursor · Ch. 7, p. 188" :
-               mode === "Revise Passage" ? "Selection · Ch. 7, ¶ 1" :
-               mode === "Write Chapter" ? "Append after Ch. 7" :
-               "Manuscript · Ch. 7"}
+              {live.chapterNum == null ? "No chapter yet" :
+               mode === "Write Chapter" ? "Append after Ch. " + live.chapterNum :
+               mode === "Continue Writing" ? "Cursor · end of Ch. " + live.chapterNum :
+               "Manuscript · Ch. " + live.chapterNum}
             </div>
             <div style={{ fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: "var(--fs-sm)", color: "var(--ink-2)", marginTop: 4 }}>
-              {mode === "Write Add-In" ?
-                "\"…the Auger of Hess in a felt-lined case slung across her back, and even wrapped, even quiet, it pressed against her like a second pulse.\"" :
-                "Current cursor is after the line: 'Tell me first whether the road through the Vraska Pass is still walkable.'"}
+              {live.excerpt
+                ? '"' + live.excerpt + '"'
+                : "Nothing written yet — the writer will start from your project intelligence alone."}
             </div>
           </div>
         </div>
@@ -404,7 +381,10 @@ const AiWriterPanelBody = ({ panel }) => {
         {/* Entity drop zone */}
         <div>
           <div className="aiw__section-title">Entities in context</div>
-          <AiEntityDropZone chips={chips} onDropEntity={() => {}}/>
+          <AiEntityDropZone chips={chips} onDropEntity={onDropEntity}/>
+          {chips.length > 0 && (
+            <button className="rpg-btn rpg-btn--small" style={{ marginTop: 4 }} onClick={() => setChips([])}>Clear entities</button>
+          )}
         </div>
 
         {/* Instruction */}
@@ -426,7 +406,8 @@ const AiWriterPanelBody = ({ panel }) => {
               <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span className="aiw__section-title">Style</span>
                 <select className="loc-body__filter" value={style} onChange={(e) => setStyle(e.target.value)}>
-                  <option>Pale Reach prose</option>
+                  <option>Project voice</option>
+                  {live.styleRefs.map((t) => <option key={t}>{t}</option>)}
                   <option>Plain workhorse</option>
                   <option>Bleak / cold</option>
                   <option>Court formal</option>
@@ -436,9 +417,8 @@ const AiWriterPanelBody = ({ panel }) => {
               <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span className="aiw__section-title">POV</span>
                 <select className="loc-body__filter" value={pov} onChange={(e) => setPov(e.target.value)}>
-                  <option>Aelinor — close third</option>
-                  <option>Brec — close third</option>
-                  <option>Saren — close third</option>
+                  {live.castNames.map((n) => <option key={n}>{n + " — close third"}</option>)}
+                  <option>Close third</option>
                   <option>Distant third</option>
                   <option>First (specify)</option>
                 </select>
@@ -464,11 +444,13 @@ const AiWriterPanelBody = ({ panel }) => {
                 {beats.map((b, i) => (
                   <div key={i} className="aiw__beat">
                     <span style={{ fontFamily: "var(--font-mono)", color: "var(--ink-4)", fontSize: "var(--fs-2xs)" }}>{i + 1}</span>
-                    <span style={{ flex: 1 }}>{b}</span>
+                    <input style={{ flex: 1, background: "transparent", border: "none", borderBottom: "1px dashed var(--line-2)", font: "inherit", color: "inherit" }}
+                           value={b} placeholder="Describe the beat…"
+                           onChange={(e) => setBeats((curr) => curr.map((x, ix) => ix === i ? e.target.value : x))}/>
                     <button className="stat-rule-row__icon" onClick={() => setBeats((curr) => curr.filter((_, ix) => ix !== i))}>✕</button>
                   </div>
                 ))}
-                <button className="rpg-btn rpg-btn--small" data-callback="onAddBeat" onClick={() => setBeats((curr) => [...curr, "New beat…"])}>+ Beat</button>
+                <button className="rpg-btn rpg-btn--small" data-callback="onAddBeat" onClick={() => setBeats((curr) => [...curr, ""])}>+ Beat</button>
               </div>
             </div>
           </>
@@ -480,35 +462,47 @@ const AiWriterPanelBody = ({ panel }) => {
             <div className="aiw__compare-pane">
               <h4>Before</h4>
               <p style={{ fontStyle: "italic", color: "var(--ink-3)" }}>
-                "She carried the Auger of Hess in a felt-lined case slung across her back, and even wrapped, even quiet, it pressed against her like a second pulse."
+                {live.excerpt ? '"' + live.excerpt + '"' : "—"}
               </p>
             </div>
             <div className="aiw__compare-pane" style={{ borderLeft: "3px solid var(--accent)" }}>
               <h4>With add-in</h4>
               <p style={{ fontStyle: "italic", color: "var(--ink-3)" }}>
-                "She carried the Auger of Hess in a felt-lined case slung across her back, and even wrapped, even quiet, it pressed against her like a second pulse."
+                {live.excerpt ? '"' + live.excerpt + '"' : ""}
               </p>
-              <p>
-                {previewText}
-              </p>
+              <p>{previewText}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Continuity Check — live results */}
+        {mode === "Continuity Check" && conflicts !== null && (
+          <div>
+            <div className="aiw__section-title">Findings</div>
+            <div className="aiw__preview" data-ui="AiwConflicts">
+              {conflicts.length === 0
+                ? <p style={{ fontStyle: "italic", color: "var(--ink-3)" }}>No contradictions detected against your canon sources.</p>
+                : conflicts.map((c, i) => (
+                    <p key={i}>• {typeof c === "string" ? c : (c.claim || c.summary || "") + (c.reference ? " — vs " + c.reference : "") + (c.evidence ? " (" + c.evidence + ")" : "")}</p>
+                  ))}
             </div>
           </div>
         )}
 
         {/* Generate / preview */}
-        {mode !== "Write Add-In" && (
+        {mode !== "Write Add-In" && mode !== "Continuity Check" && (
           <div>
             <div className="aiw__section-title">Preview</div>
             {generated ? (
-              <div className="aiw__preview">
+              <div className="aiw__preview" data-ui="AiwPreview">
                 <div className="aiw__preview-meta">
-                  {mode} · sample · ~{Math.round((previewText.split(/\s+/).length))}w
+                  {mode} · draft · ~{Math.round((previewText.split(/\s+/).filter(Boolean).length))}w
                 </div>
                 {previewText.split("\n\n").map((p, i) => <p key={i}>{p}</p>)}
               </div>
             ) : (
-              <div className="aiw__preview" style={{ fontStyle: "italic", color: "var(--ink-4)" }}>
-                Press Generate to preview.
+              <div className="aiw__preview" style={{ fontStyle: "italic", color: "var(--ink-4)" }} data-ui="AiwPreviewEmpty">
+                Press Generate to draft with your configured AI provider — the project's context (chapter, entities, canon, voice) rides along automatically.
               </div>
             )}
           </div>
@@ -517,34 +511,38 @@ const AiWriterPanelBody = ({ panel }) => {
 
       {/* Actions */}
       <div className="aiw__actions">
-        <button className="rpg-btn rpg-btn--primary" data-callback="onGenerateAIWriterDraft" onClick={() => setGenerated(true)}>Generate</button>
+        <button className="rpg-btn rpg-btn--primary" data-callback="onGenerateAIWriterDraft" data-testid="aiw-generate"
+                onClick={onGenerate}>{mode === "Continuity Check" ? "Run check" : "Generate"}</button>
         <button className="rpg-btn" data-callback="onAcceptGeneratedText">Accept</button>
         {mode === "Write Chapter" ? (
           <>
-            <button className="rpg-btn" data-callback="onInsertGeneratedText">Insert as draft</button>
-            <button className="rpg-btn" data-callback="onCreateChapter">Create as new chapter</button>
+            <button className="rpg-btn" data-callback="onInsertGeneratedText"
+                    onClick={() => generated && window.dispatchEvent(new CustomEvent("lw:composition-insert-draft", { detail: { text: generated.text, source: "ai-writer" } }))}>Insert as draft</button>
+            <button className="rpg-btn" data-callback="onCreateChapter"
+                    onClick={() => generated && window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onCreateChapterFromComposition", detail: { text: generated.text, title: "" } } }))}>Create as new chapter</button>
           </>
         ) : mode === "Write Add-In" ? (
           <>
-            <button className="rpg-btn" data-callback="onInsertGeneratedText">Insert below</button>
+            <button className="rpg-btn" data-callback="onInsertGeneratedText"
+                    onClick={() => generated && window.dispatchEvent(new CustomEvent("lw:composition-insert-draft", { detail: { text: generated.text, source: "ai-writer" } }))}>Insert below</button>
           </>
         ) : (
-          <button className="rpg-btn" data-callback="onInsertGeneratedText">Insert</button>
+          <button className="rpg-btn" data-callback="onInsertGeneratedText"
+                  onClick={() => generated && window.dispatchEvent(new CustomEvent("lw:composition-insert-draft", { detail: { text: generated.text, source: "ai-writer" } }))}>Insert</button>
         )}
         <button className="rpg-btn" data-callback="onCopyGeneratedText">Copy</button>
         <span style={{ flex: 1 }}/>
         {mode === "Continuity Check" && (
           <button className="rpg-btn" data-callback="onRunContinuityCheck">Re-run check</button>
         )}
-        <button className="rpg-btn rpg-btn--ghost" data-callback="onDismissGeneratedText">Dismiss</button>
+        <button className="rpg-btn rpg-btn--ghost" data-callback="onDismissGeneratedText"
+                onClick={() => { setGenerated(null); setConflicts(null); }}>Dismiss</button>
       </div>
     </div>
   );
 };
 
-window.TODAY_SUGGESTIONS = TODAY_SUGGESTIONS;
-window.TODAY_SECTIONS    = TODAY_SECTIONS;
-window.AI_PREVIEWS       = AI_PREVIEWS;
+window.TODAY_SECTIONS = TODAY_SECTIONS;
 window.AI_MODES          = AI_MODES;
 
 Object.assign(window, { TodayPanelBody, TodayScreen, AiWriterPanelBody, TodayCardCompact, AiEntityDropZone });

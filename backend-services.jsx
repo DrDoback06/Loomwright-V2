@@ -1917,10 +1917,39 @@
       return StorageService.getSync(KEYS.manuscriptChapters, this.defaultState());
     },
     async save(state, opts = {}) {
+      // Daily writing-stats baseline: on the first save of a new day,
+      // remember the word count BEFORE this save so Home can report
+      // "words added today" truthfully.
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const stats = SettingsService.getSectionSync("writingStats", {});
+        if (stats.date !== today) {
+          await SettingsService.saveSection("writingStats", { date: today, baseline: this.totalWordsSync() });
+        }
+      } catch (_) {}
       const next = { ...this.loadSync(), ...clone(state), updatedAt: nowIso() };
       await StorageService.set(KEYS.manuscriptChapters, next);
       window.dispatchEvent(new CustomEvent("lw:manuscript-chapters-updated", { detail: next }));
       return next;
+    },
+    // Total words across all chapter manuscripts.
+    totalWordsSync() {
+      const state = this.loadSync();
+      let words = 0;
+      for (const m of Object.values(state.manuscripts || {})) {
+        const text = (m && (m.text || "")) || "";
+        if (text) words += text.trim().split(/\s+/).filter(Boolean).length;
+      }
+      return words;
+    },
+    // Words added today (vs the day's first-save baseline).
+    writingStatsSync() {
+      const today = new Date().toISOString().slice(0, 10);
+      let stats = {};
+      try { stats = SettingsService.getSectionSync("writingStats", {}); } catch (_) {}
+      const total = this.totalWordsSync();
+      const wordsToday = stats.date === today ? Math.max(0, total - (Number(stats.baseline) || 0)) : 0;
+      return { totalWords: total, wordsToday, date: today };
     },
     async setChapterContent(chapterId, manuscript, meta = {}, opts = {}) {
       const state = this.loadSync();

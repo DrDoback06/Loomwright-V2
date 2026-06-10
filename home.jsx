@@ -192,12 +192,26 @@ const HomeScreen = ({
       count: B.EntityService.listSync(t).length,
       queue: (B.ReviewService?.listSync(t) || []).length,
     }));
+    const mcState = B.ManuscriptChapterService?.loadSync?.() || {};
+    const activeIx = chapters.findIndex((c) => c.id === mcState.activeChapterId);
+    const activeChapter = activeIx >= 0 ? chapters[activeIx] : chapters[chapters.length - 1];
+    const wordsToday = B.ManuscriptChapterService?.writingStatsSync?.().wordsToday ?? 0;
+    const target = Number(B.SettingsService?.getSectionSync?.("project", {})?.targetWordCount) || 90000;
+    // Pace line: derived from today's output against the remaining target.
+    const remaining = Math.max(0, target - words);
+    const paceSub = !words ? "Write your first words to start the clock"
+      : wordsToday > 0
+        ? "~" + Math.max(1, Math.ceil(remaining / wordsToday)) + " writing days left at today's pace"
+        : remaining > 0 ? remaining.toLocaleString() + " words to the draft target" : "Draft target reached";
     return {
       ms: {
         chaptersDrafted: chapters.length,
         chaptersReserved: chapters.filter((c) => c.reserved).length,
         wordCount: words,
-        targetWordCount: 90000,
+        targetWordCount: target,
+        activeChapterNum: activeChapter ? (activeChapter.num || (activeIx >= 0 ? activeIx + 1 : chapters.length)) : null,
+        wordsToday,
+        paceSub,
         lastChapterTitle: chapters[chapters.length - 1]?.title || "—",
         lastSavedHuman: chapters.length ? "saved locally" : "no chapters yet",
       },
@@ -233,7 +247,7 @@ const HomeScreen = ({
     return () => window.removeEventListener("lw:continuity-check", onCheck);
   }, []);
 
-  const ms = live?.ms || { chaptersDrafted: 0, chaptersReserved: 0, wordCount: 0, targetWordCount: 90000, lastChapterTitle: "—", lastSavedHuman: "no chapters yet" };
+  const ms = live?.ms || { chaptersDrafted: 0, chaptersReserved: 0, wordCount: 0, targetWordCount: 90000, activeChapterNum: null, wordsToday: 0, paceSub: "", lastChapterTitle: "—", lastSavedHuman: "no chapters yet" };
   const PI = live?.PI || { completion: 0, styleProfile: "Not set", canonRules: 0, references: 0, missing: [] };
   const RQ = live?.RQ || { total: 0, high: 0, strong: 0, uncertain: 0, weak: 0, autoAccepted: 0, needsDecision: 0 };
   const entityHealth = live?.entityHealth || [];
@@ -454,11 +468,11 @@ const HomeScreen = ({
             <div className="home-stats">
               <HomeStat label="Chapters" value={ms.chaptersDrafted} sub={"+ " + ms.chaptersReserved + " reserved"}/>
               <HomeStat label="Words"    value={ms.wordCount.toLocaleString()} sub={"of " + ms.targetWordCount.toLocaleString()}/>
-              <HomeStat label="Active"   value={"Ch. " + 7} sub={ms.lastChapterTitle}/>
-              <HomeStat label="Today"    value={"+1,204"} sub="words added" tone="ok"/>
+              <HomeStat label="Active"   value={ms.activeChapterNum ? "Ch. " + ms.activeChapterNum : "—"} sub={ms.lastChapterTitle}/>
+              <HomeStat label="Today"    value={"+" + (ms.wordsToday ?? 0).toLocaleString()} sub="words added" tone={ms.wordsToday ? "ok" : undefined}/>
             </div>
             <div style={{ marginTop: 12 }}>
-              <HomeProgressBar value={ms.wordCount} max={ms.targetWordCount} label="Toward draft target" sub="Steady pace · ~7 weeks remaining at current cadence"/>
+              <HomeProgressBar value={ms.wordCount} max={ms.targetWordCount} label="Toward draft target" sub={ms.paceSub || ""}/>
             </div>
           </HomeCard>
 

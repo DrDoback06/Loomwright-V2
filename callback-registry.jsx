@@ -899,7 +899,8 @@
       const route = await requireProviderOrNotice("AI Writer draft generation", "writingDraft");
       if (!route) return;
       const activeChapterId = ctx.detail?.chapterId || document.querySelector("[data-ui='ManuscriptCanvas']")?.getAttribute("data-chapter-id") || null;
-      const built = B().AIContextBuilder.build({ task: "writingDraft", chapterId: activeChapterId, includeReferences: true, includeProjectIntelligence: true });
+      const selectedEntityIds = Array.isArray(ctx.detail?.entityIds) ? ctx.detail.entityIds : [];
+      const built = B().AIContextBuilder.build({ task: "writingDraft", chapterId: activeChapterId, selectedEntityIds, includeReferences: true, includeProjectIntelligence: true });
       if (!aiPrivacyGuard({ task: "writingDraft", providerId: route.providerId, model: route.model, context: built })) return;
       const prompt = (ctx.detail?.prompt || "Write a draft scene.") + (built.userPrompt ? `\n\n${built.userPrompt}` : "");
       try {
