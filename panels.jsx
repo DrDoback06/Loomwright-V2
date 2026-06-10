@@ -67,8 +67,8 @@ const SlidingPanel = ({
   const [mergeOpen, setMergeOpen]   = _useState_p(false);
 
   const entities = useFramework ? (panel.entities || (window.ENTITY_SAMPLES?.[entityType]) || []) : [];
-  const reviewItems = useFramework ? (panel.reviewItems || (window.ENTITY_REVIEW_SAMPLES?.[entityType]) || []) : [];
-  const suggestions = useFramework ? (panel.suggestions || (window.ENTITY_SUGGESTION_SAMPLES?.[entityType]) || []) : [];
+  const reviewItems = useFramework ? (panel.reviewItems || []) : [];
+  const suggestions = useFramework ? (panel.suggestions || []) : [];
   const queueCount = panel.queueCount ?? reviewItems.length;
 
   const filtered = _useMemo_p(() => {

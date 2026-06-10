@@ -16,7 +16,7 @@ const { useState: _crab_us } = React;
 // ClassesPanelBody
 // ---------------------------------------------------------------------
 const ClassesPanelBody = ({ panel, onSelectEntity }) => {
-  const entities = (window.ENTITY_SAMPLES && window.ENTITY_SAMPLES.classes) || [];
+  const entities = window.LoomwrightBackend?.EntityService?.listSync?.("classes") || [];
   const [search, setSearch] = _crab_us("");
   const [selectedId, setSelectedId] = _crab_us(entities[0]?.id || null);
   const selected = entities.find((e) => e.id === selectedId);
@@ -94,7 +94,7 @@ const ClassesPanelBody = ({ panel, onSelectEntity }) => {
 // RacesPanelBody
 // ---------------------------------------------------------------------
 const RacesPanelBody = ({ panel, onSelectEntity }) => {
-  const entities = (window.ENTITY_SAMPLES && window.ENTITY_SAMPLES.races) || [];
+  const entities = window.LoomwrightBackend?.EntityService?.listSync?.("races") || [];
   const [search, setSearch] = _crab_us("");
   const [selectedId, setSelectedId] = _crab_us(entities[0]?.id || null);
   const selected = entities.find((e) => e.id === selectedId);
@@ -170,7 +170,7 @@ const RacesPanelBody = ({ panel, onSelectEntity }) => {
 // AbilitiesPanelBody — DEPRECATION CARD (Abilities are now Skill Trees)
 // ---------------------------------------------------------------------
 const AbilitiesPanelBody = ({ panel, onSelectEntity }) => {
-  const legacyAbilities = (window.ENTITY_SAMPLES && window.ENTITY_SAMPLES.abilities) || [];
+  const legacyAbilities = window.LoomwrightBackend?.EntityService?.listSync?.("abilities") || [];
   return (
     <div className="upg" data-ui="AbilitiesPanelBody" data-state="deprecated">
       <div style={{

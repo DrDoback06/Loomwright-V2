@@ -237,35 +237,6 @@ const LOCATIONS_DATA = [
   },
 ];
 
-const LOCATIONS_REVIEW = [
-  { id: "lq1", entityType: "locations", level: "high",      value: 96,
-    candidateType: "new location candidate",
-    name: "Auger Cliffs",   suggested: "Place under The Pale Reach",
-    sourceChapter: "Ch. 4", sourceQuote: "From the Auger Cliffs the Pass looked like a ledger half-closed.",
-    related: "Pale Reach (parent)", warning: null,
-  },
-  { id: "lq2", entityType: "locations", level: "strong",    value: 78,
-    candidateType: "parent/child suggestion",
-    name: "Granary",        suggested: "Move under Pale Reach Hold",
-    sourceChapter: "Ch. 4", sourceQuote: "She crossed the granary court toward the inner wall.",
-    related: "Pale Reach Hold",
-    warning: null,
-  },
-  { id: "lq3", entityType: "locations", level: "uncertain", value: 58,
-    candidateType: "alias / merge",
-    name: "the Reach",      suggested: "Merge with Pale Reach Hold",
-    sourceChapter: "Ch. 2", sourceQuote: "The Reach was quiet that morning.",
-    related: "Pale Reach Hold (likely)",
-    warning: "Ambiguous — could mean the region.",
-  },
-  { id: "lq4", entityType: "locations", level: "weak",      value: 38,
-    candidateType: "contradiction",
-    name: "Outer wall breaches", suggested: "Pick canon: 1 or 2 breaches",
-    sourceChapter: "Ch. 5", sourceQuote: "She walked the two gaps in the outer wall.",
-    related: "Pale Reach Hold",
-    warning: "Ch. 2 says one; Ch. 5 says two.",
-  },
-];
 
 // ---------------------------------------------------------------------
 // Hierarchy tree component
@@ -450,7 +421,7 @@ const LocReviewCard = ({ item, onAccept, onEdit, onMerge, onDeny, onOpenSource }
 const LocationDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSourceMention }) => {
   const e = entity || {};
   const kind = LOCATION_KIND_BY_ID[e.kind] || LOCATION_KIND_BY_ID.other;
-  const review = (LOCATIONS_REVIEW || []).filter(() => true).slice(0, 4);
+  const review = (window.LoomwrightBackend?.ReviewService?.listCardViewsSync?.("locations") || []).slice(0, 4);
 
   // Counts for the connected-entities cluster
   const counts = {
@@ -758,7 +729,16 @@ const LocationsPanelBody = ({ panel, onSelectEntity }) => {
               )}
               {tab === "review" && (
                 <div style={{ padding: 12 }} className="loc-reviews">
-                  {LOCATIONS_REVIEW.map((r) => <LocReviewCard key={r.id} item={r}/>)}
+                  {(window.LoomwrightBackend?.ReviewService?.listCardViewsSync?.("locations") || []).map((r) => (
+                    <LocReviewCard key={r.id} item={r}
+                      onAccept={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onAcceptLocationQueueItem", detail: { id: it.id } } }))}
+                      onEdit={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onEditLocationQueueItem", detail: { id: it.id } } }))}
+                      onMerge={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onMergeLocationQueueItem", detail: { id: it.id } } }))}
+                      onDeny={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onDenyLocationQueueItem", detail: { id: it.id } } }))}/>
+                  ))}
+                  {(window.LoomwrightBackend?.ReviewService?.listCardViewsSync?.("locations") || []).length === 0 && (
+                    <EmptyState icon="bell" title="Inbox empty" body="Location extraction candidates will appear here."/>
+                  )}
                 </div>
               )}
               {tab === "references" && (
@@ -780,14 +760,11 @@ const LocationsPanelBody = ({ panel, onSelectEntity }) => {
 // Wire into the framework
 // ---------------------------------------------------------------------
 window.LOCATIONS_DATA   = LOCATIONS_DATA;
-window.LOCATIONS_REVIEW = LOCATIONS_REVIEW;
 window.LOCATION_KINDS   = LOCATION_KINDS;
 
 // Override the framework sample with the rich list so other panels that
 // chip-link to a location can resolve names.
 window.ENTITY_SAMPLES = window.ENTITY_SAMPLES || {};
-window.ENTITY_REVIEW_SAMPLES = window.ENTITY_REVIEW_SAMPLES || {};
-window.ENTITY_REVIEW_SAMPLES.locations = LOCATIONS_REVIEW;
 
 // Register the bespoke detail renderer (used inside framework body fallback).
 window.RPG_DETAIL_RENDERERS = window.RPG_DETAIL_RENDERERS || {};

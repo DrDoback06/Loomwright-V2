@@ -28,8 +28,8 @@ const EntityFrameworkPanelBody = ({ panel, onSelectEntity, ...frameworkCallbacks
   const [mergeOpen, setMergeOpen]   = _useState_efh(false);
 
   const entities    = panel.entities    || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_SAMPLES?.[entityType] : null) || [];
-  const reviewItems = panel.reviewItems || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_REVIEW_SAMPLES?.[entityType] : null) || [];
-  const suggestions = panel.suggestions || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_SUGGESTION_SAMPLES?.[entityType] : null) || [];
+  const reviewItems = panel.reviewItems || [];
+  const suggestions = panel.suggestions || [];
   const queueCount  = panel.queueCount ?? reviewItems.length;
 
   // Per-panel polished empty state — when the live store is empty AND the

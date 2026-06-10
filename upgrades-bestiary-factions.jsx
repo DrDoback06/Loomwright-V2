@@ -99,30 +99,6 @@ const BESTIARY_DATA = [
   },
 ];
 
-const BESTIARY_REVIEW = [
-  { id: "brq1", entityType: "bestiary", level: "strong", value: 84,
-    candidateType: "new bestiary entry",
-    name: "Marsh-walker",
-    suggested: "Create new bestiary entry",
-    sourceChapter: "Ch. 4", sourceQuote: "A long-legged thing in the reeds, that did not run.",
-    related: "Vraska Pass",
-  },
-  { id: "brq2", entityType: "bestiary", level: "uncertain", value: 58,
-    candidateType: "habitat suggestion",
-    name: "Salt-wraith",
-    suggested: "Add habitat: Brittlewood edge",
-    sourceChapter: "Ch. 5", sourceQuote: "Glimpsed; not engaged.",
-    related: "Brittlewood",
-  },
-  { id: "brq3", entityType: "bestiary", level: "weak", value: 38,
-    candidateType: "ability/weakness suggestion",
-    name: "Hess wolfhound",
-    suggested: "Add ability: tracks by silver",
-    sourceChapter: "Ch. 3", sourceQuote: "It followed the signet, not her.",
-    related: "Vey Signet",
-    warning: "Stretchy inference — confirm.",
-  },
-];
 
 // ---------------------------------------------------------------------
 // BestiaryDetail
@@ -419,22 +395,6 @@ const FACTIONS_DATA = [
   },
 ];
 
-const FACTIONS_REVIEW = [
-  { id: "frq1", entityType: "factions", level: "high", value: 92,
-    candidateType: "membership suggestion",
-    name: "Dav the Quiet",
-    suggested: "Add as member of House Vey",
-    sourceChapter: "Ch. 6", sourceQuote: "Dav, of the Vey watch, did not lower his eyes.",
-    related: "House Vey",
-  },
-  { id: "frq2", entityType: "factions", level: "strong", value: 79,
-    candidateType: "alliance / enemy",
-    name: "Glass Court ↔ House Hess",
-    suggested: "Confirm ally relationship",
-    sourceChapter: "Ch. 3", sourceQuote: "Saren read the audience; the Glass would not contradict her.",
-    related: "Glass Court",
-  },
-];
 
 // ---------------------------------------------------------------------
 // FactionDetail
@@ -687,13 +647,8 @@ const FactionsPanelBody = ({ panel, onSelectEntity }) => {
 // ---------------------------------------------------------------------
 window.BESTIARY_DATA = BESTIARY_DATA;
 window.FACTIONS_DATA = FACTIONS_DATA;
-window.BESTIARY_REVIEW = BESTIARY_REVIEW;
-window.FACTIONS_REVIEW = FACTIONS_REVIEW;
 
 window.ENTITY_SAMPLES = window.ENTITY_SAMPLES || {};
-window.ENTITY_REVIEW_SAMPLES = window.ENTITY_REVIEW_SAMPLES || {};
-window.ENTITY_REVIEW_SAMPLES.bestiary = BESTIARY_REVIEW;
-window.ENTITY_REVIEW_SAMPLES.factions = FACTIONS_REVIEW;
 
 window.RPG_DETAIL_RENDERERS = window.RPG_DETAIL_RENDERERS || {};
 window.RPG_DETAIL_RENDERERS.bestiary = (entity, ctx) => <BestiaryDetail entity={entity} {...ctx}/>;

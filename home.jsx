@@ -15,65 +15,11 @@ const { useState: _hm_us, useMemo: _hm_um, useCallback: _hm_uc } = React;
 // ---------------------------------------------------------------------
 // Static demo data
 // ---------------------------------------------------------------------
-const HOME_MANUSCRIPT = {
-  chaptersDrafted: 7,
-  chaptersReserved: 3,
-  wordCount: 31482,
-  targetWordCount: 90000,
-  lastChapterId: "c7",
-  lastChapterTitle: "Ash & Auger",
-  lastChapterWords: 3214,
-  lastSavedHuman: "2 min ago",
-};
 
-const HOME_RECENT_ACTIVITY = [
-  { id: "ra1", kind: "chapter",    text: "Edited Ch. 7 — Ash & Auger",                when: "2 min ago",  link: { type: "writers-room" } },
-  { id: "ra2", kind: "extraction", text: "Accepted 4 candidates from Ch. 7",          when: "12 min ago", link: { type: "review" } },
-  { id: "ra3", kind: "entity",     text: "Created Saren of Hess (Cast)",              when: "1 hr ago",   link: { type: "cast", id: "c2" } },
-  { id: "ra4", kind: "entity",     text: "Updated The Auger Wake (Events)",           when: "2 hr ago",   link: { type: "events", id: "e1" } },
-  { id: "ra5", kind: "panel",      text: "Opened Atlas · centred on Vraska Pass",     when: "3 hr ago",   link: { type: "atlas" } },
-  { id: "ra6", kind: "extraction", text: "Denied 2 weak ownership candidates",        when: "Yesterday",  link: { type: "review" } },
-];
 
-const HOME_WARNINGS = [
-  { id: "w1", level: "danger",  title: "Auger of Hess: contradictory ownership",
-    body: "Lost in Ch. 5, used in Ch. 6 — reconcile or split entity.", action: "Open quest log",  link: { type: "items", id: "i1" } },
-  { id: "w2", level: "warn",    title: "Saren of Hess: dormant for 4 chapters",
-    body: "Last mention Ch. 3; flagged Important — wake or sleep?",   action: "Open Cast",       link: { type: "cast", id: "c2" } },
-  { id: "w3", level: "warn",    title: "Vraska Pass: unplaced on Atlas",
-    body: "Referenced in 3 chapters with no coordinates.",              action: "Place on Atlas",  link: { type: "atlas" } },
-  { id: "w4", level: "info",    title: "Glass Court: contradicts canon",
-    body: "Canon says no banner; Ch. 4 shows one. Add canon variant?",  action: "Open Lore",       link: { type: "lore" } },
-];
 
-const HOME_PI = {
-  completion: 64,
-  styleProfile: "Established",
-  canonRules: 12,
-  references: 7,
-  missing: ["Tone bible — sword scenes", "Casting glossary"],
-};
 
-const HOME_REVIEW = {
-  total: 23,
-  high: 6,
-  strong: 8,
-  uncertain: 6,
-  weak: 3,
-  autoAccepted: 17,
-  needsDecision: 9,
-};
 
-const HOME_ENTITY_HEALTH = [
-  { id: "cast",      label: "Cast",         count: 14, queue: 1, color: "#7a5aa3", glyph: "C" },
-  { id: "locations", label: "Locations",    count: 9,  queue: 2, color: "#5b7a4a", glyph: "L" },
-  { id: "items",     label: "Items",        count: 11, queue: 4, color: "#9a7b3a", glyph: "I" },
-  { id: "quests",    label: "Quests",       count: 6,  queue: 1, color: "#a85a72", glyph: "Q" },
-  { id: "events",    label: "Events",       count: 18, queue: 3, color: "#c79545", glyph: "E" },
-  { id: "timeline",  label: "Timeline",     count: 24, queue: 0, color: "#6a7a8a", glyph: "T" },
-  { id: "lore",      label: "Lore",         count: 12, queue: 2, color: "#7a5a3a", glyph: "L" },
-  { id: "bestiary",  label: "Bestiary",     count: 4,  queue: 0, color: "#a84a3a", glyph: "B" },
-];
 
 const HOME_QUICK_LAUNCH = [
   { id: "writers-room", label: "Writer's Room",   icon: "feather", kind: "route" },
@@ -717,6 +663,5 @@ const HomeScreen = ({
 
 Object.assign(window, {
   HomeScreen,
-  HOME_MANUSCRIPT, HOME_RECENT_ACTIVITY, HOME_WARNINGS,
-  HOME_PI, HOME_REVIEW, HOME_ENTITY_HEALTH, HOME_QUICK_LAUNCH,
+  HOME_QUICK_LAUNCH,
 });

@@ -12,38 +12,6 @@ const { useState: _it_us, useMemo: _it_um, useCallback: _it_uc } = React;
 // ---------------------------------------------------------------------
 // Item-system review queue (extends what's already loaded).
 // ---------------------------------------------------------------------
-const ITEMS_REVIEW = [
-  { id: "irq1", entityType: "items", level: "high",      value: 96,
-    candidateType: "owner change detected",
-    name: "Bone Auger",
-    suggested: "Apply owner change: Aelinor → Brec (on loan)",
-    sourceChapter: "Ch. 7", sourceQuote: "Brec carries it under his cloak.",
-    related: "Aelinor Vey · Captain Brec",
-  },
-  { id: "irq2", entityType: "items", level: "strong",    value: 78,
-    candidateType: "item found location",
-    name: "Salt-bitten Cloak",
-    suggested: "Set found location: Vraska Pass roadside",
-    sourceChapter: "Ch. 5", sourceQuote: "She pulled the cloak from the body at the roadside.",
-    related: "Vraska Pass",
-  },
-  { id: "irq3", entityType: "items", level: "uncertain", value: 58,
-    candidateType: "property / effect detected",
-    name: "Vey Signet",
-    suggested: "Add affix: 'never removed in public'",
-    sourceChapter: "Ch. 3", sourceQuote: "She did not remove it, even in the bath.",
-    related: "Vey Signet",
-    warning: "Stretchy inference.",
-  },
-  { id: "irq4", entityType: "items", level: "weak",      value: 38,
-    candidateType: "contradiction in ownership",
-    name: "Hess Letter-key",
-    suggested: "Reconcile: lost Ch. 5, but used Ch. 6?",
-    sourceChapter: "Ch. 6", sourceQuote: "He sealed the second letter then.",
-    related: "Brec's Letter",
-    warning: "Possible canon break.",
-  },
-];
 
 // ---------------------------------------------------------------------
 // Rarity tone (matches ItemDetail's facet tones)
@@ -209,7 +177,7 @@ const ItemLocationHistory = ({ item, onSelectEntity }) => {
 const ItemReviewCard = ({ item }) => {
   const c = (window.CONFIDENCE || {})[item.level] || {};
   return (
-    <div className="item-review" style={{ "--cc": c.color, "--cs": c.soft, "--cd": c.deep }}>
+    <div className="item-review" data-entity-id={item.id} data-entity-type="items" style={{ "--cc": c.color, "--cs": c.soft, "--cd": c.deep }}>
       <div className="item-review__head">
         <ConfidenceBadge level={item.level} value={item.value}/>
         <span className="item-review__type">{item.candidateType}</span>
@@ -376,7 +344,7 @@ const ItemsPanelBody = ({ panel, onSelectEntity }) => {
                   {[
                     ["dossier",  "Dossier"],
                     ["history",  "History"],
-                    ["review",   "Review" + (ITEMS_REVIEW.length > 0 ? " · " + ITEMS_REVIEW.length : "")],
+                    ["review",   "Review" + (((window.LoomwrightBackend?.ReviewService?.listSync?.("items") || []).filter((q) => q.status === "pending").length || 0) > 0 ? " · " + (window.LoomwrightBackend?.ReviewService?.listSync?.("items") || []).filter((q) => q.status === "pending").length : "")],
                     ["mentions", "Mentions"],
                   ].map(([k, l]) => (
                     <button key={k} className={"loc-body__tab" + (tab === k ? " is-active" : "")} onClick={() => setTab(k)}>{l}</button>
@@ -443,9 +411,9 @@ const ItemsPanelBody = ({ panel, onSelectEntity }) => {
 
                 {tab === "review" && (
                   <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                    {ITEMS_REVIEW.length === 0 ? (
+                    {(window.LoomwrightBackend?.ReviewService?.listCardViewsSync?.("items") || []).length === 0 ? (
                       <EmptyState icon="bell" title="Inbox empty" body="Items-related extraction items will appear here."/>
-                    ) : ITEMS_REVIEW.map((r) => <ItemReviewCard key={r.id} item={r}/>)}
+                    ) : (window.LoomwrightBackend?.ReviewService?.listCardViewsSync?.("items") || []).map((r) => <ItemReviewCard key={r.id} item={r}/>)}
                   </div>
                 )}
 
@@ -479,9 +447,6 @@ const ItemsPanelBody = ({ panel, onSelectEntity }) => {
 // ---------------------------------------------------------------------
 // Wire data into globals
 // ---------------------------------------------------------------------
-window.ITEMS_REVIEW = ITEMS_REVIEW;
-window.ENTITY_REVIEW_SAMPLES = window.ENTITY_REVIEW_SAMPLES || {};
-window.ENTITY_REVIEW_SAMPLES.items = ITEMS_REVIEW;
 
 // Mirror rich data into ENTITY_SAMPLES so other panels chip-resolve items.
 if (typeof RPG_ITEM_DATA !== "undefined") {
@@ -504,6 +469,5 @@ window.RPG_FILTERS.items = [
 
 Object.assign(window, {
   ItemsPanelBody,
-  ItemEquipmentSlotCard, ItemEffectsStrip, ItemOwnershipTimeline, ItemLocationHistory, ItemReviewCard,
-  ITEMS_REVIEW, ITEM_RARITY_COLORS,
+  ItemEquipmentSlotCard, ItemEffectsStrip, ItemOwnershipTimeline, ItemLocationHistory, ItemReviewCard, ITEM_RARITY_COLORS,
 });

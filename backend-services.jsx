@@ -461,6 +461,38 @@
       const t = type ? normaliseType(type) : null;
       return t ? all.filter((item) => normaliseType(item.entityType || item.type) === t && item.status !== "done") : all;
     },
+    // Designed review-card shape (level/value/name/suggested/quote/cite)
+    // consumed by the per-panel Review tabs. One mapper, every panel.
+    listCardViewsSync(type) {
+      const rows = this.listSync(type).filter((q) => q.status === "pending" || q.status === "auto-added");
+      const chapterNum = new Map();
+      try {
+        (ManuscriptChapterService.loadSync().chapters || []).filter((c) => !c.reserved)
+          .forEach((c, i) => chapterNum.set(c.id, c.num || i + 1));
+      } catch (_) {}
+      return rows.map((q) => {
+        const conf = typeof q.confidence === "number" ? q.confidence : (typeof q.value === "number" ? q.value / 100 : 0.6);
+        const level = conf >= 0.95 ? "high" : conf >= 0.75 ? "strong" : conf >= 0.5 ? "uncertain" : "weak";
+        const n = q.chapterId ? chapterNum.get(q.chapterId) : null;
+        return {
+          id: q.id,
+          level,
+          value: Math.round(conf * 100),
+          candidateType: q.matchType === "new" ? "New " + normaliseType(q.entityType || type || "entry")
+            : (q.suggestedAction === "update" ? "Update" : (q.matchType || "Candidate")),
+          name: q.name || (q.payload && q.payload.name) || "Candidate",
+          suggested: q.status === "auto-added" ? "Auto-added — reviewable"
+            : q.suggestedAction === "create" ? "Add to the project?"
+            : q.suggestedAction === "update" ? "Apply the suggested update?"
+            : (q.reason || "Review this candidate."),
+          sourceQuote: q.sourceQuote || (q.payload && q.payload.sourceQuote) || q.summary || "",
+          sourceChapter: n ? "Ch. " + n : "—",
+          related: null,
+          warning: null,
+          raw: q,
+        };
+      });
+    },
     async add(item) {
       const all = await StorageService.get(KEYS.reviewQueue, []);
       const next = [{ status: "pending", createdAt: nowIso(), ...item }, ...all];

@@ -106,30 +106,6 @@ const STATS_DATA = [
   },
 ];
 
-const STATS_REVIEW = [
-  { id: "srq1", entityType: "stats", level: "blue", value: 96,
-    candidateType: "exact stat increase",
-    name: "Aelinor · Resolve +1",
-    suggested: "Apply +1 to Aelinor's Resolve",
-    sourceChapter: "Ch. 1", sourceQuote: "Her resolve increased by 1.",
-    related: "Resolve",
-  },
-  { id: "srq2", entityType: "stats", level: "green", value: 82,
-    candidateType: "qualitative stat change",
-    name: "Brec · 'held the line'",
-    suggested: "Apply suggested +1 to Brec's Resolve",
-    sourceChapter: "Ch. 5", sourceQuote: "He held the line through the second day.",
-    related: "Resolve",
-  },
-  { id: "srq3", entityType: "stats", level: "orange", value: 64,
-    candidateType: "qualitative stat change",
-    name: "Brec · 'could not bear it'",
-    suggested: "Apply suggested −1 to Brec's Resolve",
-    sourceChapter: "Ch. 7", sourceQuote: "He could not bear it, and looked away.",
-    related: "Resolve",
-    warning: "Conflicts with Ch. 5 increase.",
-  },
-];
 
 // ---------------------------------------------------------------------
 // Match-type / effect-type / confidence labels
@@ -532,10 +508,7 @@ const StatsPanelBody = ({ panel, onSelectEntity }) => {
 // Register
 // ---------------------------------------------------------------------
 window.STATS_DATA   = STATS_DATA;
-window.STATS_REVIEW = STATS_REVIEW;
 window.ENTITY_SAMPLES = window.ENTITY_SAMPLES || {};
-window.ENTITY_REVIEW_SAMPLES = window.ENTITY_REVIEW_SAMPLES || {};
-window.ENTITY_REVIEW_SAMPLES.stats = STATS_REVIEW;
 
 // Override the detail renderer
 window.RPG_DETAIL_RENDERERS = window.RPG_DETAIL_RENDERERS || {};

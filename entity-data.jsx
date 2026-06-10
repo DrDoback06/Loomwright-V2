@@ -172,40 +172,6 @@ const ENTITY_SAMPLES = {
   ],
 };
 
-const ENTITY_REVIEW_SAMPLES = {
-  bestiary: [
-    { id:"rq1", name:"Hess wolfhound", action:"New entry", level:"strong", value:84,
-      excerpt:"A grey hound at the door of the Glass Court — Hess-trained, by the look of the collar.",
-      cite:"Ch. 3, p. 76", reason:"Detected as new bestiary entry" },
-  ],
-  locations: [
-    { id:"rq2", name:"The Auger Cliffs", action:"New entry", level:"high", value:96,
-      excerpt:"From the Auger Cliffs the Pass looked like a ledger half-closed.", cite:"Ch. 4, p. 91",
-      reason:"Auto-added — appears in 3 chapters" },
-    { id:"rq3", name:"Glass Court ↔ Hess Hall", action:"Merge?", level:"uncertain", value:62,
-      excerpt:"They sat in the Glass Court — the same hall the Hess called their Hall of Hours.", cite:"Ch. 3, p. 78",
-      reason:"Possible duplicate of \"Glass Court\"" },
-  ],
-  items: [
-    { id:"rq4", name:"Salt cloak (Brec)", action:"New entry", level:"weak", value:38,
-      excerpt:"He had pulled the salt cloak around himself — but it was not his cloak.", cite:"Ch. 5, p. 122",
-      reason:"Low confidence — vague reference" },
-  ],
-};
 
-const ENTITY_SUGGESTION_SAMPLES = {
-  locations: [
-    { id:"sg1", level:"strong", value:81, lbl:"Promote 'eastern beach' to a sub-entry of Pale Reach", excerpt:"They walked the eastern beach until the salt let them speak." },
-    { id:"sg2", level:"uncertain", value:59, lbl:"Add coordinates to Vraska Pass" },
-  ],
-  bestiary: [
-    { id:"sg3", level:"high", value:96, lbl:"Auto-add 'Hess wolfhound' from Ch. 3", excerpt:"A grey hound at the door of the Glass Court." },
-  ],
-  factions: [
-    { id:"sg4", level:"strong", value:79, lbl:"Add neutrality stance to House Hess" },
-  ],
-};
 
 window.ENTITY_SAMPLES = ENTITY_SAMPLES;
-window.ENTITY_REVIEW_SAMPLES = ENTITY_REVIEW_SAMPLES;
-window.ENTITY_SUGGESTION_SAMPLES = ENTITY_SUGGESTION_SAMPLES;

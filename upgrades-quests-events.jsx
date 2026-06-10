@@ -190,30 +190,6 @@ const QUESTS_DATA = [
   },
 ];
 
-const QUESTS_REVIEW = [
-  { id: "qrq1", entityType: "quests", level: "high",      value: 95,
-    candidateType: "quest step detected",
-    name: "Day three — break or bind",
-    suggested: "Mark step as active",
-    sourceChapter: "Ch. 7", sourceQuote: "Today we choose. Today, or not at all.",
-    related: "The Hess negotiation",
-  },
-  { id: "qrq2", entityType: "quests", level: "strong",    value: 78,
-    candidateType: "participant link",
-    name: "Mara of Hess",
-    suggested: "Add as participant in The Auger Wake",
-    sourceChapter: "Ch. 7", sourceQuote: "Mara stood in the witness's place, and no one said her name.",
-    related: "The Auger Wake",
-  },
-  { id: "qrq3", entityType: "quests", level: "uncertain", value: 58,
-    candidateType: "branch detected",
-    name: "Bind with Auger as bond",
-    suggested: "Create branch on The Hess negotiation",
-    sourceChapter: "Ch. 7", sourceQuote: "We could offer the rite itself.",
-    related: "The Hess negotiation",
-    warning: "Conflicts with hard canon: Auger Stone, once used, cannot be used again in same generation.",
-  },
-];
 
 // ---------------------------------------------------------------------
 // Events sample data
@@ -340,30 +316,6 @@ const EVENTS_DATA = [
   },
 ];
 
-const EVENTS_REVIEW = [
-  { id: "erq1", entityType: "events", level: "high",      value: 95,
-    candidateType: "new event candidate",
-    name: "Saren's gift",
-    suggested: "Create event in Ch. 6",
-    sourceChapter: "Ch. 6", sourceQuote: "She gave the Auger Stone to him then, openly.",
-    related: "The Hess negotiation",
-  },
-  { id: "erq2", entityType: "events", level: "strong",    value: 80,
-    candidateType: "relationship change",
-    name: "Brec → Aelinor: trusted → loyal but absent",
-    suggested: "Apply change at Ch. 7",
-    sourceChapter: "Ch. 7", sourceQuote: "Brec left first, and did not look back.",
-    related: "Hess negotiation break",
-  },
-  { id: "erq3", entityType: "events", level: "weak",      value: 38,
-    candidateType: "timeline conflict",
-    name: "Two letters on the same night",
-    suggested: "Confirm Ch. 2 and Ch. 5 letters are different",
-    sourceChapter: "Ch. 5", sourceQuote: "The letter, he said again, the other one.",
-    related: "Brec's Letter",
-    warning: "Possible duplicate event.",
-  },
-];
 
 // ---------------------------------------------------------------------
 // Shared visuals
@@ -760,10 +712,14 @@ const QuestsFullScreen = ({ onClose }) => {
         <header className="qe-fs__head">
           <div className="qe-fs__head-eyebrow">Review queue</div>
           <div className="qe-fs__head-title">Quests</div>
-          <div className="qe-fs__head-sub">{QUESTS_REVIEW.length} pending</div>
+          <div className="qe-fs__head-sub">{(window.LoomwrightBackend?.ReviewService?.listCardViewsSync?.("quests") || []).length} pending</div>
         </header>
         <div className="qe-fs__right-body">
-          {QUESTS_REVIEW.map((r) => <LocReviewCard key={r.id} item={r}/>)}
+          {(window.LoomwrightBackend?.ReviewService?.listCardViewsSync?.("quests") || []).map((r) => (
+            <LocReviewCard key={r.id} item={r}
+              onAccept={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onAcceptQuestQueueItem", detail: { id: it.id } } }))}
+              onDeny={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onDenyQuestQueueItem", detail: { id: it.id } } }))}/>
+          ))}
         </div>
       </aside>
     </div>
@@ -835,10 +791,14 @@ const EventsFullScreen = ({ onClose }) => {
         <header className="qe-fs__head">
           <div className="qe-fs__head-eyebrow">Review queue</div>
           <div className="qe-fs__head-title">Events</div>
-          <div className="qe-fs__head-sub">{EVENTS_REVIEW.length} pending</div>
+          <div className="qe-fs__head-sub">{(window.LoomwrightBackend?.ReviewService?.listCardViewsSync?.("events") || []).length} pending</div>
         </header>
         <div className="qe-fs__right-body">
-          {EVENTS_REVIEW.map((r) => <LocReviewCard key={r.id} item={r}/>)}
+          {(window.LoomwrightBackend?.ReviewService?.listCardViewsSync?.("events") || []).map((r) => (
+            <LocReviewCard key={r.id} item={r}
+              onAccept={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onAcceptEventQueueItem", detail: { id: it.id } } }))}
+              onDeny={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onDenyEventQueueItem", detail: { id: it.id } } }))}/>
+          ))}
         </div>
       </aside>
     </div>
@@ -1021,13 +981,8 @@ const EventsPanelBody = ({ panel, onSelectEntity }) => {
 // ---------------------------------------------------------------------
 window.QUESTS_DATA = QUESTS_DATA;
 window.EVENTS_DATA = EVENTS_DATA;
-window.QUESTS_REVIEW = QUESTS_REVIEW;
-window.EVENTS_REVIEW = EVENTS_REVIEW;
 
 window.ENTITY_SAMPLES = window.ENTITY_SAMPLES || {};
-window.ENTITY_REVIEW_SAMPLES = window.ENTITY_REVIEW_SAMPLES || {};
-window.ENTITY_REVIEW_SAMPLES.quests = QUESTS_REVIEW;
-window.ENTITY_REVIEW_SAMPLES.events = EVENTS_REVIEW;
 
 window.RPG_DETAIL_RENDERERS = window.RPG_DETAIL_RENDERERS || {};
 window.RPG_DETAIL_RENDERERS.quests = (entity, ctx) => <QuestDetail entity={entity} {...ctx}/>;
