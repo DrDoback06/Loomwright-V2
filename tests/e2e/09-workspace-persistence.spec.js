@@ -105,8 +105,8 @@ test.describe("M. Workspace persistence — service-level round-trip", () => {
     await openFreshApp(page);
     const nodeId = await page.evaluate(async () => {
       const T = window.LoomwrightBackend.TangleService;
-      const s1 = await T.addNode({ title: "Idea: Aelinor's secret", body: "Tied to Hess." });
-      const node = s1.nodes[s1.nodes.length - 1];
+      // addNode returns the created row (board-aware contract).
+      const node = await T.addNode({ title: "Idea: Aelinor's secret", body: "Tied to Hess." });
       await T.updateNode(node.id, { position: { x: 240, y: 320 } });
       await T.addGroup({ title: "Hess motifs" });
       return node.id;
