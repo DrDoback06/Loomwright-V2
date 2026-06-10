@@ -119,6 +119,31 @@ for (const v of reactVendor) {
   if (fs.existsSync(srcPath)) fs.copyFileSync(srcPath, path.join(OUT, v));
 }
 
+// ---- PWA assets: manifest + icon + service worker ----
+// The SW is a template: substitute a build-stamped cache name and the
+// exact asset list so each deploy invalidates the previous cache.
+const BUILD_STAMP = new Date().toISOString().replace(/[:.]/g, "-");
+const localCss = css.filter((h) => !/^https?:\/\//.test(h));
+const swAssets = [
+  "./index.html",
+  "loomwright.bundle.js",
+  "manifest.json",
+  "icons/loomwright-icon.svg",
+  ...reactVendor,
+  ...localCss,
+];
+
+fs.copyFileSync(path.join(ROOT, "manifest.json"), path.join(OUT, "manifest.json"));
+fs.mkdirSync(path.join(OUT, "icons"), { recursive: true });
+fs.copyFileSync(path.join(ROOT, "icons", "loomwright-icon.svg"), path.join(OUT, "icons", "loomwright-icon.svg"));
+
+const swTemplate = read(path.join(ROOT, "sw.js"));
+const swCompiled = swTemplate
+  .replace("__LW_CACHE_NAME__", `loomwright-${BUILD_STAMP}`)
+  .replace("__LW_ASSETS__", JSON.stringify(swAssets, null, 2));
+fs.writeFileSync(path.join(OUT, "sw.js"), swCompiled, "utf8");
+console.log(`Wrote dist/sw.js (cache loomwright-${BUILD_STAMP}, ${swAssets.length} precached assets) + manifest + icon.`);
+
 // Copy any other static assets referenced by CSS-adjacent files we know
 // about (images/fonts live via Google Fonts CDN in <head>, kept as-is).
 
@@ -134,9 +159,12 @@ const prodHtml = `<!doctype html>
 ${htmlTag}
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=1280, initial-scale=1"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="theme-color" content="#f4ecd8"/>
   <title>Loomwright v2</title>
-  <link rel="icon" href="data:,"/>
+  <link rel="icon" href="icons/loomwright-icon.svg" type="image/svg+xml"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icons/loomwright-icon.svg"/>
 
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -151,6 +179,14 @@ ${css.filter((h) => !/^https?:\/\//.test(h)).map((h) => `  <link rel="stylesheet
   <script src="vendor/react.development.js"></script>
   <script src="vendor/react-dom.development.js"></script>
   <script src="loomwright.bundle.js"></script>
+  <script>
+    // Offline shell — production only (vite dev serves source directly).
+    if ("serviceWorker" in navigator && location.protocol !== "file:") {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("./sw.js").catch(function () {});
+      });
+    }
+  </script>
 </body>
 </html>
 `;

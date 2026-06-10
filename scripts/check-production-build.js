@@ -66,6 +66,22 @@ check("dist/vendor/react.development.js present", fs.existsSync(path.join(OUT, "
 check("dist/vendor/react-dom.development.js present", fs.existsSync(path.join(OUT, "vendor", "react-dom.development.js")));
 check("dist/ does NOT ship babel.min.js", !fs.existsSync(path.join(OUT, "vendor", "babel.min.js")));
 
+// PWA layer.
+if (hasIndex) {
+  const idx = fs.readFileSync(indexPath, "utf8");
+  check("index.html uses a responsive viewport", idx.indexOf("width=device-width") !== -1);
+  check("index.html links manifest.json", idx.indexOf('rel="manifest"') !== -1);
+  check("index.html registers the service worker", idx.indexOf("serviceWorker") !== -1);
+}
+check("dist/manifest.json present", fs.existsSync(path.join(OUT, "manifest.json")));
+check("dist/icons/loomwright-icon.svg present", fs.existsSync(path.join(OUT, "icons", "loomwright-icon.svg")));
+const swPath = path.join(OUT, "sw.js");
+check("dist/sw.js present", fs.existsSync(swPath));
+if (fs.existsSync(swPath)) {
+  const sw = fs.readFileSync(swPath, "utf8");
+  check("sw.js placeholders substituted (stamped cache name)", sw.indexOf("__LW_CACHE_NAME__") === -1 && sw.indexOf("__LW_ASSETS__") === -1 && /loomwright-\d{4}/.test(sw));
+}
+
 console.log("");
 if (failures.length) {
   console.log(`FAIL — ${failures.length} production-build check(s) failed.`);

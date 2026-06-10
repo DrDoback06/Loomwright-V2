@@ -71,4 +71,47 @@ test.describe("S. Production build — boot smoke (precompiled bundle)", () => {
     expect(result.saved).toBe(true);
     expect(result.found).toBe(true);
   });
+
+  test("PWA: manifest served, responsive viewport, service worker registers", async ({ page, request }) => {
+    // Static assets are served by vite preview from dist/.
+    const manifest = await request.get("/manifest.json");
+    expect(manifest.ok()).toBe(true);
+    const m = await manifest.json();
+    expect(m.short_name).toBe("Loomwright");
+    expect(m.display).toBe("standalone");
+
+    const sw = await request.get("/sw.js");
+    expect(sw.ok()).toBe(true);
+    const swBody = await sw.text();
+    expect(swBody).not.toContain("__LW_CACHE_NAME__");
+    expect(swBody).toContain("loomwright-");
+
+    const icon = await request.get("/icons/loomwright-icon.svg");
+    expect(icon.ok()).toBe(true);
+
+    await page.goto(SHELL);
+    const viewport = await page.locator("meta[name='viewport']").getAttribute("content");
+    expect(viewport).toContain("width=device-width");
+    await expect(page.locator("link[rel='manifest']")).toHaveAttribute("href", "manifest.json");
+
+    // The SW registers and activates on the production origin.
+    await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
+    const swState = await page.evaluate(async () => {
+      if (!("serviceWorker" in navigator)) return "unsupported";
+      const reg = await navigator.serviceWorker.ready.catch(() => null);
+      return reg ? "ready" : "none";
+    });
+    expect(swState).toBe("ready");
+  });
+
+  test("PWA: phone viewport boots the mobile shell from the bundle", async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const page = await ctx.newPage();
+    await page.goto(SHELL);
+    await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
+    await page.waitForSelector("#root *", { timeout: 20000 });
+    await expect(page.locator(".app-shell")).toHaveAttribute("data-mobile", "true");
+    await expect(page.locator("[data-testid='mnav']")).toBeVisible();
+    await ctx.close();
+  });
 });
