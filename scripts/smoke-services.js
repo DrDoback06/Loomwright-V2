@@ -1660,6 +1660,25 @@ async function main() {
       deduped.length === 1 && deduped[0].sourceQuotes.includes("alpha") && deduped[0].sourceQuotes.includes("beta") && !deduped[0].sourceQuotes.includes("alpha-overlap"));
   }
 
+  // --- [pron] E4 — offline sentence-local pronoun resolution ---
+  {
+    await B.StorageService.clear();
+    const her = await B.EntityService.save("cast", { name: "Anwen Hale", data: { pronouns: "she/her" } }, { status: "active" });
+    const him = await B.EntityService.save("cast", { name: "Bram Iron", data: { gender: "male" } }, { status: "active" });
+    const textP = "Anwen Hale reached the gate. She paid the toll. Bram Iron watched from the wall, and he said nothing. They argued until dusk.";
+    const occs = B.resolvePronounsInText(textP, "pron-ch", "pron-s");
+    const byText = (t) => occs.filter((o) => o.exactText.toLowerCase() === t);
+    log("[pron] 'She' resolves to the female antecedent", byText("she").length === 1 && byText("she")[0].entityId === her.id);
+    log("[pron] 'he' resolves to the male antecedent", byText("he").length === 1 && byText("he")[0].entityId === him.id);
+    log("[pron] resolved rows are flagged + offset-accurate",
+      occs.every((o) => o.isPronounResolution === true) &&
+      textP.slice(byText("she")[0].startOffset, byText("she")[0].endOffset) === "She");
+    log("[pron] 'they' resolves to the most recent mention", byText("they").length === 1 && byText("they")[0].entityId === him.id);
+    // No cast → no work; gender mismatch in lookback → unresolved pronouns stay out.
+    const lonely = B.resolvePronounsInText("He walked alone for days.", "pron-ch", "pron-s");
+    log("[pron] pronouns with no antecedent are skipped", lonely.length === 0);
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

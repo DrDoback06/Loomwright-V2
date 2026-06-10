@@ -251,6 +251,9 @@ function buildOccurrenceLookup(occurrences) {
   const byText = new Map();
   for (const occ of occurrences || []) {
     if (!occ || occ.stale) continue;
+    // Resolved pronouns feed the dossiers/atlas, but wrapping every
+    // "she"/"he" in a highlight would drown the prose — skip them here.
+    if (occ.isPronounResolution) continue;
     if (!occ.entityId || !occ.exactText) continue;
     const key = String(occ.exactText).toLowerCase();
     if (!byText.has(key)) byText.set(key, []);

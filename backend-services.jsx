@@ -3520,6 +3520,93 @@
   }
 
   // -------------------------------------------------------------------
+  // E4 — offline pronoun resolution (sentence-local, no ML). "Aelinor
+  // walked to the keep. She opened the door." resolves "She" to Aelinor
+  // when she is the most recent gender-compatible cast mention within a
+  // two-sentence lookback. Resolved pronouns become occurrences flagged
+  // `isPronounResolution: true` — mention charts, travel derivation and
+  // the dossier scrubber get richer; the Writer's Room keeps its inline
+  // highlights to explicit names so prose stays clean.
+  // -------------------------------------------------------------------
+  const PRONOUN_GENDER = { he: "male", him: "male", his: "male", she: "female", her: "female", hers: "female", they: "any", them: "any", their: "any" };
+  function _castGenderOf(entity) {
+    const d = (entity && entity.data) || {};
+    const explicit = String(d.gender || "").toLowerCase();
+    if (explicit === "male" || explicit === "female") return explicit;
+    if (explicit === "nonbinary" || explicit === "neutral") return "any";
+    const pr = String(d.pronouns || "").toLowerCase();
+    if (/\bshe\b|\bher\b/.test(pr)) return "female";
+    if (/\bhe\b|\bhim\b/.test(pr)) return "male";
+    if (/\bthey\b|\bthem\b/.test(pr)) return "any";
+    return null; // unknown — compatible with anything, at lower priority
+  }
+  function resolvePronounsInText(text, chapterId, sessionId, opts = {}) {
+    if (!text) return [];
+    const castRows = Object.values((EntityService.listAllSync().cast) || {})
+      .filter((e) => e && e.status !== "deleted" && e.name);
+    if (!castRows.length) return [];
+    const cast = castRows.map((e) => ({
+      id: e.id,
+      gender: _castGenderOf(e),
+      labels: [e.name, ...(e.aliases || [])].filter(Boolean),
+    }));
+    const spans = splitSentenceSpans(text);
+    const maxOut = opts.max || 200;
+    const lookback = 2; // current + two previous sentences
+    const out = [];
+    // Per-sentence cast mentions: [{castIx, offset}] sorted by offset.
+    const mentionsBySentence = spans.map((s) => {
+      const slice = text.slice(s.start, s.end);
+      const found = [];
+      cast.forEach((c, ix) => {
+        for (const label of c.labels) {
+          const ranges = findRanges(slice, label);
+          for (const r of ranges) found.push({ castIx: ix, offset: s.start + r.start });
+        }
+      });
+      return found.sort((a, b) => a.offset - b.offset);
+    });
+    const pronounRe = /\b(he|she|they)\b/gi;
+    for (let si = 0; si < spans.length && out.length < maxOut; si++) {
+      const s = spans[si];
+      const slice = text.slice(s.start, s.end);
+      pronounRe.lastIndex = 0;
+      let m;
+      while ((m = pronounRe.exec(slice)) !== null && out.length < maxOut) {
+        const pron = m[0].toLowerCase();
+        const want = PRONOUN_GENDER[pron];
+        const pronAbs = s.start + m.index;
+        // Nearest PRIOR compatible mention in this sentence, else the
+        // previous `lookback` sentences (most recent first).
+        let resolved = null;
+        for (let back = 0; back <= lookback && !resolved; back++) {
+          const tix = si - back;
+          if (tix < 0) break;
+          const pool = mentionsBySentence[tix].filter((mm) => back > 0 || mm.offset < pronAbs);
+          for (let k = pool.length - 1; k >= 0; k--) {
+            const cand = cast[pool[k].castIx];
+            const g = cand.gender;
+            const compatible = want === "any" ? true : (g === want || g === "any" || g === null);
+            if (compatible) { resolved = cand; break; }
+          }
+        }
+        if (!resolved) continue;
+        out.push({
+          entityId: resolved.id,
+          entityType: "cast",
+          exactText: m[0],
+          chapterId,
+          startOffset: pronAbs,
+          endOffset: pronAbs + m[0].length,
+          extractionSessionId: sessionId,
+          isPronounResolution: true,
+        });
+      }
+    }
+    return out;
+  }
+
+  // -------------------------------------------------------------------
   // OccurrenceService — persisted EntityOccurrence records linking
   // manuscript spans to real entity IDs. Created by extraction or by
   // accepting a review-queue candidate. Writer's Room can use these for
@@ -4651,6 +4738,9 @@
       // EntityOccurrence records pointing at real entity IDs. This runs
       // regardless of AI configuration so double-click works without BYOK.
       const occurrences = scanTextForKnownEntities(text || "", chapterId, sessionId);
+      // E4 — resolved pronouns join the occurrence store (flagged), so
+      // mention charts and travel derivation see "She opened the door."
+      try { occurrences.push(...resolvePronounsInText(text || "", chapterId, sessionId)); } catch (_) {}
       if (paragraphs && occurrences.length) {
         // Annotate each occurrence with the paragraphId whose
         // [start, end) range covers the occurrence's offset, when the
@@ -7057,6 +7147,7 @@ Only evidenced pairs. Return JSON only.`;
     dedupeCandidates,
     mapAiPayloadToData,
     detectorConfidence,
+    resolvePronounsInText,
     analyzeWritingStyle,
     autoApplyCandidate,
     OccurrenceService,
