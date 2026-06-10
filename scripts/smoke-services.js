@@ -751,8 +751,7 @@ async function main() {
 
   // -- Tangle --
   await B.StorageService.clear();
-  const tNode = await B.TangleService.addNode({ title: "Idea: Aelinor's secret", body: "Tied to Hess." });
-  const tnRow = tNode.nodes[tNode.nodes.length - 1];
+  const tnRow = await B.TangleService.addNode({ title: "Idea: Aelinor's secret", body: "Tied to Hess." });
   log("[tangle] addNode persists", !!tnRow?.id);
   await B.TangleService.updateNode(tnRow.id, { position: { x: 240, y: 320 } });
   const tStateAfter = B.TangleService.loadSync();
@@ -1415,6 +1414,49 @@ async function main() {
     await B.EntityService.delete("cast", cole.id);
     const afterDelete = B.LinkService.listRelationshipEdgesSync();
     log("[rel] edges drop when a member is deleted", !afterDelete.some((e) => e.a === cole.id || e.b === cole.id));
+  }
+
+  // --- [tangle] board service — boards, first-class edges, migration ---
+  {
+    const T = B.TangleService;
+    // Legacy migration: a pre-board state wraps into "Board 1".
+    await B.StorageService.set(B.keys.tangle, {
+      nodes: [{ id: "leg1", kind: "note", title: "Legacy note", x: 10, y: 10 }],
+      edges: [{ from: "leg1", to: "leg1x" }],
+      groups: [],
+    });
+    const migrated = T.loadSync();
+    log("[tangle] legacy state migrates into Board 1",
+      Array.isArray(migrated.boards) && migrated.boards.length === 1 && migrated.nodes[0].boardId === migrated.boards[0].id);
+    // Boards CRUD + active board.
+    const b1 = await T.addBoard({ name: "Acts II–III plot" });
+    const b2 = await T.addBoard({ name: "Motifs" });
+    log("[tangle] addBoard sets the new board active", T.loadSync().activeBoardId === b2.id);
+    await T.setActiveBoard(b1.id);
+    const n1 = await T.addNode({ kind: "note", title: "The toll war", x: 100, y: 100 });
+    const n2 = await T.addNode({ kind: "quote", title: "“Today, or not at all.”", x: 300, y: 160 });
+    log("[tangle] nodes land on the active board", n1.boardId === b1.id && n2.boardId === b1.id);
+    // Entity-linked node.
+    const castRow = await B.EntityService.save("cast", { name: "Smoke Tangle Cast" }, { status: "active" });
+    const en = await T.addEntityNode(b1.id, castRow, { x: 500, y: 100 });
+    log("[tangle] addEntityNode binds the live entity", en.entityId === castRow.id && en.kind === "cast" && en.title === "Smoke Tangle Cast");
+    // First-class edges: labelled, directed, MULTIPLE between same pair.
+    const e1 = await T.addEdge({ from: n1.id, to: n2.id, label: "echoes" });
+    const e2 = await T.addEdge({ from: n1.id, to: n2.id, label: "contradicts", directed: false });
+    const boardView = T.listBoardSync(b1.id);
+    log("[tangle] two labelled edges coexist on the same pair",
+      boardView.edges.filter((e) => e.from === n1.id && e.to === n2.id).length === 2 && e2.directed === false && e1.label === "echoes");
+    await T.updateEdge(e1.id, { label: "answers" });
+    log("[tangle] updateEdge persists label changes", T.listBoardSync(b1.id).edges.find((e) => e.id === e1.id).label === "answers");
+    // Board isolation + node removal cascades its edges.
+    log("[tangle] boards isolate their nodes", T.listBoardSync(b2.id).nodes.length === 0);
+    await T.removeNode(n2.id);
+    log("[tangle] removing a node cascades its edges", T.listBoardSync(b1.id).edges.length === 0);
+    // Merge rebinding.
+    const castRow2 = await B.EntityService.save("cast", { name: "Smoke Tangle Cast Prime" }, { status: "active" });
+    await B.LinkService.mergeEntities(castRow2.id, "cast", [castRow.id]);
+    const rebound = T.loadSync().nodes.find((n) => n.id === en.id);
+    log("[tangle] entity merge rebinds board nodes", rebound.entityId === castRow2.id);
   }
 
   console.log("");

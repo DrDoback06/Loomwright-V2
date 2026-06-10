@@ -284,6 +284,7 @@ const DockedPanel = ({
           const body = (() => {
           if (panel.id === "p-speedReader" && typeof SpeedReaderPanelBody !== "undefined") return <SpeedReaderPanelBody {...bespokeProps}/>;
           if (panel.id === "p-aiWriter" && typeof AiWriterPanelBody !== "undefined") return <AiWriterPanelBody {...bespokeProps}/>;
+          if (panel.id === "p-tangle" && typeof TanglePanelBody !== "undefined") return <TanglePanelBody {...bespokeProps}/>;
           if (panel.entityType === "atlas" && typeof AtlasPanelBody !== "undefined") return <AtlasPanelBody {...bespokeProps}/>;
           if (panel.entityType === "cast" && typeof CastPanelBody !== "undefined" && !["loading","error","empty"].includes(panel.state)) return <CastPanelBody {...bespokeProps}/>;
           if (panel.entityType === "skills" && typeof SkillsPanelBody !== "undefined") return <SkillsPanelBody {...bespokeProps}/>;

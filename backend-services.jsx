@@ -1665,12 +1665,33 @@
     },
   };
 
+  // -------------------------------------------------------------------
+  // TangleService — the story board. Boards of freeform nodes (notes,
+  // quotes, custom cards, and LINKED ENTITIES) joined by first-class
+  // edges: labelled, directed, multiple edges allowed between the same
+  // pair. Node positions are canvas coordinates. Legacy single-board
+  // states ({nodes,edges,groups} without `boards`) migrate in place.
+  // -------------------------------------------------------------------
   const TangleService = {
     defaultState() {
-      return { nodes: [], groups: [], edges: [], updatedAt: nowIso() };
+      return { boards: [], activeBoardId: null, nodes: [], groups: [], edges: [], updatedAt: nowIso() };
+    },
+    _migrate(raw) {
+      if (!raw || typeof raw !== "object") return this.defaultState();
+      if (Array.isArray(raw.boards)) return raw;
+      // Legacy shape → wrap everything into "Board 1".
+      const boardId = "tb-default";
+      return {
+        boards: [{ id: boardId, name: "Board 1", pinned: true, createdAt: raw.updatedAt || nowIso() }],
+        activeBoardId: boardId,
+        nodes: (raw.nodes || []).map((n) => ({ boardId, ...n, boardId })),
+        edges: (raw.edges || []).map((e, i) => ({ id: e.id || "te-" + i, directed: true, label: "", boardId, ...e, boardId })),
+        groups: (raw.groups || []).map((g) => ({ boardId, ...g, boardId })),
+        updatedAt: raw.updatedAt || nowIso(),
+      };
     },
     loadSync() {
-      return StorageService.getSync(KEYS.tangle, this.defaultState());
+      return this._migrate(StorageService.getSync(KEYS.tangle, null)) || this.defaultState();
     },
     async save(state) {
       const next = { ...this.loadSync(), ...clone(state), updatedAt: nowIso() };
@@ -1678,10 +1699,74 @@
       window.dispatchEvent(new CustomEvent("lw:tangle-updated", { detail: next }));
       return next;
     },
+    // ---- Boards ----
+    async addBoard(board = {}) {
+      const state = this.loadSync();
+      const row = { id: board.id || uuid("tb"), name: board.name || "New board", pinned: !!board.pinned, createdAt: nowIso() };
+      await this.save({ ...state, boards: [...(state.boards || []), row], activeBoardId: row.id });
+      return row;
+    },
+    async renameBoard(id, name) {
+      const state = this.loadSync();
+      return this.save({ ...state, boards: (state.boards || []).map((b) => b.id === id ? { ...b, name: name || b.name } : b) });
+    },
+    async removeBoard(id) {
+      const state = this.loadSync();
+      const boards = (state.boards || []).filter((b) => b.id !== id);
+      return this.save({
+        ...state,
+        boards,
+        activeBoardId: state.activeBoardId === id ? (boards[0]?.id || null) : state.activeBoardId,
+        nodes: (state.nodes || []).filter((n) => n.boardId !== id),
+        edges: (state.edges || []).filter((e) => e.boardId !== id),
+        groups: (state.groups || []).filter((g) => g.boardId !== id),
+      });
+    },
+    async setActiveBoard(id) {
+      const state = this.loadSync();
+      return this.save({ ...state, activeBoardId: id });
+    },
+    // Active board, auto-creating "Board 1" the first time the panel needs one.
+    async ensureBoard() {
+      const state = this.loadSync();
+      const active = (state.boards || []).find((b) => b.id === state.activeBoardId) || (state.boards || [])[0];
+      if (active) {
+        if (state.activeBoardId !== active.id) await this.setActiveBoard(active.id);
+        return active;
+      }
+      return this.addBoard({ name: "Board 1", pinned: true });
+    },
+    listBoardSync(boardId) {
+      const state = this.loadSync();
+      const id = boardId || state.activeBoardId;
+      return {
+        board: (state.boards || []).find((b) => b.id === id) || null,
+        nodes: (state.nodes || []).filter((n) => n.boardId === id),
+        edges: (state.edges || []).filter((e) => e.boardId === id),
+        groups: (state.groups || []).filter((g) => g.boardId === id),
+      };
+    },
+    // ---- Nodes ----
     async addNode(node) {
       const state = this.loadSync();
-      const row = { ...clone(node), id: node.id || uuid("tn"), createdAt: node.createdAt || nowIso() };
-      return this.save({ ...state, nodes: [...(state.nodes || []), row] });
+      const boardId = node.boardId || state.activeBoardId || (await this.ensureBoard()).id;
+      const row = { kind: "note", title: "", preview: "", x: 0, y: 0, ...clone(node), boardId, id: node.id || uuid("tn"), createdAt: node.createdAt || nowIso() };
+      await this.save({ ...this.loadSync(), nodes: [...(this.loadSync().nodes || []), row] });
+      return row;
+    },
+    // A node bound to a live entity: degrades gracefully if the entity goes.
+    async addEntityNode(boardId, entity, pos = { x: 200, y: 200 }) {
+      if (!entity || !entity.id) return null;
+      return this.addNode({
+        boardId,
+        kind: normaliseType(entity.type || entity.entityType || "custom"),
+        entityId: entity.id,
+        entityType: normaliseType(entity.type || entity.entityType || "custom"),
+        title: entity.name || "Entity",
+        preview: entity.summary || (entity.data && entity.data.summary) || "",
+        x: Number(pos.x) || 0,
+        y: Number(pos.y) || 0,
+      });
     },
     async updateNode(id, patch) {
       const state = this.loadSync();
@@ -1689,12 +1774,52 @@
     },
     async removeNode(id) {
       const state = this.loadSync();
-      return this.save({ ...state, nodes: (state.nodes || []).filter((n) => n.id !== id) });
+      return this.save({
+        ...state,
+        nodes: (state.nodes || []).filter((n) => n.id !== id),
+        edges: (state.edges || []).filter((e) => e.from !== id && e.to !== id),
+      });
     },
+    // ---- Edges (first-class: labelled, directed, multi) ----
+    async addEdge(edge = {}) {
+      if (!edge.from || !edge.to || edge.from === edge.to) return null;
+      const state = this.loadSync();
+      const fromNode = (state.nodes || []).find((n) => n.id === edge.from);
+      const row = {
+        id: edge.id || uuid("te"),
+        boardId: edge.boardId || fromNode?.boardId || state.activeBoardId,
+        from: edge.from,
+        to: edge.to,
+        label: edge.label || "",
+        directed: edge.directed !== false,
+        kind: edge.kind || "thread",
+        createdAt: nowIso(),
+      };
+      await this.save({ ...state, edges: [...(state.edges || []), row] });
+      return row;
+    },
+    async updateEdge(id, patch) {
+      const state = this.loadSync();
+      return this.save({ ...state, edges: (state.edges || []).map((e) => e.id === id ? { ...e, ...patch, updatedAt: nowIso() } : e) });
+    },
+    async removeEdge(id) {
+      const state = this.loadSync();
+      return this.save({ ...state, edges: (state.edges || []).filter((e) => e.id !== id) });
+    },
+    // ---- Groups ----
     async addGroup(group) {
       const state = this.loadSync();
-      const row = { ...clone(group), id: group.id || uuid("tg"), createdAt: group.createdAt || nowIso() };
+      const row = { ...clone(group), boardId: group.boardId || state.activeBoardId, id: group.id || uuid("tg"), createdAt: group.createdAt || nowIso() };
       return this.save({ ...state, groups: [...(state.groups || []), row] });
+    },
+    // Rebind entity-linked nodes when entities merge.
+    async rebindEntity(fromId, toId) {
+      const state = this.loadSync();
+      const next = (state.nodes || []).map((n) => n.entityId === fromId ? { ...n, entityId: toId } : n);
+      if (JSON.stringify(next) !== JSON.stringify(state.nodes)) {
+        return this.save({ ...state, nodes: next });
+      }
+      return state;
     },
   };
 
@@ -2303,6 +2428,8 @@
     if (JSON.stringify(piNext) !== JSON.stringify(pi)) {
       await ProjectIntelService.save(piNext);
     }
+    // 8. Tangle board entity bindings.
+    try { await TangleService.rebindEntity(fromId, toId); } catch (_) {}
   }
 
   // -------------------------------------------------------------------

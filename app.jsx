@@ -37,7 +37,7 @@ function wheelSlotsForContext(ctx, queueCount) {
     { id: "merge", icon: "link", lbl: "Merge" },
     review,
     { id: "speed", icon: "eye", lbl: "Speed" },
-    { id: "tangle", icon: "knot", lbl: "Tangle", disabled: true, reason: "Coming soon" },
+    { id: "tangle", icon: "knot", lbl: "Tangle" },
     { id: "more", icon: "more", lbl: "More…" },
   ];
 }
@@ -1087,6 +1087,7 @@ const AppShell = () => {
         else onOpenPanel("review");
         break;
       case "speed": onOpenPanel("speedReader"); break;
+      case "tangle": onOpenPanel("tangle"); break;
       case "tag": notify("Tagging is coming with the entity tabs."); break;
       case "extract": window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "manuscript" } })); break;
       default: break;

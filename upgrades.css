@@ -2168,3 +2168,65 @@
   margin-top: 4px;
 }
 
+
+/* ---------------------------------------------------------------------
+   Tangle live-board additions: board rows, entity tray, edge selection,
+   inline title editing, search, empty states.
+   --------------------------------------------------------------------- */
+.tan-side__empty {
+  padding: 18px 12px;
+  text-align: center;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--fs-sm);
+  color: var(--ink-4);
+}
+.tan-side__item--board { cursor: pointer; background: transparent; border: none; width: 100%; text-align: left; }
+.tan-side__item--board.is-on { background: var(--bg-paper-2, rgba(120,96,60,0.08)); border-radius: var(--r-2); }
+.tan-side__item--add { cursor: pointer; background: transparent; border: 1px dashed var(--line-2); border-radius: var(--r-2); width: 100%; color: var(--ink-3); }
+.tan-fs__tray-entities {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.tan-fs__tb-search {
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  color: var(--ink-1);
+  background: var(--bg-paper);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+  padding: 3px 8px;
+  width: 180px;
+}
+.tan-fs__empty {
+  position: absolute;
+  left: 360px;
+  top: 280px;
+  max-width: 380px;
+  padding: 22px 24px;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--fs-md);
+  color: var(--ink-3);
+  background: var(--bg-paper);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-3);
+}
+.tan-fs__title-edit {
+  width: 100%;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  color: var(--ink-1);
+  line-height: 1.1;
+  margin-top: 2px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  padding: 0;
+}
+.tan-fs__title-edit:hover { border-bottom-color: var(--line-2); }
+.tan-fs__title-edit:focus { outline: none; border-bottom-color: var(--ink-3); }
+.tan-node.is-unlinked { opacity: 0.75; border-style: dashed; }

@@ -418,7 +418,7 @@ const DEFAULT_WHEEL_SLOTS = [
   { id: "merge",   icon: "link",    lbl: "Merge" },
   { id: "review",  icon: "bell",    lbl: "Review",  queue: 12 },
   { id: "speed",   icon: "eye",     lbl: "Speed" },
-  { id: "tangle",  icon: "knot",    lbl: "Tangle",  disabled: true, reason: "Coming soon" },
+  { id: "tangle",  icon: "knot",    lbl: "Tangle" },
   { id: "more",    icon: "more",    lbl: "More…" },
 ];
 
