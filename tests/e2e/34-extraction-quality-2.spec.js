@@ -99,7 +99,9 @@ test.describe("U34. Extraction quality 2", () => {
     await page.waitForTimeout(500);
     const notices = await page.evaluate(() => window.__notices);
     expect(notices.some((n) => /pending suggestion/i.test(n))).toBe(true);
-    // It routed to the Review panel where the pending fill waits.
-    await expect(page.locator("[data-testid='rqc-accept-rq-u34']")).toBeVisible();
+    // It routed to the LIVE Review panel where the pending fill waits
+    // (the same card also shows in the cast panel's queue strip, so
+    // scope to the review panel).
+    await expect(page.locator("[data-panel-id='p-review'] [data-testid='rqc-accept-rq-u34']")).toBeVisible();
   });
 });

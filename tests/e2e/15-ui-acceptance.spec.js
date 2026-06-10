@@ -341,6 +341,17 @@ test.describe("T. UI acceptance — rendered DOM reflects the live store", () =>
 
   test("speed reader pivot stays centred + WPM persists (#13)", async ({ page }) => {
     await openFreshApp(page);
+    // A fresh project shows the designed empty state (no demo passage);
+    // give the reader a real chapter to read.
+    await page.evaluate(async () => {
+      await window.LoomwrightBackend.ManuscriptChapterService.save({
+        chapters: [{ id: "u15-sr", num: 1, title: "Reading Matter" }],
+        activeChapterId: "u15-sr",
+        manuscripts: { "u15-sr": { text: "The light over the reach was the colour of cooled tin when she came through the gate.", html: "" } },
+      });
+    });
+    await page.reload();
+    await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
     await openPanel(page, "speedReader");
     const pivot = page.locator("[data-testid='sr-pivot']").first();
     const word = page.locator("[data-testid='sr-word']").first();
