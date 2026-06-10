@@ -247,4 +247,38 @@ test.describe("U36. System workspaces live", () => {
     await page.locator(".palette__input input").fill("Palette Probe");
     await expect(page.locator("[data-ui='CommandPaletteRow']", { hasText: "Palette Probe" })).toBeVisible();
   });
+
+  test("speed reader: fresh project shows empty state, chapters become sources", async ({ page }) => {
+    await openFreshApp(page);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "speedReader" } })));
+    const body = page.locator("[data-ui='SpeedReaderPanelBody']");
+    await expect(body).toBeVisible();
+    // No demo passage on a fresh project — designed empty state instead.
+    await expect(body).toContainText("Nothing to read yet");
+    await expect(body).not.toContainText("Ash & Auger");
+
+    // A real chapter becomes a reading source on reload.
+    await page.evaluate(async () => {
+      await window.LoomwrightBackend.ManuscriptChapterService.save({
+        chapters: [{ id: "u36-sr", num: 1, title: "The Crossing" }],
+        activeChapterId: "u36-sr",
+        manuscripts: { "u36-sr": { text: "The ferry left at dusk and the river kept its counsel.", html: "" } },
+      });
+    });
+    await page.reload();
+    await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "speedReader" } })));
+    await expect(page.locator("[data-ui='SpeedReaderPanelBody'] select")).toContainText("The Crossing");
+  });
+
+  test("Tangle Canvas workspace renders the live full-screen canvas", async ({ page }) => {
+    await openFreshApp(page);
+    await page.evaluate(async () => {
+      await window.LoomwrightBackend.TangleService.addNode({ kind: "note", title: "Loose thread", x: 200, y: 160 });
+    });
+    await openWorkspace(page, "tangle-canvas", "tangle", "p-tangle");
+    // The real canvas (not the placeholder card) with the real node.
+    await expect(page.locator("[data-ui='TangleFullScreen']")).toBeVisible();
+    await expect(page.locator("[data-ui='TangleFullScreen']")).toContainText("Loose thread");
+  });
 });

@@ -7,12 +7,12 @@
 //                         sources, research notes, project intelligence
 //                         and writing-style influences)
 //   • control-centre    — Settings Control Centre
-//   • trash-manager     — Trash Manager
-//   • speed-reader      — Speed Reader
-//   • relationship-map  — Relationship Workspace (only used when the
-//                         existing in-panel editor isn't available)
-//   • tangle-canvas     — Tangle Canvas shell (uses the existing
-//                         TanglePanelBody if available, else placeholder)
+//   • trash-manager     — Trash Manager (live TrashService)
+//   • relationship-map  — Relationship Workspace (embeds the live
+//                         RelationshipsPanelBody graph)
+//   • tangle-canvas     — Tangle Canvas (renders the live
+//                         TangleFullScreen canvas)
+// ("speed-reader" is registered by speed-reader.jsx, which loads later.)
 // =====================================================================
 
 const { useState: _ws_us, useEffect: _ws_ue, useMemo: _ws_um } = React;
@@ -906,169 +906,12 @@ const ControlCentreWorkspace = ({ workspace, onExit, onRequest, dragTargetVisibl
       }
       main={
         <WorkspaceCard title={active?.label} sub={"Settings · " + (active?.group || "")}>
-          {typeof RichSettingsSection !== "undefined" && (
-            (() => {
-              const rich = <RichSettingsSection sectionId={activeId} onRequest={onRequest}/>;
-              if (rich) return rich;
-              return null;
-            })()
-          ) || null}
-          {/* Fallback: legacy inline content (shown only if RichSettingsSection
-              didn't handle this id — kept for safety). */}
-          {typeof RichSettingsSection === "undefined" && (<>
-          {activeId === "project" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <ControlField label="Project name" value="The Auger's Door" placeholder="Untitled project"/>
-              <ControlField label="Book"        value="Book II"/>
-              <ControlField label="Author"      value="E. Marlowe"/>
-              <ControlField label="Genre"       value="Literary fantasy"/>
-            </div>
-          )}
-          {activeId === "intel" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <p style={{ fontFamily: "var(--font-serif)", fontStyle: "italic", color: "var(--ink-3)", fontSize: 12 }}>
-                Project Intelligence is the curated context shown to the AI — voice, tone, taboos, hard canon, current arc.
-              </p>
-              <button className="fws-topbar__exit" onClick={() => onRequest.openPanel("references")}>
-                <Icon name="paper" size={11}/> Manage source documents in Research Library →
-              </button>
-              <button className="fws-section__action" data-callback="onAddProjectIntelligenceSection">+ Add section</button>
-            </div>
-          )}
-          {activeId === "brand" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <ControlField label="Theme" value="parchment-light"/>
-              <ControlField label="Accent" value="#9a7b3a"/>
-              <ControlField label="Density" value="balanced"/>
-            </div>
-          )}
-          {activeId === "authors" && (
-            <>
-              {["E. Marlowe", "Ann (co-writer)", "Loomwright AI"].map((n, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)", marginBottom: 6 }}>
-                  <div className="fws-roster__row__avatar">{n.slice(0, 2)}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: "var(--font-serif)", fontSize: 13 }}>{n}</div>
-                    <div style={{ fontSize: 11, color: "var(--ink-3)" }}>Default colour, attribution stamp, voice</div>
-                  </div>
-                  <button className="fws-section__action">Edit</button>
-                </div>
-              ))}
-              <button className="fws-section__action" data-callback="onCreateAuthorProfile">+ Add author profile</button>
-            </>
-          )}
-          {activeId === "ai" && (
-            <>
-              {[
-                { provider: "Loomwright Local", model: "Local · llama-class", status: "Active" },
-                { provider: "Anthropic", model: "claude-haiku-4-5", status: "Configured" },
-              ].map((row, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)", marginBottom: 6 }}>
-                  <Icon name="sparkle" size={14}/>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: "var(--font-serif)", fontSize: 13 }}>{row.provider}</div>
-                    <div style={{ fontSize: 11, color: "var(--ink-3)" }}>{row.model}</div>
-                  </div>
-                  <span className="fws-chip fws-chip--accent">{row.status}</span>
-                </div>
-              ))}
-              <button className="fws-section__action" data-callback="onAddAIProvider">+ Add AI provider</button>
-            </>
-          )}
-          {activeId === "privacy" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <ControlField label="Privacy mode" value="local"/>
-              <ControlField label="Cloud sync" value="off"/>
-              <ControlField label="AI access" value="explicit per chapter"/>
-            </div>
-          )}
-          {activeId === "editor" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <ControlField label="Default font" value="Source Serif 4"/>
-              <ControlField label="Editor width" value="740px"/>
-              <ControlField label="Typewriter mode" value="off"/>
-            </div>
-          )}
-          {activeId === "extraction" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <ControlField label="On save" value="quick extract"/>
-              <ControlField label="Deep extract" value="manual"/>
-              <ControlField label="Auto-accept threshold" value="92%"/>
-            </div>
-          )}
-          {activeId === "review" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <ControlField label="Group by" value="chapter"/>
-              <ControlField label="Notify on uncertain" value="badge only"/>
-            </div>
-          )}
-          {activeId === "references" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <button className="fws-topbar__exit" onClick={() => onRequest.openPanel("references")}>
-                <Icon name="paper" size={11}/> Open Research Library →
-              </button>
-              <button className="fws-section__action" data-callback="onAddReferenceSource">+ Add reference source</button>
-            </div>
-          )}
-          {activeId === "import" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <button className="fws-section__action">Import .docx manuscript</button>
-              <button className="fws-section__action">Import entities (JSON)</button>
-              <button className="fws-section__action" data-callback="onExportProfile">Export project profile</button>
-            </div>
-          )}
-          {activeId === "backup" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <ControlField label="Auto-backup" value="hourly"/>
-              <ControlField label="Backup location" value="~/Loomwright/Backups"/>
-              <button className="fws-section__action">Run backup now</button>
-            </div>
-          )}
-          {activeId === "shortcuts" && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12 }}>
-              {[
-                ["Command palette", "⌘P"],
-                ["Adaptive wheel", "⌘K"],
-                ["New chapter", "⌘⇧N"],
-                ["Save", "⌘S"],
-                ["Save + Extract", "⌘E"],
-                ["Toggle margins", "⌘⌥M"],
-              ].map(([k, v], i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)" }}>
-                  <span>{k}</span>
-                  <span style={{ fontFamily: "var(--font-mono)", color: "var(--ink-3)" }}>{v}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {activeId === "debug" && (
-            <div style={{ fontSize: 12, color: "var(--ink-2)", lineHeight: 1.55 }}>
-              Tweaks panel is available from the right side of the app (toolbar toggle).
-              State diagnostics live there too — open it to see live panel/route state.
-            </div>
-          )}
-          </>)}
+          <RichSettingsSection sectionId={activeId} onRequest={onRequest}/>
         </WorkspaceCard>
       }
     />
   );
 };
-
-// Small helper for control fields
-const ControlField = ({ label, value, placeholder }) => (
-  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-    <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--ink-4)", fontWeight: 600 }}>{label}</span>
-    <input defaultValue={value} placeholder={placeholder} style={{
-      padding: "8px 10px",
-      background: "var(--bg-paper-2)",
-      border: "1px solid var(--line-2)",
-      borderRadius: "var(--r-2)",
-      fontFamily: "var(--font-serif)",
-      fontSize: "var(--fs-md)",
-      color: "var(--ink-1)",
-    }}/>
-  </label>
-);
 
 // =====================================================================
 // TRASH MANAGER --------------------------------------------------------
@@ -1309,128 +1152,6 @@ const TrashManagerWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible
 };
 
 // =====================================================================
-// SPEED READER WORKSPACE -----------------------------------------------
-// =====================================================================
-const SpeedReaderWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible, toast, onDismissToast }) => {
-  // Static word list driven by a tiny demo paragraph from the manuscript.
-  const PASSAGE = "The light over Pale Reach was the colour of cooled tin when Aelinor Vey came through the stockade gate. Snow had been falling all morning, and the wind off the salt flats turned each flake into a small, deliberate cut.";
-  const WORDS = PASSAGE.split(/\s+/);
-
-  const [idx, setIdx] = _ws_us(0);
-  const [playing, setPlaying] = _ws_us(false);
-  const [wpm, setWpm] = _ws_us(360);
-  const [doc, setDoc] = _ws_us("ch7");
-  const [fontSize, setFontSize] = _ws_us(64);
-
-  _ws_ue(() => {
-    if (!playing) return;
-    const ms = Math.max(60, 60000 / wpm);
-    const t = setTimeout(() => {
-      setIdx((i) => (i + 1) % WORDS.length);
-    }, ms);
-    return () => clearTimeout(t);
-  }, [playing, idx, wpm]);
-
-  // Find the pivot letter (~30% in)
-  const word = WORDS[idx] || "—";
-  const pivotIdx = Math.max(0, Math.min(word.length - 1, Math.floor(word.length * 0.3)));
-  const before = word.slice(0, pivotIdx);
-  const pivot = word[pivotIdx];
-  const after = word.slice(pivotIdx + 1);
-
-  const fraction = (idx + 1) / WORDS.length;
-
-  return (
-    <WorkspaceShell
-      icon="eye"
-      eyebrow="Speed Reader" title="Speed Reader"
-      subtitle="Read the manuscript at pace. Flag inconsistencies and bookmark passages."
-      createLabel="Add reading source"
-      onCreate={() => window.dispatchEvent(new CustomEvent("lw:speed-reader-add", { detail: { sourcePanel: workspace.sourcePanel } }))}
-      onExit={onExit} cols="lcr"
-      dragTargetVisible={dragTargetVisible} toast={toast} onDismissToast={onDismissToast}
-      left={
-        <>
-          <div className="fws-section"><span className="fws-section__title">Source</span></div>
-          <div className="fws-settings-nav">
-            {[
-              { id: "ch1", label: "Ch.1 — The Hollow Crown" },
-              { id: "ch2", label: "Ch.2 — Pale Reach" },
-              { id: "ch3", label: "Ch.3 — Saren's Bargain" },
-              { id: "ch7", label: "Ch.7 — Ash & Auger" },
-              { id: "ch9", label: "Ch.9 — The Auger's Door" },
-            ].map((c) => (
-              <button key={c.id}
-                className={"fws-settings-nav__row " + (doc === c.id ? "is-on" : "")}
-                onClick={() => { setDoc(c.id); setIdx(0); }}>
-                <Icon name="paper" size={11}/> {c.label}
-              </button>
-            ))}
-          </div>
-          <div className="fws-section" style={{ marginTop: 12 }}><span className="fws-section__title">Bookmarks</span></div>
-          <div className="fws-empty" style={{ padding: 16, fontSize: 11 }}>No bookmarks yet.</div>
-        </>
-      }
-      main={
-        <>
-          <div className="fws-reader-stage">
-            <div className="fws-reader-word" style={{ fontSize }}>
-              <span style={{ opacity: 0.6 }}>{before}</span>
-              <span className="fws-reader-word__pivot">{pivot}</span>
-              <span style={{ opacity: 0.6 }}>{after}</span>
-            </div>
-            <div className="fws-reader-ctrls">
-              <button className="fws-section__action" onClick={() => setIdx(Math.max(0, idx - 1))}>← prev</button>
-              <button className="fws-topbar__primary" onClick={() => setPlaying((p) => !p)}>
-                <Icon name={playing ? "close" : "bolt"} size={11}/> {playing ? "Pause" : "Play"}
-              </button>
-              <button className="fws-section__action" onClick={() => setIdx(Math.min(WORDS.length - 1, idx + 1))}>next →</button>
-            </div>
-            <div className="fws-reader-bar">
-              <div className="fws-reader-bar__fill" style={{ width: (fraction * 100) + "%" }}/>
-            </div>
-            <div style={{ fontFamily: "var(--font-mono)", color: "var(--ink-3)", fontSize: 11 }}>
-              word {idx + 1} of {WORDS.length}  ·  {wpm} wpm
-            </div>
-          </div>
-        </>
-      }
-      right={
-        <>
-          <div className="fws-section"><span className="fws-section__title">Reader settings</span></div>
-          <div className="fws-tab-body">
-            <ControlField label="WPM" value={String(wpm)}/>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: -8 }}>
-              <input type="range" min="100" max="900" step="20" value={wpm} onChange={(e) => setWpm(Number(e.target.value))} style={{ flex: 1 }}/>
-            </div>
-            <ControlField label="Font size" value={fontSize + "px"}/>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: -8 }}>
-              <input type="range" min="28" max="120" step="4" value={fontSize} onChange={(e) => setFontSize(Number(e.target.value))} style={{ flex: 1 }}/>
-            </div>
-            <hr className="hr" style={{ margin: "12px 0" }}/>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-              <input type="checkbox" defaultChecked/> Punctuation pause
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-              <input type="checkbox" defaultChecked/> Sentence pause
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-              <input type="checkbox"/> Focus mode (dim everything else)
-            </label>
-            <hr className="hr" style={{ margin: "12px 0" }}/>
-            <div className="fws-section__title" style={{ marginBottom: 6 }}>Session stats</div>
-            <div style={{ fontSize: 12 }}>
-              Words read: <b>{idx + 1}</b><br/>
-              Estimated time: <b>{Math.ceil((idx + 1) / wpm * 60)}s</b>
-            </div>
-          </div>
-        </>
-      }
-    />
-  );
-};
-
-// =====================================================================
 // RELATIONSHIP MAP WORKSPACE -------------------------------------------
 // (a lightweight shell — the existing in-panel relationship graph
 // continues to live in relationships.jsx and is preferred when present)
@@ -1517,30 +1238,28 @@ const RelationshipMapWorkspace = ({ workspace, onExit, onRequest, dragTargetVisi
 };
 
 // =====================================================================
-// TANGLE CANVAS WORKSPACE (shell) --------------------------------------
+// TANGLE CANVAS WORKSPACE ----------------------------------------------
+// The live full-screen Tangle canvas (tangle.jsx) IS the workspace —
+// same nodes, edges, and clusters as the docked panel.
 // =====================================================================
 const TangleCanvasWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible, toast, onDismissToast }) => {
+  if (typeof TangleFullScreen !== "undefined") {
+    return <TangleFullScreen onClose={onExit}/>;
+  }
+  // Defensive fallback if tangle.jsx didn't load.
   return (
     <WorkspaceShell
       icon="knot"
       eyebrow="Tangle" title="Tangle Canvas"
       subtitle="A canvas for non-linear thinking — clusters become quests, notes, and threads."
-      createLabel="Add note"
-      onCreate={() => onRequest.openEntityEditor({ type: "generic" })}
       onExit={onExit} cols="c"
       dragTargetVisible={dragTargetVisible} toast={toast} onDismissToast={onDismissToast}
       main={
-        <WorkspaceCard title="Canvas" sub="The bespoke in-panel Tangle canvas is the canonical surface — this is the same canvas, but full-bleed.">
-          <div style={{ padding: 48, textAlign: "center", color: "var(--ink-3)" }}>
-            <Icon name="knot" size={32}/>
-            <p style={{ marginTop: 12, fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
-              (Tangle canvas — drag notes, cluster them into quests, send to Writer's Room.)
-            </p>
-            <div style={{ marginTop: 14 }}>
-              <button className="fws-topbar__exit" onClick={() => onRequest.openPanel("tangle")}>
-                Open in-panel canvas →
-              </button>
-            </div>
+        <WorkspaceCard title="Canvas">
+          <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
+            <button className="fws-topbar__exit" onClick={() => onRequest.openPanel("tangle")}>
+              Open in-panel canvas →
+            </button>
           </div>
         </WorkspaceCard>
       }
@@ -1548,18 +1267,18 @@ const TangleCanvasWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible
   );
 };
 
-// Register
+// Register. NOTE: speed-reader.jsx (loaded after this file) registers
+// the live SpeedReaderWorkspaceFull under "speed-reader".
 Object.assign(window.WORKSPACE_COMPONENTS, {
   "research-library": ResearchLibraryWorkspace,
   "control-centre":   ControlCentreWorkspace,
   "trash-manager":    TrashManagerWorkspace,
-  "speed-reader":     SpeedReaderWorkspace,
   "relationship-map": RelationshipMapWorkspace,
   "tangle-canvas":    TangleCanvasWorkspace,
 });
 
 Object.assign(window, {
   ResearchLibraryWorkspace, ControlCentreWorkspace,
-  TrashManagerWorkspace, SpeedReaderWorkspace,
+  TrashManagerWorkspace,
   RelationshipMapWorkspace, TangleCanvasWorkspace,
 });

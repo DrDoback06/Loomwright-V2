@@ -181,9 +181,27 @@ function useSpeedReader(initialSourceId = "ch7") {
 
   const initialSources = _sr_um(() => {
     const live = (persistedAtMount.sessions || []).map(_sr_buildSourceFromSession);
-    // When the user has live sessions, drop the sample sources so the
-    // reader doesn't quietly mix demo and real content.
-    return live.length ? live : SR_SAMPLE_SOURCES;
+    if (live.length) return live;
+    // No live sessions: fall back to the manuscript's own chapters so the
+    // reader always reads YOUR book. Sample passages appear only when the
+    // user explicitly loaded the sample project.
+    const chapters = (() => {
+      try {
+        const st = _sr_backend()?.ManuscriptChapterService?.loadSync() || {};
+        const ms = st.manuscripts || {};
+        return (st.chapters || [])
+          .filter((c) => !c.reserved)
+          .map((c, i) => ({
+            id: "chapter-" + c.id,
+            label: (c.num ? "Ch." + c.num + " — " : "") + (c.title || "Chapter " + (i + 1)),
+            kind: "chapter",
+            text: (ms[c.id] && (ms[c.id].text || "")) || "",
+          }))
+          .filter((s) => s.text.trim());
+      } catch (_) { return []; }
+    })();
+    if (chapters.length) return chapters;
+    return window.__LW_SAMPLE_LOADED__ ? SR_SAMPLE_SOURCES : [];
   }, [persistedAtMount.sessions]);
 
   const activeSessionAtMount = _sr_um(() =>
@@ -454,6 +472,16 @@ const SpeedReaderPanelBody = ({ panel }) => {
     const text = typeof window !== "undefined" ? window.prompt("Paste text to read:") : "";
     if (text && text.trim()) sr.addPastedSource(text.trim(), "Pasted (panel)");
   };
+
+  if (sr.sources.length === 0) {
+    return (
+      <div className="sr-panel" data-ui="SpeedReaderPanelBody">
+        <EmptyState icon="eye" title="Nothing to read yet"
+          body="Write a chapter in the Writer's Room, or paste any text to speed-read it."
+          action={<Btn variant="primary" size="sm" icon="paper" data-callback="onSpeedReaderPasteText" onClick={onPaste}>Paste text</Btn>}/>
+      </div>
+    );
+  }
 
   return (
     <div className="sr-panel" data-ui="SpeedReaderPanelBody">

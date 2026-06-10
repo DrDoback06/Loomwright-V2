@@ -32,6 +32,32 @@ const { useState: _ps_us, useCallback: _ps_uc, useRef: _ps_ur, useEffect: _ps_ue
 const MAX_VISIBLE_UNPINNED = 4;
 
 // ---------------------------------------------------------------------
+// PanelOverview — generic list renderer for decorated panels. Rows come
+// from EntityService.decoratePanel (always the live store).
+// ---------------------------------------------------------------------
+const PanelOverview = ({ panel, onSelectEntity }) => {
+  const rows = panel.rows || [];
+  if (!rows.length) return <EmptyState icon={panel.icon} title="Empty" body="Create or extract entries to populate this panel."/>;
+  return (
+    <div className="panel__list">
+      {rows.map((r) => (
+        <div
+          key={r.id}
+          className={"panel__list-row " + (r.selected ? "is-selected" : "")}
+          data-callback="onSelectEntity"
+          onClick={() => onSelectEntity && onSelectEntity(r)}
+        >
+          {panel.entityType && <EntityTypeBadge type={panel.entityType} size="xs" showLabel={false}/>}
+          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+          {r.queue && <ReviewCountBadge count={r.queue}/>}
+          <span className="panel__list-row__sub">{r.meta}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
 // FilterChip — shown in panel header when this panel is being filtered
 // by another panel's focused entity (cross-panel focus propagation).
 // ---------------------------------------------------------------------
@@ -317,16 +343,17 @@ const DockedPanel = ({
               && typeof EntityFrameworkPanelBody !== "undefined") {
             return <EntityFrameworkPanelBody {...bespokeProps} onEditEntity={(e) => { if (!e || !e.save) bespokeProps.onEditEntity(e); }}/>;
           }
+          // Generic fallthrough — system panels without a bespoke body.
+          // (The legacy selected/multi/review/edit/suggestion demo states
+          // are gone; every such panel now has a live bespoke body above.)
           return (<>
-            {panel.state === "overview"   && <PanelOverview panel={panel} onSelectEntity={onSelectEntity}/>}
-            {panel.state === "selected"   && <PanelSelected panel={panel}/>}
-            {panel.state === "multi"      && <PanelMulti panel={panel}/>}
+            {(panel.state === "overview" || panel.state === "selected" || panel.state === "multi") &&
+              <PanelOverview panel={panel} onSelectEntity={onSelectEntity}/>}
             {panel.state === "empty"      && <EmptyState icon={panel.icon || "paper"} title={"No " + panel.title.toLowerCase() + " yet"} body="Create your first entry, or extract from the manuscript." action={<Btn variant="primary" size="sm" icon="plus" data-callback="onCreateEntity">Create</Btn>}/>}
             {panel.state === "loading"    && <LoadingState title={"Loading " + panel.title.toLowerCase() + "…"} lines={4}/>}
             {panel.state === "error"      && <ErrorState title="Couldn't load panel" body="Local index unreachable. Your data is safe." onRetry={() => {}}/>}
-            {panel.state === "review"     && <PanelReview panel={panel}/>}
-            {panel.state === "edit"       && <PanelEdit panel={panel}/>}
-            {panel.state === "suggestion" && <PanelSuggestion panel={panel}/>}
+            {(panel.state === "review" || panel.state === "edit" || panel.state === "suggestion") &&
+              <EmptyState icon={panel.icon || "paper"} title={panel.title} body="This panel has no live body for this state — reopen it from the rail."/>}
           </>);
           })();
           return reviewQueueEl ? <>{reviewQueueEl}{body}</> : body;
