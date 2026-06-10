@@ -536,3 +536,53 @@
   font-size: 12px;
   font-style: italic;
 }
+
+/* ---------------------------------------------------------------------
+   Live-panel additions: empty states, inline AI-rule editor, tag input.
+   --------------------------------------------------------------------- */
+.lore-empty, .refs-empty--lg {
+  margin: 18px auto;
+  max-width: 420px;
+  text-align: center;
+  padding: 26px 20px;
+  color: var(--lr-ink-3);
+  background: var(--lr-paper-2);
+  border: 1px dashed var(--lr-line-2);
+  border-radius: 6px;
+}
+.lore-empty__title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--lr-ink-1);
+  margin-bottom: 6px;
+}
+.lore-empty__body {
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.lore-ai__card--edit { align-items: center; }
+.lore-ai__input {
+  flex: 1;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: var(--lr-ink-1);
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed var(--lr-line-2);
+  padding: 2px 0;
+}
+.lore-ai__input:focus { outline: none; border-bottom-color: var(--lr-ink-3); }
+.refs-card__tag-input {
+  width: 100%;
+  margin: 4px 0;
+  font-family: inherit;
+  font-size: 10.5px;
+  color: inherit;
+  background: rgba(255,255,255,0.5);
+  border: 1px dashed rgba(74,56,28,0.35);
+  border-radius: 3px;
+  padding: 4px 6px;
+}

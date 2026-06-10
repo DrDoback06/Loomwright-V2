@@ -52,6 +52,7 @@
     ENTITY_SAMPLES: { ...(window.ENTITY_SAMPLES || {}) },
     CAST_SAMPLE: Array.isArray(window.CAST_SAMPLE) ? window.CAST_SAMPLE.slice() : [],
     ATLAS: { ...(window.ATLAS_SAMPLE_DATA || {}) },
+    REFERENCES: Array.isArray(window.SAMPLE_REFERENCES) ? window.SAMPLE_REFERENCES.slice() : [],
   };
   try {
     const raw = window.localStorage && window.localStorage.getItem(PREFIX + KEYS.sampleLoaded);
@@ -4228,7 +4229,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       applyEntityGlobals(merged);
       // References: also merge by id, sample-tag each.
       const existingRefs = await StorageService.get(KEYS.references, []);
-      const sampleRefs = (window.REFERENCES || []).map((r) => ({
+      const sampleRefs = ((window.__LW_SAMPLE_SOURCES__ && window.__LW_SAMPLE_SOURCES__.REFERENCES) || []).map((r) => ({
         ...clone(r),
         id: r.id || uuid("ref"),
         source: "sample",

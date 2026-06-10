@@ -1502,8 +1502,8 @@ const AppShell = () => {
             <div><b>Skill Trees:</b> {(window.LoomwrightBackend?.SkillTreeService?.loadSync?.().trees || []).length} trees · {(window.LoomwrightBackend?.ReviewService?.listSync?.("skills") || []).length} review</div>
             <div><b>Relationships:</b> {(window.LoomwrightBackend?.LinkService?.listRelationshipEdgesSync?.() || []).length} edges · {(window.LoomwrightBackend?.ReviewService?.listSync?.("relationships") || []).length} review</div>
             <div><b>Timeline:</b> {((window.LoomwrightBackend?.EntityService?.listSync?.("events") || []).length + (window.LoomwrightBackend?.EntityService?.listSync?.("timeline") || []).length)} events · {((window.LoomwrightBackend?.ReviewService?.listSync?.("events") || []).length + (window.LoomwrightBackend?.ReviewService?.listSync?.("timeline") || []).length)} review</div>
-            <div><b>Lore:</b> {(window.CANON_FACTS || []).length} facts · {(window.CANON_CONTRADICTIONS || []).length} contras · {(window.CANON_AI_INSTRUCTIONS || []).length} AI rules</div>
-            <div><b>References:</b> {(window.REFERENCES || []).length} refs · {(window.REFERENCES || []).filter((r) => r.aiContext).length} in AI context</div>
+            <div><b>Lore:</b> {(window.LoomwrightBackend?.EntityService?.listSync?.("lore") || []).length} facts · {(window.LoomwrightBackend?.ProjectIntelService?.loadSync?.({})?.canonRules || []).length} AI rules</div>
+            <div><b>References:</b> {(window.LoomwrightBackend?.ReferencesService?.listSync?.() || []).length} refs · {(window.LoomwrightBackend?.ReferencesService?.listSync?.() || []).filter((r) => r.aiContext !== false).length} in AI context</div>
           </div>
         </TweakSection>
         <TweakSection title="Overlay states" subtitle="Preview state coverage on palette + wheel">
