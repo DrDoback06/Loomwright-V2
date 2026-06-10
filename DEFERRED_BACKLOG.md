@@ -1,68 +1,40 @@
 # Deferred backlog
 
-Items intentionally deferred from completed areas. Updated for the Area 4
-completion pass (visual tabs all live + demo purge).
+Updated after the full completion pass (Area 4 visual tabs → Phase 18).
+Everything below the line is **done and verified**; the short list at the
+bottom is what remains intentionally out of scope.
 
-## Completed in the Area 4 pass (was deferred, now done)
-- ~~Relationships tab live rendering~~ — all six modes live
-  (`LinkService.listRelationshipEdgesSync`, spec 21).
-- ~~Timeline tab live rendering~~ — events/timeline stores drive the designed
-  cards, inspector, filters, review (spec 22).
-- ~~Skill-tree assignment selector on skill candidates~~ — drafts rail in the
-  constellation editor assigns accepted candidates into a chosen tree (spec 23).
-- ~~Skill Trees designed canvas~~ — the constellation editor is the live panel
-  (drag/connect/unlock/groups/validate/auto-layout persist; spec 23).
-- ~~Travel/location display (Atlas)~~ — character travel routes derive from
-  shared-chapter occurrences; roads/connections render from `data.routes`
-  (spec 24). The Cast-dossier travel line remains below.
-- ~~Atlas live map + editor tools~~ — placements, hierarchy, click-to-place,
-  pin dragging, route drawing (spec 24).
-- ~~Lore/Canon + References tabs~~ — live records, contradiction flow, AI
-  instructions read/write `ProjectIntelService.canonRules` (spec 25).
-- ~~AI Writer panel~~ — live context, drag-in entities, provider-gated
-  generation, real previews, working insert/accept/create-chapter (spec 26);
-  the panel is now reachable from the live panel renderer.
-- ~~Home demo strings~~ — active chapter, words-today (daily baseline in
-  `writingStatsSync`), derived pace line (spec 26).
-- ~~Demo data purge~~ — per-panel Review tabs read
-  `ReviewService.listCardViewsSync`; `ENTITY_REVIEW_SAMPLES` /
-  `ENTITY_SUGGESTION_SAMPLES` / `*_REVIEW` / `AI_PREVIEWS` / `HOME_*` demo
-  constants deleted; sample fixtures live only under `__LW_SAMPLE_SOURCES__`
-  and seed real entities on the opt-in sample load (spec 27).
+## Completed in the full completion pass
 
-## Still deferred
+### Area 4 — every visual tab live (phases 1–7)
+- Relationships: all six designed modes live (`LinkService.listRelationshipEdgesSync`, spec 21).
+- Timeline: live events/timeline stores drive eras, cards, inspector, filters, review (spec 22).
+- Skill Trees: the designed constellation editor IS the panel — drag/connect/unlock/groups/validate/auto-layout persist; extraction candidates assign into a chosen tree (spec 23).
+- Atlas: live map + hierarchy + editor tools (click-to-place, pin drag, route drawing), derived character travel routes, road lines, sample seeding (spec 24); per-layer opacity persisted (U24b).
+- Lore/Canon + References: live records, contradiction flow, AI instructions ↔ `ProjectIntelService.canonRules`, reference toggles/tags/archive (spec 25).
+- AI Writer: live context, drag-in entities, provider-gated generation with real previews, insert/accept/create-chapter; panel reachable from the live renderer (spec 26). Home stats truthful (words-today baseline, pace) (spec 26).
+- Demo purge: per-panel Review tabs read `ReviewService.listCardViewsSync`; every demo constant deleted; sample fixtures live only under `__LW_SAMPLE_SOURCES__` and seed real entities on the opt-in sample load (spec 27).
 
-### From Area 1 — Extraction
-- **Source-quote provenance shown in the Cast dossier** (the occurrence and
-  accepted `data.sourceQuote` carry it). → dossier polish pass.
-- **Cast dossier travel line** — `cast.data.location` set on accept; show the
-  designed travel row + "Show on Atlas". → dossier polish pass.
-- **Two-pass relationship extraction** (richer relationship records — the
-  Relationships panel already renders strength/trust/conflict when present).
-  → extraction-quality pass.
+### Alkemion-inspired features (phases 8–13)
+- Tangle story board: boards, first-class labelled/directed multi-edges, entity-bound cards with merge rebinding, designed canvas fully persistent, panel enabled everywhere (specs 28, smoke [tangle]).
+- Random tables: `RandomTableService` with builtin starters, weighted/unique rolls, history, panel + wheel action, results → Writer / entity (spec 30, smoke [rt]).
+- Markdown/HTML world-bible export with manuscript/codex scoping (spec 31, smoke [md]).
+- Reusable templates: entity templates (incl. genre starters — the deferred "genre RPG entity templates") + tangle board templates; entity-editor "Start from" strip + Save-as-template; export/import (spec 32, smoke [tpl]).
+- Entity editor round-trip fixed: id-initials hydrate, flat fields pack into `entity.data` (spec 32).
 
-### From Area 2 — Onboarding
-- **Genre RPG entity templates** — seed example classes/races/abilities from
-  the chosen genre/template. → templates feature.
-- **"Import existing project"** — wire the Welcome import option to
-  `ProjectArchiveService.applyImport`. → onboarding follow-up.
-- **Apply workspace.* layout prefs** — editorWidth/font/margins/panelStack
-  persisted but not read by the Writer's Room. → Writers Room polish.
-- **Deeper AI style critique** of the voice sample (local metrics done).
-  → AI polish pass.
+### Remaining deferred items (phases 14–17)
+- Cast dossier travel line + "Show on Atlas" + "First evidence" provenance card (spec 33).
+- Onboarding "Import existing project" → validated import completes setup (spec 33).
+- `workspace.*` prefs applied live (canvas width/font/margins) + Settings ▸ Editor controls (spec 33).
+- Two-pass relationship extraction in the deep path (smoke [rel2]).
+- Gemini adapter; provider-gated AI style critique in onboarding; Atlas layer opacity slider (U24b).
+- Cast bulk operations: tag/delete/merge multiple + wheel Tag action (spec 29).
 
-### From the pre-Area-3 fixes pass — adaptive wheel
-- **Full cross-app wheel context-awareness** — extend wheel contexts to map
-  nodes, relationship nodes, timeline events. → adaptive wheel pass.
-- **Wheel "Tag" action** — placeholder notice; lands with entity tagging.
-- **Deep (BYOK) model picker on the wheel** — per-action model chooser.
-
-### Cross-cutting (not yet scheduled)
-- **Tangle story board** — designed UI pending live build (next phase).
-- **Random tables / generators**, **Markdown/HTML export**, **reusable
-  templates** — planned Alkemion-inspired features.
-- **Gemini adapter** (routing already accommodates it).
-- **Atlas layer opacity slider** (`atlas-editor.jsx` layers tab).
+## Still intentionally out of scope
 - **Multi-project support** (single project per device today).
-- **AI Writer model picker UI** (routing already supports per-task models).
-- **Offline grammar/spell/thesaurus** in the Writer's Room.
+- **Cloud sync / collaboration** (local-first by design).
+- **Managed AI provider** (waitlist entry stays disabled by design — BYOK only).
+- **AI Writer per-action model picker UI** (routing already supports per-task models in Settings ▸ AI routing).
+- **Offline grammar/spell/thesaurus** beyond the browser's spellcheck (Settings toggles store preferences; a packaged dictionary engine is future work).
+- **Full cross-app adaptive-wheel context coverage** (manuscript contexts are live; per-tab item contexts can grow incrementally).
+- **Source maps / minification** for the production bundle (correctness-first build ships unminified).

@@ -1,26 +1,52 @@
 # Loomwright v2 — Implementation Status
 
-_Last updated: 2026-05-19 (post-PR-#3 merged to `main`)._
+_Last updated: 2026-06-10 (full completion pass — Area 4 visual tabs,
+Alkemion features, deferred backlog cleared)._
 
-## Post-PR-#3 milestone (2026-05-19)
+## Full completion milestone (2026-06-10)
 
-PR #3 merged. The branch is the "tested functional local prototype"
-checkpoint:
+Every designed surface is live; no panel renders demo data. The pass
+covered, in committed phases:
 
-- `npm run validate` passes on `main`. 524 callbacks registered; **0
-  Bucket A reaches the generic default notice**; 6 Bucket B
-  provider-gated; 4 Bucket D React-owned.
-- `npm run test:smoke` passes: 22/22 service checks in <1s, no browser.
-- `npm run test:e2e` passes: 28/28 Playwright tests in real Chromium,
-  ~3 minutes wall.
+1. **Visual tabs live (Area 4):** Relationships, Timeline, Skill Trees
+   (constellation editor), Atlas (map + editor tools + travel routes +
+   layer opacity), Lore/Canon, References, AI Writer, Home stats, and
+   every per-panel Review tab — all driven by the live stores.
+2. **Demo purge:** all `*_REVIEW` / `ENTITY_REVIEW_SAMPLES` /
+   `AI_PREVIEWS` / `HOME_*` / atlas-, tangle-, skill-, lore-, relationship-
+   demo constants deleted. Sample fixtures live only under
+   `__LW_SAMPLE_SOURCES__` and seed REAL entities on the opt-in
+   "Load sample project" (clearSample removes them).
+3. **Alkemion-inspired features:** Tangle story board (boards +
+   first-class labelled/directed multi-edges + entity-bound cards),
+   Random Tables (weighted rollable generators), Markdown/HTML
+   world-bible export, reusable entity + board templates (with genre
+   starters).
+4. **Deferred backlog cleared:** cast bulk ops + wheel tagging, dossier
+   travel + provenance, onboarding project import, workspace prefs
+   applied live, two-pass relationship extraction, Gemini adapter,
+   provider-gated AI style critique.
+5. **Editor round-trip fix:** the entity editor hydrates id-initials and
+   packs flat fields back into `entity.data` — editor- and
+   extraction-created records now share one shape.
 
-**For the current per-feature status (implemented / prototype-thin /
-provider-gated / future-scope / needs-next-PR) see
-`PRODUCT_COMPLETION_AUDIT.md`** — that file supersedes the burn-down /
-wiring-pass sections below for current-state queries. The sections
-below remain as a historical record of how the prototype came together.
+Verification at this milestone:
+
+- `npm run validate` — all callbacks reach explicit branches or are
+  declared (0 Bucket A; 7 Bucket B provider-gated; 4 Bucket D).
+- `npm run test:smoke` — 320+ node-level assertions, all green
+  (incl. [rel] [rel2] [tangle] [rt] [md] [tpl] suites).
+- `npm run test:e2e` — 175+ Playwright tests across 33 workflows.
+- `npm run build` + `npm run test:e2e:preview` — precompiled
+  production bundle boots and passes.
+
+**For per-feature detail see `PRODUCT_COMPLETION_AUDIT.md` and
+`DEFERRED_BACKLOG.md`** (the backlog file now lists what shipped and the
+short intentionally-out-of-scope list). Historical sections below are
+unchanged.
 
 ---
+
 
 ## Burn-down pass summary (2026-05-18) — historical
 
