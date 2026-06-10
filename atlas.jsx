@@ -43,7 +43,8 @@ const AtlasPanelBody = ({ panel }) => {
   _ue_atx(() => {
     const bump = () => setStoreVersion((v) => v + 1);
     const evs = ["lw:entity-store-updated", "lw:review-queue-updated", "lw:occurrences-updated",
-                 "lw:manuscript-chapters-updated", "lw:backend-ready", "lw:project-imported"];
+                 "lw:manuscript-chapters-updated", "lw:backend-ready", "lw:project-imported",
+                 "lw:settings-updated"];
     evs.forEach((e) => window.addEventListener(e, bump));
     return () => evs.forEach((e) => window.removeEventListener(e, bump));
   }, []);
@@ -58,6 +59,11 @@ const AtlasPanelBody = ({ panel }) => {
       warnings: (l.id === "warnings" || l.id === "extracts") ? data.queue.length : l.warnings,
     }));
     const payload = { ...data, layers: layerDefs };
+    // Persisted per-layer opacity (Settings ▸ atlas.layerOpacity) — read
+    // by AtlasMap's render groups.
+    try {
+      window.ATLAS_LAYER_OPACITY = (B?.SettingsService?.getSectionSync?.("atlas", {}) || {}).layerOpacity || {};
+    } catch (_e) { window.ATLAS_LAYER_OPACITY = {}; }
     Object.assign(window, {
       ATLAS_LOCATIONS: payload.locations,
       ATLAS_ROUTES: payload.routes,

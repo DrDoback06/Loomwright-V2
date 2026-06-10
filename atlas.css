@@ -1076,3 +1076,13 @@
   font-style: italic;
   line-height: 1.35;
 }
+
+/* Layer opacity slider (editor layers rail) */
+.ae-layers__op { position: relative; }
+.ae-layers__op-range {
+  position: absolute;
+  inset: -4px 0;
+  width: 100%;
+  opacity: 0;
+  cursor: ew-resize;
+}

@@ -393,6 +393,7 @@ window.__LW_CALLBACK_NAMES = [
   "onRetry",
   "onReturnToSetup",
   "onRollRandomTable",
+  "onRunAIStyleCritique",
   "onRunCommand",
   "onRunContinuityCheck",
   "onRunEntitySuggestion",

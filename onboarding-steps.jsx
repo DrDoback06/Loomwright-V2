@@ -206,6 +206,16 @@ const Step_Voice = ({ data, set, callbacks, jumpTo }) => {
   const [analyzing, setAnalyzing] = _us_st(false);
   const [analyzed, setAnalyzed] = _us_st(false);
 
+  // Provider-gated AI critique results land back on the draft.
+  React.useEffect(() => {
+    const onCritique = (e) => {
+      const text = e?.detail?.text;
+      if (text) set("voice", { ...(data.voice || {}), aiCritique: text });
+    };
+    window.addEventListener("lw:ai-style-critique", onCritique);
+    return () => window.removeEventListener("lw:ai-style-critique", onCritique);
+  }, [data.voice]);
+
   return (
     <>
       <div className="ob-block">
@@ -270,7 +280,13 @@ const Step_Voice = ({ data, set, callbacks, jumpTo }) => {
                 <div className="ob-card__tags">
                   <Btn variant={v.profileAccepted ? "outline" : "primary"} size="sm" icon="check" data-callback="onAcceptStyleProfile" onClick={() => upd("profileAccepted", true)}>{v.profileAccepted ? "Profile accepted" : "Accept profile"}</Btn>
                   <Btn variant="outline" size="sm" icon="paper" data-callback="onEditStyleProfile" onClick={() => jumpTo && jumpTo("style")}>Edit profile</Btn>
+                  <Btn variant="outline" size="sm" icon="sparkle" data-callback="onRunAIStyleCritique" data-testid="ob-ai-critique"
+                    onClick={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onRunAIStyleCritique", detail: { sample: v.sample || "" } } }))}>
+                    AI critique (BYOK)</Btn>
                 </div>
+                {v.aiCritique && (
+                  <div className="ob-card__meta" data-ui="ObAiCritique" style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{v.aiCritique}</div>
+                )}
               </div>
             </div>
           </div>

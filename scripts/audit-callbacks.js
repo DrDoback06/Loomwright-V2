@@ -156,6 +156,7 @@ const REACT_OWNED = new Set([
 // "X isn't wired yet".
 const PROVIDER_GATED = new Set([
   "onGenerateAIWriterDraft",
+  "onRunAIStyleCritique",
   "onGenerateDraftSkillTree",
   "onRunContinuityCheck",
   "onRunEntitySuggestion",

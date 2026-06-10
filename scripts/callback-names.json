@@ -392,6 +392,7 @@
   "onRetry",
   "onReturnToSetup",
   "onRollRandomTable",
+  "onRunAIStyleCritique",
   "onRunCommand",
   "onRunContinuityCheck",
   "onRunEntitySuggestion",

@@ -343,6 +343,18 @@ const AtlasMap = ({
   const locById = _um_am(() => Object.fromEntries(locations.map((l) => [l.id, l])), [locations]);
   const ctxShow = context && context.show;
   const roads = window.ATLAS_ROADS || [];
+  // Per-layer opacity (Settings ▸ atlas.layerOpacity, edited in the
+  // editor's layers rail).
+  const layerOp = window.ATLAS_LAYER_OPACITY || {};
+  const opOf = (id) => (layerOp[id] != null ? Math.max(0.1, Math.min(1, layerOp[id] / 100)) : 1);
+  const pinLayerId = (loc) => {
+    if (loc.type === "country" || loc.type === "region") return "regions";
+    if (loc.type === "city" || loc.type === "town" || loc.type === "village") return "settlements";
+    if (loc.type === "district") return "districts";
+    if (loc.type === "building" || loc.type === "room") return "buildings";
+    if (loc.type === "ruin" || loc.type === "battlefield" || loc.type === "hidden") return "story";
+    return "natural";
+  };
 
   // ---- Editing interactions (click-to-place, pin dragging) ----------
   const svgRef = React.useRef(null);
@@ -431,11 +443,11 @@ const AtlasMap = ({
       <AtlasPlate showIso={showIso} showGrid={showGrid} showTexture={showTexture}/>
 
       {/* Region polygons under everything */}
-      <AtlasRegions locations={locations} layers={layers} highlight={regionHighlight}/>
+      <g opacity={opOf("regions")}><AtlasRegions locations={locations} layers={layers} highlight={regionHighlight}/></g>
 
       {/* Road / connection lines between placed locations */}
       {layers.routes !== false && roads.length > 0 && (
-        <g className="atm-roads">
+        <g className="atm-roads" opacity={opOf("routes")}>
           {roads.map((rd) => {
             const a = locById[rd.from], b = locById[rd.to];
             if (!a || !b || a.placed === false || b.placed === false) return null;
@@ -454,13 +466,13 @@ const AtlasMap = ({
       {emphBeast && layers.beasts !== false && <AtlasBeastOverlay beast={emphBeast} locById={locById}/>}
 
       {/* Routes — emphasised first under, then non-emph dimmed */}
-      {layers.routes !== false && routes.map((r) => {
+      {layers.routes !== false && <g opacity={opOf("characters")}>{routes.map((r) => {
         const isEmph = emphRouteIds.includes(r.id);
         const dim = isCtxActive && !isEmph;
         return <AtlasRoute key={r.id} route={r} locById={locById} dim={dim} emphasised={isEmph}
                            scrubChapter={scrubChapter == null ? null : scrubChapter + 1}
                            intersect={isEmph ? intersectIds : null}/>;
-      })}
+      })}</g>}
 
       {/* Quest steps */}
       {emphQuest && <AtlasQuestOverlay quest={emphQuest} locById={locById}/>}
@@ -481,7 +493,7 @@ const AtlasMap = ({
           // Queue badge
           const badge = loc.queue ? { text: String(loc.queue), color: loc.queueLevel === "high" ? "#5d6d4e" : "#c98a2c" } : null;
           return (
-            <g key={loc.id} data-atm-pin={loc.id} onPointerDown={(e) => onPinPointerDown(e, loc)}>
+            <g key={loc.id} data-atm-pin={loc.id} opacity={opOf(pinLayerId(loc))} onPointerDown={(e) => onPinPointerDown(e, loc)}>
               <AtlasPin loc={pinLoc(loc)} focused={focused} dim={dim} badge={badge}
                         scaleLabel={variant === "side" ? 1 : 0.95}
                         showLabel={showLabels && (variant === "editor" || ["country","city","town","region"].includes(loc.type))}

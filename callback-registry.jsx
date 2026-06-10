@@ -917,6 +917,26 @@
       } catch (e) { notify(e.message); }
       return;
     }
+    if (name === "onRunAIStyleCritique") {
+      const route = await requireProviderOrNotice("AI style critique", "styleCritique");
+      if (!route) return;
+      const sample = (ctx.detail?.sample || "").trim();
+      if (!sample) { notify("Paste a writing sample first."); return; }
+      if (!aiPrivacyGuard({ task: "styleCritique", providerId: route.providerId, model: route.model, context: { includesManuscript: false, approxChars: sample.length } })) return;
+      try {
+        const text = await AIService.complete({
+          providerId: route.providerId, model: route.model,
+          system: "You are a prose editor. Be specific and brief.",
+          prompt: `Critique this writing sample's STYLE (not its story) in at most 5 short bullets: cadence, diction, sentence variety, tics worth keeping, tics worth losing.\n\nSample:\n---\n${sample.slice(0, 4000)}\n---`,
+          maxTokens: 500,
+          purpose: "styleCritique",
+        });
+        window.dispatchEvent(new CustomEvent("lw:ai-style-critique", { detail: { text } }));
+        B().AuditService?.log?.({ action: "ai.styleCritique", label: "Ran AI style critique", source: "AIService", metadata: { providerId: route.providerId, model: route.model, status: "ok" }, reversible: false });
+        notify("AI critique ready.");
+      } catch (e) { notify(e.message); }
+      return;
+    }
     if (name === "onGenerateDraftSkillTree") {
       const route = await requireProviderOrNotice("Skill Tree draft generation", "skillTreeGeneration");
       if (!route) return;

@@ -275,8 +275,18 @@ const AtlasEdLeftRail = ({
                       </span>
                     </button>
                     <div className="ae-layers__sub">
-                      <span className="ae-layers__op" title="Layer opacity (coming soon)">
-                        <span className="ae-layers__op-fill" style={{ width: "80%" }}/>
+                      <span className="ae-layers__op" title="Layer opacity">
+                        <span className="ae-layers__op-fill" style={{ width: ((window.ATLAS_LAYER_OPACITY || {})[l.id] ?? 100) + "%" }}/>
+                        <input type="range" className="ae-layers__op-range" min={10} max={100} step={10}
+                               aria-label={l.label + " opacity"}
+                               data-testid={"ae-opacity-" + l.id}
+                               value={(window.ATLAS_LAYER_OPACITY || {})[l.id] ?? 100}
+                               onChange={async (e) => {
+                                 const B = window.LoomwrightBackend;
+                                 const section = B?.SettingsService?.getSectionSync?.("atlas", {}) || {};
+                                 const layerOpacity = { ...(section.layerOpacity || {}), [l.id]: Number(e.target.value) };
+                                 await B?.SettingsService?.saveSection("atlas", { ...section, layerOpacity });
+                               }}/>
                       </span>
                       <button className={"ae-layers__lock" + (l.locked ? " is-on" : "")}
                               title={l.locked ? "Unlock layer" : "Lock layer"}

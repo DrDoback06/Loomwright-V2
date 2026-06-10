@@ -3015,6 +3015,7 @@
     openai:     { baseUrl: "https://api.openai.com/v1", defaultModel: "gpt-4o-mini", needsKey: true },
     openrouter: { baseUrl: "https://openrouter.ai/api/v1", defaultModel: "openrouter/auto", needsKey: true },
     anthropic:  { baseUrl: "https://api.anthropic.com", defaultModel: "claude-opus-4-7", needsKey: true },
+    gemini:     { baseUrl: "https://generativelanguage.googleapis.com/v1beta", defaultModel: "gemini-2.5-flash", needsKey: true },
     ollama:     { baseUrl: "http://localhost:11434", defaultModel: "llama3", needsKey: false },
     custom:     { baseUrl: "", defaultModel: "", needsKey: true },
   };
@@ -3068,6 +3069,11 @@
           if (!res.ok) { const t = await res.text(); return { ok: false, providerId, message: `HTTP ${res.status}: ${t.slice(0, 200)}` }; }
           return { ok: true, providerId, message: "Local Ollama reachable." };
         }
+        if (cfg.providerType === "gemini") {
+          const res = await fetch(`${base}/models`, { headers: { "x-goog-api-key": cfg.apiKey } });
+          if (!res.ok) { const t = await res.text(); return { ok: false, providerId, message: `HTTP ${res.status}: ${t.slice(0, 200)}` }; }
+          return { ok: true, providerId, message: "Connection successful." };
+        }
         // openai / openrouter / custom — GET /models.
         const res = await fetch(`${base}/models`, {
           headers: { Authorization: `Bearer ${cfg.apiKey}`, ...(cfg.headers || {}) },
@@ -3115,6 +3121,29 @@
       const json = await res.json();
       return (json.content || []).map((b) => b.text || "").join("") || "";
     },
+    async _completeGemini(cfg, { messages, model, maxTokens, temperature }) {
+      const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
+      const contents = messages
+        .filter((m) => m.role !== "system")
+        .map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content || "" }] }));
+      const body = {
+        contents: contents.length ? contents : [{ role: "user", parts: [{ text: "" }] }],
+        ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+        generationConfig: {
+          maxOutputTokens: maxTokens || 1200,
+          ...(temperature != null ? { temperature } : {}),
+        },
+      };
+      const mdl = model || cfg.model;
+      const res = await fetch(`${(cfg.baseUrl || "").replace(/\/$/, "")}/models/${mdl}:generateContent`, {
+        method: "POST",
+        headers: { "x-goog-api-key": cfg.apiKey, "Content-Type": "application/json", ...(cfg.headers || {}) },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const t = await res.text(); throw new Error(`AI request failed (${res.status}): ${t.slice(0, 300)}`); }
+      const json = await res.json();
+      return (json.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("") || "";
+    },
     async _completeOllama(cfg, { messages, model, temperature }) {
       const body = { model: model || cfg.model, messages, stream: false, ...(temperature != null ? { options: { temperature } } : {}) };
       const res = await fetch(`${(cfg.baseUrl || "").replace(/\/$/, "")}/api/chat`, {
@@ -3142,6 +3171,7 @@
           ];
       const params = { messages, model: opts.model, maxTokens: opts.maxTokens, temperature: opts.temperature, responseFormat: opts.responseFormat };
       if (cfg.providerType === "anthropic") return this._completeAnthropic(cfg, params);
+      if (cfg.providerType === "gemini") return this._completeGemini(cfg, params);
       if (cfg.providerType === "ollama") return this._completeOllama(cfg, params);
       return this._completeOpenAI(cfg, params);
     },

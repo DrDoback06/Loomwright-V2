@@ -153,3 +153,20 @@ test.describe("U24. Atlas — live map", () => {
     await expect(editor.locator(".atm-roads line").first()).toBeVisible();
   });
 });
+
+test.describe("U24b. Atlas — layer opacity", () => {
+  test("persisted layer opacity applies to the map's pin groups", async ({ page }) => {
+    await openFreshApp(page);
+    await seedWorld(page);
+    await page.evaluate(async () => {
+      const B = window.LoomwrightBackend;
+      const section = B.SettingsService.getSectionSync("atlas", {}) || {};
+      await B.SettingsService.saveSection("atlas", { ...section, layerOpacity: { settlements: 30 } });
+    });
+    await openAtlasPanel(page);
+    const pin = page.locator("[data-atm-pin]").first();
+    await expect(pin).toBeVisible();
+    const op = await pin.getAttribute("opacity");
+    expect(Number(op)).toBeCloseTo(0.3, 5);
+  });
+});
