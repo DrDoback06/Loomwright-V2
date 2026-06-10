@@ -1570,6 +1570,34 @@ async function main() {
       exportedTpls.some((t) => t.id === tpl.id) && !exportedTpls.some((t) => t.source === "builtin"));
   }
 
+  // --- [rel2] two-pass relationship extraction — candidate shaping ---
+  {
+    const anwen2 = await B.EntityService.save("cast", { name: "Pass Two Anwen" }, { status: "active" });
+    const bram2 = await B.EntityService.save("cast", { name: "Pass Two Bram" }, { status: "active" });
+    const present = [anwen2, bram2];
+    const rows = [
+      { from: "Pass Two Anwen", to: "Pass Two Bram", type: "Rival", strength: 140, trust: -5, conflict: 80, secret: 1,
+        summary: "Border rivals since the toll war.", evidenceQuote: "Anwen would not yield the gate to Bram." },
+      { from: "Pass Two Anwen", to: "Pass Two Bram", type: "ally" },           // duplicate pair → dropped
+      { from: "Pass Two Anwen", to: "Nobody Known", type: "ally" },             // unknown name → skipped
+      { from: "Pass Two Anwen", to: "Pass Two Anwen", type: "self" },           // self pair → skipped
+    ];
+    const cands = B.buildRelationshipPassCandidates(rows, present, { chapterId: null, sessionId: "smoke", deep: true });
+    log("[rel2] resolves names to ids and dedupes pairs", cands.length === 1 && cands[0].suggestedChanges.fromId === anwen2.id && cands[0].suggestedChanges.toId === bram2.id);
+    log("[rel2] meters clamp to 0–100 and secret coerces",
+      cands[0].suggestedChanges.strength === 100 && cands[0].suggestedChanges.trust === 0 && cands[0].suggestedChanges.conflict === 80 && cands[0].suggestedChanges.secret === true);
+    log("[rel2] evidence quote rides the candidate AND the record diff",
+      cands[0].sourceQuote.includes("yield the gate") && cands[0].suggestedChanges.sourceQuote.includes("yield the gate"));
+    // Accepting (the registry merges suggestedChanges into data) yields a
+    // fully-rendered edge in the live Relationships normalizer.
+    await B.EntityService.save("relationships", {
+      name: cands[0].name, summary: cands[0].summary, data: { ...cands[0].suggestedChanges },
+    }, { status: "active" });
+    const relEdge = B.LinkService.listRelationshipEdgesSync().find((e) =>
+      (e.a === anwen2.id && e.b === bram2.id) || (e.a === bram2.id && e.b === anwen2.id));
+    log("[rel2] accepted pass-2 bond renders with its rich meters", !!relEdge && relEdge.type === "rival" && relEdge.strength === 100 && relEdge.conflict === 80 && relEdge.secret === true);
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

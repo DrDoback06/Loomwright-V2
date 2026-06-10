@@ -3874,6 +3874,52 @@
     return out;
   }
 
+  // Shape the deep pass-2 relationship rows (AI JSON) into wired
+  // candidates: names resolve to ids, meters clamp, evidence rides in
+  // suggestedChanges so accepting lands a fully-rendered bond. Pure —
+  // covered by smoke without a provider.
+  function buildRelationshipPassCandidates(rels, presentCast, { chapterId = null, sessionId = null, deep = true } = {}) {
+    if (!Array.isArray(rels) || !Array.isArray(presentCast)) return [];
+    const byName = new Map(presentCast.filter((c) => c && c.name).map((c) => [String(c.name).toLowerCase(), c]));
+    const clamp = (v, d) => { const n = Number(v); return isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : d; };
+    const out = [];
+    const seen = new Set();
+    for (const r of rels) {
+      if (!r || typeof r !== "object") continue;
+      const a = byName.get(String(r.from || r.character1 || "").toLowerCase());
+      const b = byName.get(String(r.to || r.character2 || "").toLowerCase());
+      if (!a || !b || a.id === b.id) continue;
+      const key = a.id < b.id ? a.id + "::" + b.id : b.id + "::" + a.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const evidence = typeof r.evidenceQuote === "string" ? r.evidenceQuote.trim().slice(0, 220) : "";
+      out.push(buildCandidate({
+        entityType: "relationships",
+        name: `${a.name} → ${b.name}`,
+        suggestedAction: "create",
+        summary: typeof r.summary === "string" ? r.summary : "",
+        confidence: typeof r.confidence === "number" ? r.confidence : 0.8,
+        matchType: "new",
+        sourceQuote: evidence,
+        chapterId,
+        relatedEntityIds: [a.id, b.id],
+        suggestedChanges: {
+          fromId: a.id,
+          toId: b.id,
+          relationshipType: String(r.type || "other").toLowerCase().replace(/\s+/g, "-"),
+          strength: clamp(r.strength, 55),
+          trust: clamp(r.trust, 50),
+          conflict: clamp(r.conflict, 30),
+          secret: !!r.secret,
+          summary: typeof r.summary === "string" ? r.summary : "",
+          sourceQuote: evidence,
+        },
+        extractionSessionId: sessionId,
+      }, { deep, extractionSessionId: sessionId }));
+    }
+    return out;
+  }
+
   function detectStatChanges(text, index, chapterId, sessionId) {
     if (!text || !index) return [];
     const out = [];
@@ -4538,6 +4584,49 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
         }
       }
 
+      // Pass 2 (deep only): focused relationship enrichment. One bounded
+      // call asks for the bonds between KNOWN cast who co-occur in this
+      // chapter, with the rich fields the Relationships panel renders
+      // (strength / trust / conflict / secret + a verbatim evidence
+      // quote). When it succeeds, its wired candidates replace the deep
+      // pass's flat relationship rows.
+      let relationshipPassCandidates = [];
+      if (deep && aiAvailable && !isAborted()) {
+        const castRows = Object.values(EntityService.listAllSync().cast || {}).filter((e) => e && e.status !== "deleted" && e.name);
+        const presentCast = castRows.filter((c) => {
+          const esc = String(c.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          return new RegExp("\\b" + esc + "\\b", "i").test(text || "");
+        }).slice(0, 12);
+        if (presentCast.length >= 2) {
+          report("ai-relationships", { castCount: presentCast.length });
+          const relPrompt = `Identify the relationships between these characters AS EVIDENCED in the chapter text below.
+Characters: ${presentCast.map((c) => c.name).join(", ")}.
+
+Chapter:
+---
+${(text || "").slice(0, 6000)}
+---
+
+Return a JSON array. For each pair with clear textual evidence:
+{"from": "<name>", "to": "<name>", "type": "<ally|enemy|family|lover|rival|mentor|other>", "strength": 0-100, "trust": 0-100, "conflict": 0-100, "secret": true|false, "summary": "<one sentence>", "evidenceQuote": "<short verbatim quote>"}
+Only evidenced pairs. Return JSON only.`;
+          try {
+            const raw = await AIService.complete({
+              providerId: aiRoute.providerId,
+              model: aiRoute.model,
+              prompt: relPrompt,
+              system: "Return valid JSON only. No markdown fences.",
+              maxTokens: 1200,
+            });
+            const rels = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, "").trim());
+            relationshipPassCandidates = buildRelationshipPassCandidates(rels, presentCast, { chapterId, sessionId, deep });
+          } catch (_) { /* pass 2 is enrichment only — never fatal */ }
+        }
+      }
+      if (relationshipPassCandidates.length) {
+        items = items.filter((it) => it.type !== "relationships");
+      }
+
       // Convert AI items (if any) into the standardised candidate shape
       // via buildCandidate. Then merge with the local detectors' output
       // and dedupe so the queue isn't flooded with duplicates of the
@@ -4576,7 +4665,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
         }, { deep, extractionSessionId: sessionId });
       });
 
-      let reviewItems = dedupeCandidates([...discoveryCandidates, ...localCandidates, ...aiCandidates]);
+      let reviewItems = dedupeCandidates([...discoveryCandidates, ...localCandidates, ...aiCandidates, ...relationshipPassCandidates]);
       // Honour the user's Settings → Extraction controls: skip disabled entity
       // types and drop candidates below the confidence threshold.
       const exMinConf = (exPrefs.threshold != null ? exPrefs.threshold : 50) / 100;
@@ -6778,6 +6867,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     discoverEntities,
     extractProperNounSpans,
     buildAuthorContext,
+    buildRelationshipPassCandidates,
     analyzeWritingStyle,
     autoApplyCandidate,
     OccurrenceService,
