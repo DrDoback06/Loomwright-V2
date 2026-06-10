@@ -1499,7 +1499,7 @@ const AppShell = () => {
             <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed var(--line-1)" }}>
               <b>Atlas:</b> see in-panel debug (Atlas open → Debug tab)
             </div>
-            <div><b>Skill Trees:</b> {(window.SKILL_TREES || []).length} trees · {(window.SKILL_ORPHANS || []).length} orphans · {(window.SKILL_REVIEW || []).length} review</div>
+            <div><b>Skill Trees:</b> {(window.LoomwrightBackend?.SkillTreeService?.loadSync?.().trees || []).length} trees · {(window.LoomwrightBackend?.ReviewService?.listSync?.("skills") || []).length} review</div>
             <div><b>Relationships:</b> {(window.LoomwrightBackend?.LinkService?.listRelationshipEdgesSync?.() || []).length} edges · {(window.LoomwrightBackend?.ReviewService?.listSync?.("relationships") || []).length} review</div>
             <div><b>Timeline:</b> {((window.LoomwrightBackend?.EntityService?.listSync?.("events") || []).length + (window.LoomwrightBackend?.EntityService?.listSync?.("timeline") || []).length)} events · {((window.LoomwrightBackend?.ReviewService?.listSync?.("events") || []).length + (window.LoomwrightBackend?.ReviewService?.listSync?.("timeline") || []).length)} review</div>
             <div><b>Lore:</b> {(window.CANON_FACTS || []).length} facts · {(window.CANON_CONTRADICTIONS || []).length} contras · {(window.CANON_AI_INSTRUCTIONS || []).length} AI rules</div>

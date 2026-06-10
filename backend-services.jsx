@@ -1204,12 +1204,21 @@
       });
     },
     async updateNodePosition(treeId, skillEntityId, position) {
+      // Merge into the existing layout entry — never drop unlocked/tier/group.
+      return this.updateNodeLayout(treeId, skillEntityId, {
+        x: Number(position?.x) || 0,
+        y: Number(position?.y) || 0,
+      });
+    },
+    // Generic per-node layout patch (x/y/tier/group/unlocked…), merged.
+    async updateNodeLayout(treeId, skillEntityId, patch = {}) {
       const state = this.loadSync();
       return this.save({
         ...state,
         trees: (state.trees || []).map((t) => {
           if (t.id !== treeId) return t;
-          const layout = { ...(t.layout || {}), [skillEntityId]: { x: Number(position?.x) || 0, y: Number(position?.y) || 0 } };
+          const prev = (t.layout || {})[skillEntityId] || {};
+          const layout = { ...(t.layout || {}), [skillEntityId]: { ...prev, ...patch } };
           return { ...t, layout, updatedAt: nowIso() };
         }),
       });
@@ -1276,6 +1285,24 @@
           set.add(castEntityId);
           return { ...t, assignedCast: [...set], updatedAt: nowIso() };
         }),
+      });
+    },
+    async unassignCast(treeId, castEntityId) {
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => t.id === treeId
+          ? { ...t, assignedCast: (t.assignedCast || []).filter((id) => id !== castEntityId), updatedAt: nowIso() }
+          : t),
+      });
+    },
+    async unassignClass(treeId, classEntityId) {
+      const state = this.loadSync();
+      return this.save({
+        ...state,
+        trees: (state.trees || []).map((t) => t.id === treeId
+          ? { ...t, assignedClasses: (t.assignedClasses || []).filter((id) => id !== classEntityId), updatedAt: nowIso() }
+          : t),
       });
     },
     // Persist a node's locked/unlocked state in the tree layout (UAT #17).

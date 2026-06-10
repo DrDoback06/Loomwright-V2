@@ -359,9 +359,12 @@ test.describe("T. UI acceptance — rendered DOM reflects the live store", () =>
     await openFreshApp(page);
     await openPanel(page, "skillTrees");
     await page.waitForTimeout(300);
-    // DOM action: create a tree.
+    // DOM action: create a tree (side panel roster — also opens the editor).
     await page.locator("[data-testid='st-create-tree']").dispatchEvent("click");
     await page.waitForTimeout(300);
+    // The constellation editor opens; add a star from the Nodes rail.
+    await expect(page.locator("[data-ui='SkillTreeEditor']")).toBeVisible({ timeout: 5000 });
+    await page.locator("[data-testid='st-tab-nodes']").dispatchEvent("click");
     await expect(page.locator("[data-testid='st-add-node']")).toBeVisible({ timeout: 5000 });
     // DOM action: add a node.
     await page.locator("[data-testid='st-add-node']").dispatchEvent("click");

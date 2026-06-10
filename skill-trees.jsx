@@ -9,99 +9,189 @@
 // /layers) + constellation canvas (centre) + right rail (inspector/
 // queue/related/source) + bottom progression strip.
 //
-// Demo data is rich enough that the panel feels real on first render.
+// Everything renders LIVE project data:
+//   trees        ← SkillTreeService.loadSync().trees
+//   stars        ← EntityService("skills") records placed via tree.layout
+//   bearers      ← skill data.learnedBy + tree.assignedCast
+//   drafts/queue ← ReviewService.listSync("skills")
+//   sources      ← OccurrenceService quotes for the selected skill
+// Canvas edits (drag, add star, connect, unlock, group) persist through
+// SkillTreeService and survive reload.
 // =====================================================================
 
 const { useState: _st_us, useMemo: _st_um, useCallback: _st_uc, useRef: _st_ur, useEffect: _st_ue } = React;
 
+const ST_GLYPHS = ["✷", "◈", "❋", "✦", "✺", "✹", "◇", "✶"];
+const ST_COLORS = ["#7a6aa3", "#3e6db5", "#a8553f", "#5d6d4e", "#8a6a2a", "#b86a82", "#3d3a78", "#c98a2c"];
+const _stHash = (s) => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+const _stInitials = (name) => {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || "") + (parts[1]?.[0] || parts[0]?.[1] || "")).toUpperCase() || "?";
+};
+const _stIds = (v) => {
+  if (v == null) return [];
+  const arr = Array.isArray(v) ? v : [v];
+  return arr.map((x) => (typeof x === "string" ? x : x && x.id)).filter(Boolean);
+};
+const _stNotice = (message) => {
+  try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message } })); } catch (_e) {}
+};
+const _stDispatch = (name, detail) => window.dispatchEvent(new CustomEvent(name, { detail }));
+
 // ---------------------------------------------------------------------
-// Demo data — 3 trees with constellation-style node layouts.
-// Each node has { id, name, type, tier, x, y, locked, upgrade, review,
-// chars, summary, effect, cost, requires, linkedAbilities, linkedStats }.
+// Live context — skills, trees, cast, queue, occurrences.
 // ---------------------------------------------------------------------
-const SKILL_TREES = [
-  {
-    id: "t-augur",
-    name: "The Augur",
-    eyebrow: "Salt magic · cliff-walkers",
-    glyph: "✷",
-    color: "#7a6aa3",
-    summary: "A salt-line discipline — knowing what is about to come from the sea. Aelinor's path.",
-    assignedChars: ["aelinor", "auger"],
-    review: 3,
-    constellation: "Cliffhawk",
-    nodes: [
-      { id: "a1", name: "Salt-Sense",     type: "passive",  tier: 1, x: 50, y: 78, summary: "Feel the change in salt water before the tide turns.",
-        effect: "Reroll one Perception when within sight of the sea.", cost: "Free", requires: [], unlocked: true,  chars: 2, linkedStats: ["per"] },
-      { id: "a2", name: "Tide-Walker",    type: "passive",  tier: 1, x: 30, y: 64, summary: "Walks salt flats without stumbling.",
-        effect: "+2 movement in coastal terrain.", cost: "Free", requires: ["a1"], unlocked: true,  chars: 2 },
-      { id: "a3", name: "Stone-Read",     type: "active",   tier: 2, x: 50, y: 56, summary: "Read meaning from worn cliff-stone.",
-        effect: "Cast: gain one truth about a place's past (1/day).", cost: "1 attention", requires: ["a1"], unlocked: true,  chars: 2 },
-      { id: "a4", name: "Augur-Mark",     type: "triggered",tier: 2, x: 72, y: 64, summary: "A salt-mark on the brow that wraiths cannot cross.",
-        effect: "When attacked by a Wraith, the first blow misses.", cost: "Permanent mark", requires: ["a1"], unlocked: false, chars: 1, review: true },
-      { id: "a5", name: "Cliffhawk's Eye",type: "active",   tier: 3, x: 40, y: 40, summary: "See the cliff as the hawk sees it.",
-        effect: "+4 ranged attack from elevation; reveal one hidden enemy.", cost: "2 attention", requires: ["a3"], unlocked: false, chars: 1, upgrade: true },
-      { id: "a6", name: "Salt-Bind",      type: "active",   tier: 3, x: 62, y: 40, summary: "Bind a wraith in a circle of poured salt.",
-        effect: "Hold a Wraith for one round; you cannot move.", cost: "1 attention + salt", requires: ["a4"], unlocked: false, chars: 0 },
-      { id: "a7", name: "Old Auger Stone",type: "one-time", tier: 4, x: 50, y: 22, summary: "Touch the Old Auger and remember a future.",
-        effect: "Once per arc: rewrite one choice already made.", cost: "Visit the Old Auger", requires: ["a5","a6"], unlocked: false, chars: 0, review: true },
-    ],
-  },
-  {
-    id: "t-glass",
-    name: "Glass Court",
-    eyebrow: "Hess discipline · court-craft",
-    glyph: "◈",
-    color: "#3e6db5",
-    summary: "Saren's school — politics, glass, audience. A discipline of standing very still in moving rooms.",
-    assignedChars: ["saren", "mara"],
-    review: 1,
-    constellation: "Glass Crown",
-    nodes: [
-      { id: "g1", name: "Audience-Calm",  type: "passive",  tier: 1, x: 50, y: 78, summary: "The room slows when you are still.", effect: "+2 to all social rolls in formal settings.", cost: "Free", requires: [], unlocked: true, chars: 2 },
-      { id: "g2", name: "Glass-Speak",    type: "active",   tier: 2, x: 32, y: 56, summary: "Speak in such a way that you cannot quite be heard wrong.", effect: "Reframe any sentence — once per scene.", cost: "1 patience", requires: ["g1"], unlocked: true, chars: 2 },
-      { id: "g3", name: "Court-Step",     type: "passive",  tier: 2, x: 68, y: 56, summary: "Walk the court without disturbing it.", effect: "+3 stealth in inhabited buildings.", cost: "Free", requires: ["g1"], unlocked: true, chars: 1 },
-      { id: "g4", name: "Reliquary",      type: "triggered",tier: 3, x: 50, y: 36, summary: "Hold the Glass Reliquary; cannot be lied to.", effect: "While held, sense untruth.", cost: "Held in hand", requires: ["g2","g3"], unlocked: false, chars: 1, upgrade: true },
-      { id: "g5", name: "Throne-Form",    type: "one-time", tier: 4, x: 50, y: 18, summary: "Sit the Glass Throne once, by leave of Hess.", effect: "Unlock one decree per book.", cost: "Royal leave", requires: ["g4"], unlocked: false, chars: 0 },
-    ],
-  },
-  {
-    id: "t-salt",
-    name: "Order of Salt",
-    eyebrow: "Coastal religious order",
-    glyph: "❋",
-    color: "#a8553f",
-    summary: "Brec's old discipline. Defends the coast against the wraiths. Less mystical, more drill.",
-    assignedChars: ["brec"],
-    review: 2,
-    constellation: "Watchhouse",
-    nodes: [
-      { id: "s1", name: "Watchstand",       type: "passive",  tier: 1, x: 50, y: 76, summary: "Trained to stand watch — no skill check for fatigue.", effect: "Ignore one fatigue penalty.", cost: "Free", requires: [], unlocked: true,  chars: 1 },
-      { id: "s2", name: "Salt-Volley",      type: "active",   tier: 2, x: 30, y: 56, summary: "A coordinated thrown-salt volley.", effect: "Disrupt one Wraith for 1 round.", cost: "Group of 3+", requires: ["s1"], unlocked: true,  chars: 1 },
-      { id: "s3", name: "Stockade Discipline", type: "passive", tier: 2, x: 70, y: 56, summary: "Bowmen on the stockade.", effect: "+1 ranged attack from wood positions.", cost: "Free", requires: ["s1"], unlocked: false, chars: 0 },
-      { id: "s4", name: "Brec's Salute",    type: "triggered",tier: 3, x: 50, y: 32, summary: "The Captain's signal — every Salt-Order soldier in earshot responds.", effect: "Rally allies within 30ft.", cost: "1/day", requires: ["s2","s3"], unlocked: false, chars: 0, review: true },
-    ],
-  },
-];
+const buildSTContext = () => {
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  const ctx = { skills: new Map(), trees: [], cast: {}, castList: [], classes: [], stats: new Map(), abilities: new Map(), queue: [], occByEntity: new Map(), chapterNumById: new Map() };
+  if (!B) return ctx;
+  for (const e of (B.EntityService?.listSync?.("skills") || [])) {
+    if (e && e.status !== "deleted") ctx.skills.set(e.id, e);
+  }
+  ctx.trees = (B.SkillTreeService?.loadSync?.().trees || []);
+  for (const e of (B.EntityService?.listSync?.("cast") || [])) {
+    if (!e || e.status === "deleted") continue;
+    const c = {
+      id: e.id, name: e.name || "Unnamed",
+      initials: e.glyphChar || _stInitials(e.name),
+      color: (e.data && e.data.color) || ST_COLORS[_stHash(e.id) % ST_COLORS.length],
+      role: (e.data && e.data.role) || "",
+    };
+    ctx.cast[c.id] = c;
+    ctx.castList.push(c);
+  }
+  ctx.classes = (B.EntityService?.listSync?.("classes") || []).filter((e) => e && e.status !== "deleted");
+  for (const e of (B.EntityService?.listSync?.("stats") || [])) if (e && e.status !== "deleted") ctx.stats.set(e.id, e);
+  for (const e of (B.EntityService?.listSync?.("abilities") || [])) if (e && e.status !== "deleted") ctx.abilities.set(e.id, e);
+  ctx.queue = (B.ReviewService?.listSync?.("skills") || []).filter((q) => q.status === "pending");
+  try {
+    const chState = B.ManuscriptChapterService?.loadSync?.() || {};
+    (chState.chapters || []).filter((c) => !c.reserved).forEach((c, i) => ctx.chapterNumById.set(c.id, c.num || i + 1));
+  } catch (_e) {}
+  try {
+    for (const o of (B.OccurrenceService?.listAllSync?.() || [])) {
+      if (!o || !o.entityId || !ctx.skills.has(o.entityId)) continue;
+      const list = ctx.occByEntity.get(o.entityId) || [];
+      list.push(o);
+      ctx.occByEntity.set(o.entityId, list);
+    }
+  } catch (_e) {}
+  return ctx;
+};
 
-const SKILL_ORPHANS = [
-  { id: "o1", name: "Knife-Talker", source: "Ch. 3 · p. 88", suggestion: "The Augur",   reason: "Cliff-line magic. Used by Aelinor near the cliffs."           },
-  { id: "o2", name: "Pale Salute",   source: "Ch. 5 · p. 134", suggestion: "Order of Salt", reason: "Watch-discipline gesture; appears among Brec's soldiers." },
-  { id: "o3", name: "Audience-Hush", source: "Ch. 7 · p. 211", suggestion: "Glass Court",   reason: "Court ability — Mara performs it on entry."              },
-];
+// Tier: explicit layout/tier field wins; otherwise derived from the
+// star's height on the canvas (lower = earlier tier), matching the
+// designed vertical tiering.
+const _stTierOf = (pos, d) => {
+  const t = Number((pos && pos.tier) ?? d.tier);
+  if (t >= 1 && t <= 4) return Math.round(t);
+  const y = Number(pos && pos.y);
+  if (!isFinite(y)) return 1;
+  return y >= 68 ? 1 : y >= 48 ? 2 : y >= 30 ? 3 : 4;
+};
 
-const SKILL_DRAFTS = [
-  { id: "d1", name: "Cliff-Catch",     tree: "t-augur", tier: 2, status: "draft", note: "Catch yourself one second of falling — 1/day." },
-  { id: "d2", name: "Glass-Step",      tree: "t-glass", tier: 3, status: "draft", note: "Step through any threshold inside Glass Court." },
-  { id: "d3", name: "Tide-Listener",   tree: "t-augur", tier: 3, status: "draft", note: "Hear the next tide three nights ahead." },
-];
+// Map one persisted tree onto the designed constellation shape.
+const liveTreeToView = (tree, ctx) => {
+  const color = tree.color || ST_COLORS[_stHash(tree.id) % ST_COLORS.length];
+  const glyph = tree.glyph || ST_GLYPHS[_stHash(tree.id) % ST_GLYPHS.length];
+  const layout = tree.layout || {};
+  const nodeIds = (tree.nodeIds || []).filter((id) => ctx.skills.has(id));
+  const queueNames = new Set(ctx.queue.map((q) => String(q.name || "").toLowerCase()));
+  const nodes = nodeIds.map((id, i) => {
+    const skill = ctx.skills.get(id);
+    const d = skill.data || {};
+    const pos = layout[id] || { x: 18 + (i * 16) % 64, y: 75 - (i % 4) * 16 };
+    const requires = (tree.edges || []).filter((e) => e.to === id && nodeIds.includes(e.from)).map((e) => e.from);
+    const bearerIds = _stIds(d.learnedBy || d.bearers).filter((cid) => ctx.cast[cid]);
+    return {
+      id,
+      name: skill.name || "Untitled skill",
+      type: d.skillType || "active",
+      tier: _stTierOf(pos, d),
+      x: Number(pos.x) || 0,
+      y: Number(pos.y) || 0,
+      group: pos.group || null,
+      summary: skill.summary || d.summary || "",
+      effect: d.effect || "",
+      cost: d.cost || "",
+      requires,
+      unlocked: !!pos.unlocked,
+      bearerIds,
+      chars: bearerIds.length,
+      upgrade: !!d.upgrade || (tree.edges || []).some((e) => e.to === id && e.kind === "upgrade"),
+      review: queueNames.has(String(skill.name || "").toLowerCase()),
+      linkedStats: _stIds(d.linkedStats).map((sid) => ctx.stats.get(sid)?.name).filter(Boolean),
+      linkedAbilities: _stIds(d.linkedAbilities).map((aid) => ctx.abilities.get(aid)?.name).filter(Boolean),
+      sourceQuote: typeof d.sourceQuote === "string" ? d.sourceQuote : "",
+    };
+  });
+  return {
+    id: tree.id,
+    name: tree.name || "Untitled tree",
+    eyebrow: tree.description || (nodes.length + " skills"),
+    glyph, color,
+    summary: tree.description || "",
+    assignedChars: (tree.assignedCast || []).filter((cid) => ctx.cast[cid]),
+    assignedClasses: (tree.assignedClasses || []),
+    review: 0, // filled by the caller via suggestTreeFor
+    constellation: tree.constellation || tree.name || "—",
+    nodes,
+    raw: tree,
+  };
+};
 
-const SKILL_REVIEW = [
-  { id: "r1", lvl: "strong",    name: "Augur-Mark",      tree: "t-augur", action: "Confirm trigger condition", excerpt: "…the wraith's first stroke turned aside without contact…", cite: "Ch. 6 · p. 184" },
-  { id: "r2", lvl: "uncertain", name: "Glass-Step (new)",tree: "t-glass", action: "Add to tree?",              excerpt: "…and she was on the other side without a step between…",  cite: "Ch. 7 · p. 207" },
-  { id: "r3", lvl: "weak",      name: "Throne-Form",     tree: "t-glass", action: "Possible contradiction",    excerpt: "…no one but the queen-mother had ever sat it…",           cite: "Ch. 7 · p. 218" },
-  { id: "r4", lvl: "strong",    name: "Salt-Volley",     tree: "t-salt",  action: "Update participant count",  excerpt: "…three of the salt-men cast at once and the wraith stopped…", cite: "Ch. 6 · p. 191" },
-];
+// Token-overlap suggestion: which tree does an unplaced skill belong to?
+const suggestTreeFor = (text, views) => {
+  const tokens = String(text || "").toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
+  if (!tokens.length || !views.length) return views[0] || null;
+  let best = null, bestScore = 0;
+  for (const v of views) {
+    const hay = (v.name + " " + v.summary + " " + v.eyebrow).toLowerCase();
+    const score = tokens.reduce((s, t) => s + (hay.includes(t) ? 1 : 0), 0);
+    if (score > bestScore) { best = v; bestScore = score; }
+  }
+  return best || views[0] || null;
+};
+
+// A free canvas spot that doesn't sit on an existing star.
+const _stFreeSpot = (view) => {
+  const taken = (view?.nodes || []).map((n) => ({ x: n.x, y: n.y }));
+  for (let i = 0; i < 40; i++) {
+    const x = 18 + (i * 17) % 66;
+    const y = 74 - (Math.floor(i / 4) * 15) % 56;
+    if (!taken.some((p) => Math.abs(p.x - x) < 7 && Math.abs(p.y - y) < 7)) return { x, y };
+  }
+  return { x: 50, y: 50 };
+};
+
+const _stViews = (ctx) => {
+  const views = ctx.trees.map((t) => liveTreeToView(t, ctx));
+  for (const q of ctx.queue) {
+    const v = suggestTreeFor((q.name || "") + " " + (q.summary || ""), views);
+    if (v) v.review += 1;
+  }
+  return views;
+};
+
+// Orphans: live skills not placed in any tree (and not dismissed).
+const _stOrphans = (ctx, views) => {
+  const placed = new Set(views.flatMap((v) => v.nodes.map((n) => n.id)));
+  const out = [];
+  for (const skill of ctx.skills.values()) {
+    if (placed.has(skill.id)) continue;
+    const d = skill.data || {};
+    if (d.orphanDismissed) continue;
+    const chNum = skill.chapterId ? ctx.chapterNumById.get(skill.chapterId) : null;
+    out.push({
+      id: skill.id,
+      name: skill.name || "Untitled skill",
+      source: chNum ? "Ch. " + chNum : "Unplaced",
+      suggestionTree: suggestTreeFor((skill.name || "") + " " + (skill.summary || ""), views),
+      reason: skill.summary || (skill.data && skill.data.summary) || "Not yet placed in a constellation.",
+    });
+  }
+  return out;
+};
 
 // ---------------------------------------------------------------------
 // Local key/value row helper. (Babel scripts don't share scope so
@@ -156,23 +246,55 @@ const SkillTreeMini = ({ tree, selectedNodeId, onSelectNode }) => {
 };
 
 // ---------------------------------------------------------------------
+// Small inline picker — designed-chip list used by the Assign…/Merge
+// affordances in the side panel.
+// ---------------------------------------------------------------------
+const STInlinePicker = ({ items, onPick, emptyLabel }) => (
+  <div className="stp__picker" data-ui="STInlinePicker">
+    {items.length === 0 && <div className="stp__picker-empty">{emptyLabel || "— nothing available —"}</div>}
+    {items.map((it) => (
+      <button key={it.id} className="stp__char" style={{ "--c": it.color || "var(--accent)" }}
+              onClick={() => onPick(it)}>
+        {it.initials && <span className="stp__char-avatar">{it.initials}</span>}
+        <span>{it.name}</span>
+      </button>
+    ))}
+  </div>
+);
+
+// ---------------------------------------------------------------------
 // SkillTreesSidePanel — body inserted into the docked panel
 // ---------------------------------------------------------------------
-const SkillTreesSidePanel = ({ onOpenEditor }) => {
-  const [selectedTreeId, setSelectedTreeId] = _st_us("t-augur");
-  const [selectedNodeId, setSelectedNodeId] = _st_us("a3");
-  const tree = SKILL_TREES.find((t) => t.id === selectedTreeId) || SKILL_TREES[0];
-  const node = tree.nodes.find((n) => n.id === selectedNodeId) || tree.nodes[0];
+const SkillTreesSidePanel = ({ ctx, views, onOpenEditor }) => {
+  const [selectedTreeId, setSelectedTreeId] = _st_us(null);
+  const [selectedNodeId, setSelectedNodeId] = _st_us(null);
+  const [picker, setPicker] = _st_us(null); // "assign-node" | "assign-tree" | "merge:<orphanId>" | null
+  const B = () => window.LoomwrightBackend;
+
+  const tree = views.find((t) => t.id === selectedTreeId) || views[0] || null;
+  _st_ue(() => {
+    if (!tree) { if (selectedTreeId) setSelectedTreeId(null); return; }
+    if (tree.id !== selectedTreeId) setSelectedTreeId(tree.id);
+  }, [views.length]);
+  const node = tree ? (tree.nodes.find((n) => n.id === selectedNodeId) || tree.nodes[0] || null) : null;
+
+  const createTree = async () => {
+    const s = B()?.SkillTreeService;
+    if (!s) return;
+    const row = await s.addTree({ name: "New skill tree" });
+    if (row?.id) { setSelectedTreeId(row.id); onOpenEditor(row.id); }
+  };
+  const orphans = _st_um(() => _stOrphans(ctx, views), [ctx, views]);
 
   return (
     <div className="stp" data-ui="SkillTreesSidePanel">
       <div className="stp__roster">
         <div className="stp__sech">Trees</div>
         <div className="stp__roster-list">
-          {SKILL_TREES.map((t) => (
+          {views.map((t) => (
             <button key={t.id}
-              className={"stp__roster-row" + (t.id === selectedTreeId ? " is-on" : "")}
-              onClick={() => { setSelectedTreeId(t.id); setSelectedNodeId(t.nodes[0]?.id); }}
+              className={"stp__roster-row" + (tree && t.id === tree.id ? " is-on" : "")}
+              onClick={() => { setSelectedTreeId(t.id); setSelectedNodeId(t.nodes[0]?.id || null); }}
               data-callback="onSelectSkillTree"
               style={{ "--c": t.color }}>
               <span className="stp__roster-glyph">{t.glyph}</span>
@@ -183,14 +305,18 @@ const SkillTreesSidePanel = ({ onOpenEditor }) => {
               {t.review > 0 && <span className="stp__roster-q">{t.review}</span>}
             </button>
           ))}
-          <button className="stp__roster-add" data-callback="onCreateSkillTree"
-                  onClick={onOpenEditor}>
+          {views.length === 0 && (
+            <div className="stp__empty" data-ui="STEmptyRoster">No skill trees yet — chart your first constellation.</div>
+          )}
+          <button className="stp__roster-add" data-callback="onCreateSkillTree" data-testid="st-create-tree"
+                  onClick={createTree}>
             <Icon name="plus" size={11}/>
             <span>Create tree…</span>
           </button>
         </div>
       </div>
 
+      {tree ? (
       <div className="stp__preview">
         <div className="stp__preview-head">
           <span className="stp__preview-glyph" style={{ color: tree.color }}>{tree.glyph}</span>
@@ -198,14 +324,14 @@ const SkillTreesSidePanel = ({ onOpenEditor }) => {
             <div className="stp__preview-name">{tree.name}</div>
             <div className="stp__preview-eyebrow">{tree.eyebrow} · {tree.constellation}</div>
           </div>
-          <button className="stp__preview-edit" onClick={onOpenEditor} data-callback="onOpenSkillTreeEditor">
+          <button className="stp__preview-edit" onClick={() => onOpenEditor(tree.id)} data-callback="onOpenSkillTreeEditor">
             <Icon name="expand" size={11}/>
             <span>Open editor</span>
           </button>
         </div>
 
         <div className="stp__mini">
-          <SkillTreeMini tree={tree} selectedNodeId={selectedNodeId} onSelectNode={setSelectedNodeId}/>
+          <SkillTreeMini tree={tree} selectedNodeId={node?.id} onSelectNode={setSelectedNodeId}/>
           <div className="stp__mini-foot">
             <span>{tree.nodes.length} skills</span>
             <span>·</span>
@@ -215,6 +341,7 @@ const SkillTreesSidePanel = ({ onOpenEditor }) => {
           </div>
         </div>
 
+        {node ? (
         <div className="stp__node-card" style={{ "--c": tree.color }}>
           <div className="stp__node-head">
             <span className="stp__node-tier">T{node.tier}</span>
@@ -223,47 +350,85 @@ const SkillTreesSidePanel = ({ onOpenEditor }) => {
           </div>
           <p className="stp__node-sum">{node.summary}</p>
           <div className="stp__node-rows">
-            <STRow k="Effect" v={node.effect}/>
-            <STRow k="Cost"   v={node.cost}/>
+            {node.effect && <STRow k="Effect" v={node.effect}/>}
+            {node.cost && <STRow k="Cost" v={node.cost}/>}
             {node.requires.length > 0 && (
               <STRow k="Requires" v={node.requires.map((r) => tree.nodes.find((x) => x.id === r)?.name).filter(Boolean).join(" · ")}/>
             )}
           </div>
           <div className="stp__node-actions">
-            <button data-callback="onAssignSkillToCharacter">Assign…</button>
-            <button data-callback="onMarkSkillUnlocked">{node.unlocked ? "Lock" : "Unlock"}</button>
-            <button data-callback="onOpenSkillTreeEditor" onClick={onOpenEditor}>Edit in canvas</button>
+            <button data-callback="onAssignSkillToCharacter"
+                    onClick={() => setPicker(picker === "assign-node" ? null : "assign-node")}>Assign…</button>
+            <button data-callback="onMarkSkillUnlocked" data-testid="stp-toggle-lock"
+                    onClick={async () => { await B()?.SkillTreeService?.setNodeUnlocked(tree.id, node.id, !node.unlocked); }}>
+              {node.unlocked ? "Lock" : "Unlock"}</button>
+            <button data-callback="onOpenSkillTreeEditor" onClick={() => onOpenEditor(tree.id)}>Edit in canvas</button>
           </div>
+          {picker === "assign-node" && (
+            <STInlinePicker
+              items={ctx.castList.filter((c) => !node.bearerIds.includes(c.id))}
+              emptyLabel="No unassigned characters."
+              onPick={async (c) => {
+                const skill = ctx.skills.get(node.id);
+                const d = { ...((skill && skill.data) || {}) };
+                const list = Array.isArray(d.learnedBy) ? [...d.learnedBy] : [];
+                list.push({ id: c.id, name: c.name, type: "cast" });
+                d.learnedBy = list;
+                await B()?.EntityService?.update("skills", node.id, { data: d });
+                await B()?.SkillTreeService?.assignCast(tree.id, c.id);
+                setPicker(null);
+                _stNotice(c.name + " learned " + node.name + ".");
+              }}/>
+          )}
         </div>
+        ) : (
+          <div className="stp__empty">No skills in this tree yet — open the editor and place your first star.</div>
+        )}
 
         <div className="stp__chars">
           <div className="stp__sech">Assigned to</div>
           <div className="stp__chars-list">
             {tree.assignedChars.map((cid) => {
-              const c = (window.ATLAS_CAST || []).find((x) => x.id === cid);
+              const c = ctx.cast[cid];
               if (!c) return null;
               return (
                 <button key={cid} className="stp__char"
                         data-callback="onOpenCharacterDossier"
+                        onClick={() => {
+                          _stDispatch("lw:open-panel", { kind: "cast" });
+                          _stDispatch("lw:open-cast-member", { entityId: cid });
+                        }}
                         style={{ "--c": c.color }}>
                   <span className="stp__char-avatar">{c.initials}</span>
                   <span>{c.name}</span>
                 </button>
               );
             })}
-            <button className="stp__char stp__char--add" data-callback="onAssignSkillTreeToCharacter">
+            <button className="stp__char stp__char--add" data-callback="onAssignSkillTreeToCharacter"
+                    onClick={() => setPicker(picker === "assign-tree" ? null : "assign-tree")}>
               <Icon name="plus" size={10}/><span>Assign…</span>
             </button>
           </div>
+          {picker === "assign-tree" && (
+            <STInlinePicker
+              items={ctx.castList.filter((c) => !tree.assignedChars.includes(c.id))}
+              emptyLabel="Everyone already bears this tree."
+              onPick={async (c) => {
+                await B()?.SkillTreeService?.assignCast(tree.id, c.id);
+                setPicker(null);
+                _stNotice(c.name + " now bears " + tree.name + ".");
+              }}/>
+          )}
         </div>
 
         <div className="stp__orphans">
           <div className="stp__sech">
             Orphan skills
-            <span className="stp__sech-n">{SKILL_ORPHANS.length}</span>
+            <span className="stp__sech-n">{orphans.length}</span>
           </div>
           <div className="stp__orphan-list">
-            {SKILL_ORPHANS.map((o) => (
+            {orphans.length === 0 && <div className="stp__empty">No orphan skills — every skill has a constellation.</div>}
+            {orphans.map((o) => (
               <div key={o.id} className="stp__orphan">
                 <div className="stp__orphan-head">
                   <span className="stp__orphan-name">{o.name}</span>
@@ -271,28 +436,150 @@ const SkillTreesSidePanel = ({ onOpenEditor }) => {
                 </div>
                 <div className="stp__orphan-reason">{o.reason}</div>
                 <div className="stp__orphan-actions">
-                  <button data-callback="onAcceptDraftSkillNode">→ {o.suggestion}</button>
-                  <button data-callback="onMergeDraftSkillNode">Merge</button>
-                  <button data-callback="onCreateSkillTree">New tree</button>
-                  <button data-callback="onDenyDraftSkillNode" className="stp__orphan-deny">Dismiss</button>
+                  {o.suggestionTree && (
+                    <button data-callback="onAcceptDraftSkillNode"
+                            onClick={async () => {
+                              await B()?.SkillTreeService?.addNode(o.suggestionTree.id, o.id, _stFreeSpot(o.suggestionTree));
+                              _stNotice(o.name + " placed in " + o.suggestionTree.name + ".");
+                            }}>→ {o.suggestionTree.name}</button>
+                  )}
+                  <button data-callback="onMergeDraftSkillNode"
+                          onClick={() => setPicker(picker === "merge:" + o.id ? null : "merge:" + o.id)}>Merge</button>
+                  <button data-callback="onCreateSkillTree"
+                          onClick={async () => {
+                            const s = B()?.SkillTreeService;
+                            if (!s) return;
+                            const row = await s.addTree({ name: o.name + " path" });
+                            if (row?.id) await s.addNode(row.id, o.id, { x: 50, y: 76 });
+                            _stNotice("New tree charted around " + o.name + ".");
+                          }}>New tree</button>
+                  <button data-callback="onDenyDraftSkillNode" className="stp__orphan-deny"
+                          onClick={async () => {
+                            const skill = ctx.skills.get(o.id);
+                            await B()?.EntityService?.update("skills", o.id, { data: { ...((skill && skill.data) || {}), orphanDismissed: true } });
+                          }}>Dismiss</button>
                 </div>
+                {picker === "merge:" + o.id && (
+                  <STInlinePicker
+                    items={[...ctx.skills.values()].filter((s) => s.id !== o.id).map((s) => ({ id: s.id, name: s.name }))}
+                    emptyLabel="No other skills to merge into."
+                    onPick={async (target) => {
+                      await B()?.LinkService?.mergeEntities(target.id, "skills", [o.id]);
+                      setPicker(null);
+                      _stNotice("Merged " + o.name + " into " + target.name + ".");
+                      _stDispatch("lw:entity-store-updated", {});
+                    }}/>
+                )}
               </div>
             ))}
           </div>
         </div>
       </div>
+      ) : (
+        <div className="stp__preview">
+          <div className="stp__empty stp__empty--lg" data-ui="STEmptyPreview">
+            No constellation yet. Create a tree and start placing skills — extraction will also propose stars from your chapters.
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 // ---------------------------------------------------------------------
-// SkillTreeCanvas — full constellation map, scaled to fit the surface.
-// Nodes positioned by (x, y) in 0–100 percent space.
+// SkillTreeCanvas — full constellation map with live editing.
+// Nodes positioned by (x, y) in 0–100 percent space. Supports the
+// editor tools (select/pan/add/connect/branch/group), wheel zoom,
+// node dragging, and layer visibility — all persisted by the caller.
 // ---------------------------------------------------------------------
-const SkillTreeCanvas = ({ tree, selectedNodeId, onSelectNode, showLabels = true }) => {
-  const W = 1000, H = 700;
+const ST_CANVAS_W = 1000, ST_CANVAS_H = 700;
+
+const SkillTreeCanvas = ({
+  tree, selectedNodeId, onSelectNode, showLabels = true,
+  tool = "select", layers = {}, armedNodeId = null,
+  onMoveNode, onCanvasPoint, onNodeTap,
+}) => {
+  const W = ST_CANVAS_W, H = ST_CANVAS_H;
+  const svgRef = _st_ur(null);
+  const [view, setView] = _st_us({ x: 0, y: 0, k: 1 });
+  const dragRef = _st_ur(null); // {kind:"node"|"pan", id, startX, startY, moved}
+  const [dragPos, setDragPos] = _st_us(null); // {id, x, y} optimistic
+
+  const show = (k) => layers[k] !== false;
+  const visibleNodes = tree.nodes.filter((n) => (n.unlocked ? show("unlocked") : show("locked")));
+
+  // "Fit view" tool resets pan/zoom the moment it's picked.
+  _st_ue(() => { if (tool === "fit") setView({ x: 0, y: 0, k: 1 }); }, [tool]);
+
+  // Convert a pointer event to 0–100 canvas space (compensating the
+  // xMidYMid letterbox and the pan/zoom transform).
+  const toPct = (evt) => {
+    const rect = svgRef.current.getBoundingClientRect();
+    const scale = Math.min(rect.width / W, rect.height / H) || 1;
+    const ox = (rect.width - W * scale) / 2;
+    const oy = (rect.height - H * scale) / 2;
+    const sx = (evt.clientX - rect.left - ox) / scale;
+    const sy = (evt.clientY - rect.top - oy) / scale;
+    return {
+      x: Math.max(0, Math.min(100, ((sx - view.x) / view.k / W) * 100)),
+      y: Math.max(0, Math.min(100, ((sy - view.y) / view.k / H) * 100)),
+    };
+  };
+
+  const onWheel = (e) => {
+    e.preventDefault();
+    setView((v) => ({ ...v, k: Math.max(0.5, Math.min(2.5, v.k * (e.deltaY < 0 ? 1.1 : 0.9))) }));
+  };
+  const onPointerDownBg = (e) => {
+    if (e.target.closest && e.target.closest("[data-st-node]")) return;
+    if (tool === "pan" || e.button === 1) {
+      dragRef.current = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: view.x, oy: view.y };
+      svgRef.current.setPointerCapture?.(e.pointerId);
+      return;
+    }
+    if (tool === "add-node" || tool === "branch") {
+      onCanvasPoint && onCanvasPoint(toPct(e), tool);
+    }
+  };
+  const onPointerDownNode = (e, n) => {
+    e.stopPropagation();
+    if (tool === "select") {
+      dragRef.current = { kind: "node", id: n.id, moved: false };
+      svgRef.current.setPointerCapture?.(e.pointerId);
+    } else {
+      onNodeTap && onNodeTap(n, tool);
+    }
+  };
+  const onPointerMove = (e) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (d.kind === "pan") {
+      setView((v) => ({ ...v, x: d.ox + (e.clientX - d.startX), y: d.oy + (e.clientY - d.startY) }));
+    } else if (d.kind === "node") {
+      const p = toPct(e);
+      d.moved = true;
+      setDragPos({ id: d.id, x: p.x, y: p.y });
+    }
+  };
+  const onPointerUp = () => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (d && d.kind === "node") {
+      if (d.moved && dragPos && dragPos.id === d.id) {
+        onMoveNode && onMoveNode(d.id, dragPos.x, dragPos.y);
+      } else {
+        onSelectNode && onSelectNode(d.id);
+      }
+    }
+    setDragPos(null);
+  };
+  const posOf = (n) => (dragPos && dragPos.id === n.id) ? dragPos : n;
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="stc__svg" preserveAspectRatio="xMidYMid meet">
+    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="stc__svg" preserveAspectRatio="xMidYMid meet"
+         data-tool={tool}
+         onWheel={onWheel} onPointerDown={onPointerDownBg}
+         onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
       <defs>
         <radialGradient id={"stc-vault-" + tree.id} cx="50%" cy="55%" r="65%">
           <stop offset="0%"  stopColor="#1a1814" stopOpacity="0.04"/>
@@ -306,139 +593,326 @@ const SkillTreeCanvas = ({ tree, selectedNodeId, onSelectNode, showLabels = true
       <rect x="0" y="0" width={W} height={H} fill={"url(#stc-vault-" + tree.id + ")"}/>
       <rect x="0" y="0" width={W} height={H} fill="url(#stc-grain)" opacity="0.5"/>
 
-      {/* Zodiac arcs (faint background) */}
-      <g opacity="0.32">
-        {[0, 1, 2, 3].map((i) => (
-          <circle key={i} cx={W / 2} cy={H * 0.58} r={120 + i * 80}
-                  fill="none" stroke={tree.color} strokeOpacity="0.50" strokeWidth="0.5"
-                  strokeDasharray={i === 0 ? "2 5" : i === 1 ? "1 4" : "0.5 3"}/>
-        ))}
-      </g>
+      <g transform={`translate(${view.x}, ${view.y}) scale(${view.k})`}>
+        {/* Zodiac arcs (faint background) */}
+        <g opacity="0.32">
+          {[0, 1, 2, 3].map((i) => (
+            <circle key={i} cx={W / 2} cy={H * 0.58} r={120 + i * 80}
+                    fill="none" stroke={tree.color} strokeOpacity="0.50" strokeWidth="0.5"
+                    strokeDasharray={i === 0 ? "2 5" : i === 1 ? "1 4" : "0.5 3"}/>
+          ))}
+        </g>
 
-      {/* Tier rings labels */}
-      <g opacity="0.7" fontFamily="var(--font-display)">
-        {[1, 2, 3, 4].map((t) => {
-          const y = H - 80 - (t - 1) * 145;
-          return (
-            <g key={t}>
-              <line x1={40} y1={y} x2={W - 40} y2={y} stroke="rgba(74,56,28,0.18)" strokeWidth="0.5" strokeDasharray="2 6"/>
-              <text x={48} y={y - 6} fontSize="11" fill="rgba(74,56,28,0.55)" letterSpacing="0.15em">TIER {t}</text>
-            </g>
-          );
-        })}
-      </g>
-
-      {/* Connection lines */}
-      <g>
-        {tree.nodes.map((n) =>
-          n.requires.map((rid) => {
-            const r = tree.nodes.find((x) => x.id === rid);
-            if (!r) return null;
-            const x1 = (r.x / 100) * W, y1 = (r.y / 100) * H;
-            const x2 = (n.x / 100) * W, y2 = (n.y / 100) * H;
-            const mx = (x1 + x2) / 2;
-            const my = (y1 + y2) / 2 - 14;
+        {/* Tier rings labels */}
+        <g opacity="0.7" fontFamily="var(--font-display)">
+          {[1, 2, 3, 4].map((t) => {
+            const y = H - 80 - (t - 1) * 145;
             return (
-              <g key={n.id + rid}>
-                <path d={`M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`}
-                      fill="none" stroke="#3a2c12" strokeOpacity={n.unlocked ? 0.55 : 0.30}
-                      strokeWidth={n.unlocked ? 1.2 : 0.8}
-                      strokeDasharray={n.unlocked ? "0" : "3 4"}/>
+              <g key={t}>
+                <line x1={40} y1={y} x2={W - 40} y2={y} stroke="rgba(74,56,28,0.18)" strokeWidth="0.5" strokeDasharray="2 6"/>
+                <text x={48} y={y - 6} fontSize="11" fill="rgba(74,56,28,0.55)" letterSpacing="0.15em">TIER {t}</text>
               </g>
             );
-          }))}
-      </g>
+          })}
+        </g>
 
-      {/* Nodes (stars) */}
-      <g>
-        {tree.nodes.map((n) => {
-          const x = (n.x / 100) * W;
-          const y = (n.y / 100) * H;
-          const r = n.tier === 1 ? 13 : n.tier === 2 ? 10 : n.tier === 3 ? 8 : 7;
-          const isSelected = n.id === selectedNodeId;
-          return (
-            <g key={n.id} transform={`translate(${x}, ${y})`}
-               onClick={() => onSelectNode(n.id)}
-               style={{ cursor: "pointer" }}>
-              {/* Halo */}
-              {isSelected && (
-                <>
-                  <circle r={r + 14} fill={tree.color} opacity="0.10"/>
-                  <circle r={r + 6}  fill="none" stroke={tree.color} strokeWidth="1.5"/>
-                </>
-              )}
-              {n.upgrade && <circle r={r + 4} fill="none" stroke="#c98a2c" strokeWidth="1" strokeDasharray="2 2"/>}
-              {n.review && <circle r={r + 8} fill="none" stroke="#c98a2c" strokeWidth="0.8" strokeDasharray="1 3"/>}
+        {/* Connection lines */}
+        {show("connections") && (
+          <g>
+            {visibleNodes.map((n) =>
+              n.requires.map((rid) => {
+                const r = visibleNodes.find((x) => x.id === rid);
+                if (!r) return null;
+                const pn = posOf(n), pr = posOf(r);
+                const x1 = (pr.x / 100) * W, y1 = (pr.y / 100) * H;
+                const x2 = (pn.x / 100) * W, y2 = (pn.y / 100) * H;
+                const mx = (x1 + x2) / 2;
+                const my = (y1 + y2) / 2 - 14;
+                return (
+                  <g key={n.id + rid}>
+                    <path d={`M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`}
+                          fill="none" stroke="#3a2c12" strokeOpacity={n.unlocked ? 0.55 : 0.30}
+                          strokeWidth={n.unlocked ? 1.2 : 0.8}
+                          strokeDasharray={n.unlocked ? "0" : "3 4"}/>
+                  </g>
+                );
+              }))}
+          </g>
+        )}
 
-              {/* Star body */}
-              <circle r={r + 2} fill="rgba(255,248,230,0.95)" stroke={tree.color} strokeWidth="0.8"/>
-              <circle r={r} fill={n.unlocked ? tree.color : "rgba(255,248,230,0.95)"}
-                            stroke={tree.color} strokeWidth={n.unlocked ? 0 : 1.5}/>
-              {/* Inner glow / type glyph */}
-              {n.unlocked && <circle r={r * 0.5} fill="#fff" opacity="0.5"/>}
-              <text textAnchor="middle" dominantBaseline="central"
-                    fontFamily="var(--font-display)" fontWeight="700"
-                    fontSize={n.tier === 1 ? 14 : 11}
-                    fill={n.unlocked ? "#fff" : tree.color}>
-                {n.type === "active" ? "✦" : n.type === "passive" ? "◐" : n.type === "triggered" ? "⚡" : n.type === "one-time" ? "✷" : "◇"}
-              </text>
+        {/* Nodes (stars) */}
+        <g>
+          {visibleNodes.map((n) => {
+            const p = posOf(n);
+            const x = (p.x / 100) * W;
+            const y = (p.y / 100) * H;
+            const r = n.tier === 1 ? 13 : n.tier === 2 ? 10 : n.tier === 3 ? 8 : 7;
+            const isSelected = n.id === selectedNodeId;
+            const isArmed = n.id === armedNodeId;
+            return (
+              <g key={n.id} transform={`translate(${x}, ${y})`} data-st-node={n.id}
+                 onPointerDown={(e) => onPointerDownNode(e, n)}
+                 style={{ cursor: tool === "select" ? "grab" : "pointer" }}>
+                {/* Halo */}
+                {isSelected && (
+                  <>
+                    <circle r={r + 14} fill={tree.color} opacity="0.10"/>
+                    <circle r={r + 6}  fill="none" stroke={tree.color} strokeWidth="1.5"/>
+                  </>
+                )}
+                {isArmed && <circle r={r + 10} fill="none" stroke={tree.color} strokeWidth="1.2" strokeDasharray="4 3"/>}
+                {n.group && <circle r={r + 12} fill="none" stroke={tree.color} strokeOpacity="0.45" strokeWidth="0.8" strokeDasharray="6 4"/>}
+                {show("upgrade") && n.upgrade && <circle r={r + 4} fill="none" stroke="#c98a2c" strokeWidth="1" strokeDasharray="2 2"/>}
+                {show("review") && n.review && <circle r={r + 8} fill="none" stroke="#c98a2c" strokeWidth="0.8" strokeDasharray="1 3"/>}
 
-              {/* Label */}
-              {showLabels && (
-                <g transform={`translate(0, ${r + 18})`}>
-                  <text textAnchor="middle"
-                        fontFamily="var(--font-display)" fontWeight={n.unlocked ? 600 : 500}
-                        fontSize="12" fill={n.unlocked ? "#2a2218" : "#76684c"}>
-                    {n.name}
-                  </text>
-                  {n.chars > 0 && (
-                    <text y="14" textAnchor="middle"
-                          fontFamily="var(--font-sans)" fontSize="9.5" fill="rgba(74,56,28,0.55)"
-                          letterSpacing="0.05em">
-                      {n.chars} {n.chars === 1 ? "bearer" : "bearers"}
+                {/* Star body */}
+                <circle r={r + 2} fill="rgba(255,248,230,0.95)" stroke={tree.color} strokeWidth="0.8"/>
+                <circle r={r} fill={n.unlocked ? tree.color : "rgba(255,248,230,0.95)"}
+                              stroke={tree.color} strokeWidth={n.unlocked ? 0 : 1.5}/>
+                {/* Inner glow / type glyph */}
+                {n.unlocked && <circle r={r * 0.5} fill="#fff" opacity="0.5"/>}
+                <text textAnchor="middle" dominantBaseline="central"
+                      fontFamily="var(--font-display)" fontWeight="700"
+                      fontSize={n.tier === 1 ? 14 : 11}
+                      fill={n.unlocked ? "#fff" : tree.color}>
+                  {n.type === "active" ? "✦" : n.type === "passive" ? "◐" : n.type === "triggered" ? "⚡" : n.type === "one-time" ? "✷" : "◇"}
+                </text>
+
+                {/* Label */}
+                {showLabels && (
+                  <g transform={`translate(0, ${r + 18})`}>
+                    <text textAnchor="middle"
+                          fontFamily="var(--font-display)" fontWeight={n.unlocked ? 600 : 500}
+                          fontSize="12" fill={n.unlocked ? "#2a2218" : "#76684c"}>
+                      {n.name}
                     </text>
-                  )}
-                </g>
-              )}
-            </g>
-          );
-        })}
-      </g>
+                    {n.chars > 0 && (
+                      <text y="14" textAnchor="middle"
+                            fontFamily="var(--font-sans)" fontSize="9.5" fill="rgba(74,56,28,0.55)"
+                            letterSpacing="0.05em">
+                        {n.chars} {n.chars === 1 ? "bearer" : "bearers"}
+                      </text>
+                    )}
+                  </g>
+                )}
+              </g>
+            );
+          })}
+        </g>
 
-      {/* Constellation name (faint, centre) */}
-      <text x={W / 2} y={42} textAnchor="middle"
-            fontFamily="var(--font-display)" fontStyle="italic" fontSize="20" fill="rgba(74,56,28,0.45)"
-            letterSpacing="0.06em">
-        ★ {tree.constellation} ★
-      </text>
+        {/* Empty constellation prompt */}
+        {tree.nodes.length === 0 && (
+          <text x={W / 2} y={H / 2} textAnchor="middle"
+                fontFamily="var(--font-display)" fontStyle="italic" fontSize="18"
+                fill="rgba(74,56,28,0.55)">
+            No stars yet — pick “Add node” and tap the sky.
+          </text>
+        )}
+
+        {/* Constellation name (faint, centre) */}
+        <text x={W / 2} y={42} textAnchor="middle"
+              fontFamily="var(--font-display)" fontStyle="italic" fontSize="20" fill="rgba(74,56,28,0.45)"
+              letterSpacing="0.06em">
+          ★ {tree.constellation} ★
+        </text>
+      </g>
     </svg>
   );
 };
 
 // ---------------------------------------------------------------------
+// Tree validation + auto-layout (Validate / Auto-layout strip buttons).
+// ---------------------------------------------------------------------
+const _stValidate = (view) => {
+  const issues = [];
+  const byId = Object.fromEntries(view.nodes.map((n) => [n.id, n]));
+  // Cycle detection over `requires`.
+  const state = {}; // 0 visiting, 1 done
+  const visit = (id, trail) => {
+    if (state[id] === 1) return false;
+    if (state[id] === 0) { issues.push("Cycle through " + trail.map((t) => byId[t]?.name).join(" → ")); return true; }
+    state[id] = 0;
+    for (const r of (byId[id]?.requires || [])) if (byId[r] && visit(r, [...trail, r])) break;
+    state[id] = 1;
+    return false;
+  };
+  for (const n of view.nodes) visit(n.id, [n.id]);
+  // Tier ordering: prerequisites should sit at the same or earlier tier.
+  for (const n of view.nodes) {
+    for (const r of n.requires) {
+      if (byId[r] && byId[r].tier > n.tier) {
+        issues.push(`${n.name} (T${n.tier}) requires higher-tier ${byId[r].name} (T${byId[r].tier})`);
+      }
+    }
+  }
+  // Floating stars (no connections at all, in a tree with edges).
+  if (view.nodes.length > 1) {
+    const connected = new Set(view.nodes.flatMap((n) => [...n.requires, ...(n.requires.length ? [n.id] : [])]));
+    for (const n of view.nodes) {
+      const hasEdge = n.requires.length > 0 || view.nodes.some((x) => x.requires.includes(n.id));
+      if (!hasEdge && connected.size > 0) issues.push(n.name + " floats unconnected");
+    }
+  }
+  return issues;
+};
+
+const _stAutoLayout = async (view) => {
+  const B = window.LoomwrightBackend;
+  const s = B?.SkillTreeService;
+  if (!s || !view.nodes.length) return;
+  const byId = Object.fromEntries(view.nodes.map((n) => [n.id, n]));
+  const depth = {};
+  const calc = (id, seen) => {
+    if (depth[id] != null) return depth[id];
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    const reqs = (byId[id]?.requires || []).filter((r) => byId[r]);
+    depth[id] = reqs.length ? 1 + Math.max(...reqs.map((r) => calc(r, seen))) : 0;
+    return depth[id];
+  };
+  const tiers = { 1: [], 2: [], 3: [], 4: [] };
+  for (const n of view.nodes) {
+    const t = Math.min(4, calc(n.id, new Set()) + 1);
+    tiers[t].push(n);
+  }
+  const Y = { 1: 78, 2: 56, 3: 40, 4: 22 };
+  for (const [t, row] of Object.entries(tiers)) {
+    for (let i = 0; i < row.length; i++) {
+      const x = Math.max(12, Math.min(88, (100 / (row.length + 1)) * (i + 1)));
+      await s.updateNodeLayout(view.id, row[i].id, { x, y: Y[t], tier: Number(t) });
+    }
+  }
+  _stNotice("Constellation re-charted by tier.");
+};
+
+// ---------------------------------------------------------------------
 // SkillTreeEditor — full-screen editor overlay
 // ---------------------------------------------------------------------
-const SkillTreeEditor = ({ onExit }) => {
-  const [activeTreeId, setActiveTreeId] = _st_us("t-augur");
-  const [selectedNodeId, setSelectedNodeId] = _st_us("a3");
+const SkillTreeEditor = ({ ctx, views, initialTreeId, onExit }) => {
+  const [activeTreeId, setActiveTreeId] = _st_us(initialTreeId || null);
+  const [selectedNodeId, setSelectedNodeId] = _st_us(null);
   const [leftTab, setLeftTab] = _st_us("roster");
   const [rightTab, setRightTab] = _st_us("inspector");
   const [showLabels, setShowLabels] = _st_us(true);
   const [activeTool, setActiveTool] = _st_us("select");
+  const [layers, setLayers] = _st_us({ unlocked: true, locked: true, upgrade: true, review: true, connections: true });
+  const [armedNodeId, setArmedNodeId] = _st_us(null);
+  const [draftTreePick, setDraftTreePick] = _st_us({});
+  const promptRef = _st_ur(null);
+  const B = () => window.LoomwrightBackend;
 
-  const tree = SKILL_TREES.find((t) => t.id === activeTreeId);
-  const node = tree.nodes.find((n) => n.id === selectedNodeId) || tree.nodes[0];
+  const tree = views.find((t) => t.id === activeTreeId) || views[0] || null;
+  _st_ue(() => {
+    if (!tree) { if (activeTreeId) setActiveTreeId(null); return; }
+    if (tree.id !== activeTreeId) setActiveTreeId(tree.id);
+  }, [views.length]);
+  const node = tree ? (tree.nodes.find((n) => n.id === selectedNodeId) || tree.nodes[0] || null) : null;
 
-  const TB = ({ icon, label, value, group, onClick }) => (
+  const addStarAt = async (pos, connectFromId) => {
+    const ES = B()?.EntityService, s = B()?.SkillTreeService;
+    if (!ES || !s || !tree) return;
+    const skill = await ES.save("skills", { name: "New skill" }, { status: "active" });
+    await s.addNode(tree.id, skill.id, { x: pos.x, y: pos.y });
+    if (connectFromId) await s.connectNodes(tree.id, connectFromId, skill.id, "leads-to");
+    setSelectedNodeId(skill.id);
+    _stNotice(connectFromId ? "New star branched." : "New star placed — name it in the inspector.");
+  };
+
+  const onCanvasPoint = (pos, tool) => {
+    if (tool === "add-node") addStarAt(pos);
+    if (tool === "branch") {
+      if (!node) { _stNotice("Select a star to branch from first."); return; }
+      addStarAt(pos, node.id);
+    }
+  };
+  const onNodeTap = async (n, tool) => {
+    const s = B()?.SkillTreeService;
+    if (!s || !tree) return;
+    if (tool === "connect" || tool === "prereq" || tool === "upgrade") {
+      if (!armedNodeId) { setArmedNodeId(n.id); _stNotice("Pick the target star."); return; }
+      if (armedNodeId !== n.id) {
+        const kind = tool === "prereq" ? "prereq" : tool === "upgrade" ? "upgrade" : "leads-to";
+        await s.connectNodes(tree.id, armedNodeId, n.id, kind);
+        _stNotice("Stars joined.");
+      }
+      setArmedNodeId(null);
+      return;
+    }
+    if (tool === "group") {
+      const current = (tree.raw.layout || {})[n.id]?.group || null;
+      await s.updateNodeLayout(tree.id, n.id, { group: current ? null : "g1" });
+      return;
+    }
+    setSelectedNodeId(n.id);
+  };
+  const onMoveNode = async (id, x, y) => {
+    const s = B()?.SkillTreeService;
+    if (!s || !tree) return;
+    await s.updateNodePosition(tree.id, id, { x, y });
+  };
+
+  const acceptDraft = async (q) => {
+    const Bk = B();
+    if (!Bk) return;
+    const targetTreeId = draftTreePick[q.id] || tree?.id || null;
+    const payload = (q.payload && q.payload.name) ? { ...q.payload } : { name: q.name, summary: q.summary };
+    if (q.suggestedChanges && Object.keys(q.suggestedChanges).length) {
+      payload.data = { ...(payload.data || {}), ...q.suggestedChanges };
+    }
+    const saved = await Bk.EntityService.save("skills", payload, { status: "active" });
+    const targetView = views.find((v) => v.id === targetTreeId);
+    if (targetTreeId && saved?.id) await Bk.SkillTreeService.addNode(targetTreeId, saved.id, _stFreeSpot(targetView));
+    if (q.candidateId && Bk.OccurrenceService) {
+      try { await Bk.OccurrenceService.linkCandidateToEntity(q.candidateId, saved.id, "skills"); } catch (_e) {}
+    }
+    await Bk.ReviewService.resolve(q.id, "done");
+    _stNotice(targetTreeId ? "Skill accepted into the constellation." : "Skill accepted.");
+    _stDispatch("lw:entity-store-updated", {});
+  };
+  const denyDraft = async (q) => {
+    await B()?.ReviewService?.resolve(q.id, "denied");
+    _stNotice("Skill candidate denied.");
+    _stDispatch("lw:entity-store-updated", {});
+  };
+
+  const TB = ({ icon, label, value, onClick }) => (
     <button
       className={"ste-tb__btn" + (activeTool === value ? " is-active" : "")}
-      onClick={() => { setActiveTool(value); onClick && onClick(); }}
+      onClick={() => { setActiveTool(value); setArmedNodeId(null); onClick && onClick(); }}
       title={label}
     >
       <Icon name={icon} size={12}/>
       <span>{label}</span>
     </button>
   );
+
+  if (!tree) {
+    return (
+      <div className="ste" data-ui="SkillTreeEditor">
+        <div className="ste-tb">
+          <div className="ste-tb__brand"><span>Skill Tree Editor</span></div>
+          <span style={{ flex: 1 }}/>
+          <button className="ste-tb__exit" onClick={onExit} data-callback="onExitSkillTreeEditor">
+            <Icon name="close" size={11}/><span>Exit</span>
+          </button>
+        </div>
+        <div className="ste__body">
+          <div className="ste__canvas">
+            <div className="stp__empty stp__empty--lg" style={{ margin: "auto" }}>
+              No skill trees yet.
+              <button className="stm__add" data-callback="onCreateSkillTree" data-testid="ste-create-first-tree"
+                      onClick={async () => {
+                        const row = await B()?.SkillTreeService?.addTree({ name: "New skill tree" });
+                        if (row?.id) setActiveTreeId(row.id);
+                      }}>
+                <Icon name="plus" size={11}/> Create tree
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="ste" data-ui="SkillTreeEditor">
@@ -463,15 +937,15 @@ const SkillTreeEditor = ({ onExit }) => {
           <TB icon="stack"    label="Group"      value="group"/>
         </div>
         <div className="ste-tb__group">
-          <TB icon="expand"   label="Fit view"   value="fit"/>
+          <TB icon="expand" label="Fit view" value="fit"/>
           <button className={"ste-tb__btn" + (showLabels ? " is-active" : "")} onClick={() => setShowLabels((v) => !v)}>
             <Icon name="paper" size={12}/><span>Labels</span>
           </button>
         </div>
         <span style={{ flex: 1 }}/>
-        <button className="ste-tb__btn ste-tb__btn--queue">
+        <button className="ste-tb__btn ste-tb__btn--queue" onClick={() => setRightTab("queue")}>
           <Icon name="bell" size={12}/><span>Review</span>
-          <span className="ste-tb__badge">{SKILL_REVIEW.length}</span>
+          {ctx.queue.length > 0 && <span className="ste-tb__badge">{ctx.queue.length}</span>}
         </button>
         <button className="ste-tb__exit" onClick={onExit} data-callback="onExitSkillTreeEditor">
           <Icon name="close" size={11}/><span>Exit</span>
@@ -485,6 +959,7 @@ const SkillTreeEditor = ({ onExit }) => {
             {[["roster","Trees","tree"], ["nodes","Nodes","bars"], ["tray","Cast","user"], ["drafts","Drafts","sparkle"], ["layers","Layers","stack"]].map(([id, label, icon]) => (
               <button key={id}
                 className={"ste__tab" + (leftTab === id ? " is-on" : "")}
+                data-testid={"st-tab-" + id}
                 onClick={() => setLeftTab(id)}>
                 <Icon name={icon} size={10}/><span>{label}</span>
               </button>
@@ -493,10 +968,10 @@ const SkillTreeEditor = ({ onExit }) => {
           <div className="ste__rail-body">
             {leftTab === "roster" && (
               <div className="ste-list">
-                {SKILL_TREES.map((t) => (
+                {views.map((t) => (
                   <button key={t.id}
-                    className={"ste-list__row" + (t.id === activeTreeId ? " is-on" : "")}
-                    onClick={() => setActiveTreeId(t.id)}
+                    className={"ste-list__row" + (t.id === tree.id ? " is-on" : "")}
+                    onClick={() => { setActiveTreeId(t.id); setSelectedNodeId(null); }}
                     style={{ "--c": t.color }}>
                     <span className="ste-list__glyph">{t.glyph}</span>
                     <span className="ste-list__main">
@@ -505,7 +980,11 @@ const SkillTreeEditor = ({ onExit }) => {
                     </span>
                   </button>
                 ))}
-                <button className="ste-list__add" data-callback="onCreateSkillTree">
+                <button className="ste-list__add" data-callback="onCreateSkillTree"
+                        onClick={async () => {
+                          const row = await B()?.SkillTreeService?.addTree({ name: "New skill tree" });
+                          if (row?.id) setActiveTreeId(row.id);
+                        }}>
                   <Icon name="plus" size={11}/><span>New tree</span>
                 </button>
               </div>
@@ -514,7 +993,7 @@ const SkillTreeEditor = ({ onExit }) => {
               <div className="ste-list">
                 {tree.nodes.map((n) => (
                   <button key={n.id}
-                    className={"ste-list__row" + (n.id === selectedNodeId ? " is-on" : "")}
+                    className={"ste-list__row" + (n.id === node?.id ? " is-on" : "")}
                     onClick={() => setSelectedNodeId(n.id)}
                     style={{ "--c": tree.color }}>
                     <span className={"ste-list__type ste-list__type--" + n.type}/>
@@ -525,52 +1004,90 @@ const SkillTreeEditor = ({ onExit }) => {
                     {n.review && <span className="ste-list__q">!</span>}
                   </button>
                 ))}
+                {tree.nodes.length === 0 && <div className="ste-list__hint">No stars yet.</div>}
+                <button className="ste-list__add" data-testid="st-add-node"
+                        onClick={() => addStarAt(_stFreeSpot(tree))}>
+                  <Icon name="plus" size={11}/><span>New star</span>
+                </button>
               </div>
             )}
             {leftTab === "tray" && (
               <div className="ste-list">
-                {(window.ATLAS_CAST || []).map((c) => (
-                  <button key={c.id} className="ste-list__row" style={{ "--c": c.color }}>
-                    <span className="ste-list__avatar">{c.initials}</span>
-                    <span className="ste-list__main">
-                      <span className="ste-list__name">{c.name}</span>
-                      <span className="ste-list__sub">{c.role}</span>
-                    </span>
-                  </button>
-                ))}
+                <div className="ste-list__hint">Tap a character to grant them this tree.</div>
+                {ctx.castList.map((c) => {
+                  const on = tree.assignedChars.includes(c.id);
+                  return (
+                    <button key={c.id} className={"ste-list__row" + (on ? " is-on" : "")} style={{ "--c": c.color }}
+                            onClick={async () => {
+                              const s = B()?.SkillTreeService;
+                              if (!s) return;
+                              if (on) await s.unassignCast(tree.id, c.id);
+                              else await s.assignCast(tree.id, c.id);
+                            }}>
+                      <span className="ste-list__avatar">{c.initials}</span>
+                      <span className="ste-list__main">
+                        <span className="ste-list__name">{c.name}{on ? " ✓" : ""}</span>
+                        <span className="ste-list__sub">{c.role}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+                {ctx.castList.length === 0 && <div className="ste-list__hint">No cast yet — create characters first.</div>}
               </div>
             )}
             {leftTab === "drafts" && (
               <div className="ste-list">
-                <div className="ste-list__hint">Type a prompt to generate a starter tree, or accept drafts below.</div>
+                <div className="ste-list__hint">Type a prompt to generate a starter tree, or accept extraction candidates below.</div>
                 <div className="ste-list__prompt">
-                  <input placeholder="Create me a fire mage skill tree…" data-callback="onGenerateDraftSkillTree"/>
-                  <button>Draft</button>
+                  <input placeholder="Create me a fire mage skill tree…" ref={promptRef}/>
+                  <button data-callback="onGenerateDraftSkillTree"
+                          onClick={() => _stDispatch("lw:dispatch-callback", {
+                            name: "onGenerateDraftSkillTree",
+                            detail: { prompt: promptRef.current?.value || "", treeId: tree.id },
+                          })}>Draft</button>
                 </div>
-                {SKILL_DRAFTS.map((d) => (
-                  <div key={d.id} className="ste-list__draft">
+                {ctx.queue.map((q) => (
+                  <div key={q.id} className="ste-list__draft">
                     <div className="ste-list__draft-head">
-                      <span className="ste-list__draft-name">{d.name}</span>
-                      <span className="ste-list__draft-tier">T{d.tier}</span>
+                      <span className="ste-list__draft-name">{q.name}</span>
+                      <span className="ste-list__draft-tier">{Math.round((q.confidence || 0.6) * 100)}%</span>
                     </div>
-                    <div className="ste-list__draft-note">{d.note}</div>
+                    <div className="ste-list__draft-note">{q.sourceQuote || q.summary || q.reason || ""}</div>
+                    <div className="ste-list__draft-tree">
+                      <span>into</span>
+                      <select value={draftTreePick[q.id] || tree.id}
+                              onChange={(e) => setDraftTreePick((m) => ({ ...m, [q.id]: e.target.value }))}>
+                        {views.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                      </select>
+                    </div>
                     <div className="ste-list__draft-actions">
-                      <button data-callback="onAcceptDraftSkillNode">Accept</button>
-                      <button data-callback="onEditDraftSkillNode">Edit</button>
-                      <button data-callback="onMergeDraftSkillNode">Merge</button>
-                      <button data-callback="onDenyDraftSkillNode">Deny</button>
+                      <button data-callback="onAcceptSkillQueueItem" data-testid={"st-draft-accept-" + q.id}
+                              onClick={() => acceptDraft(q)}>Accept</button>
+                      <button data-callback="onEditSkillQueueItem"
+                              onClick={() => _stDispatch("lw:dispatch-callback", { name: "onEditSkillQueueItem", detail: { id: q.id } })}>Edit</button>
+                      <button data-callback="onMergeSkillQueueItem"
+                              onClick={() => _stDispatch("lw:dispatch-callback", { name: "onMergeSkillQueueItem", detail: { id: q.id } })}>Merge</button>
+                      <button data-callback="onDenySkillQueueItem"
+                              onClick={() => denyDraft(q)}>Deny</button>
                     </div>
                   </div>
                 ))}
+                {ctx.queue.length === 0 && <div className="ste-list__hint">No pending skill candidates.</div>}
               </div>
             )}
             {leftTab === "layers" && (
               <div className="ste-list">
-                {[["unlocked","Unlocked"],["locked","Locked"],["upgrade","Upgrade-available"],["review","In review"],["connections","Connections"],["labels","Labels"]].map(([id, lbl]) => (
+                {[["unlocked","Unlocked"],["locked","Locked"],["upgrade","Upgrade-available"],["review","In review"],["connections","Connections"]].map(([id, lbl]) => (
                   <label key={id} className="ste-list__layer">
-                    <input type="checkbox" defaultChecked/><span>{lbl}</span>
+                    <input type="checkbox" checked={layers[id] !== false}
+                           onChange={() => setLayers((l) => ({ ...l, [id]: l[id] === false }))}/>
+                    <span>{lbl}</span>
                   </label>
                 ))}
+                <label className="ste-list__layer">
+                  <input type="checkbox" checked={showLabels} onChange={() => setShowLabels((v) => !v)}/>
+                  <span>Labels</span>
+                </label>
               </div>
             )}
           </div>
@@ -578,8 +1095,10 @@ const SkillTreeEditor = ({ onExit }) => {
 
         {/* Canvas */}
         <div className="ste__canvas">
-          <SkillTreeCanvas tree={tree} selectedNodeId={selectedNodeId}
-                           onSelectNode={setSelectedNodeId} showLabels={showLabels}/>
+          <SkillTreeCanvas tree={tree} selectedNodeId={node?.id}
+                           onSelectNode={setSelectedNodeId} showLabels={showLabels}
+                           tool={activeTool} layers={layers} armedNodeId={armedNodeId}
+                           onMoveNode={onMoveNode} onCanvasPoint={onCanvasPoint} onNodeTap={onNodeTap}/>
         </div>
 
         {/* Right rail */}
@@ -590,27 +1109,36 @@ const SkillTreeEditor = ({ onExit }) => {
                 className={"ste__tab" + (rightTab === id ? " is-on" : "")}
                 onClick={() => setRightTab(id)}>
                 <Icon name={icon} size={10}/><span>{label}</span>
-                {id === "queue" && <span className="ste-list__q">{SKILL_REVIEW.length}</span>}
+                {id === "queue" && ctx.queue.length > 0 && <span className="ste-list__q">{ctx.queue.length}</span>}
               </button>
             ))}
           </div>
           <div className="ste__rail-body">
-            {rightTab === "inspector" && (
+            {rightTab === "inspector" && (node ? (
               <div className="ste-insp">
                 <div className="ste-insp__head">
                   <span className="ste-insp__tier">T{node.tier}</span>
-                  <span className="ste-insp__name">{node.name}</span>
+                  <input className="ste-insp__name ste-insp__name--edit"
+                         key={node.id + ":" + node.name}
+                         defaultValue={node.name}
+                         data-testid="ste-insp-name"
+                         aria-label="Skill name"
+                         onBlur={(e) => {
+                           const name = (e.target.value || "").trim();
+                           if (name && name !== node.name) B()?.EntityService?.update("skills", node.id, { name });
+                         }}
+                         onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}/>
                 </div>
                 <div className={"ste-insp__type ste-insp__type--" + node.type}>{node.type} skill</div>
                 <p className="ste-insp__sum">{node.summary}</p>
-                <STRow k="Effect"  v={node.effect}/>
-                <STRow k="Cost"    v={node.cost}/>
+                {node.effect && <STRow k="Effect"  v={node.effect}/>}
+                {node.cost && <STRow k="Cost"    v={node.cost}/>}
                 <STRow k="Locked"  v={node.unlocked ? "Unlocked" : "Locked"}/>
                 <STRow k="Bearers" v={node.chars + " character(s)"}/>
                 {node.requires.length > 0 && (
                   <STRow k="Requires" v={node.requires.map((r) => tree.nodes.find((x) => x.id === r)?.name).filter(Boolean).join(" · ")}/>
                 )}
-                {node.linkedStats && <STRow k="Stats" v={node.linkedStats.join(", ")}/>}
+                {node.linkedStats.length > 0 && <STRow k="Stats" v={node.linkedStats.join(", ")}/>}
 
                 <div className="ste-insp__sec">
                   <div className="ste-insp__sech">Upgrades</div>
@@ -627,68 +1155,111 @@ const SkillTreeEditor = ({ onExit }) => {
 
                 <div className="ste-insp__sec">
                   <div className="ste-insp__sech">Characters with skill</div>
-                  {tree.assignedChars.slice(0, node.chars).map((cid) => {
-                    const c = (window.ATLAS_CAST || []).find((x) => x.id === cid);
+                  {node.bearerIds.map((cid) => {
+                    const c = ctx.cast[cid];
                     if (!c) return null;
                     return (
-                      <button key={cid} className="ste-insp__chip" style={{ "--c": c.color }}>
+                      <button key={cid} className="ste-insp__chip" style={{ "--c": c.color }}
+                              onClick={() => {
+                                _stDispatch("lw:open-panel", { kind: "cast" });
+                                _stDispatch("lw:open-cast-member", { entityId: cid });
+                              }}>
                         <span className="ste-insp__chip-avatar">{c.initials}</span>
                         <span>{c.name}</span>
                       </button>
                     );
                   })}
+                  {node.bearerIds.length === 0 && <div className="ste-insp__none">— No bearers yet —</div>}
                 </div>
 
                 <div className="ste-insp__actions">
-                  <button data-callback="onEditSkillNode">Edit node</button>
-                  <button data-callback="onConnectSkillNodes">Add connection</button>
-                  <button data-callback="onMarkSkillUnlocked">{node.unlocked ? "Lock" : "Unlock"}</button>
+                  <button data-callback="onEditSkillNode"
+                          onClick={() => {
+                            const rec = ctx.skills.get(node.id);
+                            if (rec) _stDispatch("lw:open-entity-editor", { type: "skills", initial: rec, mode: "full" });
+                          }}>Edit node</button>
+                  <button data-callback="onConnectSkillNodes"
+                          onClick={() => { setActiveTool("connect"); setArmedNodeId(node.id); _stNotice("Pick the target star."); }}>Add connection</button>
+                  <button data-callback="onMarkSkillUnlocked" data-testid="ste-toggle-lock"
+                          onClick={async () => { await B()?.SkillTreeService?.setNodeUnlocked(tree.id, node.id, !node.unlocked); }}>
+                    {node.unlocked ? "Lock" : "Unlock"}</button>
+                  <button data-testid="ste-remove-node"
+                          onClick={async () => {
+                            await B()?.SkillTreeService?.removeNode(tree.id, node.id);
+                            setSelectedNodeId(null);
+                            _stNotice("Star removed from the constellation (skill kept as orphan).");
+                          }}>Remove from tree</button>
                 </div>
               </div>
-            )}
+            ) : (
+              <div className="ste-insp"><div className="ste-insp__none">— No star selected —</div></div>
+            ))}
             {rightTab === "queue" && (
               <div className="ste-queue">
-                {SKILL_REVIEW.map((r) => (
-                  <div key={r.id} className={"ste-queue__card ste-queue__card--" + r.lvl}>
-                    <div className="ste-queue__head">
-                      <ConfidenceBadge level={r.lvl}/>
-                      <span className="ste-queue__name">{r.name}</span>
+                {ctx.queue.map((q) => {
+                  const conf = typeof q.confidence === "number" ? q.confidence : 0.6;
+                  const lvl = conf >= 0.95 ? "high" : conf >= 0.75 ? "strong" : conf >= 0.5 ? "uncertain" : "weak";
+                  const chNum = q.chapterId ? ctx.chapterNumById.get(q.chapterId) : null;
+                  return (
+                    <div key={q.id} className={"ste-queue__card ste-queue__card--" + lvl}>
+                      <div className="ste-queue__head">
+                        <ConfidenceBadge level={lvl}/>
+                        <span className="ste-queue__name">{q.name}</span>
+                      </div>
+                      <p className="ste-queue__excerpt">"{q.sourceQuote || q.summary || q.reason || ""}"</p>
+                      <div className="ste-queue__meta">{chNum ? "Ch. " + chNum : ""}</div>
+                      <div className="ste-queue__pill">{q.suggestedAction === "create" ? "Add to tree?" : (q.action || "Review")}</div>
+                      <div className="ste-queue__actions">
+                        <button data-callback="onAcceptSkillQueueItem" onClick={() => acceptDraft(q)}>Accept</button>
+                        <button data-callback="onEditSkillQueueItem"
+                                onClick={() => _stDispatch("lw:dispatch-callback", { name: "onEditSkillQueueItem", detail: { id: q.id } })}>Edit</button>
+                        <button data-callback="onMergeSkillQueueItem"
+                                onClick={() => _stDispatch("lw:dispatch-callback", { name: "onMergeSkillQueueItem", detail: { id: q.id } })}>Merge</button>
+                        <button data-callback="onDenySkillQueueItem" onClick={() => denyDraft(q)}>Deny</button>
+                      </div>
                     </div>
-                    <p className="ste-queue__excerpt">"{r.excerpt}"</p>
-                    <div className="ste-queue__meta">{r.cite}</div>
-                    <div className="ste-queue__pill">{r.action}</div>
-                    <div className="ste-queue__actions">
-                      <button data-callback="onAcceptDraftSkillNode">Accept</button>
-                      <button data-callback="onEditDraftSkillNode">Edit</button>
-                      <button data-callback="onMergeDraftSkillNode">Merge</button>
-                      <button data-callback="onDenyDraftSkillNode">Deny</button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
+                {ctx.queue.length === 0 && <div className="ste-insp__none">— Review queue is clear —</div>}
               </div>
             )}
             {rightTab === "related" && (
               <div className="ste-related">
                 <div className="ste-insp__sech">Linked abilities</div>
-                <button className="ste-insp__chip">Salt-Sense · passive</button>
-                <button className="ste-insp__chip">Reach Speech · spoken</button>
+                {(node?.linkedAbilities || []).map((name) => (
+                  <button key={name} className="ste-insp__chip">{name}</button>
+                ))}
+                {(!node || node.linkedAbilities.length === 0) && <div className="ste-insp__none">— none linked —</div>}
                 <div className="ste-insp__sech" style={{ marginTop: 14 }}>Linked stats</div>
-                <button className="ste-insp__chip">Perception</button>
-                <button className="ste-insp__chip">Attention</button>
+                {(node?.linkedStats || []).map((name) => (
+                  <button key={name} className="ste-insp__chip">{name}</button>
+                ))}
+                {(!node || node.linkedStats.length === 0) && <div className="ste-insp__none">— none linked —</div>}
                 <div className="ste-insp__sech" style={{ marginTop: 14 }}>Linked classes</div>
-                <button className="ste-insp__chip">Augur</button>
+                {tree.assignedClasses.map((clid) => {
+                  const cl = ctx.classes.find((c) => c.id === clid);
+                  return cl ? <button key={clid} className="ste-insp__chip">{cl.name}</button> : null;
+                })}
+                {tree.assignedClasses.length === 0 && <div className="ste-insp__none">— none linked —</div>}
               </div>
             )}
             {rightTab === "source" && (
               <div className="ste-source">
-                <div className="ste-source__card">
-                  <div className="ste-source__cite">Ch. 3 · p. 88</div>
-                  <p>"…she pressed her palm to the cliff-stone and the stone gave back what it remembered."</p>
-                </div>
-                <div className="ste-source__card">
-                  <div className="ste-source__cite">Ch. 6 · p. 184</div>
-                  <p>"The first stroke of the wraith turned aside, without contact, as if the salt itself had bent it."</p>
-                </div>
+                {node && node.sourceQuote && (
+                  <div className="ste-source__card">
+                    <div className="ste-source__cite">First evidence</div>
+                    <p>"{node.sourceQuote}"</p>
+                  </div>
+                )}
+                {node && (ctx.occByEntity.get(node.id) || []).slice(0, 4).map((o) => (
+                  <div key={o.occurrenceId || o.id} className="ste-source__card">
+                    <div className="ste-source__cite">Ch. {ctx.chapterNumById.get(o.chapterId) ?? "?"}</div>
+                    <p>"{String(o.exactText || "").trim()}"</p>
+                  </div>
+                ))}
+                {(!node || (!node.sourceQuote && (ctx.occByEntity.get(node.id) || []).length === 0)) && (
+                  <div className="ste-insp__none">— No manuscript sources yet —</div>
+                )}
               </div>
             )}
           </div>
@@ -700,8 +1271,13 @@ const SkillTreeEditor = ({ onExit }) => {
         <div className="ste__strip-head">
           <span style={{ fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", fontSize: 10, color: "var(--atl-ink-3)" }}>Path · {tree.name}</span>
           <span style={{ flex: 1 }}/>
-          <button className="ste__strip-btn">Validate</button>
-          <button className="ste__strip-btn">Auto-layout</button>
+          <button className="ste__strip-btn" data-testid="ste-validate"
+                  onClick={() => {
+                    const issues = _stValidate(tree);
+                    _stNotice(issues.length ? ("Found " + issues.length + " issue(s): " + issues.slice(0, 3).join("; ")) : "Constellation is sound.");
+                  }}>Validate</button>
+          <button className="ste__strip-btn" data-testid="ste-auto-layout"
+                  onClick={() => _stAutoLayout(tree)}>Auto-layout</button>
         </div>
         <div className="ste__strip-track">
           {[1, 2, 3, 4].map((tier) => {
@@ -712,7 +1288,7 @@ const SkillTreeEditor = ({ onExit }) => {
                 <div className="ste__strip-tier-nodes">
                   {ns.map((n) => (
                     <button key={n.id}
-                      className={"ste__strip-node" + (n.id === selectedNodeId ? " is-on" : "") + (n.unlocked ? " is-unlocked" : "")}
+                      className={"ste__strip-node" + (n.id === node?.id ? " is-on" : "") + (n.unlocked ? " is-unlocked" : "")}
                       style={{ "--c": tree.color }}
                       onClick={() => setSelectedNodeId(n.id)}
                       title={n.name + " — " + n.type}>
@@ -733,171 +1309,39 @@ const SkillTreeEditor = ({ onExit }) => {
 };
 
 // ---------------------------------------------------------------------
-// SkillsPanelBody — entry point used by the panel-stack dispatcher
+// SkillsPanelBody — entry point used by the panel-stack dispatcher.
+// Side panel + the full constellation editor as an overlay.
 // ---------------------------------------------------------------------
-// ---------------------------------------------------------------------
-// SkillTreeNodeRow — one live node (a skills entity) inside a tree.
-// ---------------------------------------------------------------------
-const SkillTreeNodeRow = ({ node, connectArmed, onRename, onToggleLock, onConnect, onRemove }) => (
-  <div className="stm-node" data-testid={"st-node-" + node.id} style={{ "--c": node.unlocked ? "var(--accent)" : "var(--line-3)" }}>
-    <input
-      className="stm-node__name"
-      defaultValue={node.name}
-      key={node.id + ":" + node.name}
-      aria-label="Skill node name"
-      data-testid={"st-node-name-" + node.id}
-      onBlur={(e) => onRename(node.id, e.target.value)}
-      onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
-    />
-    <button type="button" className={"stm-btn" + (node.unlocked ? " is-on" : "")} data-testid={"st-lock-" + node.id} onClick={() => onToggleLock(node.id)} title={node.unlocked ? "Lock node" : "Unlock node"}>{node.unlocked ? "Unlocked" : "Locked"}</button>
-    <button type="button" className={"stm-btn" + (connectArmed ? " is-arming" : "")} data-testid={"st-connect-" + node.id} onClick={() => onConnect(node.id)} title="Connect to another node">{connectArmed ? "Pick target…" : "Connect"}</button>
-    <button type="button" className="stm-btn stm-btn--danger" data-testid={"st-remove-node-" + node.id} onClick={() => onRemove(node.id)} title="Remove node">×</button>
-  </div>
-);
-
-// ---------------------------------------------------------------------
-// SkillTreeLiveManager — live, persistent skill-tree editing (UAT #17).
-// Backed entirely by SkillTreeService + EntityService("skills"); nodes are
-// skill entities. Create tree/node, connect, assign to cast/class, lock,
-// and rename all persist and survive reload. The visual constellation
-// canvas remains future scope (see notice in SkillsPanelBody).
-// ---------------------------------------------------------------------
-const SkillTreeLiveManager = () => {
-  const B = () => window.LoomwrightBackend;
-  const read = () => (B() && B().SkillTreeService ? (B().SkillTreeService.loadSync().trees || []) : []);
-  const [trees, setTrees] = React.useState(read);
-  const [selId, setSelId] = React.useState(null);
-  const [connectFrom, setConnectFrom] = React.useState(null);
-  const refresh = React.useCallback(() => setTrees(read()), []);
-  React.useEffect(() => {
-    refresh();
-    const evs = ["lw:skill-trees-updated", "lw:entity-store-updated", "lw:backend-ready", "lw:project-imported"];
-    evs.forEach((e) => window.addEventListener(e, refresh));
-    return () => evs.forEach((e) => window.removeEventListener(e, refresh));
-  }, [refresh]);
-  React.useEffect(() => {
-    if (!selId && trees.length) setSelId(trees[0].id);
-  }, [trees, selId]);
-
-  const tree = trees.find((t) => t.id === selId) || null;
-  const skillName = (id) => { try { const e = B().EntityService.getSync(id, "skills"); return (e && e.name) || "Untitled skill"; } catch (_e) { return "Untitled skill"; } };
-  const nodes = tree ? (tree.nodeIds || []).map((id) => ({ id, name: skillName(id), unlocked: !!((tree.layout || {})[id] || {}).unlocked })) : [];
-  const cast = (() => { try { return B().EntityService.listSync("cast") || []; } catch (_e) { return []; } })();
-  const classes = (() => { try { return B().EntityService.listSync("classes") || []; } catch (_e) { return []; } })();
-
-  const createTree = async () => { const s = B() && B().SkillTreeService; if (!s) return; const t = await s.addTree({ name: "New skill tree" }); if (t && t.id) setSelId(t.id); };
-  const removeTree = async () => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.removeTree(tree.id); setSelId(null); };
-  const addNode = async () => {
-    if (!tree) return;
-    const ES = B() && B().EntityService, s = B() && B().SkillTreeService; if (!ES || !s) return;
-    const skill = await ES.save("skills", { name: "New skill" }, { status: "active" });
-    await s.addNode(tree.id, skill.id, { x: 20 + (nodes.length * 13) % 60, y: 30 + (nodes.length * 7) % 40 });
-  };
-  const renameNode = async (id, name) => { const ES = B() && B().EntityService; if (!ES) return; await ES.update("skills", id, { name: (name || "").trim() || "Untitled skill" }); refresh(); };
-  const toggleLock = async (id) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.setNodeUnlocked(tree.id, id, !((tree.layout || {})[id] || {}).unlocked); };
-  const removeNode = async (id) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.removeNode(tree.id, id); };
-  const connect = async (id) => {
-    const s = B() && B().SkillTreeService; if (!s || !tree) return;
-    if (!connectFrom) { setConnectFrom(id); return; }
-    if (connectFrom === id) { setConnectFrom(null); return; }
-    await s.connectNodes(tree.id, connectFrom, id);
-    setConnectFrom(null);
-  };
-  const assignCast = async (cid) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.assignCast(tree.id, cid); };
-  const assignClass = async (clid) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.assignClass(tree.id, clid); };
-
-  return (
-    <div className="stm" data-ui="SkillTreeLiveManager">
-      <div className="stm__trees">
-        <div className="stm__sech">Skill trees</div>
-        <div className="stm__tree-list">
-          {trees.map((t) => (
-            <button key={t.id} type="button" className={"stm__tree" + (t.id === selId ? " is-on" : "")} data-testid={"st-tree-" + t.id} onClick={() => { setSelId(t.id); setConnectFrom(null); }}>
-              <span className="stm__tree-name">{t.name}</span>
-              <span className="stm__tree-meta">{(t.nodeIds || []).length} nodes</span>
-            </button>
-          ))}
-          {trees.length === 0 && <div className="stm__empty" data-testid="st-empty">No skill trees yet. Create one to start adding skill nodes.</div>}
-          <button type="button" className="stm__add" data-testid="st-create-tree" onClick={createTree}><Icon name="plus" size={11}/> Create tree</button>
-        </div>
-      </div>
-
-      {tree ? (
-        <div className="stm__detail" data-testid="st-detail">
-          <div className="stm__detail-head">
-            <span className="stm__detail-name">{tree.name}</span>
-            <button type="button" className="stm-btn" data-testid="st-add-node" onClick={addNode}><Icon name="plus" size={10}/> Add node</button>
-            <button type="button" className="stm-btn stm-btn--danger" data-testid="st-remove-tree" onClick={removeTree} title="Delete this tree">Delete tree</button>
-          </div>
-
-          <div className="stm__sech">Nodes ({nodes.length})</div>
-          <div className="stm__nodes">
-            {nodes.length === 0 && <div className="stm__empty">No nodes yet — “Add node” creates a skill node that persists.</div>}
-            {nodes.map((n) => (
-              <SkillTreeNodeRow key={n.id} node={n} connectArmed={connectFrom === n.id}
-                onRename={renameNode} onToggleLock={toggleLock} onConnect={connect} onRemove={removeNode}/>
-            ))}
-          </div>
-
-          {(tree.edges || []).length > 0 && (
-            <div className="stm__edges">
-              <div className="stm__sech">Connections ({tree.edges.length})</div>
-              {tree.edges.map((e, i) => (
-                <div key={i} className="stm__edge" data-testid="st-edge">{skillName(e.from)} → {skillName(e.to)}</div>
-              ))}
-            </div>
-          )}
-
-          <div className="stm__assign">
-            <div className="stm__sech">Assign to cast</div>
-            <div className="stm__assign-row">
-              {cast.length === 0 && <span className="stm__empty">No cast yet — create cast members to assign this tree.</span>}
-              {cast.map((c) => {
-                const on = (tree.assignedCast || []).includes(c.id);
-                return <button key={c.id} type="button" className={"stm-chip" + (on ? " is-on" : "")} data-testid={"st-assign-cast-" + c.id} onClick={() => assignCast(c.id)}>{c.name}{on ? " ✓" : ""}</button>;
-              })}
-            </div>
-            <div className="stm__sech">Assign to class</div>
-            <div className="stm__assign-row">
-              {classes.length === 0 && <span className="stm__empty">No classes yet.</span>}
-              {classes.map((c) => {
-                const on = (tree.assignedClasses || []).includes(c.id);
-                return <button key={c.id} type="button" className={"stm-chip" + (on ? " is-on" : "")} data-testid={"st-assign-class-" + c.id} onClick={() => assignClass(c.id)}>{c.name}{on ? " ✓" : ""}</button>;
-              })}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="stm__detail stm__detail--empty">Select or create a skill tree to edit its nodes, connections, and assignments.</div>
-      )}
-    </div>
-  );
-};
-
 const SkillsPanelBody = ({ panel }) => {
-  const [showCanvasNote, setShowCanvasNote] = _st_us(false);
-  // The standardised panel header can request the (future) full-screen canvas.
-  React.useEffect(() => {
+  const [storeVersion, setStoreVersion] = _st_us(0);
+  const [editor, setEditor] = _st_us(null); // { treeId } | null
+  _st_ue(() => {
+    const bump = () => setStoreVersion((v) => v + 1);
+    const evs = ["lw:skill-trees-updated", "lw:entity-store-updated", "lw:review-queue-updated", "lw:backend-ready", "lw:project-imported"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+  // The standardised panel header can request the full-screen canvas.
+  _st_ue(() => {
     const onOpen = (e) => {
       const d = e?.detail || {};
       if (d.panelKind === "skills" || d.panelKind === "abilities" || d.workspaceId === "skill-tree-editor") {
-        setShowCanvasNote(true);
+        setEditor({ treeId: null });
       }
     };
     window.addEventListener("lw:open-existing-fullscreen", onOpen);
     return () => window.removeEventListener("lw:open-existing-fullscreen", onOpen);
   }, []);
+
+  const ctx = _st_um(() => buildSTContext(), [storeVersion]);
+  const views = _st_um(() => _stViews(ctx), [ctx]);
+
   return (
     <div className="stp-host">
-      <SkillTreeLiveManager/>
-      {showCanvasNote && (
+      <SkillTreesSidePanel ctx={ctx} views={views} onOpenEditor={(treeId) => setEditor({ treeId })}/>
+      {editor && (
         <div className="ste-overlay">
-          <div className="ste-future" data-ui="SkillTreeCanvasFuture">
-            <Icon name="tree" size={28}/>
-            <h2>Visual constellation canvas</h2>
-            <p>The drag-and-drop constellation canvas is a planned enhancement. For now, create and edit skill trees, nodes, connections, lock state, and cast/class assignments in the panel — every change persists and survives reload.</p>
-            <button type="button" className="stm__add" data-callback="onExitSkillTreeEditor" onClick={() => setShowCanvasNote(false)}>Back to skills</button>
-          </div>
+          <SkillTreeEditor ctx={ctx} views={views} initialTreeId={editor.treeId} onExit={() => setEditor(null)}/>
         </div>
       )}
     </div>
@@ -905,6 +1349,6 @@ const SkillsPanelBody = ({ panel }) => {
 };
 
 Object.assign(window, {
-  SKILL_TREES, SKILL_ORPHANS, SKILL_DRAFTS, SKILL_REVIEW,
+  buildSTContext, liveTreeToView,
   SkillTreeMini, SkillTreesSidePanel, SkillTreeCanvas, SkillTreeEditor, SkillsPanelBody,
 });
