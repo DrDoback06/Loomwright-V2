@@ -107,6 +107,20 @@ const OnboardingWizard = ({ initial = {}, onCompleteOnboarding, onExitOnboarding
   const [currentId, setCurrentId] = _us_W("welcome");
   const [completedIds, setCompletedIds] = _us_W([]);
   const [saveState, setSaveState] = _us_W({ kind: "saved", label: "Draft saved · just now" });
+
+  // "Import existing project" start option: a real project import IS the
+  // setup — mark onboarding complete and close the wizard.
+  _ue_W(() => {
+    const onImported = async (e) => {
+      if (e?.detail?.sample) return;
+      try { await window.LoomwrightBackend?.OnboardingService?.setStatus("complete"); } catch (_e) {}
+      try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Project imported — setup complete." } })); } catch (_e) {}
+      // Close WITHOUT the host's exit path (that one stamps "skipped").
+      window.dispatchEvent(new CustomEvent("lw:close-onboarding"));
+    };
+    window.addEventListener("lw:project-imported", onImported);
+    return () => window.removeEventListener("lw:project-imported", onImported);
+  }, []);
   const [intelOpen, setIntelOpen] = _us_W(false);
   const [history, setHistory] = _us_W([]);
   const saveTimer = _ur_W(null);

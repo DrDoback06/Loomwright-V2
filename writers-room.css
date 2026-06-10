@@ -301,14 +301,16 @@
 }
 .wr-canvas {
   position: relative;
-  width: min(720px, 100%);
+  /* --wr-editor-* come from the persisted workspace.* prefs
+     (onboarding "Workspace" step / Settings ▸ Editor). */
+  width: min(var(--wr-editor-max, 720px), 100%);
   margin: 0 auto;
   background: var(--bg-paper);
   border: 1px solid var(--line-2);
   border-radius: var(--r-5);
   box-shadow: var(--shadow-2);
-  padding: var(--sp-13) var(--sp-14) var(--sp-13);
-  font-family: var(--font-serif);
+  padding: var(--sp-13) var(--wr-editor-pad, var(--sp-14)) var(--sp-13);
+  font-family: var(--wr-editor-font, var(--font-serif));
   font-size: var(--fs-lg);
   line-height: 1.7;
   color: var(--ink-1);

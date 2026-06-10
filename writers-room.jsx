@@ -1023,12 +1023,40 @@ const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, spellChec
 // ---------------------------------------------------------------------
 // ManuscriptCanvas
 // ---------------------------------------------------------------------
+// Persisted workspace.* prefs (onboarding "Workspace" step / Settings ▸
+// Editor) applied as CSS vars on the canvas: width, font, margins.
+const useWorkspacePrefs = () => {
+  const [tick, setTick] = React.useState(0);
+  React.useEffect(() => {
+    const bump = (e) => {
+      if (e?.detail?.section && e.detail.section !== "workspace") return;
+      setTick((t) => t + 1);
+    };
+    window.addEventListener("lw:settings-updated", bump);
+    window.addEventListener("lw:backend-ready", bump);
+    return () => {
+      window.removeEventListener("lw:settings-updated", bump);
+      window.removeEventListener("lw:backend-ready", bump);
+    };
+  }, []);
+  return React.useMemo(() => {
+    const w = window.LoomwrightBackend?.SettingsService?.getSectionSync?.("workspace", {}) || {};
+    const style = {};
+    const width = Number(w.editorWidth);
+    if (width >= 400 && width <= 1400) style["--wr-editor-max"] = width + "px";
+    if (typeof w.font === "string" && w.font.trim()) style["--wr-editor-font"] = '"' + w.font.trim() + '", var(--font-serif)';
+    if (w.margins === false) style["--wr-editor-pad"] = "var(--sp-8)";
+    return style;
+  }, [tick]);
+};
+
 const ManuscriptCanvas = ({
   chapter, manuscript, state, bodyRef, titleRef, bodyEpoch, spellCheck,
   onBodyInput, onStartWriting,
   onEntityHoverDelegated, onEntityDoubleClickDelegated,
   onCreateChapter, onSaveAndExtract,
 }) => {
+  const prefStyle = useWorkspacePrefs();
   // Load persisted EntityOccurrences for this chapter and rebuild the
   // lookup whenever the entity store updates (accept queue, merge, etc).
   const [occurrences, setOccurrences] = React.useState(() => {
@@ -1092,7 +1120,7 @@ const ManuscriptCanvas = ({
   }
   const showHint = !hintDismissed && isEmptyBody;
   return (
-    <article className="wr-canvas" data-ui="ManuscriptCanvas" data-state={state} data-chapter-id={chapter.id}>
+    <article className="wr-canvas" data-ui="ManuscriptCanvas" data-state={state} data-chapter-id={chapter.id} style={prefStyle}>
       <header className="wr-canvas__head">
         <div className="wr-canvas__eyebrow">Chapter {chapter.num}</div>
         <h1

@@ -270,6 +270,12 @@ const SetEditor = () => {
     marginsDefault: "both", chapterTabBehaviour: "expand", authorStamp: true,
   });
   const up = (k, v) => setS({ ...s, [k]: v });
+  // workspace.* — the canvas prefs the onboarding "Workspace" step seeds
+  // and the Writer's Room reads live (width / font / margins).
+  const [w, setW] = useLWSettingState("workspace", {
+    editorWidth: 740, font: "Source Serif 4", margins: true,
+  });
+  const upW = (k, v) => setW({ ...w, [k]: v });
   return (
     <SetGroupCard title="Editor" hint="What happens while you type and what shows in the margins.">
       <SetRow label="Linting"><div className="set-stack">
@@ -295,6 +301,17 @@ const SetEditor = () => {
           options={[{ id: "expand", label: "Expand on hover" }, { id: "click", label: "Click to open" }, { id: "always", label: "Always expanded" }]}/>
       </SetRow>
       <SetRow label="Author attribution"><SetToggle checked={s.authorStamp} onChange={(v) => up("authorStamp", v)} label="Show author stamps in margin"/></SetRow>
+      <div className="set-card__divider"/>
+      <SetRow label="Page width" hint="Applies live to the manuscript canvas.">
+        <SetSlider value={Number(w.editorWidth) || 740} onChange={(v) => upW("editorWidth", v)} min={560} max={920} step={20} unit="px"/>
+      </SetRow>
+      <SetRow label="Manuscript font">
+        <SetSegmented value={w.font || "Source Serif 4"} onChange={(v) => upW("font", v)}
+          options={[{ id: "Source Serif 4", label: "Source Serif" }, { id: "EB Garamond", label: "Garamond" }, { id: "Cormorant Garamond", label: "Cormorant" }, { id: "Inter Tight", label: "Inter" }]}/>
+      </SetRow>
+      <SetRow label="Annotation margins">
+        <SetToggle checked={w.margins !== false} onChange={(v) => upW("margins", v)} label="Reserve side margins for notes"/>
+      </SetRow>
     </SetGroupCard>
   );
 };

@@ -837,3 +837,17 @@
   border-color: var(--accent);
   background: linear-gradient(0deg, var(--accent-soft), transparent 60%);
 }
+
+/* "Show on Atlas" affordance beside the Currently fact */
+.cast-fields__atlas {
+  margin-left: 8px;
+  font-family: inherit;
+  font-size: 10px;
+  color: var(--accent-deep, #7a5a3a);
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed currentColor;
+  padding: 0;
+  cursor: pointer;
+}
+.cast-fields__atlas:hover { color: var(--ink-1, #2a2218); }

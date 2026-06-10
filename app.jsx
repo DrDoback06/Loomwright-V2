@@ -249,6 +249,12 @@ const AppShell = () => {
     try { await window.LoomwrightBackend?.OnboardingService?.setStatus("skipped"); } catch (_e) {}
     setOnboarding({ open: false, initial: null });
   }, []);
+  // Plain close (status already settled elsewhere — e.g. import-completed).
+  _ue_a(() => {
+    const onCloseOb = () => setOnboarding({ open: false, initial: null });
+    window.addEventListener("lw:close-onboarding", onCloseOb);
+    return () => window.removeEventListener("lw:close-onboarding", onCloseOb);
+  }, []);
   const handleMinimizeOnboarding = _uc_a(async () => {
     try { await window.LoomwrightBackend?.OnboardingService?.setStatus("in-progress"); } catch (_e) {}
     setOnboarding({ open: false, initial: null });

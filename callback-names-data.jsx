@@ -295,6 +295,7 @@ window.__LW_CALLBACK_NAMES = [
   "onOpenAtlasEditorFromLocation",
   "onOpenAtlasFocusSelector",
   "onOpenAtlasFocusSummary",
+  "onOpenAtlasFor",
   "onOpenAtlasForSharedLocations",
   "onOpenAtlasFullScreen",
   "onOpenAtlasReviewQueue",

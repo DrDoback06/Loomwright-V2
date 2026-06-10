@@ -395,12 +395,18 @@ const liveCastToDossier = (entity, ctx = {}) => {
     occurrenceId: o.occurrenceId,
   });
   const allQuotes = myOccs.map(quoteFor).filter((q) => q.text);
+  // Provenance: the accepted candidate's source quote leads the list.
+  if (typeof d.sourceQuote === "string" && d.sourceQuote.trim()) {
+    allQuotes.unshift({ text: d.sourceQuote.trim(), cite: "First evidence", chapterId: null, occurrenceId: null });
+  }
   const quotes = allQuotes.slice(0, 3);
 
   // Identity / faction / location lookups via the entity index.
   const faction = _resolveRelatedList(d.faction, entityIndex)[0] || null;
   const home    = _resolveRelatedList(d.homeLocation, entityIndex)[0] || null;
-  const cur     = _resolveRelatedList(d.currentLocation, entityIndex)[0] || null;
+  const cur     = _resolveRelatedList(d.currentLocation, entityIndex)[0]
+    || _resolveRelatedList(d.location, entityIndex)[0]   // extraction travel writes data.location
+    || null;
   const aliasList = Array.isArray(d.aliases) ? d.aliases.map((a) => typeof a === "string" ? a : (a && (a.name || a.label || a.id))).filter(Boolean) : [];
 
   // Traits — strengths(+) ∪ flaws(–) ∪ distinguishing marks ∪ tags.
@@ -501,6 +507,7 @@ const liveCastToDossier = (entity, ctx = {}) => {
     affiliation: faction?.name || d.affiliation || "",
     origin: home?.name || cur?.name || d.origin || "",
     currentLocation: cur?.name || "",
+    currentLocationId: cur?.id || null,
     age: d.age || d.ageRange || "",
     pronouns: d.pronouns || "",
     summary: d.summary || d.description || "",
@@ -813,7 +820,16 @@ const CastDetail = ({
           {c.title       && (<><div className="cast-fields__k">Title</div><div className="cast-fields__v">{c.title}</div></>)}
           {c.affiliation && (<><div className="cast-fields__k">Affiliation</div><div className="cast-fields__v">{c.affiliation}</div></>)}
           {c.origin      && (<><div className="cast-fields__k">Origin</div><div className="cast-fields__v">{c.origin}</div></>)}
-          {c.currentLocation && (<><div className="cast-fields__k">Currently</div><div className="cast-fields__v">{c.currentLocation}</div></>)}
+          {c.currentLocation && (<><div className="cast-fields__k">Currently</div><div className="cast-fields__v">
+            {c.currentLocation}
+            {c.currentLocationId && (
+              <button className="cast-fields__atlas" data-callback="onOpenAtlasFor" data-testid="cast-show-on-atlas"
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "atlas" } }));
+                        window.dispatchEvent(new CustomEvent("lw:focus-entity", { detail: { panelKind: "atlas", entityId: c.currentLocationId, label: c.currentLocation } }));
+                      }}>Show on Atlas →</button>
+            )}
+          </div></>)}
           {c.age         && (<><div className="cast-fields__k">Age</div><div className="cast-fields__v">{c.age}</div></>)}
           {c.pronouns    && (<><div className="cast-fields__k">Pronouns</div><div className="cast-fields__v">{c.pronouns}</div></>)}
           {c.aliases?.length > 1 && (<><div className="cast-fields__k">Aliases</div><div className="cast-fields__v">{c.aliases.slice(1).join(", ")}</div></>)}

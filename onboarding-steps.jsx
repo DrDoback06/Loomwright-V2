@@ -44,9 +44,19 @@ const Step_Welcome = ({ data, set }) => {
         <div className="ob-block__title">Start from</div>
         <div className="ob-choices ob-grid ob-grid--3">
           <ChoiceCard icon="paper" title="Create blank project"   sub="Empty manuscript, blank cast. Build everything from scratch." on={w.start === "blank"}    onClick={() => upd("start", "blank")} callback="onSaveOnboardingDraft"/>
-          <ChoiceCard icon="stack" title="Import existing project" sub="Bring in a .loom export, Scrivener bundle, or folder of chapters." on={w.start === "import"}   onClick={() => upd("start", "import")}/>
+          <ChoiceCard icon="stack" title="Import existing project" sub="Bring in a Loomwright project export (.json)." on={w.start === "import"}   onClick={() => upd("start", "import")}/>
           <ChoiceCard icon="clock" title="Continue previous setup" sub="Resume an autosaved onboarding draft from this device."          on={w.start === "continue"} onClick={() => upd("start", "continue")} meta={<span className="chip chip--info">Last saved 2 min ago</span>}/>
         </div>
+        {w.start === "import" && (
+          <div className="ob-card ob-import-now" data-ui="ObImportNow" style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10 }}>
+            <div style={{ flex: 1, fontSize: "var(--fs-xs)", color: "var(--ink-3)" }}>
+              Pick your Loomwright export (.json). The importer validates it, backs up anything already here, and finishes setup for you.
+            </div>
+            <button className="set-btn set-btn--primary" data-callback="onImportProjectData" data-testid="ob-import-now">
+              <Icon name="paper" size={11}/> Choose export file…
+            </button>
+          </div>
+        )}
       </div>
     </>
   );
