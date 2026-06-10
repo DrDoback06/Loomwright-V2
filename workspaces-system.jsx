@@ -1436,6 +1436,30 @@ const SpeedReaderWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible,
 // continues to live in relationships.jsx and is preferred when present)
 // =====================================================================
 const RelationshipMapWorkspace = ({ workspace, onExit, onRequest, dragTargetVisible, toast, onDismissToast }) => {
+  const [relVersion, setRelVersion] = _ws_us(0);
+  void relVersion;
+  _ws_ue(() => {
+    const refresh = () => setRelVersion(Date.now());
+    window.addEventListener("lw:entity-store-updated", refresh);
+    window.addEventListener("lw:backend-ready", refresh);
+    return () => {
+      window.removeEventListener("lw:entity-store-updated", refresh);
+      window.removeEventListener("lw:backend-ready", refresh);
+    };
+  }, []);
+
+  // Live graph health for the Tools rail.
+  const bonds = (window.LoomwrightBackend?.EntityService?.listSync("relationships") || []);
+  const byType = (() => {
+    const m = new Map();
+    bonds.forEach((b) => {
+      const t = (b.data && (b.data.bondType || b.data.type)) || "bond";
+      m.set(t, (m.get(t) || 0) + 1);
+    });
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  })();
+  const withEvidence = bonds.filter((b) => Array.isArray(b.data?.evidence) && b.data.evidence.length).length;
+
   return (
     <WorkspaceShell
       icon="link" entityType="relationships"
@@ -1446,24 +1470,45 @@ const RelationshipMapWorkspace = ({ workspace, onExit, onRequest, dragTargetVisi
       onExit={onExit} cols="cr"
       dragTargetVisible={dragTargetVisible} toast={toast} onDismissToast={onDismissToast}
       main={
-        <WorkspaceCard title="Relationship graph" sub="The in-panel graph stays the canonical view. This workspace gives it room to breathe.">
-          <div style={{ padding: 24, textAlign: "center", color: "var(--ink-3)", fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
-            (Re-rendering the in-panel relationship graph at scale.)
-          </div>
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 10 }}>
-            <button className="fws-topbar__exit" onClick={() => onRequest.openPanel("relationships")}>
-              <Icon name="link" size={11}/> Open Relationships panel →
-            </button>
-          </div>
+        <WorkspaceCard title="Relationship graph" sub="The same live graph as the docked panel, with room to breathe.">
+          {typeof RelationshipsPanelBody !== "undefined" ? (
+            <div style={{ minHeight: 420 }} data-testid="rmw-graph">
+              <RelationshipsPanelBody panel={{ id: "p-relationships", entityType: "relationships", workspace: true }}/>
+            </div>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
+              <button className="fws-topbar__exit" onClick={() => onRequest.openPanel("relationships")}>
+                <Icon name="link" size={11}/> Open Relationships panel →
+              </button>
+            </div>
+          )}
         </WorkspaceCard>
       }
       right={
         <>
-          <div className="fws-section"><span className="fws-section__title">Tools</span></div>
-          <div className="fws-tab-body">
-            <button className="fws-section__action" data-callback="onAddEvidence">+ Add evidence</button>
-            <button className="fws-section__action">Filter by faction</button>
-            <button className="fws-section__action">Filter by quest</button>
+          <div className="fws-section"><span className="fws-section__title">Graph health</span></div>
+          <div className="fws-tab-body" data-testid="rmw-tools">
+            <div className="fws-card" style={{ padding: 10, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: "var(--ink-2)", display: "flex", flexDirection: "column", gap: 4 }}>
+                <span><strong>{bonds.length}</strong> tracked {bonds.length === 1 ? "bond" : "bonds"}</span>
+                <span><strong>{withEvidence}</strong> with source evidence</span>
+              </div>
+              {byType.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  {byType.map(([t, n]) => (
+                    <span key={t} className="fws-chip" style={{ marginRight: 4, marginBottom: 4 }}>{t} · {n}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button className="fws-section__action" data-callback="onAddEvidence"
+              title="Open a relationship record to attach manuscript evidence"
+              onClick={() => onRequest.openEntityEditor({ type: "relationships" })}>
+              + Add evidence
+            </button>
+            <button className="fws-section__action" onClick={() => onRequest.openPanel("relationships")}>
+              Open docked panel
+            </button>
           </div>
         </>
       }

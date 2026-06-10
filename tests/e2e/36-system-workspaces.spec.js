@@ -4,6 +4,10 @@
 //      "+ Link entity" picker + persisted AI/style/canon toggles.
 // S2 — Trash Manager workspace: live TrashService rows, real preview,
 //      Restore + Delete forever; docked panel renders real entity types.
+// S3 — Relationship workspace embeds the live graph + live graph-health
+//      rail instead of placeholder text and dead filter buttons.
+// S4 — Command palette: real actions only; designed empty state on a
+//      fresh project (no sample entities/chapters).
 // S5 — system docked panels (Review / Today / Recent / Active refs) render
 //      live bodies instead of legacy demo states.
 
@@ -192,5 +196,55 @@ test.describe("U36. System workspaces live", () => {
     const refs = page.locator("[data-ui='ActiveRefsPanelBody']");
     await expect(refs).toBeVisible();
     await expect(refs).toContainText("Always-on canon sheet");
+  });
+
+  test("Relationship workspace embeds the live graph with live health stats", async ({ page }) => {
+    await openFreshApp(page);
+    const a = await saveEntity(page, "cast", { name: "Anwen Hale" });
+    const b = await saveEntity(page, "cast", { name: "Brec Tollman" });
+    await page.evaluate(async ({ a, b }) => {
+      await window.LoomwrightBackend.EntityService.save("relationships", {
+        name: "Anwen ↔ Brec",
+        data: {
+          from: { id: a, type: "cast" }, to: { id: b, type: "cast" },
+          bondType: "rivalry",
+          evidence: [{ quote: "She would not pay his toll twice." }],
+        },
+      });
+    }, { a: a.id, b: b.id });
+    await openWorkspace(page, "relationship-map", "relationships", "p-relationships");
+
+    // The canonical live panel body renders inside the workspace card.
+    await expect(page.locator("[data-testid='rmw-graph'] [data-ui='RelationshipsPanelBody']")).toBeVisible();
+    // Tools rail reports real counts, not dead filter buttons.
+    const tools = page.locator("[data-testid='rmw-tools']");
+    await expect(tools).toContainText("1 tracked bond");
+    await expect(tools).toContainText("1 with source evidence");
+    await expect(tools).toContainText("rivalry · 1");
+    await expect(tools).not.toContainText("Filter by faction");
+  });
+
+  test("command palette: no demo rows, real create-chapter action works", async ({ page }) => {
+    await openFreshApp(page);
+    await page.keyboard.press("Control+p");
+    const palette = page.locator("[data-testid='command-palette']");
+    await expect(palette).toBeVisible();
+    // The old sample project rows are gone.
+    await expect(palette).not.toContainText("Aelinor Vey");
+    await expect(palette).not.toContainText("Saren of Hess");
+    await expect(palette).not.toContainText("Glass and bone");
+    // Real actions render.
+    await expect(palette).toContainText("Create new chapter");
+    await page.locator("[data-testid='palette-row-a-new-chapter']").click();
+    await page.waitForTimeout(400);
+    const chapters = await page.evaluate(() =>
+      (window.LoomwrightBackend.ManuscriptChapterService.loadSync().chapters || []).length);
+    expect(chapters).toBeGreaterThanOrEqual(1);
+
+    // Live search picks up project records once they exist.
+    await saveEntity(page, "cast", { name: "Palette Probe" });
+    await page.keyboard.press("Control+p");
+    await page.locator(".palette__input input").fill("Palette Probe");
+    await expect(page.locator("[data-ui='CommandPaletteRow']", { hasText: "Palette Probe" })).toBeVisible();
   });
 });

@@ -17,33 +17,21 @@ const { useState: _us_cp, useEffect: _ue_cp, useRef: _ur_cp, useMemo: _um_cp, us
 // ---------------------------------------------------------------------
 // CommandPalette
 // ---------------------------------------------------------------------
+// Real actions only — every row here is handled by the host's
+// onRunCommand. Project data (entities/chapters/references) comes from
+// the live SearchService; there are no sample rows.
 const PALETTE_DATA = {
-  recent: [
-    { id: "r1", icon: "feather", title: "Open Writer's Room",  sub: "Recent",        kbd: ["⌘", "1"] },
-    { id: "r2", icon: "user",    title: "Aelinor Vey",          sub: "Cast • Recent", entity: "cast",   queue: 2 },
-    { id: "r3", icon: "scroll",  title: "Quest: The Glass Vow", sub: "Quests",        entity: "quests", queue: 1 },
-  ],
   suggested: [
-    { id: "s1", icon: "plus",     title: "Create new chapter",            sub: "Action",        kbd: ["⌘", "⇧", "N"] },
-    { id: "s2", icon: "sparkle",  title: "Run extraction on chapter 7",   sub: "AI Action",     kbd: ["⌘", "E"] },
-    { id: "s3", icon: "wheel",    title: "Open Adaptive Wheel here",      sub: "Action",        kbd: ["␣"] },
-    { id: "s4", icon: "lock",     title: "Toggle privacy mode",            sub: "AI Action",     kbd: ["⌘", "⇧", "P"], disabled: true, reason: "Cloud sync unavailable offline" },
-  ],
-  entities: [
-    { id: "e1", icon: "user",  entity: "cast",      title: "Saren of Hess",          sub: "Cast" },
-    { id: "e2", icon: "pin",   entity: "locations", title: "Pale Reach, the",        sub: "Locations", queue: 1 },
-    { id: "e3", icon: "gem",   entity: "items",     title: "Auger of Hess",          sub: "Items" },
-    { id: "e4", icon: "book",  entity: "lore",      title: "The Hollowing (canon)",  sub: "Lore",   queue: 3 },
-  ],
-  chapters: [
-    { id: "c1", icon: "book", title: "Ch. 1 — A small dark queen",  sub: "Manuscript" },
-    { id: "c2", icon: "book", title: "Ch. 7 — Glass and bone",       sub: "Manuscript", queue: 5 },
-    { id: "c3", icon: "book", title: "Ch. 9 — (reserved)",            sub: "Manuscript", disabled: true, reason: "Reserved by another author" },
+    { id: "a-new-chapter", icon: "plus",    title: "Create new chapter",              sub: "Action" },
+    { id: "a-extract",     icon: "sparkle", title: "Run extraction on the manuscript", sub: "AI Action" },
+    { id: "a-wheel",       icon: "wheel",   title: "Open Adaptive Wheel here",         sub: "Action", kbd: ["␣"] },
+    { id: "a-privacy",     icon: "lock",    title: "Cycle privacy mode",               sub: "Action" },
   ],
   tabs: [
-    { id: "t1", icon: "feather", title: "Go to Writer's Room", sub: "Tab", kbd: ["G", "W"] },
-    { id: "t2", icon: "compass", title: "Go to Atlas",         sub: "Tab", kbd: ["G", "A"] },
-    { id: "t3", icon: "scroll",  title: "Go to Quests",        sub: "Tab", kbd: ["G", "Q"] },
+    { id: "a-goto-writers", icon: "feather", title: "Go to Writer's Room", sub: "Route" },
+    { id: "a-open-atlas",   icon: "compass", title: "Open Atlas",          sub: "Panel" },
+    { id: "a-open-quests",  icon: "scroll",  title: "Open Quests",         sub: "Panel" },
+    { id: "a-open-review",  icon: "bell",    title: "Open Review Queue",   sub: "Panel" },
   ],
 };
 
@@ -70,6 +58,15 @@ const CommandPalette = ({
 
   _ue_cp(() => { if (open) { setQ(""); setSel(0); setTimeout(() => inputRef.current?.focus(), 50); } }, [open]);
 
+  // Re-run the search when the (debounced) index rebuild lands — typing
+  // right after creating a record would otherwise race the rebuild.
+  const [indexVersion, setIndexVersion] = _us_cp(0);
+  _ue_cp(() => {
+    const bump = () => setIndexVersion((v) => v + 1);
+    window.addEventListener("lw:search-index-updated", bump);
+    return () => window.removeEventListener("lw:search-index-updated", bump);
+  }, []);
+
   // Live search via SearchService. When the index is empty (fresh
   // project), fall back to the static action suggestions so the user
   // still has somewhere to go.
@@ -78,7 +75,7 @@ const CommandPalette = ({
     if (!Search) return null;
     const limit = 30;
     return Search.search(q, { limit, includeReviewQueue: true });
-  }, [q]);
+  }, [q, indexVersion]);
 
   const liveStats = _um_cp(() => {
     const Search = (typeof window !== "undefined") ? window.LoomwrightBackend?.SearchService : null;
@@ -140,25 +137,26 @@ const CommandPalette = ({
       return groups.filter((g) => g.rows.length && byScope(g));
     }
 
-    // Empty-index fallback: keep the original sample/recent/suggested
-    // structure so the palette still has affordances on a brand-new project.
+    // Empty-index fallback (brand-new project): only the real actions —
+    // never sample entities/chapters. The hint above the groups tells
+    // the user the search index is waiting on their project.
     const groups = [
-      { id: "recent",    label: "Recent",            rows: filterRows(PALETTE_DATA.recent) },
       { id: "suggested", label: "Suggested actions", rows: filterRows(PALETTE_DATA.suggested) },
-      { id: "entities",  label: "Entities",          rows: filterRows(PALETTE_DATA.entities) },
-      { id: "chapters",  label: "Chapters",          rows: filterRows(PALETTE_DATA.chapters) },
       { id: "tabs",      label: "Tabs & navigation", rows: filterRows(PALETTE_DATA.tabs) },
     ];
     // Scope filter
     const byScope = (g) => {
       if (scope === "all") return true;
-      if (scope === "entities") return g.id === "entities" || g.id === "recent";
-      if (scope === "chapters") return g.id === "chapters";
+      if (scope === "entities" || scope === "chapters") return false;
       if (scope === "actions")  return g.id === "suggested" || g.id === "tabs";
       return true;
     };
     return groups.filter((g) => g.rows.length && byScope(g));
   }, [q, scope, liveResults, liveStats]);
+
+  // True when the project index has nothing yet — the palette leads with
+  // a designed hint instead of pretending to have data.
+  const indexEmpty = !!(liveStats && liveStats.total === 0);
 
   const flat = _um_cp(() => filtered.flatMap((g) => g.rows.map((r) => ({ ...r, group: g.id }))), [filtered]);
 
@@ -239,6 +237,17 @@ const CommandPalette = ({
       );
     }
     if (filtered.length === 0) {
+      if (indexEmpty) {
+        return (
+          <div className="palette__state">
+            <EmptyState
+              icon="search"
+              title="Type to search your project"
+              body="Entities, chapters, references, and settings appear here as you build them. Nothing is indexed yet."
+            />
+          </div>
+        );
+      }
       return (
         <div className="palette__state">
           <EmptyState
@@ -260,7 +269,15 @@ const CommandPalette = ({
     }
 
     let runningIdx = -1;
-    return filtered.map((g) => (
+    const emptyHint = indexEmpty ? (
+      <div key="__hint" className="palette__group" data-ui="CommandPaletteGroup" data-group="hint">
+        <div className="palette__group-lbl">Your project</div>
+        <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--ink-3)", fontFamily: "var(--font-serif)", fontStyle: "italic" }}>
+          Type to search your project \u2014 entities, chapters, and settings show up here once they exist.
+        </div>
+      </div>
+    ) : null;
+    return [emptyHint, ...filtered.map((g) => (
       <div key={g.id} className="palette__group" data-ui="CommandPaletteGroup" data-group={g.id}>
         <div className="palette__group-lbl">{g.label}</div>
         {g.rows.map((r) => {
@@ -302,7 +319,7 @@ const CommandPalette = ({
           );
         })}
       </div>
-    ));
+    ))];
   };
 
   return (

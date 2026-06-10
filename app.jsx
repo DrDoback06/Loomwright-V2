@@ -1357,13 +1357,37 @@ const AppShell = () => {
             window.dispatchEvent(new CustomEvent("lw:open-search-result", { detail: cmd._searchResult }));
             return;
           }
-          if (cmd.id === "s3") {
-            const r = document.querySelector("[data-ui='Workspace']")?.getBoundingClientRect();
-            if (r) onOpenAdaptiveWheel({ x: r.left + r.width / 2, y: r.top + r.height / 2, contextLabel: "Workspace" });
+          switch (cmd.id) {
+            case "a-new-chapter":
+              window.LoomwrightBackend?.ManuscriptChapterService?.createFromComposition({});
+              setRouteId("writers-room");
+              break;
+            case "a-extract":
+              window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "manuscript" } }));
+              break;
+            case "a-wheel": {
+              const r = document.querySelector("[data-ui='Workspace']")?.getBoundingClientRect();
+              if (r) onOpenAdaptiveWheel({ x: r.left + r.width / 2, y: r.top + r.height / 2, contextLabel: "Workspace" });
+              break;
+            }
+            case "a-privacy":
+              onTogglePrivacyMode();
+              break;
+            case "a-goto-writers":
+              setRouteId("writers-room");
+              break;
+            case "a-open-atlas":
+              onOpenPanel("atlas");
+              break;
+            case "a-open-quests":
+              onOpenPanel("quests");
+              break;
+            case "a-open-review":
+              onOpenPanel("review");
+              break;
+            default:
+              break;
           }
-          if (cmd.id === "t1") setRouteId("writers-room");
-          if (cmd.id === "t2") setRouteId("atlas");
-          if (cmd.id === "t3") setRouteId("quests");
         }}
       />
 
