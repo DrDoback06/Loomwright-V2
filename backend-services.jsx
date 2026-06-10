@@ -1904,9 +1904,206 @@
     }
   }
 
+  // -------------------------------------------------------------------
+  // Relationship edges — live data source for the Relationships panel.
+  // Two origins merge into one normalised edge list:
+  //   1. Explicit `relationships` entities. Extraction-accepted records
+  //      carry data.fromId/toId/relationshipType; editor-created records
+  //      carry data.from/to (related pickers) + data.bondType.
+  //   2. Synthetic edges read from cast dossier fields (family / lovers /
+  //      allies / mentors / rivals / enemies) so the web is populated
+  //      before any explicit record exists. Synthetic edges are read-only
+  //      (recordId: null) and yield to explicit records on the same pair.
+  // -------------------------------------------------------------------
+  const REL_TYPE_BUCKETS = {
+    friend: "friend", ally: "friend", allies: "friend", "loyal-to": "friend",
+    "sworn-to": "friend", oath: "friend", trusted: "friend", saved: "friend",
+    forgave: "friend", comforted: "friend", "whispered-to": "friend",
+    enemy: "enemy", enemies: "enemy", foe: "enemy", betrayed: "enemy",
+    struck: "enemy", abandoned: "enemy", confronted: "enemy", "shouted-at": "enemy",
+    family: "family", sister: "family", brother: "family", mother: "family",
+    father: "family", parent: "family", child: "family", cousin: "family",
+    sibling: "family", kin: "family", "ward-of": "family", "sister-in-law": "family",
+    lover: "lover", lovers: "lover", loves: "lover", spouse: "lover",
+    married: "lover", kissed: "lover", embraced: "lover",
+    rival: "rival", rivals: "rival",
+    mentor: "mentor", mentors: "mentor", teacher: "mentor", "student-of": "mentor",
+    faction: "faction",
+  };
+  const REL_EDGE_DEFAULTS = {
+    friend:  { strength: 65, trust: 70, conflict: 15 },
+    enemy:   { strength: 65, trust: 10, conflict: 75 },
+    family:  { strength: 70, trust: 60, conflict: 35 },
+    lover:   { strength: 80, trust: 75, conflict: 25 },
+    rival:   { strength: 60, trust: 30, conflict: 65 },
+    mentor:  { strength: 60, trust: 65, conflict: 20 },
+    faction: { strength: 50, trust: 45, conflict: 40 },
+    unknown: { strength: 45, trust: 50, conflict: 30 },
+  };
+  function relTypeBucket(raw) {
+    const t = String(raw || "").trim().toLowerCase().replace(/\s+/g, "-");
+    if (REL_EDGE_DEFAULTS[t]) return t;
+    return REL_TYPE_BUCKETS[t] || "unknown";
+  }
+  function relPartyId(v) {
+    if (v == null) return null;
+    if (Array.isArray(v)) return relPartyId(v[0]);
+    if (typeof v === "string") return v || null;
+    if (typeof v === "object") return v.id || null;
+    return null;
+  }
+  function relNum(v) {
+    const n = typeof v === "string" ? parseFloat(v) : v;
+    return typeof n === "number" && isFinite(n) ? n : null;
+  }
+  const relClamp = (n) => Math.max(0, Math.min(100, Math.round(n)));
+
   const LinkService = {
     async patchEntity(entityId, entityType, patch) {
       return EntityService.update(entityType, entityId, patch);
+    },
+
+    listRelationshipEdgesSync() {
+      const castById = {};
+      for (const c of EntityService.listSync("cast")) {
+        if (c && c.status !== "deleted") castById[c.id] = c;
+      }
+      // Chapter numbers + per-cast occurrence chapters → "Ch. n" chips and
+      // shared-scene evidence quotes.
+      const chapterNum = new Map();
+      try {
+        const chState = ManuscriptChapterService.loadSync() || {};
+        (chState.chapters || []).filter((c) => !c.reserved).forEach((c, i) => chapterNum.set(c.id, c.num || i + 1));
+      } catch (_) {}
+      const occByEntity = new Map();
+      try {
+        for (const o of OccurrenceService.listAllSync() || []) {
+          if (!o || !o.entityId || !castById[o.entityId]) continue;
+          const list = occByEntity.get(o.entityId) || [];
+          list.push(o);
+          occByEntity.set(o.entityId, list);
+        }
+      } catch (_) {}
+      const chaptersOf = (id) => {
+        const set = new Set();
+        for (const o of occByEntity.get(id) || []) {
+          const n = chapterNum.get(o.chapterId);
+          if (n != null) set.add(n);
+        }
+        return set;
+      };
+      const sharedChapters = (aId, bId) => {
+        const bSet = chaptersOf(bId);
+        return [...chaptersOf(aId)].filter((n) => bSet.has(n)).sort((x, y) => x - y).slice(0, 8);
+      };
+      const sharedQuotes = (aId, bId, chapters, max = 2) => {
+        const want = new Set(chapters);
+        const out = [];
+        for (const o of occByEntity.get(aId) || []) {
+          const n = chapterNum.get(o.chapterId);
+          if (n == null || !want.has(n)) continue;
+          const text = String(o.exactText || "").trim();
+          if (!text) continue;
+          out.push({ id: "occ-" + (o.occurrenceId || o.id || out.length), chapter: n, quote: text, strength: "uncertain" });
+          if (out.length >= max) break;
+        }
+        return out;
+      };
+
+      const edges = [];
+      const pairCovered = new Set();
+      const pairKey = (a, b) => (a < b ? a + "::" + b : b + "::" + a);
+
+      // 1. Explicit relationship records.
+      for (const rec of EntityService.listSync("relationships")) {
+        if (!rec || rec.status === "deleted") continue;
+        const d = rec.data || {};
+        const a = relPartyId(d.fromId != null ? d.fromId : d.from);
+        const b = relPartyId(d.toId != null ? d.toId : d.to);
+        if (!a || !b || a === b || !castById[a] || !castById[b]) continue;
+        const rawType = d.bondType || d.relationshipType || d.type || "";
+        const type = relTypeBucket(rawType);
+        const base = REL_EDGE_DEFAULTS[type] || REL_EDGE_DEFAULTS.unknown;
+        let strength = relNum(d.strength != null ? d.strength : d.intensity);
+        let trust = relNum(d.trust);
+        let conflict = relNum(d.conflict);
+        const valence = String(d.valence || "").toLowerCase();
+        if (strength == null) strength = base.strength;
+        if (trust == null) {
+          trust = base.trust;
+          if (valence === "positive") trust += 10;
+          if (valence === "negative") trust -= 20;
+          if (valence === "cold") trust -= 10;
+        }
+        if (conflict == null) {
+          conflict = base.conflict;
+          if (valence === "negative") conflict += 20;
+          if (valence === "heated") conflict += 25;
+          if (valence === "positive") conflict -= 10;
+          if (valence === "quiet") conflict -= 10;
+        }
+        const chapters = Array.isArray(d.chapters) && d.chapters.length
+          ? d.chapters.slice(0, 8)
+          : sharedChapters(a, b);
+        const recChapter = chapterNum.get(rec.chapterId) || chapters[0] || "—";
+        const evidence = [];
+        if (d.sourceQuote) evidence.push({ id: rec.id + "-sq", chapter: recChapter, quote: String(d.sourceQuote), strength: "strong" });
+        if (d.evidence) evidence.push({ id: rec.id + "-ev", chapter: recChapter, quote: String(d.evidence), strength: "strong" });
+        if (evidence.length < 3) evidence.push(...sharedQuotes(a, b, chapters, 3 - evidence.length));
+        edges.push({
+          id: rec.id,
+          recordId: rec.id,
+          synthetic: false,
+          a, b, type,
+          rawType: String(rawType || "unknown"),
+          secret: !!d.secret || !!d.hidden,
+          summary: rec.summary || d.summary || "",
+          chapters,
+          strength: relClamp(strength),
+          trust: relClamp(trust),
+          conflict: relClamp(conflict),
+          evidence: evidence.slice(0, 3),
+        });
+        pairCovered.add(pairKey(a, b));
+      }
+
+      // 2. Synthetic edges from cast dossier related-multi fields.
+      const CAST_EDGE_FIELDS = [
+        ["family", "family"], ["lovers", "lover"], ["allies", "friend"],
+        ["mentors", "mentor"], ["rivals", "rival"], ["enemies", "enemy"],
+      ];
+      const SYN_LABEL = { family: "Family tie", lover: "Lovers", friend: "Allies", mentor: "Mentor", rival: "Rivals", enemy: "Enemies" };
+      for (const c of Object.values(castById)) {
+        const d = c.data || {};
+        for (const [field, type] of CAST_EDGE_FIELDS) {
+          const raw = d[field];
+          const list = raw == null ? [] : (Array.isArray(raw) ? raw : [raw]);
+          for (const v of list) {
+            const other = relPartyId(v);
+            if (!other || other === c.id || !castById[other]) continue;
+            const key = pairKey(c.id, other);
+            if (pairCovered.has(key)) continue;
+            pairCovered.add(key);
+            const chapters = sharedChapters(c.id, other);
+            const base = REL_EDGE_DEFAULTS[type];
+            edges.push({
+              id: "syn-" + key + "-" + type,
+              recordId: null,
+              synthetic: true,
+              a: c.id, b: other, type,
+              rawType: field,
+              secret: false,
+              summary: (SYN_LABEL[type] || type) + " — recorded in " + (c.name || "this character") + "'s dossier.",
+              chapters,
+              strength: base.strength,
+              trust: base.trust,
+              conflict: base.conflict,
+              evidence: sharedQuotes(c.id, other, chapters),
+            });
+          }
+        }
+      }
+      return edges;
     },
     async linkField(entityId, entityType, field, targetId, targetType) {
       const entity = EntityService.getSync(entityId, entityType);

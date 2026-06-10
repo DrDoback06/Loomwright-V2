@@ -1378,6 +1378,45 @@ async function main() {
     }
   }
 
+  // --- [rel] LinkService.listRelationshipEdgesSync — live Relationships edges ---
+  {
+    const anwen = await B.EntityService.save("cast", { name: "Smoke Anwen" }, { status: "active" });
+    const bram = await B.EntityService.save("cast", { name: "Smoke Bram" }, { status: "active" });
+    const cole = await B.EntityService.save("cast", { name: "Smoke Cole" }, { status: "active" });
+    // Extraction-shaped record (fromId/toId/relationshipType verb).
+    await B.EntityService.save("relationships", {
+      name: "Smoke Anwen → Smoke Bram",
+      summary: "Anwen confronted Bram.",
+      data: { fromId: anwen.id, toId: bram.id, relationshipType: "confronted" },
+    }, { status: "active" });
+    // Editor-shaped record (related pickers + bondType + tone fields).
+    await B.EntityService.save("relationships", {
+      name: "Smoke Anwen ↔ Smoke Cole",
+      data: {
+        from: { id: anwen.id, name: "Smoke Anwen", type: "cast" },
+        to: [{ id: cole.id }],
+        bondType: "ally", intensity: "88", valence: "positive",
+      },
+    }, { status: "active" });
+    // Cast dossier fields → synthetic edges (and dedupe vs the explicit pair).
+    await B.EntityService.update("cast", bram.id, { data: { rivals: [cole.id], enemies: [anwen.id] } });
+    const edges = B.LinkService.listRelationshipEdgesSync();
+    const between = (x, y) => edges.filter((e) => (e.a === x && e.b === y) || (e.a === y && e.b === x));
+    const e1 = between(anwen.id, bram.id);
+    log("[rel] extraction-shaped record becomes an edge", e1.length > 0 && e1.every((e) => !e.synthetic), e1.map((e) => e.type).join(",") || "none");
+    log("[rel] verb vocabulary buckets to a styled type", e1.some((e) => e.type === "enemy"));
+    log("[rel] explicit edge wins over cast-field synthetic on the same pair", e1.length === 1);
+    const e2 = between(anwen.id, cole.id)[0];
+    log("[rel] editor-shaped record (pickers + bondType) normalises", !!e2 && e2.type === "friend" && !e2.synthetic, e2 ? e2.type : "missing");
+    log("[rel] intensity string + valence shape the meters", !!e2 && e2.strength === 88 && e2.trust === 80 && e2.conflict === 5, e2 ? `s${e2.strength} t${e2.trust} c${e2.conflict}` : "");
+    const e3 = between(bram.id, cole.id)[0];
+    log("[rel] cast dossier fields synthesize read-only edges", !!e3 && e3.synthetic === true && e3.type === "rival" && e3.recordId === null);
+    log("[rel] meters clamp to 0–100 everywhere", edges.every((e) => [e.strength, e.trust, e.conflict].every((v) => v >= 0 && v <= 100)));
+    await B.EntityService.delete("cast", cole.id);
+    const afterDelete = B.LinkService.listRelationshipEdgesSync();
+    log("[rel] edges drop when a member is deleted", !afterDelete.some((e) => e.a === cole.id || e.b === cole.id));
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

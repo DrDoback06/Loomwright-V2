@@ -1444,6 +1444,18 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
   // Follow host-driven panel.state.
   React.useEffect(() => { setView(incomingState); }, [incomingState]);
 
+  // External dossier selection (e.g. Relationships' "Open both dossiers").
+  React.useEffect(() => {
+    const onOpenMember = (e) => {
+      const id = e?.detail?.entityId;
+      if (!id) return;
+      setSelectedId(id);
+      setView("selected");
+    };
+    window.addEventListener("lw:open-cast-member", onOpenMember);
+    return () => window.removeEventListener("lw:open-cast-member", onOpenMember);
+  }, []);
+
   const selected = _um_cast(() => dossierList.find((c) => c.id === selectedId), [dossierList, selectedId]);
 
   const onSelect = (c) => {

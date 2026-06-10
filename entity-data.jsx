@@ -145,9 +145,15 @@ const ENTITY_SAMPLES = {
   relationships: [
     { id: "rel1", type: "relationships", name: "Aelinor ↔ Saren", glyphChar: "AS", status: "active",
       subtitle: "Rivals; uneasy negotiators",
-      summary: "Strained from Ch. 3; broken in Ch. 7.", chapterRange: "Ch. 3–7", queue: 1 },
+      summary: "Court-rival turned conditional ally after the Glass Audience.", chapterRange: "Ch. 3–7", queue: 1,
+      data: { fromId: "c1", toId: "c2", bondType: "rival", secret: false,
+              intensity: 78, trust: 22, conflict: 81, chapters: [3, 4, 7],
+              sourceQuote: "…Saren bowed, but not low, and Aelinor did not bow back…" } },
     { id: "rel2", type: "relationships", name: "Aelinor ↔ Brec", glyphChar: "AB", status: "active",
-      subtitle: "Loyal-to; mutual trust", chapterRange: "Ch. 1–7" },
+      subtitle: "Loyal-to; mutual trust", chapterRange: "Ch. 1–7",
+      data: { fromId: "c1", toId: "c3", bondType: "ally", secret: false,
+              intensity: 86, trust: 90, conflict: 14, chapters: [1, 2, 7],
+              sourceQuote: "Brec set down the cup so gently it might have been a bird." } },
   ],
   timeline: [
     { id: "t1", type: "timeline", name: "The Auger Wake", glyphChar: "Aw", status: "active",
