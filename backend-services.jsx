@@ -35,6 +35,7 @@
     occurrences: "entity_occurrences",
     tangle: "tangle_canvas",
     randomTables: "random_tables",
+    templates: "templates",
     skillTrees: "skill_trees",
     searchIndex: "search_index",
     auditLog: "audit_log",
@@ -1821,6 +1822,151 @@
         return this.save({ ...state, nodes: next });
       }
       return state;
+    },
+  };
+
+  // -------------------------------------------------------------------
+  // TemplateService — reusable structures (Alkemion-inspired).
+  //   kind "entity": a field snapshot (summary + data.*) applied when
+  //     creating a new record of that type ("Start from template").
+  //   kind "board":  a tangle cluster (nodes + edges, positions
+  //     normalized to origin) stamped onto a board at a drop point.
+  // Built-in genre starter templates (source: "builtin") cover the
+  // deferred "genre RPG entity templates" — classes/races/abilities per
+  // genre; they merge at read time and never export.
+  // -------------------------------------------------------------------
+  const BUILTIN_TEMPLATES = [
+    // — High fantasy —
+    { id: "tpl-hf-class", source: "builtin", kind: "entity", genre: "High fantasy", entityType: "classes", name: "Knight-errant",
+      fields: { summary: "A sworn blade between courts — oath first, lord second.",
+        data: { description: "Wandering knights bound by a personal oath rather than a banner. Their word is currency; breaking it is worse than death.", defaultStats: [{ name: "Valor", value: 7, max: 10 }, { name: "Honor", value: 8, max: 10 }] } } },
+    { id: "tpl-hf-race", source: "builtin", kind: "entity", genre: "High fantasy", entityType: "races", name: "Hill-born",
+      fields: { summary: "Short, stubborn folk of the terraced uplands.",
+        data: { description: "Clan-keepers and dry-stone masons. They count wealth in walls mended and remember debts for nine generations.", culture: "Clan moots at the turning of each season; guests fed before questioned." } } },
+    { id: "tpl-hf-ability", source: "builtin", kind: "entity", genre: "High fantasy", entityType: "abilities", name: "Oathfire",
+      fields: { summary: "A sworn promise that visibly burns until kept.",
+        data: { description: "When sworn aloud before witnesses, a faint flame marks the speaker's hand until the oath is fulfilled or forsworn.", effect: "Everyone can SEE whether this character keeps their word.", cost: "Breaking the oath scars." } } },
+    // — Grimdark —
+    { id: "tpl-gd-class", source: "builtin", kind: "entity", genre: "Grimdark", entityType: "classes", name: "Plague surgeon",
+      fields: { summary: "Keeps people alive in a world that prefers otherwise.",
+        data: { description: "Part healer, part coroner, part confessor. Carries the tools nobody wants to need and knows which wounds towns lie about.", defaultStats: [{ name: "Stomach", value: 9, max: 10 }, { name: "Trust", value: 3, max: 10 }] } } },
+    { id: "tpl-gd-race", source: "builtin", kind: "entity", genre: "Grimdark", entityType: "races", name: "Marsh-cured",
+      fields: { summary: "People of the drowned land; the water changed them.",
+        data: { description: "Generations in the fen left them resistant to rot and unwelcome in towns. Their dead are sunk, not buried.", culture: "Speak little, owe less. A favor is a chain." } } },
+    { id: "tpl-gd-ability", source: "builtin", kind: "entity", genre: "Grimdark", entityType: "abilities", name: "Read the room's debts",
+      fields: { summary: "One look tells who owes whom — and who's about to collect.",
+        data: { description: "A survival sense honed in bad taverns: posture, coin-handling, who watches the door.", effect: "Spot the most dangerous obligation in a gathering.", cost: "It never turns off." } } },
+    // — Science fiction —
+    { id: "tpl-sf-class", source: "builtin", kind: "entity", genre: "Science fiction", entityType: "classes", name: "Hull-rat",
+      fields: { summary: "Maintenance caste of the long-haul ships.",
+        data: { description: "Born shipside, raised in crawlspaces. They keep the air moving and hold the unwritten map of every duct and dead zone.", defaultStats: [{ name: "Improvise", value: 8, max: 10 }, { name: "Gravity tolerance", value: 6, max: 10 }] } } },
+    { id: "tpl-sf-race", source: "builtin", kind: "entity", genre: "Science fiction", entityType: "races", name: "Lagrange-born",
+      fields: { summary: "Station-raised humans; planets make them sick.",
+        data: { description: "Three generations without weather. They navigate by section numbers and find horizons disturbing.", culture: "Air is the first courtesy: you never crowd another's vent." } } },
+    { id: "tpl-sf-ability", source: "builtin", kind: "entity", genre: "Science fiction", entityType: "abilities", name: "Dead-reckon the decks",
+      fields: { summary: "Knows where they are in any structure, always.",
+        data: { description: "An internalized inertial sense built from a childhood of blind crawlspace runs.", effect: "Never lost inside a ship, station or ruin.", cost: "Open sky causes vertigo." } } },
+  ];
+
+  const TemplateService = {
+    defaultState() {
+      return { templates: [], updatedAt: nowIso() };
+    },
+    loadSync() {
+      const raw = StorageService.getSync(KEYS.templates, null);
+      if (!raw || !Array.isArray(raw.templates)) return this.defaultState();
+      return raw;
+    },
+    async save(state) {
+      const next = { ...this.loadSync(), ...clone(state), updatedAt: nowIso() };
+      await StorageService.set(KEYS.templates, next);
+      window.dispatchEvent(new CustomEvent("lw:templates-updated", { detail: next }));
+      return next;
+    },
+    isBuiltin(id) {
+      return BUILTIN_TEMPLATES.some((t) => t.id === id);
+    },
+    listSync(filter = {}) {
+      let out = [...BUILTIN_TEMPLATES, ...this.loadSync().templates];
+      if (filter.kind) out = out.filter((t) => t.kind === filter.kind);
+      if (filter.entityType) out = out.filter((t) => normaliseType(t.entityType) === normaliseType(filter.entityType));
+      if (filter.genre) out = out.filter((t) => t.genre === filter.genre);
+      return out;
+    },
+    getSync(id) {
+      return this.listSync().find((t) => t.id === id) || null;
+    },
+    // Snapshot a live entity (or flat editor fields) into a template —
+    // identity stripped, content kept.
+    async saveEntityTemplate({ name, entityType, fields = {} }) {
+      const data = { ...(fields.data || {}) };
+      for (const k of ["id", "name", "title", "type", "entityType", "status", "glyphChar", "createdAt", "updatedAt", "sourceMentions", "reviewQueueCount", "source"]) delete data[k];
+      const row = {
+        id: uuid("tpl"),
+        kind: "entity",
+        name: name || "Untitled template",
+        entityType: normaliseType(entityType),
+        genre: fields.genre || null,
+        fields: { summary: fields.summary || "", data },
+        createdAt: nowIso(),
+      };
+      const state = this.loadSync();
+      await this.save({ ...state, templates: [...state.templates, row] });
+      return row;
+    },
+    // Snapshot tangle nodes + their edges; positions normalize to origin.
+    async saveBoardTemplate({ name, nodes = [], edges = [] }) {
+      if (!nodes.length) return null;
+      const minX = Math.min(...nodes.map((n) => Number(n.x) || 0));
+      const minY = Math.min(...nodes.map((n) => Number(n.y) || 0));
+      const row = {
+        id: uuid("tpl"),
+        kind: "board",
+        name: name || "Untitled cluster",
+        nodes: nodes.map((n) => ({
+          key: n.id, kind: n.kind || "note", title: n.title || "", preview: n.preview || "",
+          x: (Number(n.x) || 0) - minX, y: (Number(n.y) || 0) - minY,
+        })),
+        edges: edges
+          .filter((e) => nodes.some((n) => n.id === e.from) && nodes.some((n) => n.id === e.to))
+          .map((e) => ({ from: e.from, to: e.to, label: e.label || "", directed: e.directed !== false })),
+        createdAt: nowIso(),
+      };
+      const state = this.loadSync();
+      await this.save({ ...state, templates: [...state.templates, row] });
+      return row;
+    },
+    async remove(id) {
+      if (this.isBuiltin(id)) return false;
+      const state = this.loadSync();
+      await this.save({ ...state, templates: state.templates.filter((t) => t.id !== id) });
+      return true;
+    },
+    // Flat editor-initial for an entity template.
+    entityInitialFrom(idOrTpl) {
+      const tpl = typeof idOrTpl === "string" ? this.getSync(idOrTpl) : idOrTpl;
+      if (!tpl || tpl.kind !== "entity") return null;
+      return { summary: tpl.fields?.summary || "", ...clone(tpl.fields?.data || {}) };
+    },
+    // Stamp a board template onto a tangle board at a point.
+    async instantiateBoardTemplate(idOrTpl, boardId, at = { x: 200, y: 200 }) {
+      const tpl = typeof idOrTpl === "string" ? this.getSync(idOrTpl) : idOrTpl;
+      if (!tpl || tpl.kind !== "board") return [];
+      const idMap = new Map();
+      const created = [];
+      for (const n of tpl.nodes || []) {
+        const row = await TangleService.addNode({
+          boardId, kind: n.kind, title: n.title, preview: n.preview,
+          x: (Number(at.x) || 0) + n.x, y: (Number(at.y) || 0) + n.y,
+        });
+        idMap.set(n.key, row.id);
+        created.push(row);
+      }
+      for (const e of tpl.edges || []) {
+        const from = idMap.get(e.from), to = idMap.get(e.to);
+        if (from && to) await TangleService.addEdge({ boardId, from, to, label: e.label, directed: e.directed });
+      }
+      return created;
     },
   };
 
@@ -4862,6 +5008,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       const extractionSession = await StorageService.get(KEYS.extractionSession, null);
       // User-created random tables only (builtins are code, not data).
       const randomTables = await StorageService.get(KEYS.randomTables, null);
+      const templates = await StorageService.get(KEYS.templates, null);
 
       // Atlas state is derived: locations whose data.placed===true.
       const atlasPlaced = (entities.locations || []).filter((l) => l?.data?.placed === true).map((l) => ({
@@ -4895,6 +5042,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
         atlas: { placed: atlasPlaced },
         tangle,
         randomTables,
+        templates,
         occurrences,
         reviewQueue: opts.includeReviewQueue ? reviewQueueAll : [],
         handoffLog,
@@ -5331,6 +5479,18 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
       }
 
       // Tangle — id-based merge.
+      if (payload.templates) {
+        if (mode === "replace") await StorageService.set(KEYS.templates, payload.templates);
+        else {
+          const cur = await StorageService.get(KEYS.templates, TemplateService.defaultState());
+          const tplMap = new Map((cur.templates || []).map((t) => [t.id, t]));
+          for (const t of (payload.templates.templates || [])) {
+            if (tplMap.has(t.id) && !overwrite) continue;
+            tplMap.set(t.id, t);
+          }
+          await StorageService.set(KEYS.templates, { ...cur, templates: [...tplMap.values()] });
+        }
+      }
       if (payload.randomTables) {
         if (mode === "replace") await StorageService.set(KEYS.randomTables, payload.randomTables);
         else {
@@ -6603,6 +6763,7 @@ Return JSON: [{type:"cast|items|locations|quests|events", name, summary, confide
     TrashService,
     TangleService,
     RandomTableService,
+    TemplateService,
     AtlasService,
     SkillTreeService,
     SpeedReaderService,

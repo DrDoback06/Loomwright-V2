@@ -1014,7 +1014,24 @@ const AppShell = () => {
   const saveEntityFromEditor = _uc_a((payload, opts = {}) => {
     const backend = window.LoomwrightBackend;
     const entityType = payload?.entityType || "generic";
-    const fields = payload?.payload || {};
+    const flat = payload?.payload || {};
+    // The editor's form state is FLAT; persisted entities keep custom
+    // fields under entity.data (what every live panel reads). Pack:
+    // identity keys stay top-level, everything else nests into data.
+    const IDENTITY_KEYS = new Set([
+      "id", "name", "title", "summary", "aliases", "glyphChar", "status",
+      "kind", "content", "sourceMentions", "reviewQueueCount", "source",
+      "createdAt", "updatedAt", "chapterId",
+    ]);
+    const fields = { data: {} };
+    for (const [k, v] of Object.entries(flat)) {
+      if (k === "type" || k === "entityType" || k === "data") continue;
+      if (IDENTITY_KEYS.has(k)) fields[k] = v;
+      else fields.data[k] = v;
+    }
+    // Some readers expect these in data too — mirror them.
+    if (flat.aliases != null) fields.data.aliases = flat.aliases;
+    if (flat.summary != null) fields.data.summary = flat.summary;
     const mode = opts.mode || "active";
     const status = mode === "draft" ? "draft" : "active";
 

@@ -959,13 +959,27 @@ const EntityEditor = ({
   const [mode, setMode] = _ee_us(initialMode || "full");
   const [data, setData] = _ee_us({});
 
-  // When opening, reset data + apply initial.
+  // When opening, reset data + apply initial. The form state is FLAT
+  // (data[field.id]); persisted entities nest custom fields under
+  // entity.data — so hydrate by id when only an id is passed, and
+  // flatten any entity-shaped initial (id-hydrated record, prefill with
+  // a nested data block) into the form shape.
   _ee_ue(() => {
-    if (open) {
-      setData(initial || {});
-      setMode(initialMode || "full");
+    if (!open) return;
+    let init = initial || {};
+    const ES = (typeof window !== "undefined") && window.LoomwrightBackend?.EntityService;
+    if (init.id && ES) {
+      const ent = ES.getSync(init.id, type);
+      if (ent) init = { ...ent, ...init };
     }
-  }, [open, initial, initialMode]);
+    if (init.data && typeof init.data === "object" && !Array.isArray(init.data)) {
+      const { data: nested, ...rest } = init;
+      init = { ...nested, ...rest };
+      delete init.data;
+    }
+    setData(init);
+    setMode(initialMode || "full");
+  }, [open, initial, initialMode, type]);
 
   const update = _ee_uc((patch) => setData((d) => ({ ...d, ...patch })), []);
 
@@ -1019,6 +1033,29 @@ const EntityEditor = ({
             <button type="button" className="ee-head__close" onClick={onClose} aria-label="Close editor"><Icon name="close" size={14}/></button>
           </div>
         </div>
+
+        {/* Start from a template (creating only) */}
+        {!data.id && (() => {
+          const TS = (typeof window !== "undefined") && window.LoomwrightBackend?.TemplateService;
+          const tpls = TS ? TS.listSync({ kind: "entity", entityType: type }) : [];
+          if (!tpls.length) return null;
+          return (
+            <div className="ee-templates" data-ui="EeTemplateStrip">
+              <span className="ee-templates__lbl">Start from</span>
+              {tpls.slice(0, 8).map((t) => (
+                <button key={t.id} type="button" className="ee-templates__chip"
+                        data-testid={"ee-template-" + t.id}
+                        title={(t.genre ? t.genre + " · " : "") + (t.fields?.summary || "")}
+                        onClick={() => {
+                          const init = TS.entityInitialFrom(t) || {};
+                          setData((d) => ({ ...init, name: d.name || "" }));
+                        }}>
+                  {t.genre ? t.genre + " · " : ""}{t.name}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Mode tabs */}
         <div className="ee-tabs" role="tablist">
@@ -1098,6 +1135,24 @@ const EntityEditor = ({
           </div>
           <div className="ee-foot__actions">
             <button type="button" className="ee-btn ee-btn--ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="ee-btn ee-btn--outline" data-testid="ee-save-template"
+              disabled={!(data.name || data.title)}
+              title="Snapshot these fields (minus the name) as a reusable template for this type"
+              onClick={async () => {
+                const TS = window.LoomwrightBackend?.TemplateService;
+                if (!TS) return;
+                const IDENTITY = new Set(["id", "name", "title", "summary", "aliases", "glyphChar", "status", "kind", "type", "entityType", "content", "sourceMentions", "reviewQueueCount", "source", "createdAt", "updatedAt", "chapterId", "data"]);
+                const tplData = {};
+                for (const [k, v] of Object.entries(data)) if (!IDENTITY.has(k)) tplData[k] = v;
+                await TS.saveEntityTemplate({
+                  name: (data.name || data.title || config.displayName) + " template",
+                  entityType: type,
+                  fields: { summary: data.summary || "", data: tplData },
+                });
+                try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Template saved — it appears in the Start-from strip for new " + config.displayName.toLowerCase() + " entries." } })); } catch (_e) {}
+              }}>
+              <Icon name="stack" size={11}/> Save as template
+            </button>
             <button type="button" className="ee-btn ee-btn--outline" data-callback="onSaveEntityDraft" onClick={() => handleSave("draft")}>
               <Icon name="bookmark" size={11}/> Save as Draft
             </button>

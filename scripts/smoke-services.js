@@ -1534,6 +1534,42 @@ async function main() {
     log("[md] html leaves no raw markdown bold", !/\*\*/.test(html));
   }
 
+  // --- [tpl] TemplateService — entity + board templates, builtins ---
+  {
+    const TS = B.TemplateService;
+    const genreTpls = TS.listSync({ kind: "entity", entityType: "classes" }).filter((t) => t.source === "builtin");
+    log("[tpl] genre starter templates ship as builtins", genreTpls.length >= 3 && genreTpls.some((t) => t.genre === "Grimdark"));
+    // Entity template round-trip: snapshot strips identity, initial restores.
+    const tpl = await TS.saveEntityTemplate({
+      name: "Border keep", entityType: "locations",
+      fields: { summary: "A fortified crossing.", data: { kind: "building", danger: "watched", id: "should-be-stripped", name: "should-be-stripped" } },
+    });
+    log("[tpl] saveEntityTemplate strips identity keys", !("id" in tpl.fields.data) && !("name" in tpl.fields.data) && tpl.fields.data.kind === "building");
+    const init = TS.entityInitialFrom(tpl.id);
+    log("[tpl] entityInitialFrom yields a flat editor prefill", init.summary === "A fortified crossing." && init.kind === "building" && init.danger === "watched");
+    log("[tpl] builtins cannot be removed", (await TS.remove(genreTpls[0].id)) === false);
+    // Board template: normalized to origin, instantiates with remapped edges.
+    const board = await B.TangleService.addBoard({ name: "Tpl board" });
+    const n1 = await B.TangleService.addNode({ boardId: board.id, kind: "note", title: "Cause", x: 300, y: 300 });
+    const n2 = await B.TangleService.addNode({ boardId: board.id, kind: "note", title: "Effect", x: 500, y: 380 });
+    await B.TangleService.addEdge({ from: n1.id, to: n2.id, label: "leads to" });
+    const boardView = B.TangleService.listBoardSync(board.id);
+    const btpl = await TS.saveBoardTemplate({ name: "Cause-effect", nodes: boardView.nodes, edges: boardView.edges });
+    log("[tpl] board template normalizes positions to origin", btpl.nodes.some((n) => n.x === 0 && n.y === 0));
+    const board2 = await B.TangleService.addBoard({ name: "Stamp target" });
+    const made = await TS.instantiateBoardTemplate(btpl.id, board2.id, { x: 1000, y: 1000 });
+    const stamped = B.TangleService.listBoardSync(board2.id);
+    log("[tpl] instantiate stamps nodes at the drop point", made.length === 2 && stamped.nodes.every((n) => n.x >= 1000));
+    log("[tpl] instantiate remaps edges to the new node ids",
+      stamped.edges.length === 1 && stamped.edges[0].label === "leads to" &&
+      stamped.nodes.some((n) => n.id === stamped.edges[0].from));
+    // Export carries user templates, never builtins.
+    const tplExport = await B.ProjectArchiveService.buildExport({});
+    const exportedTpls = (tplExport.templates && tplExport.templates.templates) || [];
+    log("[tpl] export includes user templates and excludes builtins",
+      exportedTpls.some((t) => t.id === tpl.id) && !exportedTpls.some((t) => t.source === "builtin"));
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

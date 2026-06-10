@@ -46,7 +46,7 @@ const useTangleState = () => {
   const [tick, setTick] = _tn_us(0);
   _tn_ue(() => {
     const bump = () => setTick((t) => t + 1);
-    const evs = ["lw:tangle-updated", "lw:entity-store-updated", "lw:backend-ready", "lw:project-imported"];
+    const evs = ["lw:tangle-updated", "lw:entity-store-updated", "lw:templates-updated", "lw:backend-ready", "lw:project-imported"];
     evs.forEach((e) => window.addEventListener(e, bump));
     return () => evs.forEach((e) => window.removeEventListener(e, bump));
   }, []);
@@ -528,6 +528,26 @@ const TangleFullScreen = ({ onClose }) => {
             </div>
           ))}
         </div>
+        {(B()?.TemplateService?.listSync?.({ kind: "board" }) || []).length > 0 && (
+          <div className="tan-fs__tray-section">
+            <h4>Templates — tap to stamp</h4>
+            {(B()?.TemplateService?.listSync?.({ kind: "board" }) || []).map((t) => (
+              <div key={t.id} className="tan-fs__tray-tile" data-testid={"tan-template-" + t.id}
+                   onClick={async () => {
+                     const rect = canvasRef.current?.getBoundingClientRect();
+                     const at = rect
+                       ? { x: (rect.width / 2 - pan.x) / scale - 80, y: (rect.height / 2 - pan.y) / scale - 30 }
+                       : { x: 200, y: 200 };
+                     const made = await B()?.TemplateService?.instantiateBoardTemplate(t.id, live.activeBoardId, at);
+                     if (made && made.length) { setSelectedId(made[0].id); _tnNotice("Stamped “" + t.name + "” (" + made.length + " cards)."); }
+                   }}
+                   title={"Stamp " + t.name + " onto the board"}>
+                <span style={{ color: "#3d3a78", fontFamily: "var(--font-display)" }}>◧</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="tan-fs__tray-section">
           <h4>Filter</h4>
           <select className="loc-body__filter" value={filterKind} onChange={(e) => setFilterKind(e.target.value)} style={{ width: "100%" }}>
@@ -586,6 +606,22 @@ const TangleFullScreen = ({ onClose }) => {
           <button className="tan-fs__tb-btn" data-callback="onConnectTangleNodes"
                   onClick={() => _tnNotice("Drag from a card's side handle onto another card to connect them.")}>Connect</button>
           <button className="tan-fs__tb-btn" data-callback="onCreateTangleGroup" onClick={groupSelection}>Group</button>
+          <button className="tan-fs__tb-btn" data-testid="tan-save-template"
+                  onClick={async () => {
+                    if (!selected) { _tnNotice("Select a card — its cluster becomes the template."); return; }
+                    const linked = new Set([selected.id]);
+                    for (const e of edges) {
+                      if (e.from === selected.id) linked.add(e.to);
+                      if (e.to === selected.id) linked.add(e.from);
+                    }
+                    const tplNodes = nodes.filter((n) => linked.has(n.id));
+                    const row = await B()?.TemplateService?.saveBoardTemplate({
+                      name: selected.title + " cluster",
+                      nodes: tplNodes,
+                      edges,
+                    });
+                    if (row) _tnNotice("Cluster saved as a template (" + tplNodes.length + " cards).");
+                  }}>Save template</button>
           <button className="tan-fs__tb-btn" data-callback="onCreateQuestFromTangle"
                   onClick={() => selected
                     ? _tnDispatch("lw:open-entity-editor", { type: "quests", initial: { name: selected.title, summary: selected.preview }, mode: "full" })
