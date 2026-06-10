@@ -99,9 +99,10 @@ test.describe("U32. Templates + editor round-trip", () => {
     await page.locator("[data-testid='tan-open-canvas']").click();
     const fs = page.locator("[data-ui='TangleFullScreen']");
     await expect(fs).toBeVisible();
-    // Select the Cause card, save its cluster as a template.
-    await fs.locator("[data-ui='TangleNode']", { hasText: "Cause" }).dispatchEvent("mousedown");
-    await fs.locator("[data-ui='TangleNode']", { hasText: "Cause" }).dispatchEvent("mouseup");
+    // Select the Cause card, save its cluster as a template. (The canvas
+    // listens to pointer events — mouse, pen, and touch share one path.)
+    await fs.locator("[data-ui='TangleNode']", { hasText: "Cause" }).dispatchEvent("pointerdown", { pointerId: 1, button: 0 });
+    await fs.locator("[data-ui='TangleNode']", { hasText: "Cause" }).dispatchEvent("pointerup", { pointerId: 1 });
     await fs.locator("[data-testid='tan-save-template']").click();
     await page.waitForTimeout(400);
     // Stamp it onto a fresh board.
