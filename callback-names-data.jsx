@@ -323,6 +323,7 @@ window.__LW_CALLBACK_NAMES = [
   "onOpenFilterMenu",
   "onOpenGlobalReview",
   "onOpenImportFlow",
+  "onOpenInsight",
   "onOpenIntelFile",
   "onOpenItemsReviewQueue",
   "onOpenLocationDossier",

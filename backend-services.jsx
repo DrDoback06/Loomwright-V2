@@ -3990,6 +3990,7 @@
   const DETECTOR_BASE_CONFIDENCE = {
     itemTransfer: 0.78, itemLoss: 0.72, travel: 0.8, relationships: 0.74,
     statChange: 0.7, questProgression: 0.66, events: 0.7, lore: 0.62,
+    dialogueAttribution: 0.78, roleEpithet: 0.66, eventChain: 0.6, factionAllegiance: 0.72,
   };
   function detectorConfidence(detectorId, opts = {}) {
     let base = DETECTOR_BASE_CONFIDENCE[detectorId] ?? 0.7;
@@ -4325,6 +4326,264 @@
   }
 
   // Run every detector. Returns a flat array of candidates.
+  // ---- Dialogue attribution -------------------------------------------
+  // "…," said Brec  /  Brec said, "…" — known speakers collect the line as
+  // a voice sample on their record; unknown speakers recurring ≥2 times in
+  // the chapter become new-cast candidates.
+  const SAID_VERBS = "said|asked|replied|whispered|shouted|muttered|answered|growled|called|murmured|snapped|breathed|hissed|added";
+  function detectDialogueAttribution(text, index, chapterId, sessionId) {
+    if (!text || !index) return [];
+    const out = [];
+    const unknownCounts = new Map(); // name → [{quote, offset}]
+    const hit = (quote, name, offset, matchLen) => {
+      const span = { start: offset, end: offset + matchLen };
+      const speaker = findEntityInSpan(text, span, index, ["cast"]);
+      const line = String(quote || "").trim().slice(0, 200);
+      if (!line) return;
+      if (speaker) {
+        out.push(buildCandidate({
+          entityType: "cast",
+          name: speaker.name,
+          existingEntityId: speaker.id,
+          suggestedAction: "update",
+          suggestedChanges: { voiceProfile: "“" + line + "”" },
+          confidence: detectorConfidence("dialogueAttribution"),
+          matchType: "exact",
+          sourceQuote: makeSourceQuote(text, span.start, span.end),
+          chapterId,
+          startOffset: speaker.offset,
+          endOffset: speaker.offset + speaker.matchText.length,
+          relatedEntityIds: [],
+          summary: `Line attributed to ${speaker.name}: “${line.slice(0, 80)}${line.length > 80 ? "…" : ""}”`,
+          extractionSessionId: sessionId,
+        }, { extractionSessionId: sessionId }));
+      } else if (/^[A-Z][a-zA-Z'’-]+$/.test(name) && !NER_STOPWORDS.has(name.toLowerCase())) {
+        const list = unknownCounts.get(name) || [];
+        list.push({ quote: makeSourceQuote(text, span.start, span.end), offset });
+        unknownCounts.set(name, list);
+      }
+    };
+    // Pattern A: "Quote," said Name
+    const reA = new RegExp("[\"“]([^\"”]{2,200})[\"”]\\s*,?\\s*(?:" + SAID_VERBS + ")\\s+([A-Z][a-zA-Z'’-]+)", "g");
+    let m;
+    while ((m = reA.exec(text)) !== null) hit(m[1], m[2], m.index, m[0].length);
+    // Pattern B: Name said, "Quote"
+    const reB = new RegExp("\\b([A-Z][a-zA-Z'’-]+)\\s+(?:" + SAID_VERBS + ")\\s*,?\\s*[\"“]([^\"”]{2,200})[\"”]", "g");
+    while ((m = reB.exec(text)) !== null) hit(m[2], m[1], m.index, m[0].length);
+    // Unknown speakers recurring ≥2 → discovery candidate.
+    for (const [name, lines] of unknownCounts) {
+      if (lines.length < 2) continue;
+      out.push(buildCandidate({
+        entityType: "cast",
+        name,
+        suggestedAction: "create",
+        suggestedChanges: {},
+        confidence: 0.62,
+        matchType: "new",
+        sourceQuote: lines[0].quote,
+        sourceQuotes: lines.slice(0, 3).map((l) => l.quote),
+        chapterId,
+        startOffset: lines[0].offset,
+        endOffset: lines[0].offset + name.length,
+        relatedEntityIds: [],
+        summary: `${name} speaks ${lines.length} times but has no cast record.`,
+        extractionSessionId: sessionId,
+      }, { extractionSessionId: sessionId }));
+    }
+    return out;
+  }
+
+  // ---- Role epithets ----------------------------------------------------
+  // "the baker", "the Auger-keeper": next to a known cast member they file
+  // an occupation; standing alone and recurring they become a candidate.
+  const ROLE_EPITHETS = [
+    "baker", "smith", "blacksmith", "captain", "innkeeper", "healer", "guard", "priest", "priestess",
+    "ferryman", "drover", "keeper", "warden", "steward", "scribe", "miller", "hunter", "fisher",
+    "midwife", "sergeant", "merchant", "butcher", "brewer", "shepherd", "carpenter", "mason",
+    "archivist", "chandler", "tanner", "weaver", "sailor", "soldier", "watchman", "gatekeeper",
+  ];
+  function detectRoleEpithets(text, index, chapterId, sessionId) {
+    if (!text) return [];
+    const out = [];
+    const standalone = new Map(); // epithet → [{offset, quote}]
+    const re = new RegExp("\\b[Tt]he\\s+((?:[A-Z][a-zA-Z'’-]+-)?(?:" + ROLE_EPITHETS.join("|") + "))\\b", "g");
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const epithet = m[1];
+      const start = m.index;
+      const end = m.index + m[0].length;
+      // Apposition right after the epithet ("the gatekeeper, an old man
+      // named Brec Tollman") names its OWN bearer — attribute only when
+      // that name is a known cast member; otherwise skip (the NER pass
+      // discovers the new name itself, with the right attribution).
+      const apposition = /^[^.!?;]{0,50}?\b(?:named|called)\s+([A-Z][\w'’-]+(?:\s+[A-Z][\w'’-]+)?)/.exec(text.slice(end, end + 70));
+      let near = null;
+      if (apposition) {
+        const known = index ? findEntityInSpan(text, { start: end, end: end + 70 }, index, ["cast"]) : null;
+        if (known && apposition[1].includes(known.matchText)) near = known;
+        else { continue; }
+      } else {
+        // Subject position only: a known cast member within 60 chars LEFT
+        // ("Dav wiped his hands; the baker…") — not anywhere in the sentence.
+        near = index ? findEntityInSpan(text, { start: Math.max(0, start - 60), end: start }, index, ["cast"]) : null;
+      }
+      if (near) {
+        out.push(buildCandidate({
+          entityType: "cast",
+          name: near.name,
+          existingEntityId: near.id,
+          suggestedAction: "update",
+          suggestedChanges: { occupation: epithet.toLowerCase() },
+          confidence: detectorConfidence("roleEpithet", { proximity: Math.abs(near.offset - start) }),
+          matchType: "exact",
+          sourceQuote: makeSourceQuote(text, start, end),
+          chapterId,
+          startOffset: start,
+          endOffset: end,
+          relatedEntityIds: [],
+          summary: `${near.name} is "the ${epithet}".`,
+          extractionSessionId: sessionId,
+        }, { extractionSessionId: sessionId }));
+      } else {
+        const list = standalone.get(epithet.toLowerCase()) || [];
+        list.push({ offset: start, quote: makeSourceQuote(text, start, end) });
+        standalone.set(epithet.toLowerCase(), list);
+      }
+    }
+    // A recurring unnamed role (≥3 mentions) is probably a character.
+    for (const [epithet, hits] of standalone) {
+      if (hits.length < 3) continue;
+      const display = "The " + epithet.charAt(0).toUpperCase() + epithet.slice(1);
+      const already = index && (index.cast || []).some((c) => String(c.name || "").toLowerCase() === display.toLowerCase());
+      if (already) continue;
+      out.push(buildCandidate({
+        entityType: "cast",
+        name: display,
+        suggestedAction: "create",
+        suggestedChanges: { occupation: epithet, epithet: true },
+        confidence: 0.55,
+        matchType: "new",
+        sourceQuote: hits[0].quote,
+        sourceQuotes: hits.slice(0, 3).map((h) => h.quote),
+        chapterId,
+        startOffset: hits[0].offset,
+        endOffset: hits[0].offset + display.length,
+        relatedEntityIds: [],
+        summary: `"${display}" appears ${hits.length} times with no record — an unnamed recurring character?`,
+        extractionSessionId: sessionId,
+      }, { extractionSessionId: sessionId }));
+    }
+    return out;
+  }
+
+  // ---- Event chaining ----------------------------------------------------
+  // Causal connectors link two known events/quests: the effect event
+  // records its cause (and the related id), feeding the timeline's
+  // cause→effect view.
+  const CHAIN_CAUSE_RIGHT = /(because of|as a result of|in the wake of|in retaliation for|caused by)/i;
+  const CHAIN_EFFECT_RIGHT = /(which led to|led to|sparked|triggered|set off|gave rise to)/i;
+  function detectEventChaining(text, index, chapterId, sessionId) {
+    if (!text || !index) return [];
+    const out = [];
+    const scan = (re, causeSide) => {
+      const verbRe = new RegExp(re.source, "gi");
+      let m;
+      while ((m = verbRe.exec(text)) !== null) {
+        const start = m.index;
+        const end = m.index + m[0].length;
+        const left = { start: Math.max(0, start - 120), end: start };
+        const right = { start: end, end: Math.min(text.length, end + 120) };
+        const leftEnt = findEntityInSpan(text, left, index, ["events", "quests"]);
+        const rightEnt = findEntityInSpan(text, right, index, ["events", "quests"]);
+        if (!leftEnt || !rightEnt || leftEnt.id === rightEnt.id) continue;
+        const cause = causeSide === "right" ? rightEnt : leftEnt;
+        const effect = causeSide === "right" ? leftEnt : rightEnt;
+        if (effect.type === "quests" && cause.type === "quests") continue; // quest↔quest chains stay manual
+        const quote = makeSourceQuote(text, start, end);
+        out.push(buildCandidate({
+          entityType: "events",
+          name: effect.name,
+          existingEntityId: effect.type === "events" ? effect.id : undefined,
+          suggestedAction: effect.type === "events" ? "update" : "create",
+          suggestedChanges: { cause: `${cause.name} — “${quote.slice(0, 100)}”` },
+          confidence: detectorConfidence("eventChain"),
+          matchType: effect.type === "events" ? "exact" : "new",
+          sourceQuote: quote,
+          chapterId,
+          startOffset: effect.offset,
+          endOffset: effect.offset + effect.matchText.length,
+          relatedEntityIds: [cause.id],
+          summary: `${effect.name} follows from ${cause.name}.`,
+          extractionSessionId: sessionId,
+        }, { extractionSessionId: sessionId }));
+      }
+    };
+    scan(CHAIN_CAUSE_RIGHT, "right");
+    scan(CHAIN_EFFECT_RIGHT, "left");
+    return out;
+  }
+
+  // ---- Faction allegiance ------------------------------------------------
+  // "swore to / banner of / joined / defected to" — known cast left of the
+  // verb binds to a faction on the right (or a new faction is suggested).
+  const ALLEGIANCE_VERBS = /(swore (?:fealty |allegiance )?to|sworn to|pledged (?:herself |himself |themselves )?to|joined|defected to|under the banner of|took the banner of|banner of)/i;
+  function detectFactionAllegiance(text, index, chapterId, sessionId) {
+    if (!text || !index) return [];
+    const out = [];
+    const verbRe = new RegExp(ALLEGIANCE_VERBS.source, "gi");
+    let m;
+    while ((m = verbRe.exec(text)) !== null) {
+      const start = m.index;
+      const end = m.index + m[0].length;
+      const left = { start: Math.max(0, start - 90), end: start };
+      const right = { start: end, end: Math.min(text.length, end + 100) };
+      const actor = findEntityInSpan(text, left, index, ["cast"]);
+      if (!actor) continue;
+      const faction = findEntityInSpan(text, right, index, ["factions"]);
+      const quote = makeSourceQuote(text, start, end);
+      if (faction) {
+        out.push(buildCandidate({
+          entityType: "cast",
+          name: actor.name,
+          existingEntityId: actor.id,
+          suggestedAction: "update",
+          suggestedChanges: { faction: { id: faction.id, name: faction.name, type: "factions" } },
+          confidence: detectorConfidence("factionAllegiance", { proximity: (faction.offset || end) - end }),
+          matchType: "exact",
+          sourceQuote: quote,
+          chapterId,
+          startOffset: actor.offset,
+          endOffset: actor.offset + actor.matchText.length,
+          relatedEntityIds: [faction.id],
+          summary: `${actor.name} swears to ${faction.name}.`,
+          extractionSessionId: sessionId,
+        }, { extractionSessionId: sessionId }));
+      } else {
+        // Capitalised faction-looking name right of the verb → suggest it.
+        const slice = text.slice(right.start, right.end);
+        const fm = /^\s*(?:the\s+)?([A-Z][\w'’-]+(?:\s+[A-Z][\w'’-]+){0,2})/.exec(slice);
+        if (fm && !NER_STOPWORDS.has(fm[1].toLowerCase())) {
+          out.push(buildCandidate({
+            entityType: "factions",
+            name: fm[1],
+            suggestedAction: "create",
+            suggestedChanges: { members: [{ id: actor.id, name: actor.name, type: "cast" }] },
+            confidence: 0.55,
+            matchType: "new",
+            sourceQuote: quote,
+            chapterId,
+            startOffset: right.start + fm.index,
+            endOffset: right.start + fm.index + fm[1].length,
+            relatedEntityIds: [actor.id],
+            summary: `${actor.name} swears to "${fm[1]}" — no faction record yet.`,
+            extractionSessionId: sessionId,
+          }, { extractionSessionId: sessionId }));
+        }
+      }
+    }
+    return out;
+  }
+
   function runLocalDetectors(text, chapterId, sessionId) {
     const index = knownEntityIndex();
     const all = [];
@@ -4336,6 +4595,10 @@
     all.push(...detectQuestProgression(text, index, chapterId, sessionId));
     all.push(...detectEvents(text, index, chapterId, sessionId));
     all.push(...detectLore(text, index, chapterId, sessionId));
+    all.push(...detectDialogueAttribution(text, index, chapterId, sessionId));
+    all.push(...detectRoleEpithets(text, index, chapterId, sessionId));
+    all.push(...detectEventChaining(text, index, chapterId, sessionId));
+    all.push(...detectFactionAllegiance(text, index, chapterId, sessionId));
     return all;
   }
 
@@ -5274,6 +5537,60 @@ Only evidenced pairs. Return JSON only.`;
       return this._save([]);
     },
   };
+
+  // -------------------------------------------------------------------
+  // buildOwnershipLedgerSync — "who holds what, when". A chapter-ordered
+  // ownership timeline per item assembled from the structured ownership
+  // log, trade history, and the current owner field. Flags conflicts
+  // (two owners in the same chapter; a current owner that contradicts the
+  // last logged holder) for the insight engine.
+  // -------------------------------------------------------------------
+  function buildOwnershipLedgerSync() {
+    const rows = [];
+    const items = EntityService.listSync("items").filter((e) => e && e.status !== "deleted");
+    const nameOf = (refOrId) => {
+      const id = refOrId && typeof refOrId === "object" ? refOrId.id : refOrId;
+      if (!id) return null;
+      const ent = EntityService.getSync(id, "cast") || EntityService.getSync(id);
+      return ent ? (ent.name || id) : (refOrId && typeof refOrId === "object" ? refOrId.name : String(refOrId));
+    };
+    for (const item of items) {
+      const d = item.data || {};
+      const timeline = [];
+      for (const o of (Array.isArray(d.ownership) ? d.ownership : [])) {
+        if (!o) continue;
+        timeline.push({ chapter: o.chapter ?? null, owner: nameOf(o.owner) || String(o.what || "").trim() || null, source: "ownership-log" });
+      }
+      for (const t of (Array.isArray(d.tradeTransferHistory) ? d.tradeTransferHistory : [])) {
+        if (!t) continue;
+        timeline.push({ chapter: t.chapter ?? null, owner: nameOf(t.to), source: "trade" });
+      }
+      timeline.sort((a, b) => (a.chapter ?? 999) - (b.chapter ?? 999));
+      const current = d.currentOwner ? nameOf(d.currentOwner) : null;
+
+      let conflict = null;
+      const evidence = [];
+      // Two different owners logged for the same chapter.
+      const byChapter = new Map();
+      for (const t of timeline) {
+        if (t.chapter == null || !t.owner) continue;
+        const prev = byChapter.get(t.chapter);
+        if (prev && prev !== t.owner) {
+          conflict = `Ch. ${t.chapter} logs both ${prev} and ${t.owner} holding it.`;
+          evidence.push({ chapter: t.chapter, quote: `${prev} vs ${t.owner}` });
+        }
+        byChapter.set(t.chapter, t.owner);
+      }
+      // Current owner contradicts the last logged holder.
+      const last = [...timeline].reverse().find((t) => t.owner);
+      if (!conflict && current && last && last.owner && last.owner !== current) {
+        conflict = `Current owner is ${current}, but the last logged holder (Ch. ${last.chapter ?? "?"}) is ${last.owner} — no transfer recorded.`;
+        evidence.push({ chapter: last.chapter ?? 0, quote: `${last.owner} → ${current}?` });
+      }
+      rows.push({ itemId: item.id, itemName: item.name || "Item", current, timeline, conflict, evidence });
+    }
+    return rows;
+  }
 
   // -------------------------------------------------------------------
   // InsightService — the code-first "editor reading over your shoulder".
@@ -7734,6 +8051,7 @@ Only evidenced pairs. Return JSON only.`;
     isOccurrenceStale,
     SelectionLockService,
     InsightService,
+    buildOwnershipLedgerSync,
     SampleProjectService,
     exportProject,
     importProject,

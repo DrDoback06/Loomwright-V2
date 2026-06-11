@@ -322,6 +322,7 @@
   "onOpenFilterMenu",
   "onOpenGlobalReview",
   "onOpenImportFlow",
+  "onOpenInsight",
   "onOpenIntelFile",
   "onOpenItemsReviewQueue",
   "onOpenLocationDossier",

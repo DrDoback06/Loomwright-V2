@@ -638,8 +638,12 @@ const SetExtraction = () => {
             { id: "questProgression", label: "Quest progression" },
             { id: "events",           label: "Events" },
             { id: "lore",             label: "Lore statements" },
+            { id: "dialogueAttribution", label: "Dialogue attribution" },
+            { id: "roleEpithet",      label: "Role epithets (\"the baker\")" },
+            { id: "eventChain",       label: "Event cause → effect" },
+            { id: "factionAllegiance", label: "Faction allegiance" },
           ].map((d) => {
-            const defaults = { itemTransfer: 78, itemLoss: 72, travel: 80, relationships: 74, statChange: 70, questProgression: 66, events: 70, lore: 62 };
+            const defaults = { itemTransfer: 78, itemLoss: 72, travel: 80, relationships: 74, statChange: 70, questProgression: 66, events: 70, lore: 62, dialogueAttribution: 78, roleEpithet: 66, eventChain: 60, factionAllegiance: 72 };
             const overrides = s.detectorConfidence || {};
             const val = Number.isFinite(Number(overrides[d.id])) && Number(overrides[d.id]) > 0
               ? Math.round(Number(overrides[d.id]) * 100)
