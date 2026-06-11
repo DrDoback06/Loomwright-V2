@@ -4891,7 +4891,29 @@ Return a JSON object mapping fieldId to value for ONLY clearly-evidenced fields.
         }
       }
       if (occurrences.length) await OccurrenceService.saveMany(occurrences);
-      report("scan", { occurrenceCount: occurrences.length });
+      // Per-entity breakdown of the known-entity scan, so progress UIs can
+      // say "re-confirmed 15 mentions of Anwen Hale (×8), Brec (×7)"
+      // instead of a bare number users mistake for new finds.
+      const knownMentions = (() => {
+        const byEntity = new Map();
+        for (const o of occurrences) {
+          if (!o.entityId) continue;
+          const cur = byEntity.get(o.entityId) || { entityId: o.entityId, entityType: o.entityType, count: 0, pronounCount: 0 };
+          cur.count += 1;
+          if (o.isPronounResolution) cur.pronounCount += 1;
+          byEntity.set(o.entityId, cur);
+        }
+        const rows = [...byEntity.values()];
+        for (const r of rows) {
+          try {
+            const e = EntityService.getSync(r.entityId, r.entityType) || EntityService.getSync(r.entityId);
+            r.name = (e && e.name) || r.entityId;
+          } catch (_) { r.name = r.entityId; }
+        }
+        rows.sort((a, b) => b.count - a.count);
+        return rows;
+      })();
+      report("scan", { occurrenceCount: occurrences.length, knownMentions });
 
       // Local detectors (Pass 1): pattern-based phrase scans for item
       // transfer/loss, travel, relationships, stat changes, quest
@@ -5159,7 +5181,7 @@ Only evidenced pairs. Return JSON only.`;
       };
       await this.saveSession(session);
       window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
-      report(isAborted() ? "cancelled" : "complete", { candidates: reviewItems, candidateCount: reviewItems.length, occurrenceCount: occurrences.length });
+      report(isAborted() ? "cancelled" : "complete", { candidates: reviewItems, candidateCount: reviewItems.length, occurrenceCount: occurrences.length, knownMentions });
       return { session, items, occurrences, candidates: reviewItems, occurrenceCount: occurrences.length, itemCount: items.length };
     },
   };

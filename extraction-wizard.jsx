@@ -33,10 +33,14 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
   const [counts, setCounts] = _ewUS({});
   const [note, setNote] = _ewUS("");
   const [progress, setProgress] = _ewUS(0); // 0..1 across the whole run, from live engine events
+  // Known-entity mentions re-confirmed by the scan (NOT review candidates) —
+  // shown separately so "found 15" is never mistaken for 15 queue items.
+  const [known, setKnown] = _ewUS({ mentions: 0, entities: [] });
+  const knownAgg = _ewUR(new Map());
   const abortRef = _ewUR(null);
 
   _ewUE(() => {
-    if (open) { setScope(initialScope || "manuscript"); setMode("quick"); setPhase("setup"); setStreamed([]); setCounts({}); setNote(""); setProgress(0); }
+    if (open) { setScope(initialScope || "manuscript"); setMode("quick"); setPhase("setup"); setStreamed([]); setCounts({}); setNote(""); setProgress(0); setKnown({ mentions: 0, entities: [] }); knownAgg.current = new Map(); }
   }, [open, initialScope]);
 
   // Allow an external cancel (e.g. a registry-dispatched onCancelExtraction).
@@ -89,6 +93,16 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
     };
     const STAGE_FRACTION = { start: 0.05, scan: 0.2, detect: 0.4, "ai-relationships": 0.9, complete: 1 };
     const makeProgressHandler = (targetTitle, targetIndex, targetCount) => (d) => {
+      // Known-entity scan results (once per chapter): aggregate across the run.
+      if (d && d.stage === "scan" && Array.isArray(d.knownMentions)) {
+        for (const m of d.knownMentions) {
+          const cur = knownAgg.current.get(m.entityId) || { ...m, count: 0 };
+          cur.count += m.count || 0;
+          knownAgg.current.set(m.entityId, cur);
+        }
+        const entities = [...knownAgg.current.values()].sort((a, b) => b.count - a.count);
+        setKnown({ mentions: entities.reduce((n, m) => n + m.count, 0), entities });
+      }
       if (d && d.stage) {
         let label = STAGE_LABEL[d.stage] || "";
         let frac = STAGE_FRACTION[d.stage] != null ? STAGE_FRACTION[d.stage] : 0.4;
@@ -223,9 +237,15 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
               <div className="exm__bar__fill" style={{ width: (phase === "running" ? Math.max(4, Math.round(progress * 100)) : 100) + "%", transition: "width .3s" }} />
             </div>
             <div className="exm__body" style={{ display: "block", maxHeight: 320, overflowY: "auto" }}>
-              <div className="exm__col-title">Discovered so far · {total}</div>
+              <div className="exm__col-title">New candidates · {total}</div>
               {total === 0 && phase === "running" && <p style={{ opacity: 0.6, fontSize: 13 }}>Reading the page…</p>}
-              {total === 0 && phase !== "running" && <p style={{ opacity: 0.6, fontSize: 13 }}>No new entities found in this scope.</p>}
+              {total === 0 && phase !== "running" && (
+                <p style={{ opacity: 0.6, fontSize: 13 }}>
+                  {known.mentions > 0
+                    ? "No NEW entities — everything mentioned is already in your world (see below). Only new or changed things need review."
+                    : "No new entities found in this scope."}
+                </p>
+              )}
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
                 {streamed.map((it, idx) => (
                   <div key={(it.id || it.name) + ":" + idx} data-testid="wizard-stream-row" style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", border: "1px solid var(--line, #e3dac6)", borderRadius: 8 }}>
@@ -241,6 +261,19 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
                   </div>
                 ))}
               </div>
+
+              {known.mentions > 0 && (
+                <div style={{ marginTop: 12 }} data-testid="wizard-known">
+                  <div className="exm__col-title" title="Mentions of entities you've already approved — they update mention counts and highlights, not the review queue">
+                    Already in your world · {known.mentions} mention{known.mentions === 1 ? "" : "s"}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                    {known.entities.map((m) => (
+                      <span key={m.entityId} className="chip" style={{ fontSize: 11 }}>{m.name} ×{m.count}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -249,7 +282,11 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
           <div className="exm__foot__hint">
             {phase === "setup" && "Local-only. Nothing leaves your device."}
             {phase === "running" && "You can keep working — triage in the review queue any time."}
-            {phase === "complete" && ("Found " + total + " candidate" + (total === 1 ? "" : "s") + ". Triage them in the review queue.")}
+            {phase === "complete" && (
+              total + " new candidate" + (total === 1 ? "" : "s") + " for review"
+              + (known.mentions > 0 ? " · " + known.mentions + " mention" + (known.mentions === 1 ? "" : "s") + " of known entities re-confirmed" : "")
+              + "."
+            )}
             {phase === "cancelled" && "Stopped. Anything already found is in the review queue."}
             {phase === "error" && note}
           </div>

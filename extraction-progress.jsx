@@ -38,7 +38,7 @@ function epStageIndexFor(d, stagesLen) {
 function useExtractionProgress(open) {
   const empty = () => ({
     sessionId: null, stageIdx: 0, found: [], counts: {},
-    occurrenceCount: 0, chunkIndex: 0, chunkCount: 0,
+    occurrenceCount: 0, knownMentions: [], chunkIndex: 0, chunkCount: 0,
     finished: false, cancelled: false, finalCount: null, deep: false,
   });
   const [live, setLive] = _epUS(empty);
@@ -59,6 +59,7 @@ function useExtractionProgress(open) {
         const stagesLen = (typeof EXTRACTION_STAGES !== "undefined" ? EXTRACTION_STAGES.length : 11);
         const next = { ...prev, stageIdx: Math.max(prev.stageIdx, epStageIndexFor(d, stagesLen)) };
         if (d.stage === "scan") next.occurrenceCount = d.occurrenceCount || 0;
+        if (Array.isArray(d.knownMentions)) next.knownMentions = d.knownMentions;
         if (d.stage === "ai") { next.chunkIndex = (d.chunkIndex || 0) + 1; next.chunkCount = d.chunkCount || 0; }
         // Candidates stream in on `detect` (local pass) and `complete`
         // (final list, including AI finds). Dedupe by type+name; upgrade
@@ -206,7 +207,7 @@ const ExtractionProgressModal = ({
                       <div className="exm__stage__hint">{s.hint}</div>
                     </div>
                     {s.id === "scan" && st !== "pending" && live.occurrenceCount > 0 && (
-                      <span className="exm__stage__count">+{live.occurrenceCount}</span>
+                      <span className="exm__stage__count" title="Mentions of entities you've already approved — these don't need review">{live.occurrenceCount} mentions</span>
                     )}
                   </div>
                 );
@@ -214,7 +215,7 @@ const ExtractionProgressModal = ({
             </div>
 
             <div className="exm__counts" data-testid="exm-found">
-              <div className="exm__col-title">Found so far · {foundTotal}</div>
+              <div className="exm__col-title">New candidates · {foundTotal}</div>
               {nonZeroTypes.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, margin: "6px 0 8px" }}>
                   {nonZeroTypes.map(([k, v]) => (
@@ -226,10 +227,14 @@ const ExtractionProgressModal = ({
               )}
               {foundTotal === 0 && (
                 <p style={{ opacity: 0.6, fontSize: 13, fontStyle: "italic" }}>
-                  {state === "running" ? "Reading the page — names appear here the moment they're found…" : "Nothing new found in this scope."}
+                  {state === "running"
+                    ? "Reading the page — new names appear here the moment they're found…"
+                    : live.knownMentions.length
+                    ? "No NEW names — everything mentioned here is already in your world (below). Only new or changed things need review."
+                    : "Nothing new found in this scope."}
                 </p>
               )}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 230, overflowY: "auto", paddingRight: 4 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: live.knownMentions.length ? 150 : 230, overflowY: "auto", paddingRight: 4 }}>
                 {live.found.map((f, i) => (
                   <div key={f.entityType + ":" + f.name + ":" + i} data-testid="exm-found-row"
                     style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 6px", border: "1px solid var(--line-1, #e7dfcc)", borderRadius: 7, fontSize: 12.5 }}>
@@ -237,11 +242,29 @@ const ExtractionProgressModal = ({
                     {typeof EntityTypeBadge !== "undefined"
                       ? <EntityTypeBadge type={f.entityType} size="xs" showLabel={false}/>
                       : <span className="chip">{f.entityType}</span>}
-                    <span style={{ fontWeight: 600, flex: "0 0 auto" }}>{f.name}</span>
+                    <span data-testid="exm-found-name" style={{ fontWeight: 600, flex: "0 0 auto" }}>{f.name}</span>
                     <span style={{ flex: 1, opacity: 0.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.quote}</span>
                   </div>
                 ))}
               </div>
+
+              {live.knownMentions.length > 0 && (
+                <div style={{ marginTop: 10 }} data-testid="exm-known">
+                  <div className="exm__col-title" title="Mentions of entities you've already approved — they update mention counts and highlights, not the review queue">
+                    Already in your world · {live.occurrenceCount} mention{live.occurrenceCount === 1 ? "" : "s"}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6, maxHeight: 84, overflowY: "auto" }}>
+                    {live.knownMentions.map((m) => (
+                      <span key={m.entityId} className="chip" data-testid="exm-known-chip" style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        {typeof EntityTypeBadge !== "undefined" && m.entityType
+                          ? <EntityTypeBadge type={m.entityType} size="xs" showLabel={false}/>
+                          : null}
+                        {m.name} ×{m.count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -249,7 +272,10 @@ const ExtractionProgressModal = ({
         <div className="exm__foot">
           <div className="exm__foot__hint">
             {state === "running"   && <>Session <span className="mono">{live.sessionId || "…"}</span> · <em>You can keep writing — this runs in the background.</em></>}
-            {state === "complete"  && <>Found {totalDetected} candidate{totalDetected === 1 ? "" : "s"} across {nonZeroTypes.length} entity type{nonZeroTypes.length === 1 ? "" : "s"}.</>}
+            {state === "complete"  && <>
+              {totalDetected} new candidate{totalDetected === 1 ? "" : "s"} for review
+              {live.occurrenceCount > 0 && <> · {live.occurrenceCount} mention{live.occurrenceCount === 1 ? "" : "s"} of {live.knownMentions.length} known entit{live.knownMentions.length === 1 ? "y" : "ies"} re-confirmed</>}.
+            </>}
             {state === "error"     && <>Session <span className="mono">{live.sessionId || "…"}</span></>}
             {state === "cancelled" && <>Stopped. Anything already found is in the review queue.</>}
           </div>
