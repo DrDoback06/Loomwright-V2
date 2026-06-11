@@ -46,12 +46,16 @@ test.describe("U26. AI Writer + Home — live", () => {
     await expect(aiw.locator("select").nth(1)).toContainText("Anwen Hale — close third");
     // Preview starts empty (no canned sample prose).
     await expect(aiw.locator("[data-ui='AiwPreviewEmpty']")).toBeVisible();
-    // Generate without a provider → specific configure notice, no sample text.
+    // Generate without a provider → specific configure notice, AND a useful
+    // local draft brief (assembled from real project context) instead of a
+    // dead end. Never canned sample prose.
     await aiw.locator("[data-testid='aiw-generate']").click();
     await page.waitForTimeout(500);
     const notices = await page.evaluate(() => window.__notices);
     expect(notices.some((n) => /provider/i.test(n))).toBe(true);
-    await expect(aiw.locator("[data-ui='AiwPreviewEmpty']")).toBeVisible();
+    await expect(aiw.locator("[data-testid='aiw-fallback-brief']")).toBeVisible();
+    await expect(aiw.locator("[data-testid='aiw-fallback-brief']")).toContainText("toll road in the rain");
+    await expect(aiw).not.toContainText("Aelinor Vey");
   });
 
   test("entities drag-drop into the writer's context as chips", async ({ page }) => {

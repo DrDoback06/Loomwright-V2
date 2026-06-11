@@ -3375,13 +3375,29 @@
         push("Selected entities", lines.join("\n"));
       }
 
-      // Project Intelligence (summaries preferred).
+      // Project Intelligence — structured so the style signal is strong:
+      // imperative style directives, hard avoid-constraints, canon, and
+      // (for writing tasks) the project foundation.
       if (includeProjectIntelligence !== false) {
         const intel = ProjectIntelService.loadSync();
-        const intelText = [intel.writingStyleGuide && ("Style: " + intel.writingStyleGuide),
-          Array.isArray(intel.canonRules) ? ("Canon: " + intel.canonRules.join("; ")) : (intel.canonRules ? "Canon: " + intel.canonRules : "")]
-          .filter(Boolean).join("\n");
-        if (intelText) { push("Project intelligence", intelText); includesIntel = true; }
+        const directives = [];
+        if (intel.pov || intel.tense) directives.push(`Write in ${[intel.pov, intel.tense && intel.tense + " tense"].filter(Boolean).join(", ")}.`);
+        if (Array.isArray(intel.toneKeywords) && intel.toneKeywords.length) directives.push(`Maintain this tone throughout: ${intel.toneKeywords.join(", ")}.`);
+        if (intel.genre) directives.push(`Genre expectations: ${intel.genre}.`);
+        if (intel.writingStyleGuide) directives.push(intel.writingStyleGuide);
+        if (directives.length) { push("Style directives", directives.join("\n")); includesIntel = true; }
+
+        const avoid = [];
+        for (const f of (Array.isArray(intel.forbidden) ? intel.forbidden : [])) avoid.push(`Do not: ${f}`);
+        const avoidLine = /(^|\n)Avoid:\s*(.+)/.exec(intel.writingStyleGuide || "");
+        if (avoidLine) avoid.push(`Do not use: ${avoidLine[2]}`);
+        if (avoid.length) { push("Avoid (hard constraints)", avoid.join("\n")); includesIntel = true; }
+
+        const canon = Array.isArray(intel.canonRules) ? intel.canonRules.join("; ") : (intel.canonRules || "");
+        if (canon) { push("Canon (never contradict)", canon); includesIntel = true; }
+
+        const writingTask = /writing|draft|revise|continue|critique|dialogue|tone/i.test(String(task || ""));
+        if (writingTask && intel.projectFoundation) { push("Project foundation", intel.projectFoundation); includesIntel = true; }
       }
 
       // References flagged for AI context.

@@ -382,9 +382,41 @@ const AiWriterPanelBody = ({ panel }) => {
     }
     return parts.join("\n\n");
   };
+  // No-provider fallback: a deterministic "draft brief" assembled from the
+  // exact context the model WOULD receive (AIContextBuilder sections, the
+  // composed instruction, entity dossiers). Never a dead end — the brief is
+  // useful on its own and copyable into any external assistant.
+  const buildLocalBrief = () => {
+    const Bk = window.LoomwrightBackend;
+    const lines = [];
+    lines.push("DRAFT BRIEF (assembled locally — no AI provider configured)");
+    lines.push("");
+    lines.push(composePrompt());
+    try {
+      const ctx = Bk?.AIContextBuilder?.build?.({ task: "writingDraft", chapterId: live.chapterId, selectedEntityIds: chips.map((c) => c.id) });
+      for (const s of (ctx?.sections || [])) {
+        lines.push("");
+        lines.push("— " + s.label + " —");
+        lines.push(String(s.text).slice(0, 900));
+      }
+    } catch (_e) {}
+    lines.push("");
+    lines.push("Next: write the scene from the beats above, or configure an AI provider in Settings ▸ AI & Privacy to generate it here.");
+    return lines.join("\n");
+  };
+
   const onGenerate = () => {
     if (mode === "Continuity Check") {
       window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onRunContinuityCheck" } }));
+      return;
+    }
+    // Provider-less path: render the local brief instead of only a notice.
+    const route = window.LoomwrightBackend?.AIRoutingService?.resolveRoute?.("writingDraft");
+    if (!route) {
+      setGenerated({ text: buildLocalBrief(), mode: "local-brief" });
+      window.dispatchEvent(new CustomEvent("lw:dispatch-callback", {
+        detail: { name: "onGenerateAIWriterDraft", detail: { prompt: composePrompt(), chapterId: live.chapterId, entityIds: chips.map((c) => c.id) } },
+      }));
       return;
     }
     window.dispatchEvent(new CustomEvent("lw:dispatch-callback", {
@@ -541,9 +573,10 @@ const AiWriterPanelBody = ({ panel }) => {
           <div>
             <div className="aiw__section-title">Preview</div>
             {generated ? (
-              <div className="aiw__preview" data-ui="AiwPreview">
+              <div className="aiw__preview" data-ui="AiwPreview"
+                data-testid={generated.mode === "local-brief" ? "aiw-fallback-brief" : "aiw-preview"}>
                 <div className="aiw__preview-meta">
-                  {mode} · draft · ~{Math.round((previewText.split(/\s+/).filter(Boolean).length))}w
+                  {mode} · {generated.mode === "local-brief" ? "local brief (no provider)" : "draft"} · ~{Math.round((previewText.split(/\s+/).filter(Boolean).length))}w
                 </div>
                 {previewText.split("\n\n").map((p, i) => <p key={i}>{p}</p>)}
               </div>
