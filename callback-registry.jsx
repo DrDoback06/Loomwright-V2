@@ -74,9 +74,9 @@
     return ctx;
   }
 
-  function openEditor(type, initial, mode) {
+  function openEditor(type, initial, mode, sectionId) {
     window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
-      detail: { type: B().EntityService.normaliseType(type), initial, mode },
+      detail: { type: B().EntityService.normaliseType(type), initial, mode, sectionId: sectionId || undefined },
     }));
   }
 
@@ -399,7 +399,8 @@
       EntityService, ReviewService, LinkService, ReferencesService,
       OnboardingService, ProjectIntelService, HandoffService, AIService,
       ExtractionService, ManuscriptChapterService, TrashService, CompositionService,
-      SampleProjectService, exportProject, importProject,
+      SampleProjectService, SettingsService, StorageService, OccurrenceService,
+      exportProject, importProject,
     } = B();
 
     if (BACKEND_HANDLED.has(name)) return;
@@ -633,10 +634,41 @@
     if (name === "onToggleEntityDoNotSuggest") await LinkService.toggleFlag(id, type, "do-not-suggest");
 
     // —— Items / equipment ——
-    if (name === "onEquipItem") { await LinkService.equipItem(id, ctx.detail?.ownerId); return; }
-    if (name === "onUnequipItem") { await LinkService.unequipItem(id); return; }
-    if (name === "onAssignItemOwner" || name === "onAssignOwner") {
-      await LinkService.assignOwner(id, ctx.detail?.ownerId);
+    if (name === "onEquipItem") {
+      const item = id && EntityService.getSync(id, "items");
+      if (item && !item.data?.currentOwner && !ctx.detail?.ownerId) {
+        // No owner yet — equipping needs one; the ownership section has the picker.
+        openEditor("items", { id }, "full", "ownership");
+        notify("Set the item's owner first — Equip marks it equipped on its current owner.");
+        return;
+      }
+      await LinkService.equipItem(id, ctx.detail?.ownerId);
+      notify("Equipped.");
+      return;
+    }
+    if (name === "onUnequipItem") { await LinkService.unequipItem(id); notify("Unequipped — now carried."); return; }
+    if (name === "onAssignItemOwner" || name === "onAssignOwner" || name === "onTransferItem" || name === "onTradeItem") {
+      if (ctx.detail?.ownerId) {
+        await LinkService.assignOwner(id, ctx.detail.ownerId, { transfer: name !== "onAssignItemOwner" && name !== "onAssignOwner", note: ctx.detail?.note });
+        notify(name === "onAssignItemOwner" || name === "onAssignOwner" ? "Owner assigned." : "Transferred.");
+        return;
+      }
+      // No target supplied — the ownership section's related picker IS the
+      // chooser (and transfers logged there land in tradeTransferHistory).
+      openEditor("items", { id }, "full", "ownership");
+      return;
+    }
+    if (name === "onDropItem") {
+      await LinkService.dropItem(id);
+      notify("Dropped — owner cleared, status set to stored.");
+      return;
+    }
+    if (name === "onUpgradeItem") {
+      openEditor("items", { id }, "full", "effects");
+      return;
+    }
+    if (name === "onUpgradeAbility") {
+      openEditor("skills", id ? { id } : undefined, "full", "effects");
       return;
     }
     if (name === "onDestroyItem" || name === "onDeleteEntityRequest") {
@@ -1510,6 +1542,102 @@
     if (/^onAssign\w+/.test(name) && id && type) {
       await LinkService.patchEntity(id, type, { data: { ...(entity?.data || {}), assignee: ctx.detail?.targetId } });
       notify("Assigned.");
+      return;
+    }
+
+    // —— Writers Room AI toolbar → AI Writer panel in the right mode ——
+    if (/^onAI(Revise|Continue|WriteChapter|WriteParagraphs|AddIn)$/.test(name)) {
+      const modeByName = {
+        onAIRevise: "Revise Passage", onAIContinue: "Continue Writing",
+        onAIWriteChapter: "Write Chapter", onAIWriteParagraphs: "Write Paragraphs",
+        onAIAddIn: "Write Add-In",
+      };
+      openPanel("aiWriter");
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("lw:aiwriter-set-mode", { detail: { mode: modeByName[name] } }));
+      }, 120);
+      return;
+    }
+
+    // —— Duplicate an entity (Classes/Races "Duplicate" etc.) ——
+    if (/^onDuplicate([A-Z][a-z]+)$/.test(name)) {
+      const src = id && EntityService.getSync(id, type);
+      if (!src) { notify("Select an entry to duplicate first."); return; }
+      const copy = await EntityService.save(src.type, {
+        ...src, id: undefined, name: (src.name || "Untitled") + " (copy)",
+        data: { ...(src.data || {}) }, createdAt: undefined, updatedAt: undefined,
+      }, { status: src.status || "active" });
+      notify(`Duplicated as "${copy.name}".`);
+      return;
+    }
+
+    // —— Atlas: jump from a location card to its first manuscript mention ——
+    if (name === "onJumpManuscript") {
+      const occ = id && (OccurrenceService?.listAllSync?.() || []).find((o) => o.entityId === id && o.chapterId);
+      if (!occ) { notify("No manuscript mentions for this entry yet."); return; }
+      window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } }));
+      window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: occ.chapterId } }));
+      return;
+    }
+
+    // —— Atlas: co-presence chip → focus that cast member ——
+    if (name === "onSelectCoPresence") {
+      if (id) focusEntity("cast", id, ctx.entity?.name || "");
+      return;
+    }
+
+    // —— Atlas queue: show a candidate's location on the map ——
+    if (name === "onShowOnAtlas") {
+      const ent = id ? (EntityService.getSync(id, "locations") || ctx.entity) : null;
+      if (ent && ent.type === "locations") { focusEntity("atlas", ent.id, ent.name); return; }
+      notify("Accept the candidate first — placed locations can be shown on the map.");
+      return;
+    }
+
+    // —— Atlas queue: process everything pending for locations ——
+    if (name === "onProcessAllAtlasQueue") {
+      const items = (ReviewService.listSync("locations") || []).filter((q) => q.status === "pending");
+      if (!items.length) { notify("Atlas queue is clear."); return; }
+      for (const q of items) await ReviewService.accept(q.id);
+      notify(`Accepted ${items.length} atlas candidate(s).`);
+      return;
+    }
+
+    // —— Atlas editor: persist per-layer lock ——
+    if (name === "onToggleAtlasLayerLock") {
+      const layerId = ctx.target?.getAttribute?.("data-layer") || ctx.detail?.layerId;
+      if (!layerId) return;
+      const section = SettingsService.getSectionSync("atlas", {}) || {};
+      const lockedLayers = { ...(section.lockedLayers || {}) };
+      const defs = window.ATLAS_LAYERS || [];
+      const current = lockedLayers[layerId] != null ? !!lockedLayers[layerId] : !!defs.find((l) => l.id === layerId)?.locked;
+      lockedLayers[layerId] = !current;
+      await SettingsService.saveSection("atlas", { ...section, lockedLayers });
+      notify(!current ? "Layer locked — visibility is pinned." : "Layer unlocked.");
+      return;
+    }
+
+    // —— Settings: reset the docked panel layout ——
+    if (name === "onResetLayout") {
+      window.dispatchEvent(new CustomEvent("lw:reset-panel-layout"));
+      notify("Panel layout reset to the default arrangement.");
+      return;
+    }
+
+    // —— Settings: clear derived context caches (search index + insights) ——
+    if (name === "onClearCachedContext") {
+      try { B().SearchService?.rebuildIndex?.(); } catch (_) {}
+      try { B().InsightService?.bump?.(); } catch (_) {}
+      notify("Derived caches rebuilt (search index + insights). Your data is untouched.");
+      return;
+    }
+
+    // —— Settings: reopen the most recent AI handoff pack ——
+    if (name === "onShowLastAIHandoff") {
+      const log = StorageService.getSync(B().keys.handoffLog, []) || [];
+      const last = log.find((e) => e.kind === "pack");
+      if (!last) { notify("No handoff packs saved yet — build one from the Writer's Room."); return; }
+      window.dispatchEvent(new CustomEvent("lw:show-handoff-pack", { detail: { entry: last } }));
       return;
     }
 

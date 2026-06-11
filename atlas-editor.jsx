@@ -771,11 +771,13 @@ const AtlasMiniMap = ({ locations, routes, selectedId, context }) => {
                    M 380 290 C 460 260, 620 230, 690 360 S 540 480, 380 420 Z
                    M 740 200 C 820 170, 1100 170, 1140 320 S 980 510, 880 480 S 720 360, 740 200 Z"
             fill="#dccda3" stroke="rgba(74,56,28,0.6)" strokeWidth="2"/>
-          {locations.filter((l) => ["country","region","city"].includes(l.type)).map((l) => {
-            const x = (l.x / 100) * 1200;
-            const y = (l.y / 100) * 700;
-            return <circle key={l.id} cx={x} cy={y} r={l.type === "city" ? 10 : 6} fill={l.id === selectedId ? "#c98a2c" : "#3a2c12"}/>;
-          })}
+          {locations
+            .filter((l) => ["country","region","city"].includes(l.type) && Number.isFinite(Number(l.x)) && Number.isFinite(Number(l.y)))
+            .map((l) => {
+              const x = (Number(l.x) / 100) * 1200;
+              const y = (Number(l.y) / 100) * 700;
+              return <circle key={l.id} cx={x} cy={y} r={l.type === "city" ? 10 : 6} fill={l.id === selectedId ? "#c98a2c" : "#3a2c12"}/>;
+            })}
           <rect x="40" y="80" width="500" height="360" fill="none" stroke="#c98a2c" strokeWidth="6" strokeDasharray="20 16"/>
         </svg>
       </div>

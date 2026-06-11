@@ -52,11 +52,15 @@ const AtlasPanelBody = ({ panel, panelContext, onSelectEntity: onHostSelectEntit
     const B = window.LoomwrightBackend;
     const data = B?.AtlasService?.buildAtlasDataSync?.()
       || { locations: [], routes: [], roads: [], chapters: [], quests: [], beasts: [], items: [], factions: [], cast: [], queue: [], counts: {} };
-    // Layer defs keep their designed structure; counts come live.
+    // Layer defs keep their designed structure; counts come live. Lock
+    // state persists in Settings ▸ atlas.lockedLayers (the lock button in
+    // the editor toggles it; a locked layer's visibility can't be toggled).
+    const lockedLayers = (B?.SettingsService?.getSectionSync?.("atlas", {}) || {}).lockedLayers || {};
     const layerDefs = (window.ATLAS_LAYER_DEFS || []).map((l) => ({
       ...l,
       count: l.count === null ? null : (data.counts[l.id] ?? 0),
       warnings: (l.id === "warnings" || l.id === "extracts") ? data.queue.length : l.warnings,
+      locked: lockedLayers[l.id] != null ? !!lockedLayers[l.id] : !!l.locked,
     }));
     const payload = { ...data, layers: layerDefs };
     // Persisted per-layer opacity (Settings ▸ atlas.layerOpacity) — read
@@ -280,7 +284,14 @@ const AtlasPanelBody = ({ panel, panelContext, onSelectEntity: onHostSelectEntit
 
   const onSetScrub      = _uc_atx((i) => setScrubChapter(i), []);
   const onJumpCurrent   = _uc_atx(() => setScrubChapter(null), []);
-  const onToggleLayer   = _uc_atx((id) => setLayerState((s) => ({ ...s, [id]: !(s[id] !== false) })), []);
+  const onToggleLayer   = _uc_atx((id) => {
+    const def = (window.ATLAS_LAYERS || []).find((l) => l.id === id);
+    if (def?.locked) {
+      window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: `"${def.label}" is locked — unlock it in the editor's Layers rail to change visibility.` } }));
+      return;
+    }
+    setLayerState((s) => ({ ...s, [id]: !(s[id] !== false) }));
+  }, []);
   const onToggleLayerFromLegend = _uc_atx((id) => setLegendState((s) => ({ ...s, [id]: !(s[id] !== false) })), []);
   const onToggleInspector = _uc_atx(() => setInspectorCollapsed((c) => !c), []);
   const onToggleMiniMap   = _uc_atx(() => setMiniMapVisible((v) => !v), []);

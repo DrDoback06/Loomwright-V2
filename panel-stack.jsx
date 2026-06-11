@@ -141,6 +141,9 @@ const PanelChrome = ({
         </div>
       </div>
       <div className="pstk__head__actions" onMouseDown={(e) => e.stopPropagation()}>
+        {typeof HelpButton !== "undefined" && (
+          <HelpButton surfaceId={"panel:" + (panel.entityType || (panel.id || "").replace(/^p-/, ""))}/>
+        )}
         {access && typeof PanelHeaderActions !== "undefined" && (
           <PanelHeaderActions panel={panel} access={access} compact={!panel.expanded}/>
         )}

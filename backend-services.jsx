@@ -3029,22 +3029,42 @@
       }
       return target;
     },
+    // Owner writes target the SCHEMA field (currentOwner, a cast ref) and
+    // keep the legacy ownerId mirror for older readers/detector payloads.
+    _ownerRef(ownerId) {
+      if (!ownerId) return null;
+      const owner = EntityService.getSync(ownerId, "cast") || EntityService.getSync(ownerId);
+      return owner ? { id: owner.id, name: owner.name, type: owner.type || "cast" } : { id: ownerId };
+    },
     async equipItem(itemId, ownerId) {
       const item = EntityService.getSync(itemId, "items");
-      return EntityService.update("items", itemId, {
-        data: { ...(item?.data || {}), ownerId, equipped: true },
-      });
+      const d = { ...(item?.data || {}), equipped: true, status: "equipped" };
+      if (ownerId) { d.currentOwner = this._ownerRef(ownerId); d.ownerId = ownerId; }
+      return EntityService.update("items", itemId, { data: d });
     },
     async unequipItem(itemId) {
       const item = EntityService.getSync(itemId, "items");
       return EntityService.update("items", itemId, {
-        data: { ...(item?.data || {}), equipped: false },
+        data: { ...(item?.data || {}), equipped: false, status: "carried" },
       });
     },
-    async assignOwner(itemId, ownerId) {
+    async assignOwner(itemId, ownerId, opts = {}) {
+      const item = EntityService.getSync(itemId, "items");
+      const d = { ...(item?.data || {}) };
+      const ref = this._ownerRef(ownerId);
+      if (opts.transfer && d.currentOwner) {
+        const history = Array.isArray(d.tradeTransferHistory) ? [...d.tradeTransferHistory] : [];
+        history.push({ chapter: opts.chapter ?? null, from: d.currentOwner, to: ref, what: opts.note || "Transferred" });
+        d.tradeTransferHistory = history;
+      }
+      d.currentOwner = ref;
+      d.ownerId = ownerId || null;
+      return EntityService.update("items", itemId, { data: d });
+    },
+    async dropItem(itemId) {
       const item = EntityService.getSync(itemId, "items");
       return EntityService.update("items", itemId, {
-        data: { ...(item?.data || {}), ownerId },
+        data: { ...(item?.data || {}), currentOwner: null, ownerId: null, equipped: false, carried: false, status: "stored" },
       });
     },
     async setParentLocation(locationId, parentId) {
@@ -4050,7 +4070,12 @@
       if (!item) continue;
       const sourceQuote = makeSourceQuote(text, verbStart, verbEnd);
       const suggestedChanges = {};
-      if (receiver) suggestedChanges.ownerId = receiver.id;
+      if (receiver) {
+        // currentOwner is the schema field every owner display reads;
+        // ownerId stays as a legacy mirror.
+        suggestedChanges.currentOwner = { id: receiver.id, name: receiver.name, type: "cast" };
+        suggestedChanges.ownerId = receiver.id;
+      }
       out.push(buildCandidate({
         entityType: "items",
         name: item.name,

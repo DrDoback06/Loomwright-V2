@@ -894,8 +894,13 @@ const AppShell = () => {
   }, [onOpenPanel]);
   _ue_a(() => {
     const onFocus = (e) => focusEntityById(e.detail || {});
+    const onResetLayout = () => setPanels(INITIAL_PANELS.map((p) => ({ ...p })));
     window.addEventListener("lw:focus-entity", onFocus);
-    return () => window.removeEventListener("lw:focus-entity", onFocus);
+    window.addEventListener("lw:reset-panel-layout", onResetLayout);
+    return () => {
+      window.removeEventListener("lw:focus-entity", onFocus);
+      window.removeEventListener("lw:reset-panel-layout", onResetLayout);
+    };
   }, [focusEntityById]);
   const onOpenReviewQueue = _uc_a(() => onOpenPanel("review"), [onOpenPanel]);
 
@@ -1672,6 +1677,9 @@ const AppShell = () => {
       </TweaksPanel>
 
       <GlobalToastHost/>
+      {typeof HelpHost !== "undefined" && (
+        <HelpHost routeId={routeId} panelWorkspace={panelWorkspace} panels={panels}/>
+      )}
     </>
   );
 };

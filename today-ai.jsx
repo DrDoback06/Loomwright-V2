@@ -132,9 +132,19 @@ function useTodaySuggestions() {
   return _td_um(() => buildTodaySuggestions(), [tick]);
 }
 
+const TODAY_DISMISSED_KEY = "lw:v2:today_dismissed";
+const _tdLoadDismissed = () => {
+  try { return new Set(JSON.parse(window.localStorage.getItem(TODAY_DISMISSED_KEY) || "[]")); } catch (_) { return new Set(); }
+};
+const _tdSaveDismissed = (set) => {
+  try { window.localStorage.setItem(TODAY_DISMISSED_KEY, JSON.stringify([...set].slice(-200))); } catch (_) {}
+};
+
 const TodayPanelBody = ({ panel, onSelectEntity }) => {
   const [filter, setFilter] = _td_us("all");
-  const suggestions = useTodaySuggestions();
+  const [dismissed, setDismissed] = _td_us(_tdLoadDismissed);
+  const onDismiss = (id) => setDismissed((s) => { const n = new Set(s); n.add(id); _tdSaveDismissed(n); return n; });
+  const suggestions = useTodaySuggestions().filter((s) => !dismissed.has(s.id));
   const filtered = filter === "all" ? suggestions : suggestions.filter((s) => s.section === filter);
 
   return (
@@ -157,18 +167,29 @@ const TodayPanelBody = ({ panel, onSelectEntity }) => {
           </div>
         )}
         {filtered.map((s) => (
-          <TodayCardCompact key={s.id} s={s} onSelectEntity={onSelectEntity}/>
+          <TodayCardCompact key={s.id} s={s} onSelectEntity={onSelectEntity} onDismiss={() => onDismiss(s.id)}/>
         ))}
       </div>
     </div>
   );
 };
 
-const TodayCardCompact = ({ s, onSelectEntity }) => (
+const TodayCardCompact = ({ s, onSelectEntity, onDismiss }) => (
   <div className="today__card" style={{ padding: 12 }}>
     <div className="today__card-head">
       <ConfidenceBadge level={s.confidence} value={s.confidence === "high" ? 95 : s.confidence === "strong" ? 78 : 56}/>
       {s.chapter && s.chapter !== "—" && <span style={{ marginLeft: "auto" }}>{s.chapter}</span>}
+      {onDismiss && (
+        <button
+          className="today__card-dismiss"
+          style={{ marginLeft: s.chapter && s.chapter !== "—" ? 6 : "auto", border: 0, background: "transparent", color: "var(--ink-4)", cursor: "pointer", padding: 2 }}
+          title="Dismiss this suggestion"
+          data-callback="onDismissTodaySuggestion"
+          onClick={onDismiss}
+        >
+          <Icon name="close" size={9}/>
+        </button>
+      )}
     </div>
     <div className="today__card-title" style={{ fontSize: "var(--fs-lg)" }}>{s.title}</div>
     <div className="today__card-why">{s.why}</div>
@@ -314,12 +335,16 @@ const AiWriterPanelBody = ({ panel }) => {
     evs.forEach((e) => window.addEventListener(e, bump));
     const onDraft = (e) => { if (e?.detail?.text) setGenerated({ text: e.detail.text, mode: "live" }); };
     const onConflicts = (e) => setConflicts(e?.detail?.conflicts || []);
+    // Writer's Room AI toolbar buttons land here with a target mode.
+    const onSetMode = (e) => { if (e?.detail?.mode) setMode(e.detail.mode); };
     window.addEventListener("lw:composition-draft-generated", onDraft);
     window.addEventListener("lw:continuity-check", onConflicts);
+    window.addEventListener("lw:aiwriter-set-mode", onSetMode);
     return () => {
       evs.forEach((e) => window.removeEventListener(e, bump));
       window.removeEventListener("lw:composition-draft-generated", onDraft);
       window.removeEventListener("lw:continuity-check", onConflicts);
+      window.removeEventListener("lw:aiwriter-set-mode", onSetMode);
     };
   }, []);
   const live = _td_um(() => {

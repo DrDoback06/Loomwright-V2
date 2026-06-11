@@ -7,7 +7,8 @@
 // the create button + drag handles + status pills + cross-panel links.
 // Most of the heavy lifting is done by EntityTabShell.
 //
-// Abilities panel is overridden ENTIRELY to show a deprecation card.
+// Abilities is the live catalogue of individual powers (skills + legacy
+// ability records) — Skill Trees arrange them into progressions.
 // =====================================================================
 
 const { useState: _crab_us } = React;
@@ -171,108 +172,141 @@ const RacesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
 };
 
 // ---------------------------------------------------------------------
-// AbilitiesPanelBody — DEPRECATION CARD (Abilities are now Skill Trees)
+// AbilitiesPanelBody — the live catalogue of individual powers (skills +
+// legacy abilities). Skill TREES arrange these records into progressions;
+// this panel owns the records themselves: browse, filter by type, edit,
+// drag into compositions, and jump into the tree editor.
 // ---------------------------------------------------------------------
-const AbilitiesPanelBody = ({ panel, onSelectEntity }) => {
-  const legacyAbilities = window.LoomwrightBackend?.EntityService?.listSync?.("abilities") || [];
+const ABILITY_TYPES = ["all", "active", "passive", "triggered", "one-time", "innate", "item-granted", "class-granted", "race-granted"];
+const AbilitiesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
+  const [storeVersion, setStoreVersion] = _crab_us(0);
+  React.useEffect(() => {
+    const bump = () => setStoreVersion((v) => v + 1);
+    const evs = ["lw:entity-store-updated", "lw:backend-ready", "lw:project-imported"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+  const all = React.useMemo(() => {
+    const ES = window.LoomwrightBackend?.EntityService;
+    const skills = (ES?.listSync?.("skills") || []).map((e) => ({ ...e, _legacy: false }));
+    const legacy = (ES?.listSync?.("abilities") || []).map((e) => ({ ...e, _legacy: true }));
+    return [...skills, ...legacy].filter((e) => e && e.status !== "deleted");
+  }, [storeVersion]);
+
+  const [search, setSearch] = _crab_us("");
+  const [typeFilter, setTypeFilter] = _crab_us("all");
+  const [selectedId, setSelectedId] = _crab_us(panel?.selected?.id || null);
+  // Follow host-driven selection (locked entities, lw:focus-entity).
+  React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
+
+  const typeOf = (e) => String(e.data?.skillType || e.data?.abilityType || e.abilityType || "passive").toLowerCase();
+  const filtered = all.filter((e) => {
+    if (search && !(e.name || "").toLowerCase().includes(search.toLowerCase())) return false;
+    if (typeFilter !== "all" && typeOf(e) !== typeFilter) return false;
+    return true;
+  });
+  const selected = all.find((e) => e.id === selectedId) || filtered[0] || null;
+  const d = selected ? (selected.data || {}) : {};
+
+  const openEditor = (id) => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
+    detail: { type: "skills", initial: id ? { id } : undefined, mode: "full" },
+  }));
+  const effects = Array.isArray(d.effects) ? d.effects : [];
+  const reqs = Array.isArray(d.requirements) ? d.requirements : (d.requirements ? [d.requirements] : []);
+
   return (
-    <div className="upg" data-ui="AbilitiesPanelBody" data-state="deprecated">
-      <div style={{
-        margin: "18px",
-        padding: "26px 28px",
-        background: "linear-gradient(135deg, var(--accent-soft), var(--bg-paper-2))",
-        border: "1px solid var(--accent)",
-        borderRadius: "var(--r-5)",
-        boxShadow: "var(--shadow-2)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <div style={{
-            width: 40, height: 40,
-            borderRadius: "var(--r-3)",
-            background: "var(--bg-paper)",
-            border: "1px solid var(--accent)",
-            display: "inline-flex", alignItems: "center", justifyContent: "center",
-            color: "var(--accent-deep)",
-          }}>
-            <Icon name="spark" size={20}/>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--accent-deep)", fontWeight: 700 }}>Merged · 2026</div>
-            <div style={{ fontFamily: "var(--font-display)", fontSize: 22, color: "var(--ink-1)" }}>Abilities are now Skill Trees / Skills</div>
-          </div>
+    <div className="upg loc-body" data-ui="AbilitiesPanelBody">
+      <div className="loc-body__top">
+        <div className="loc-body__search">
+          <Icon name="search" size={11}/>
+          <input value={search} placeholder="Search abilities…" onChange={(e) => setSearch(e.target.value)}/>
         </div>
-        <p style={{ fontFamily: "var(--font-serif)", fontSize: 14, color: "var(--ink-2)", lineHeight: 1.6, marginBottom: 12 }}>
-          Create and manage <b>active</b>, <b>passive</b>, <b>triggered</b>, <b>one-time</b>, <b>innate</b>,
-          <b> item-granted</b>, <b>class-granted</b>, and <b>race-granted</b> skills inside Skill Trees. Existing
-          abilities below have already been migrated as legacy skill entries — they appear in Skill Trees
-          unchanged. Drag any one of them into the composition overlay or onto a cast member as before.
-        </p>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button
-            className="ee-btn ee-btn--primary"
-            onClick={() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "skillTrees" } }))}
-            data-callback="onOpenSkillTreesFromAbilities"
-          >
-            <Icon name="tree" size={11}/> Open Skill Trees
-          </button>
-          <button
-            className="ee-btn ee-btn--outline"
-            onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "skills" } }))}
-            data-callback="onCreateSkill"
-          >
-            <Icon name="plus" size={11}/> Create skill
-          </button>
-          <span style={{ fontSize: 11, color: "var(--ink-4)", fontStyle: "italic", marginLeft: "auto" }}>
-            This compatibility panel will be removed in a future build.
-          </span>
+        <div className="loc-body__filters">
+          <select className="loc-body__filter" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} data-callback="onFilterStatus">
+            {ABILITY_TYPES.map((t) => <option key={t} value={t}>{t === "all" ? "All types" : t}</option>)}
+          </select>
+          <Btn variant="ghost" size="sm" icon="plus" data-callback="onCreateAbility" title="Create ability" onClick={() => openEditor(null)}/>
+          <Btn variant="ghost" size="sm" icon="branches" data-callback="onOpenSkillTreesFromAbilities" title="Arrange in Skill Trees"
+            onClick={() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "skillTrees" } }))}/>
         </div>
       </div>
 
-      <div style={{ padding: "0 18px 18px" }}>
-        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--ink-4)", fontWeight: 700, marginBottom: 8 }}>
-          Legacy abilities · migrated as skills · {legacyAbilities.length}
-        </div>
-        {legacyAbilities.length === 0 ? (
-          <EmptyState icon="spark" title="Nothing to migrate" body="No legacy abilities found in this project."/>
-        ) : (
-          <div className="upg__list">
-            {legacyAbilities.map((e) => (
+      <div className="loc-body__split">
+        <aside className="loc-body__tree">
+          <div className="loc-body__tree-head">
+            <span>Abilities</span>
+            <span className="loc-body__tree-count">{filtered.length}</span>
+          </div>
+          <div className="loc-tree">
+            {filtered.map((e) => (
               <div key={e.id}
-                className="upg__item"
+                className={"loc-tree__row" + (selected && selected.id === e.id ? " is-selected" : "")}
+                data-entity-id={e.id}
                 draggable
                 onDragStart={(ev) => {
                   const payload = { entityType: "skills", id: e.id, name: e.name, summary: e.summary };
                   try {
                     ev.dataTransfer.setData("application/x-loom-entity", JSON.stringify(payload));
+                    ev.dataTransfer.setData("text/loomwright-entity", JSON.stringify(payload));
                     ev.dataTransfer.setData("text/plain", e.name);
                   } catch (_err) {}
-                  ev.currentTarget.classList.add("is-dragging");
-                  if (window.ENTITY_DRAG) window.ENTITY_DRAG.set({ active: true, payload });
                 }}
-                onDragEnd={(ev) => {
-                  ev.currentTarget.classList.remove("is-dragging");
-                  if (window.ENTITY_DRAG) window.ENTITY_DRAG.set({ active: false, payload: null });
-                }}
-                onClick={() => onSelectEntity && onSelectEntity(e)}
-              >
-                <span className="ent-grip"><Icon name="grip" size={10}/></span>
-                <div className="upg__item__monogram">{e.glyphChar || e.name?.slice(0, 2)}</div>
-                <div className="upg__item__body">
-                  <div className="upg__item__name">{e.name}
-                    <span className="ent-status" style={{ marginLeft: 6 }}>Skill · {e.abilityType || "passive"}</span>
-                  </div>
-                  <div className="upg__item__sub">{e.subtitle || e.summary}</div>
-                </div>
-                <div className="upg__item__meta">
-                  <button className="ee-btn ee-btn--ghost" style={{ padding: "3px 8px" }}
-                    onClick={(ev) => { ev.stopPropagation(); window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "skillTrees" } })); }}>
-                    Open in Skill Trees →
-                  </button>
-                </div>
+                onClick={() => {
+                  setSelectedId(e.id);
+                  onSelectEntity && onSelectEntity({ id: e.id, label: e.name, entityType: "abilities" });
+                }}>
+                <span className="loc-tree__glyph" style={{ color: "var(--ec, #6b5a8a)" }}>✦</span>
+                <span className="loc-tree__name">{e.name}</span>
+                <span className="ent-status">{typeOf(e)}{e._legacy ? " · legacy" : ""}</span>
               </div>
             ))}
+            {filtered.length === 0 && (
+              <EmptyState icon="spark" title="No abilities yet"
+                body="Create one, or let extraction find powers in your manuscript. Skill Trees arrange these records into progressions."/>
+            )}
           </div>
-        )}
+        </aside>
+
+        <section className="loc-body__detail">
+          {selected ? (
+            <>
+              <div className="loc-body__detail-head">
+                <div>
+                  <div className="loc-body__detail-eyebrow">Ability · {typeOf(selected)}</div>
+                  <div className="loc-body__detail-title">{selected.name}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <Btn variant="outline" size="sm" icon="pen" data-callback="onEditEntity" onClick={() => openEditor(selected.id)}>Edit</Btn>
+                  <Btn variant="ghost" size="sm" icon="branches" data-callback="onOpenSkillTreeEditor" title="Open in the tree editor"
+                    onClick={() => window.dispatchEvent(new CustomEvent("lw:open-panel-workspace", {
+                      detail: { workspaceId: "skill-tree-editor", panelKind: "skills", sourcePanel: panel?.id || "p-abilities", entityId: selected.id },
+                    }))}>Tree</Btn>
+                </div>
+              </div>
+              <div style={{ overflowY: "auto", flex: 1, padding: 12 }}>
+                <p style={{ margin: "0 0 12px", fontFamily: "var(--font-serif)", fontSize: 13.5, lineHeight: 1.6, color: d.description || selected.summary ? "var(--ink-1)" : "var(--ink-3)" }}>
+                  {d.description || selected.summary || "No description yet — open the editor to add one."}
+                </p>
+                {effects.length > 0 && (
+                  <>
+                    <div className="loc-body__detail-eyebrow" style={{ marginBottom: 6 }}>Effects</div>
+                    {effects.map((ef, i) => (
+                      <div key={i} style={{ padding: "6px 8px", background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)", marginBottom: 4, fontSize: 12 }}>
+                        {(ef && typeof ef === "object") ? [ef.trigger, ef.effect].filter(Boolean).join(" → ") : String(ef)}
+                      </div>
+                    ))}
+                  </>
+                )}
+                {reqs.length > 0 && (
+                  <>
+                    <div className="loc-body__detail-eyebrow" style={{ margin: "10px 0 6px" }}>Requirements</div>
+                    {reqs.map((r, i) => <span key={i} className="fws-chip" style={{ marginRight: 4, marginBottom: 4 }}>{typeof r === "object" ? (r.label || r.name || JSON.stringify(r)) : String(r)}</span>)}
+                  </>
+                )}
+              </div>
+            </>
+          ) : <EmptyState icon="spark" title="No ability selected" body="Pick an ability to inspect its effects and requirements."/>}
+        </section>
       </div>
     </div>
   );

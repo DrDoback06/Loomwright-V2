@@ -79,6 +79,7 @@ const WorkspaceShell = ({
         </div>
         <div className="fws-topbar__spacer"/>
         <div className="fws-topbar__actions">
+          {typeof HelpButton !== "undefined" && <HelpButton title="Help for this workspace"/>}
           {extraActions}
           {createLabel && onCreate && (
             <button type="button" className="fws-topbar__primary"

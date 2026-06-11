@@ -53,6 +53,7 @@ const TopBar = ({
 
       <div className="topbar__spacer"/>
 
+      {typeof HelpButton !== "undefined" && <HelpButton className="helpbtn--topbar" title="Help for the current page (and a guided tour)"/>}
       <button
         className="topbar__search"
         data-callback="onOpenCommandPalette"

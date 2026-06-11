@@ -525,6 +525,12 @@ const AIHandoffDrawer = ({ open, onClose, surface = "composition", context = {},
 // ---------------------------------------------------------------------
 const AIHandoffButton = ({ surface = "composition", context = {}, label = "AI Handoff", icon = "sparkle", variant = "outline", onApplyResult, compact = false }) => {
   const [open, setOpen] = _ah_us(false);
+  // Settings ▸ "Show last AI handoff" reopens the drawer from anywhere.
+  _ah_ue(() => {
+    const onShow = () => setOpen(true);
+    window.addEventListener("lw:show-handoff-pack", onShow);
+    return () => window.removeEventListener("lw:show-handoff-pack", onShow);
+  }, []);
   const cls = "ee-btn ee-btn--" + variant;
   return (
     <>

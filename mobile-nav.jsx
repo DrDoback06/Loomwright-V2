@@ -136,6 +136,9 @@ const MobileBottomNav = ({
               onClick={() => openPanel(n)}/>
           ))}
           <div className="mnav-sheet__group">System</div>
+          <MobileSheetRow icon="info" label="Help" sub="This page's controls + tour"
+            testid="mnav-more-help"
+            onClick={() => { setSheet(null); window.dispatchEvent(new CustomEvent("lw:open-help", { detail: {} })); }}/>
           <MobileSheetRow icon="gear" label="Settings" sub="Control Centre"
             testid="mnav-more-settings"
             onClick={() => { setSheet(null); onOpenSettings && onOpenSettings(); }}/>
