@@ -516,7 +516,7 @@ const AuthorSelector = ({ authors, activeId, onSelectAuthor }) => {
 // ---------------------------------------------------------------------
 // FloatingSelectionToolbar
 // ---------------------------------------------------------------------
-const FloatingSelectionToolbar = ({ x, y, onAction, onCreateEntityFromSelection, onLinkEntity }) => {
+const FloatingSelectionToolbar = ({ x, y, onAction, onCreateEntityFromSelection, onLinkEntity, onExtractSelection }) => {
   return (
     <div className="wr-fst" style={{ left: x, top: y, position: "fixed" }} data-ui="FloatingSelectionToolbar" onMouseDown={(e) => e.preventDefault()}>
       <button className="wr-fst__btn" title="Bold" onClick={() => onAction("bold")}><b>B</b></button>
@@ -526,6 +526,10 @@ const FloatingSelectionToolbar = ({ x, y, onAction, onCreateEntityFromSelection,
       <button className="wr-fst__btn" title="Add paragraph note" onClick={() => onAction("comment")}><Icon name="bell" size={13}/></button>
       <span className="wr-fst__sep"/>
       <button className="wr-fst__btn" data-callback="onLinkEntity" title="Link to entity" onClick={onLinkEntity}><Icon name="link" size={13}/></button>
+      <button className="wr-fst__btn" data-callback="onExtractSelection" data-testid="wr-fst-extract"
+        title="Scan just this selection for entities" onClick={onExtractSelection}>
+        <Icon name="sparkle" size={12}/>Extract
+      </button>
       <button className="wr-fst__btn wr-fst__btn--strong" data-callback="onCreateEntityFromSelection" title="Create entity from selection" onClick={onCreateEntityFromSelection}>
         <Icon name="plus" size={11}/>New entity
       </button>
@@ -1555,9 +1559,40 @@ const WritersRoomScreen = ({
     if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
   }, [canvasState, onSetSyncState]);
   const onSelectText = _wrUC(() => {}, []);
-  const onCreateEntityFromSelection = _wrUC(() => onOpenPanel && onOpenPanel("demo"), [onOpenPanel]);
-  const onLinkEntity = _wrUC(() => onOpenPanel && onOpenPanel("recent"), [onOpenPanel]);
-  const onOpenEntity = _wrUC(() => onOpenPanel && onOpenPanel("demo"), [onOpenPanel]);
+  // Current selection inside the editable body (collapsed → "").
+  const _wrSelectionText = _wrUC(() => {
+    try {
+      const sel = window.getSelection && window.getSelection();
+      if (sel && !sel.isCollapsed && bodyRef.current && bodyRef.current.contains(sel.anchorNode)) {
+        return String(sel.toString()).replace(/\s+/g, " ").trim();
+      }
+    } catch (_e) {}
+    return "";
+  }, []);
+  const onCreateEntityFromSelection = _wrUC(() => {
+    const text = _wrSelectionText();
+    onOpenEntityEditor && onOpenEntityEditor({ type: "cast", initial: { name: text.slice(0, 60) } });
+  }, [onOpenEntityEditor, _wrSelectionText]);
+  const onLinkEntity = _wrUC(() => {
+    const text = _wrSelectionText();
+    if (!text) return;
+    const B = window.LoomwrightBackend;
+    const known = B && B.findKnownEntityMention ? B.findKnownEntityMention(text, { threshold: 0.75 }) : null;
+    if (known && known.entity && known.entity.id) {
+      window.dispatchEvent(new CustomEvent("lw:open-search-result", {
+        detail: { type: "entity", entityId: known.entity.id, entityType: known.type },
+      }));
+    } else {
+      window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "No entity matches “" + text.slice(0, 40) + "” yet — use New entity to create it." } }));
+    }
+  }, [_wrSelectionText]);
+  const onExtractSelection = _wrUC(() => {
+    const text = _wrSelectionText();
+    if (!text) return;
+    window.__LW_WIZARD_SELECTION__ = { text, chapterId: activeId };
+    window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "selection", chapterId: activeId } }));
+  }, [activeId, _wrSelectionText]);
+  const onOpenEntity = _wrUC(() => onOpenPanel && onOpenPanel("cast"), [onOpenPanel]);
   const onShowMentions = _wrUC(() => {}, []);
   const onAcceptQueueItem = _wrUC(async (idOrItem) => {
     const id = typeof idOrItem === "string" ? idOrItem : idOrItem?.id;
@@ -1763,15 +1798,27 @@ const WritersRoomScreen = ({
     onOpenAdaptiveWheel && onOpenAdaptiveWheel({ x: clientX, y: clientY, contextLabel, context });
   }, [activeId, onOpenAdaptiveWheel]);
 
-  const _wrLongPress = _wrUR({ timer: null, x: 0, y: 0, fired: false, t: 0 });
+  const _wrLongPress = _wrUR({ timer: null, x: 0, y: 0, fired: false, t: 0, lastType: "mouse" });
   const wrContext = _wrUC((e) => {
+    // Touch long-press inside editable text fires a synthetic contextmenu;
+    // preventDefault there would kill the native selection handles. Let
+    // the browser own it — the wheel is reachable from the selection
+    // toolbar and outside the page.
+    const isTouch = _wrLongPress.current.lastType !== "mouse";
+    if (isTouch && e.target && e.target.closest && e.target.closest("[contenteditable='true']")) return;
     e.preventDefault();
     // Don't re-open on the synthetic contextmenu a long-press may emit.
     if (_wrLongPress.current.fired && (Date.now() - _wrLongPress.current.t) < 800) { _wrLongPress.current.fired = false; return; }
     openContextWheel(e.clientX, e.clientY, e.target);
   }, [openContextWheel]);
   const wrPointerDown = _wrUC((e) => {
+    _wrLongPress.current.lastType = e.pointerType || "mouse";
     if (e.pointerType === "mouse") return; // right-click is handled by onContextMenu
+    // Inside editable text, long-press belongs to NATIVE selection — a
+    // wheel here would make highlighting impossible on a phone. Select
+    // text and use the floating toolbar's Wheel button, or long-press
+    // outside the page (margins / chapter strip) for the chapter wheel.
+    if (e.target && e.target.closest && e.target.closest("[contenteditable='true']")) return;
     const lp = _wrLongPress.current;
     lp.x = e.clientX; lp.y = e.clientY; lp.fired = false;
     if (lp.timer) clearTimeout(lp.timer);
@@ -1973,6 +2020,14 @@ const WritersRoomScreen = ({
               <Btn variant="ghost" size="sm" icon="chevron-up" data-testid="wr-move-up" onClick={() => onMoveChapter("up")} title="Move chapter earlier" disabled={!activeChapter || activeChapter.num <= 1}/>
               <Btn variant="ghost" size="sm" icon="chevron-d" data-testid="wr-move-down" onClick={() => onMoveChapter("down")} title="Move chapter later" disabled={!activeChapter || activeChapter.num >= chapters.length}/>
               <Btn variant="ghost" size="sm" icon="trash" onClick={onDeleteChapterRequest} data-callback="onDeleteChapterRequest" title="Delete chapter"/>
+              <Btn variant="primary" size="sm" icon="sparkle"
+                data-testid="wr-extract-chapter"
+                data-callback="onRunChapterExtraction"
+                onClick={onSaveAndExtract}
+                disabled={!activeChapter || extractionState === "running"}
+                title="Save this chapter and scan it for characters, places, items, and events — results land in the review queue.">
+                {extractionState === "running" ? "Extracting…" : "Extract"}
+              </Btn>
               <SaveModeControls
                 onSave={onSave}
                 syncing={canvasState === "saving" || extractionState === "running"}
@@ -2016,6 +2071,7 @@ const WritersRoomScreen = ({
                 onAction={onToolbarAction}
                 onCreateEntityFromSelection={onCreateEntityFromSelection}
                 onLinkEntity={onLinkEntity}
+                onExtractSelection={onExtractSelection}
               />
             </div>
           )}

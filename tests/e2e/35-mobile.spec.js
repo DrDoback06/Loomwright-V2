@@ -89,6 +89,30 @@ test.describe("U35. Mobile shell", () => {
     await expect(page.locator("[data-testid='command-palette']")).toBeVisible();
   });
 
+  test("long-press inside the manuscript selects text — the wheel stays away", async ({ page }) => {
+    await openFreshApp(page);
+    await page.evaluate(async () => {
+      await window.LoomwrightBackend.ManuscriptChapterService.createFromComposition({ title: "Touch" });
+    });
+    await page.reload();
+    await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
+    await page.locator("[data-testid='mnav-write']").tap();
+    const body = page.locator("[data-testid='wr-manuscript-body']");
+    await expect(body).toBeVisible();
+
+    // Long-press INSIDE the editable body: no wheel (native selection owns it).
+    await body.dispatchEvent("pointerdown", { pointerType: "touch", clientX: 200, clientY: 300, bubbles: true });
+    await page.waitForTimeout(700);
+    await expect(page.locator("[data-ui='AdaptiveWheelHost']")).toHaveCount(0);
+    await body.dispatchEvent("pointerup", { pointerType: "touch", bubbles: true });
+
+    // Long-press OUTSIDE the editable (chapter strip): the wheel opens.
+    const strip = page.locator("[data-ui='ChapterNodeStrip']");
+    await strip.dispatchEvent("pointerdown", { pointerType: "touch", clientX: 180, clientY: 70, bubbles: true });
+    await page.waitForTimeout(700);
+    await expect(page.locator("[data-ui='AdaptiveWheelHost']")).toBeVisible();
+  });
+
   test("tangle: tap-to-add places a card without drag and drop", async ({ page }) => {
     await openFreshApp(page);
     await page.locator("[data-testid='mnav-browse']").tap();

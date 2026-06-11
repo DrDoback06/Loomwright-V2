@@ -596,7 +596,10 @@ const SetExtraction = () => {
     aggressiveness: "balanced",
     autoAdd95: true, showAutoAddedInReview: true,
     scan: { cast: true, locations: true, items: true, quests: true, events: true, stats: true, relationships: true, lore: true, timeline: true, inventory: true },
-    threshold: 80,
+    // Matches the extraction engine's default. Local (no-AI) discovery
+    // scores 50–80%, so a higher default here would silently filter the
+    // whole local pass the moment this section is opened.
+    threshold: 50,
   });
   const up = (k, v) => setS({ ...s, [k]: v });
   return (

@@ -4493,13 +4493,18 @@
         confidence = Math.min(cls.confidence + 0.03 * (count - 1), 0.92);
       } else {
         if (count < minRecurrence) continue; // bare single-mention proper noun: skip
-        // A proper noun that ONLY ever appears at a sentence start, with no
-        // lexical signal, is almost always a capitalised common word
-        // ("Time", "Morning"). Require at least one mid-sentence mention.
-        if (!g.occ.some((o) => !o.atSentenceStart)) continue;
+        // A SINGLE capitalised word that only ever appears at a sentence
+        // start, with no lexical signal, is almost always a capitalised
+        // common word ("Time", "Morning") — veto those. Multi-word spans
+        // ("Anwen Hale") are near-certainly names even sentence-initially;
+        // a protagonist often ONLY opens sentences.
+        const sentenceStartOnly = !g.occ.some((o) => !o.atSentenceStart);
+        const tokenCount = surface.trim().split(/\s+/).length;
+        if (sentenceStartOnly && tokenCount < 2) continue;
         type = known ? known.type : "cast";
         signal = "recurrence";
         confidence = Math.min(0.48 + 0.05 * count, 0.6);
+        if (sentenceStartOnly) confidence = Math.min(confidence, 0.55);
       }
       if (matchType === "ambiguous") confidence = Math.min(confidence, known.confidence);
       // Strip a leading honorific into an alias for a cleaner cast name.
@@ -5078,11 +5083,21 @@ Only evidenced pairs. Return JSON only.`;
       // Honour the user's Settings → Extraction controls: skip disabled entity
       // types and drop candidates below the confidence threshold.
       const exMinConf = (exPrefs.threshold != null ? exPrefs.threshold : 50) / 100;
+      const preFilterCount = reviewItems.length;
       reviewItems = reviewItems.filter((c) => {
         if (exPrefs.scan && exPrefs.scan[c.entityType] === false) return false;
         const conf = typeof c.confidence === "number" ? c.confidence : 0;
         return conf >= exMinConf;
       });
+      // Never finish silently: if the threshold swallowed every candidate,
+      // say so — "extraction ran but the queue is empty" looks broken.
+      if (!reviewItems.length && preFilterCount > 0) {
+        try {
+          window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: {
+            message: `Extraction found ${preFilterCount} candidate${preFilterCount === 1 ? "" : "s"}, but all fell below your ${Math.round(exMinConf * 100)}% confidence threshold — lower it in Settings ▸ Extraction settings.`,
+          } }));
+        } catch (_) {}
+      }
       // Group candidates by the sentence that produced them (multi-entry).
       assignSentenceGroups(reviewItems, text || "", chapterId);
       // Auto-apply blue (>=0.95) candidates when the user allows it: apply now
@@ -7231,6 +7246,17 @@ Only evidenced pairs. Return JSON only.`;
     if (!sampleLoaded) clearDemoGlobals();
     await EntityService.hydrateFromStorage();
     await ReferencesService.hydrateFromStorage();
+    // One-time migration: the Settings ▸ Extraction panel used to ship a
+    // threshold default of 80 and auto-persisted it the moment the section
+    // was opened — silently filtering the whole local (no-AI) extraction
+    // pass, whose candidates score 50–80. A stored value of exactly 80 can
+    // only have come from that bug, so reset it to the engine default.
+    try {
+      const ex = SettingsService.getSectionSync("extraction", null);
+      if (ex && ex.threshold === 80 && !ex._thresholdMigrated) {
+        await SettingsService.saveSection("extraction", { ...ex, threshold: 50, _thresholdMigrated: true });
+      }
+    } catch (_) {}
     const onb = await OnboardingService.load(window.ONBOARDING_ANSWERS || {});
     if (onb && Object.keys(onb).length) window.ONBOARDING_ANSWERS = onb;
     window.PROJECT_INTELLIGENCE = ProjectIntelService.loadSync();
@@ -7280,6 +7306,7 @@ Only evidenced pairs. Return JSON only.`;
     buildCandidate,
     clusterAliases,
     dedupeCandidates,
+    findKnownEntityMention,
     mapAiPayloadToData,
     detectorConfidence,
     resolvePronounsInText,
