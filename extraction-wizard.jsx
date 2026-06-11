@@ -32,10 +32,11 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
   const [streamed, setStreamed] = _ewUS([]);
   const [counts, setCounts] = _ewUS({});
   const [note, setNote] = _ewUS("");
+  const [progress, setProgress] = _ewUS(0); // 0..1 across the whole run, from live engine events
   const abortRef = _ewUR(null);
 
   _ewUE(() => {
-    if (open) { setScope(initialScope || "manuscript"); setMode("quick"); setPhase("setup"); setStreamed([]); setCounts({}); setNote(""); }
+    if (open) { setScope(initialScope || "manuscript"); setMode("quick"); setPhase("setup"); setStreamed([]); setCounts({}); setNote(""); setProgress(0); }
   }, [open, initialScope]);
 
   // Allow an external cancel (e.g. a registry-dispatched onCancelExtraction).
@@ -75,9 +76,31 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
     }
     const ctrl = new AbortController();
     abortRef.current = ctrl;
-    setPhase("running"); setStreamed([]); setCounts({});
+    setPhase("running"); setStreamed([]); setCounts({}); setProgress(0);
     const seen = new Set();
-    const onProgress = (d) => {
+    // Live stage → status line + per-chapter progress fraction, so a long
+    // (especially AI) run visibly works rather than sitting on one note.
+    const STAGE_LABEL = {
+      start: "Saving snapshot…",
+      scan: "Scanning known entities…",
+      detect: "Detecting new entities…",
+      "ai-relationships": "Tracing relationships…",
+      complete: "Building review queue…",
+    };
+    const STAGE_FRACTION = { start: 0.05, scan: 0.2, detect: 0.4, "ai-relationships": 0.9, complete: 1 };
+    const makeProgressHandler = (targetTitle, targetIndex, targetCount) => (d) => {
+      if (d && d.stage) {
+        let label = STAGE_LABEL[d.stage] || "";
+        let frac = STAGE_FRACTION[d.stage] != null ? STAGE_FRACTION[d.stage] : 0.4;
+        if (d.stage === "ai") {
+          const done = (d.chunkIndex || 0) + 1;
+          const all = d.chunkCount || 1;
+          label = "AI deep read · chunk " + Math.min(done, all) + "/" + all + "…";
+          frac = 0.4 + 0.5 * (done / all);
+        }
+        setNote((targetCount > 1 ? ("Chapter " + (targetIndex + 1) + "/" + targetCount + " · ") : "") + targetTitle + (label ? " — " + label : ""));
+        setProgress((targetIndex + frac) / targetCount);
+      }
       const cands = (d && d.candidates) || [];
       if (!cands.length) return;
       const fresh = [];
@@ -97,8 +120,9 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
       for (let i = 0; i < targets.length; i++) {
         if (ctrl.signal.aborted) break;
         setNote(targets.length > 1 ? ("Reading " + (i + 1) + " of " + targets.length + ": " + targets[i].title) : targets[i].title);
-        await B.ExtractionService.runExtraction({ chapterId: targets[i].id, text: targets[i].text, deep: mode === "deep", scope: "wizard", onProgress, signal: ctrl.signal });
+        await B.ExtractionService.runExtraction({ chapterId: targets[i].id, text: targets[i].text, deep: mode === "deep", scope: "wizard", onProgress: makeProgressHandler(targets[i].title, i, targets.length), signal: ctrl.signal });
       }
+      setProgress(1);
       setPhase(ctrl.signal.aborted ? "cancelled" : "complete");
     } catch (e) {
       setPhase("error"); setNote((e && e.message) || "Extraction failed.");
@@ -196,7 +220,7 @@ const ExtractionWizard = ({ open, initialScope = "manuscript", typeFocus = null,
         ) : (
           <>
             <div className="exm__bar" aria-hidden>
-              <div className="exm__bar__fill" style={{ width: phase === "running" ? "66%" : "100%", transition: "width .3s" }} />
+              <div className="exm__bar__fill" style={{ width: (phase === "running" ? Math.max(4, Math.round(progress * 100)) : 100) + "%", transition: "width .3s" }} />
             </div>
             <div className="exm__body" style={{ display: "block", maxHeight: 320, overflowY: "auto" }}>
               <div className="exm__col-title">Discovered so far · {total}</div>

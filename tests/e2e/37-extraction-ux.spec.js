@@ -55,6 +55,19 @@ test.describe("U37. Extraction UX", () => {
     expect(names).toContain("Brec Tollman");
     expect(names).toContain("Anwen Hale"); // sentence-initial multi-word name
     expect(names).toContain("Greywater Keep");
+
+    // The progress modal drove itself from live engine events: it shows a
+    // snapshot of what was found and flips to complete with a real count.
+    const modal = page.locator("[data-ui='ExtractionProgressModal']");
+    await expect(modal).toHaveAttribute("data-state", "complete");
+    const found = modal.locator("[data-testid='exm-found-row']");
+    await expect(found.filter({ hasText: "Brec Tollman" })).toBeVisible();
+    await expect(found.filter({ hasText: "Anwen Hale" })).toBeVisible();
+    await expect(modal).toContainText("Found so far");
+    // Review button routes to the live Review panel.
+    await modal.locator("[data-testid='extraction-review']").dispatchEvent("click");
+    await expect(page.locator("[data-panel-id='p-review']")).toBeVisible();
+    await expect(page.locator("[data-panel-id='p-review']")).toContainText("Brec Tollman");
   });
 
   test("threshold that filters everything produces a notice, not silence", async ({ page }) => {

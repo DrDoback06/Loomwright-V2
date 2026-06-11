@@ -1,14 +1,95 @@
 // =====================================================================
 // extraction-progress.jsx — ExtractionProgressModal + failed/running states
-// All visual; emits callbacks for hookup. No real extraction logic.
+//
+// LIVE: the modal subscribes to `lw:extraction-progress` (emitted by
+// ExtractionService.runExtraction) and drives itself — stages advance
+// from real engine events, and the right-hand column streams a snapshot
+// of every entity found so far, so a long run visibly works.
 // =====================================================================
 
-const { useState: _epUS, useEffect: _epUE, useMemo: _epUM } = React;
+const { useState: _epUS, useEffect: _epUE, useMemo: _epUM, useRef: _epUR } = React;
+
+const EP_BAND_COLOR = { blue: "#3b82f6", green: "#3f9d52", orange: "#d08a2e", red: "#c0492f" };
+
+// Map engine report stages → indices in EXTRACTION_STAGES.
+//   start → snapshot(0)   scan → scan(1)   detect → detect(2)
+//   ai chunks → walk alias(3)…queues(9) proportionally
+//   ai-relationships → rel(4)   complete/cancelled → complete(last)
+function epStageIndexFor(d, stagesLen) {
+  switch (d.stage) {
+    case "start": return 0;
+    case "scan": return 1;
+    case "detect": return 2;
+    case "ai": {
+      const span = (stagesLen - 2) - 3; // alias … queues
+      const frac = d.chunkCount ? (d.chunkIndex + 1) / d.chunkCount : 0;
+      return 3 + Math.min(span, Math.floor(frac * span));
+    }
+    case "ai-relationships": return 4;
+    case "complete": case "cancelled": return stagesLen - 1;
+    default: return 0;
+  }
+}
 
 // ---------------------------------------------------------------------
-// Helper — format type-count grid using ENTITY_TYPES order
+// useExtractionProgress — one live session's state, from engine events.
+// Resets on every `start` so re-runs replace the previous snapshot.
 // ---------------------------------------------------------------------
-const EXM_COUNT_KEYS = ["cast", "bestiary", "locations", "items", "events", "factions", "abilities", "lore", "relationships", "timeline"];
+function useExtractionProgress(open) {
+  const empty = () => ({
+    sessionId: null, stageIdx: 0, found: [], counts: {},
+    occurrenceCount: 0, chunkIndex: 0, chunkCount: 0,
+    finished: false, cancelled: false, finalCount: null, deep: false,
+  });
+  const [live, setLive] = _epUS(empty);
+  const seenRef = _epUR(new Set());
+  _epUE(() => {
+    if (!open) return undefined;
+    setLive(empty());
+    seenRef.current = new Set();
+    const onProg = (e) => {
+      const d = e.detail || {};
+      if (d.stage === "start") {
+        seenRef.current = new Set();
+        setLive({ ...empty(), sessionId: d.sessionId, deep: !!d.deep });
+        return;
+      }
+      setLive((prev) => {
+        if (prev.sessionId && d.sessionId && d.sessionId !== prev.sessionId) return prev;
+        const stagesLen = (typeof EXTRACTION_STAGES !== "undefined" ? EXTRACTION_STAGES.length : 11);
+        const next = { ...prev, stageIdx: Math.max(prev.stageIdx, epStageIndexFor(d, stagesLen)) };
+        if (d.stage === "scan") next.occurrenceCount = d.occurrenceCount || 0;
+        if (d.stage === "ai") { next.chunkIndex = (d.chunkIndex || 0) + 1; next.chunkCount = d.chunkCount || 0; }
+        // Candidates stream in on `detect` (local pass) and `complete`
+        // (final list, including AI finds). Dedupe by type+name; upgrade
+        // earlier rows when the final pass brings ids/bands.
+        if (Array.isArray(d.candidates) && d.candidates.length) {
+          const found = prev.found.slice();
+          const counts = { ...prev.counts };
+          for (const c of d.candidates) {
+            if (!c || !c.name) continue;
+            const key = (c.entityType || "?") + ":" + String(c.name).toLowerCase();
+            if (seenRef.current.has(key)) continue;
+            seenRef.current.add(key);
+            found.push({ name: c.name, entityType: c.entityType, band: c.confidenceBand, quote: c.sourceQuote || "" });
+            counts[c.entityType] = (counts[c.entityType] || 0) + 1;
+          }
+          next.found = found;
+          next.counts = counts;
+        }
+        if (d.stage === "complete" || d.stage === "cancelled") {
+          next.finished = true;
+          next.cancelled = d.stage === "cancelled";
+          next.finalCount = d.candidateCount != null ? d.candidateCount : next.found.length;
+        }
+        return next;
+      });
+    };
+    window.addEventListener("lw:extraction-progress", onProg);
+    return () => window.removeEventListener("lw:extraction-progress", onProg);
+  }, [open]);
+  return live;
+}
 
 // ---------------------------------------------------------------------
 // ExtractionProgressModal
@@ -18,38 +99,42 @@ const EXM_COUNT_KEYS = ["cast", "bestiary", "locations", "items", "events", "fac
 //   mode: "quick" | "deep"
 //   privacy: "local" | "cloud" | "ai"
 //   chapterLabel: string
-//   sessionId: string
-//   stageIndex: number     -- which stage is currently active
-//   counts: { [entityType]: number }
-//   state: "running" | "complete" | "error" | "cancelled"
+//   state: optional override — "error" forces the failed body
 //   error?: { title, body, detail }
-//   onCancel, onContinueInBackground, onOpenSession, onClose, onRetry
+//   onCancelExtraction, onContinueExtractionInBackground,
+//   onOpenExtractionSession, onClose, onRerunExtraction, onOpenReview
 // ---------------------------------------------------------------------
 const ExtractionProgressModal = ({
   open,
   mode = "quick",
   privacy = "local",
   chapterLabel = "Chapter",
-  sessionId = "ses-…",
-  stageIndex = 0,
-  counts = {},
-  state = "running",
+  state: stateProp,
   error,
   onCancelExtraction,
   onContinueExtractionInBackground,
   onOpenExtractionSession,
   onClose,
   onRerunExtraction,
+  onOpenReview,
 }) => {
+  const live = useExtractionProgress(open);
   if (!open) return null;
 
   const stages = EXTRACTION_STAGES;
   const total = stages.length;
+  const state = stateProp === "error" ? "error"
+    : live.finished ? (live.cancelled ? "cancelled" : "complete")
+    : "running";
+  const stageIndex = state === "complete" ? total - 1 : live.stageIdx;
   const pct = state === "complete" ? 100
     : state === "error"   ? Math.max(8, (stageIndex / total) * 100)
     : Math.max(4, ((stageIndex + 0.5) / total) * 100);
 
-  const totalDetected = Object.values(counts).reduce((a, b) => a + (b || 0), 0);
+  const foundTotal = live.found.length;
+  const totalDetected = live.finalCount != null ? live.finalCount : foundTotal;
+  const nonZeroTypes = Object.entries(live.counts).filter(([, v]) => v > 0);
+  const ENTYPES = (typeof ENTITY_TYPES !== "undefined") ? ENTITY_TYPES : {};
 
   return (
     <div className="exm-backdrop" data-ui="ExtractionProgressModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="exm-title">
@@ -77,6 +162,9 @@ const ExtractionProgressModal = ({
               <span>·</span>
               <span className="chip">{mode === "deep" ? "DEEP" : "QUICK"}</span>
               <span className="chip">{privacy === "local" ? "LOCAL" : privacy === "ai" ? "AI" : "CLOUD"}</span>
+              {state === "running" && live.chunkCount > 0 && (
+                <span>· AI chunk {Math.min(live.chunkIndex, live.chunkCount)}/{live.chunkCount}</span>
+              )}
             </div>
           </div>
           <div className="exm__head-actions">
@@ -117,29 +205,42 @@ const ExtractionProgressModal = ({
                       <div className="exm__stage__lbl">{s.label}</div>
                       <div className="exm__stage__hint">{s.hint}</div>
                     </div>
-                    {st !== "pending" && counts[s.id] != null && (
-                      <span className="exm__stage__count">+{counts[s.id]}</span>
+                    {s.id === "scan" && st !== "pending" && live.occurrenceCount > 0 && (
+                      <span className="exm__stage__count">+{live.occurrenceCount}</span>
                     )}
                   </div>
                 );
               })}
             </div>
 
-            <div className="exm__counts">
-              <div className="exm__col-title">Detected so far · {totalDetected}</div>
-              <div className="exm__count-grid">
-                {EXM_COUNT_KEYS.map((k) => {
-                  const t = ENTITY_TYPES[k];
-                  if (!t) return null;
-                  const v = counts[k] || 0;
-                  return (
-                    <div key={k} className="exm__count-row" data-zero={v === 0}>
-                      <EntityTypeBadge type={k} size="xs" showLabel={false}/>
-                      <span className="exm__count-row__lbl">{t.label}</span>
-                      <span className="exm__count-row__val">{v}</span>
-                    </div>
-                  );
-                })}
+            <div className="exm__counts" data-testid="exm-found">
+              <div className="exm__col-title">Found so far · {foundTotal}</div>
+              {nonZeroTypes.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, margin: "6px 0 8px" }}>
+                  {nonZeroTypes.map(([k, v]) => (
+                    <span key={k} className="chip" style={{ fontSize: 10 }}>
+                      {(ENTYPES[k] && ENTYPES[k].label) || k} · {v}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {foundTotal === 0 && (
+                <p style={{ opacity: 0.6, fontSize: 13, fontStyle: "italic" }}>
+                  {state === "running" ? "Reading the page — names appear here the moment they're found…" : "Nothing new found in this scope."}
+                </p>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 230, overflowY: "auto", paddingRight: 4 }}>
+                {live.found.map((f, i) => (
+                  <div key={f.entityType + ":" + f.name + ":" + i} data-testid="exm-found-row"
+                    style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 6px", border: "1px solid var(--line-1, #e7dfcc)", borderRadius: 7, fontSize: 12.5 }}>
+                    <span title={f.band || ""} style={{ width: 7, height: 7, borderRadius: 99, background: EP_BAND_COLOR[f.band] || "#999", flex: "0 0 auto" }}/>
+                    {typeof EntityTypeBadge !== "undefined"
+                      ? <EntityTypeBadge type={f.entityType} size="xs" showLabel={false}/>
+                      : <span className="chip">{f.entityType}</span>}
+                    <span style={{ fontWeight: 600, flex: "0 0 auto" }}>{f.name}</span>
+                    <span style={{ flex: 1, opacity: 0.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.quote}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -147,10 +248,10 @@ const ExtractionProgressModal = ({
 
         <div className="exm__foot">
           <div className="exm__foot__hint">
-            {state === "running"   && <>Session <span className="mono">{sessionId}</span> · <em>You can keep writing — this runs in the background.</em></>}
-            {state === "complete"  && <>Found {totalDetected} candidates across {Object.keys(counts).filter((k) => counts[k]).length} entity types.</>}
-            {state === "error"     && <>Session <span className="mono">{sessionId}</span></>}
-            {state === "cancelled" && <>No changes were saved to your dossiers.</>}
+            {state === "running"   && <>Session <span className="mono">{live.sessionId || "…"}</span> · <em>You can keep writing — this runs in the background.</em></>}
+            {state === "complete"  && <>Found {totalDetected} candidate{totalDetected === 1 ? "" : "s"} across {nonZeroTypes.length} entity type{nonZeroTypes.length === 1 ? "" : "s"}.</>}
+            {state === "error"     && <>Session <span className="mono">{live.sessionId || "…"}</span></>}
+            {state === "cancelled" && <>Stopped. Anything already found is in the review queue.</>}
           </div>
           <div className="exm__foot__actions">
             {state === "running" && (
@@ -160,10 +261,13 @@ const ExtractionProgressModal = ({
                 <Btn variant="ghost" size="sm" icon="paper" data-callback="onOpenExtractionSession" onClick={onOpenExtractionSession}>Session details</Btn>
               </>
             )}
-            {state === "complete" && (
+            {(state === "complete" || state === "cancelled") && (
               <>
                 <Btn variant="ghost" size="sm" icon="paper" data-callback="onOpenExtractionSession" onClick={onOpenExtractionSession}>Session details</Btn>
-                <Btn variant="primary" size="sm" icon="bell" data-callback="onOpenGlobalReview" onClick={onClose}>Review {totalDetected} candidates</Btn>
+                <Btn variant="primary" size="sm" icon="bell" data-callback="onOpenGlobalReview" data-testid="extraction-review"
+                  onClick={() => { if (onOpenReview) onOpenReview(); else if (onClose) onClose(); }}>
+                  Review {totalDetected} candidate{totalDetected === 1 ? "" : "s"}
+                </Btn>
               </>
             )}
             {state === "error" && (
@@ -173,9 +277,6 @@ const ExtractionProgressModal = ({
                 <Btn variant="primary" size="sm" icon="bolt" data-callback="onRerunExtraction" data-testid="extraction-retry" onClick={onRerunExtraction}>Retry</Btn>
               </>
             )}
-            {state === "cancelled" && (
-              <Btn variant="primary" size="sm" onClick={onClose}>Dismiss</Btn>
-            )}
           </div>
         </div>
       </div>
@@ -183,4 +284,4 @@ const ExtractionProgressModal = ({
   );
 };
 
-Object.assign(window, { ExtractionProgressModal, EXM_COUNT_KEYS });
+Object.assign(window, { ExtractionProgressModal, useExtractionProgress });

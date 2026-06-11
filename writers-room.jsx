@@ -1384,23 +1384,15 @@ const WritersRoomScreen = ({
 
   const [extractionState, setExtractionState] = _wrUS("idle"); // idle | running | complete | error
 
-  // Extraction modal flow
+  // Extraction modal flow. The progress modal drives itself from live
+  // `lw:extraction-progress` engine events (real stages + a streamed
+  // snapshot of every find) — no fake timers here.
   const [progressOpen, setProgressOpen] = _wrUS(false);
-  const [progressStage, setProgressStage] = _wrUS(0);
   const [progressMode, setProgressMode] = _wrUS("quick"); // quick | deep
   const [progressFailed, setProgressFailed] = _wrUS(false);
+  const extractAbortRef = _wrUR(null);
   const [sessionDrawerOpen, setSessionDrawerOpen] = _wrUS(false);
   const [activeSession, setActiveSession] = _wrUS(null);
-
-  // Review modals
-
-  // Walk progress stages
-  _wrUE(() => {
-    if (!progressOpen || progressFailed) return;
-    if (progressStage >= EXTRACTION_STAGES.length - 1) return;
-    const t = setTimeout(() => setProgressStage((s) => s + 1), progressMode === "deep" ? 700 : 380);
-    return () => clearTimeout(t);
-  }, [progressOpen, progressStage, progressFailed, progressMode]);
 
   // Floating UI
   const [hoverEntity, setHoverEntity] = _wrUS(null);
@@ -1496,8 +1488,10 @@ const WritersRoomScreen = ({
     persistChapters(extractingChapters, nextManuscripts, activeId);
     try { await window.LoomwrightBackend?.ManuscriptService?.saveCurrentDom(); } catch (_e) {}
     setExtractionState("running");
-    setProgressMode(deep ? "deep" : "quick"); setProgressStage(0); setProgressFailed(false); setProgressOpen(true);
+    setProgressMode(deep ? "deep" : "quick"); setProgressFailed(false); setProgressOpen(true);
     onSetSyncState && onSetSyncState("syncing");
+    const ctrl = new AbortController();
+    extractAbortRef.current = ctrl;
     // Paragraph offset map so each occurrence can be attributed to a paragraph id.
     const offsets = []; let cursor = 0;
     (snap.paragraphs || []).forEach((p) => {
@@ -1507,10 +1501,11 @@ const WritersRoomScreen = ({
       cursor += t.length + 2;
     });
     try {
-      await window.LoomwrightBackend?.ExtractionService?.runExtraction({ chapterId: activeId, text: snap.text, deep, paragraphs: offsets });
+      await window.LoomwrightBackend?.ExtractionService?.runExtraction({ chapterId: activeId, text: snap.text, deep, paragraphs: offsets, signal: ctrl.signal });
     } catch (_e) {
       setProgressFailed(true);
     }
+    extractAbortRef.current = null;
     setExtractions(loadReviewExtractions());
     setChapters((curr) => curr.map((c) => c.id === activeId ? { ...c, state: "extracted" } : c));
     // Ensure the canvas re-pulls occurrences, then force a one-time body
@@ -1526,11 +1521,14 @@ const WritersRoomScreen = ({
     onSetSyncState && onSetSyncState("saved");
   }, [onSetSyncState]);
   const onCancelExtraction = _wrUC(() => {
+    // Abort the live run (AI chunks check the signal) — anything already
+    // found stays in the review queue.
+    if (extractAbortRef.current) { try { extractAbortRef.current.abort(); } catch (_e) {} }
     setProgressOpen(false);
     setExtractionState("idle");
     onSetSyncState && onSetSyncState("saved");
   }, [onSetSyncState]);
-  const onRetryExtraction = _wrUC(() => { setProgressFailed(false); setProgressStage(0); }, []);
+  const onRetryExtraction = _wrUC(() => { setProgressFailed(false); runExtractionFlow(progressMode === "deep"); }, [runExtractionFlow, progressMode]);
   const onOpenSessionDrawer = _wrUC(() => {
     const s = (typeof MOCK_SESSIONS !== "undefined" && MOCK_SESSIONS[0]) || null;
     setActiveSession(s); setSessionDrawerOpen(true);
@@ -2129,12 +2127,12 @@ const WritersRoomScreen = ({
         <ExtractionProgressModal
           open={progressOpen}
           mode={progressMode}
-          stages={EXTRACTION_STAGES}
-          currentStage={progressStage}
           chapterLabel={"Ch. " + (activeChapter?.num || "—") + " — " + (activeChapter?.title || "Untitled")}
-          onCancel={onCancelExtraction}
+          onCancelExtraction={onCancelExtraction}
+          onContinueExtractionInBackground={onCloseProgress}
+          onOpenExtractionSession={onOpenSessionDrawer}
           onClose={onCloseProgress}
-          onOpenReviewQueue={onOpenReviewQueue}
+          onOpenReview={() => { onCloseProgress(); onOpenReviewQueue && onOpenReviewQueue(); }}
         />
       )}
       {progressOpen && progressFailed && (
