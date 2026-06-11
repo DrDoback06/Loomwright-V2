@@ -193,6 +193,15 @@ const HomeScreen = ({
     return () => window.removeEventListener("lw:continuity-check", onCheck);
   }, []);
 
+  // Top code-first insights (InsightService) — staleness, orphans,
+  // contradictions, stalled threads. Recomputed with the same stats tick.
+  const topInsights = React.useMemo(() => {
+    try {
+      const { insights } = window.LoomwrightBackend?.InsightService?.computeInsights?.() || { insights: [] };
+      return insights.slice(0, 3);
+    } catch (_) { return []; }
+  }, [statsTick]);
+
   const ms = live?.ms || { chaptersDrafted: 0, chaptersReserved: 0, wordCount: 0, targetWordCount: 90000, activeChapterNum: null, wordsToday: 0, paceSub: "", lastChapterTitle: "—", lastSavedHuman: "no chapters yet" };
   const PI = live?.PI || { completion: 0, styleProfile: "Not set", canonRules: 0, references: 0, missing: [] };
   const RQ = live?.RQ || { total: 0, high: 0, strong: 0, uncertain: 0, weak: 0, autoAccepted: 0, needsDecision: 0 };
@@ -557,6 +566,44 @@ const HomeScreen = ({
               ))}
             </div>
           </HomeCard>
+
+          {/* Needs attention — top code-first insights (zero-token engine) */}
+          {topInsights.length > 0 && (
+            <HomeCard
+              className="home-card--insights"
+              eyebrow="Editor's desk"
+              title="Needs attention"
+              data-testid="home-insights"
+              action={
+                <button className="home-link" data-callback="onOpenTodayFromHome"
+                  onClick={() => onSetRoute && onSetRoute("today")}>
+                  All insights →
+                </button>
+              }
+            >
+              <div className="home-warnings">
+                {topInsights.map((ins) => (
+                  <button key={ins.id}
+                    className={"home-warning home-warning--" + (ins.severity === "high" ? "danger" : ins.severity === "warn" ? "warn" : "info")}
+                    data-callback="onOpenInsight"
+                    onClick={() => {
+                      if (ins.entityRef) {
+                        window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
+                          detail: { type: ins.entityRef.type, initial: { id: ins.entityRef.id }, mode: "full", sectionId: ins.sectionId || undefined },
+                        }));
+                      } else if (onSetRoute) onSetRoute("today");
+                    }}>
+                    <span className={"home-warning__dot home-warning__dot--" + (ins.severity === "high" ? "danger" : ins.severity === "warn" ? "warn" : "info")}/>
+                    <div className="home-warning__body">
+                      <div className="home-warning__title">{ins.title}</div>
+                      <div className="home-warning__sub">{ins.body}</div>
+                    </div>
+                    <span className="home-warning__action">Fix this →</span>
+                  </button>
+                ))}
+              </div>
+            </HomeCard>
+          )}
 
           {/* Recent Activity */}
           <HomeCard

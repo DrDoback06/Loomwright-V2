@@ -5275,6 +5275,304 @@ Only evidenced pairs. Return JSON only.`;
     },
   };
 
+  // -------------------------------------------------------------------
+  // InsightService — the code-first "editor reading over your shoulder".
+  // Deterministic, zero-token detectors over the live stores: staleness,
+  // incomplete records, orphans, broken links, stalled threads, and
+  // cheap textual contradictions (eye colour / titles / allegiances).
+  // Today/Home render these as actionable cards; AI may deepen them but
+  // is never required.
+  // -------------------------------------------------------------------
+  const INSIGHT_KEY_FIELDS = {
+    // type: [ [label, sectionId, (data, entity) => has-value ], … ]
+    cast: [
+      ["a biography or summary", "basics", (d, e) => !!(d.backstory || d.description || d.summary || e.summary)],
+      ["a role or title", "identity", (d) => !!(d.role || d.title)],
+      ["goals", "psychology", (d) => Array.isArray(d.goals) ? d.goals.length > 0 : !!d.goals],
+    ],
+    locations: [
+      ["a location type", "basics", (d) => !!(d.kind || d.customKind)],
+      ["a description", "basics", (d, e) => !!(d.description || d.summary || e.summary)],
+    ],
+    items: [
+      ["an item type", "basics", (d) => !!(d.itemType || d.customType)],
+      ["a current owner", "ownership", (d) => d.currentOwner != null && d.currentOwner !== ""],
+    ],
+    quests: [
+      ["steps", "structure", (d) => Array.isArray(d.steps) && d.steps.length > 0],
+      ["a status", "basics", (d) => !!d.status],
+    ],
+    events: [
+      ["a chapter / time", "when", (d) => !!(d.chapter || d.timelinePosition)],
+      ["participants", "participants", (d) => Array.isArray(d.participants) && d.participants.length > 0],
+    ],
+    relationships: [
+      ["a bond type", "basics", (d) => !!(d.bondType || d.relationshipType || d.type)],
+      ["both endpoints", "basics", (d) => !!(relPartyId(d.fromId != null ? d.fromId : d.from) && relPartyId(d.toId != null ? d.toId : d.to))],
+    ],
+    factions: [
+      ["goals or a summary", "basics", (d, e) => !!(d.goals && (Array.isArray(d.goals) ? d.goals.length : true)) || !!(d.summary || e.summary)],
+    ],
+    bestiary: [
+      ["a threat level", "threat", (d) => !!d.threatLevel],
+      ["a habitat", "habitat", (d) => !!d.habitat],
+    ],
+  };
+
+  const INSIGHT_EYE_COLOURS = "blue|green|grey|gray|brown|amber|violet|black|hazel|golden|silver|red";
+  const INSIGHT_TITLES = "Queen|King|Captain|Lord|Lady|Ser|Sir|Duke|Duchess|Prince|Princess|Commander|General";
+
+  const _escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  let _insightVer = 0;
+  let _insightCache = null;
+
+  const InsightService = {
+    bump() { _insightVer += 1; },
+
+    computeInsights() {
+      if (_insightCache && _insightCache.ver === _insightVer) return _insightCache.result;
+      const result = this._compute();
+      _insightCache = { ver: _insightVer, result };
+      return result;
+    },
+
+    _compute() {
+      const insights = [];
+      const push = (o) => insights.push({ severity: "info", evidence: [], ...o });
+
+      // ---- shared snapshots --------------------------------------------
+      const types = ["cast", "locations", "items", "factions", "bestiary", "quests", "events", "relationships", "lore"];
+      const byType = {};
+      const allEntities = [];
+      for (const t of types) {
+        byType[t] = EntityService.listSync(t).filter((e) => e && e.status !== "deleted");
+        allEntities.push(...byType[t]);
+      }
+      const liveIds = new Set(allEntities.map((e) => e.id));
+      // entity.id → serialised data of every OTHER entity (reference scans)
+      const dataJson = allEntities.map((e) => {
+        let s = "";
+        try { s = JSON.stringify(e.data || {}); } catch (_) {}
+        return { id: e.id, json: s };
+      });
+      const referencedIds = new Set();
+      for (const { id, json } of dataJson) {
+        for (const other of allEntities) {
+          if (other.id !== id && json.includes(other.id)) referencedIds.add(other.id);
+        }
+      }
+
+      const chState = ManuscriptChapterService.loadSync() || {};
+      const chapters = (chState.chapters || []).filter((c) => c && !c.reserved);
+      const chapterNum = new Map();
+      chapters.forEach((c, i) => chapterNum.set(c.id, c.num || i + 1));
+      const chapterText = (c) => String(c.bodyText || chState.manuscripts?.[c.id]?.text || "");
+      const latestNum = chapters.reduce((m, c) => Math.max(m, chapterNum.get(c.id) || 0), 0);
+
+      const occs = OccurrenceService.listAllSync() || [];
+      const occByEntity = new Map();
+      for (const o of occs) {
+        if (!o || !o.entityId) continue;
+        const list = occByEntity.get(o.entityId) || [];
+        list.push(o);
+        occByEntity.set(o.entityId, list);
+      }
+      const lastSeenChapter = (id) => {
+        let max = 0;
+        for (const o of occByEntity.get(id) || []) {
+          const n = chapterNum.get(o.chapterId);
+          if (n != null && n > max) max = n;
+        }
+        return max;
+      };
+
+      const ref = (e) => ({ id: e.id, type: e.type, label: e.name || "Untitled" });
+      const ageDays = (iso) => {
+        const t = Date.parse(iso || "");
+        return Number.isFinite(t) ? (Date.now() - t) / 86400000 : 0;
+      };
+
+      // ---- 1. staleness -------------------------------------------------
+      for (const t of ["cast", "locations", "items", "factions"]) {
+        for (const e of byType[t]) {
+          const seen = lastSeenChapter(e.id);
+          if (seen > 0 && latestNum - seen >= 3) {
+            push({
+              id: "ins-stale-" + e.id, kind: "staleness", severity: "warn", entityRef: ref(e),
+              title: `${e.name} hasn't appeared since Ch. ${seen}`,
+              body: `The manuscript is on Ch. ${latestNum}. Worth pulling ${e.name} back through the prose — or retiring the record.`,
+            });
+          } else if (seen === 0 && ageDays(e.updatedAt) > 14 && (occs.length > 0 || chapters.length > 0)) {
+            push({
+              id: "ins-stale-rec-" + e.id, kind: "staleness", severity: "info", entityRef: ref(e),
+              title: `${e.name} hasn't been touched in ${Math.floor(ageDays(e.updatedAt))} days`,
+              body: "No manuscript mentions and no recent edits. Still part of the story?",
+            });
+          }
+        }
+      }
+
+      // ---- 2. incomplete ------------------------------------------------
+      for (const [t, fields] of Object.entries(INSIGHT_KEY_FIELDS)) {
+        for (const e of byType[t] || []) {
+          const d = e.data || {};
+          const missing = fields.filter(([, , has]) => !has(d, e));
+          if (missing.length >= 2) {
+            push({
+              id: "ins-inc-" + e.id, kind: "incomplete", severity: "info", entityRef: ref(e),
+              sectionId: missing[0][1],
+              title: `${e.name} is missing ${missing.map((m) => m[0]).join(" and ")}`,
+              body: "Open the editor to round the record out — extraction can also fill gaps from the manuscript.",
+            });
+          }
+        }
+      }
+
+      // ---- 3. orphans + broken links -------------------------------------
+      for (const t of ["cast", "locations", "items", "bestiary", "factions"]) {
+        for (const e of byType[t]) {
+          const hasOccs = (occByEntity.get(e.id) || []).length > 0;
+          const isReferenced = referencedIds.has(e.id);
+          const refsOthers = (() => {
+            const row = dataJson.find((x) => x.id === e.id);
+            if (!row) return false;
+            for (const other of allEntities) if (other.id !== e.id && row.json.includes(other.id)) return true;
+            return false;
+          })();
+          if (!hasOccs && !isReferenced && !refsOthers && (occs.length > 0 || allEntities.length > 3)) {
+            push({
+              id: "ins-orph-" + e.id, kind: "orphan", severity: "info", entityRef: ref(e),
+              title: `${e.name} isn't connected to anything`,
+              body: "No manuscript mentions, no links from other records. Link it, mention it, or let it go.",
+            });
+          }
+        }
+      }
+      for (const r of byType.relationships) {
+        const d = r.data || {};
+        const a = relPartyId(d.fromId != null ? d.fromId : d.from);
+        const b = relPartyId(d.toId != null ? d.toId : d.to);
+        const missing = [a, b].filter((x) => x && !liveIds.has(x));
+        if (missing.length) {
+          push({
+            id: "ins-brk-" + r.id, kind: "broken-link", severity: "high", entityRef: ref(r),
+            title: `${r.name || "A relationship"} points at a missing record`,
+            body: "One side of this bond was deleted or never existed. Repoint it or move the bond to the trash.",
+          });
+        }
+      }
+
+      // ---- 4. stalled threads --------------------------------------------
+      const referencesIdInLastChapters = (entity, n) => {
+        if (!latestNum) return true; // no chapters → nothing can be stalled
+        const cutoff = latestNum - (n - 1);
+        const idsToCheck = [entity.id];
+        try {
+          const json = JSON.stringify(entity.data || {});
+          for (const e2 of byType.cast) if (json.includes(e2.id)) idsToCheck.push(e2.id);
+        } catch (_) {}
+        return idsToCheck.some((id) => lastSeenChapter(id) >= cutoff);
+      };
+      for (const q of byType.quests) {
+        const d = q.data || {};
+        const steps = Array.isArray(d.steps) ? d.steps : [];
+        const open = steps.filter((s) => s && String(s.status || "").toLowerCase() !== "done" && String(s.status || "").toLowerCase() !== "complete" && s.done !== true);
+        const activeStatus = !d.status || /active|open|in.?progress/i.test(String(d.status));
+        if ((open.length || (activeStatus && steps.length === 0)) && latestNum >= 2 && !referencesIdInLastChapters(q, 2)) {
+          push({
+            id: "ins-stall-" + q.id, kind: "stalled-thread", severity: "warn", entityRef: ref(q),
+            title: `"${q.name}" has gone quiet`,
+            body: `${open.length || "Its"} open step(s) and no movement in the last 2 chapters. Advance it or park it.`,
+          });
+        }
+      }
+      for (const ev of byType.events) {
+        const d = ev.data || {};
+        if (/open|unresolved|pending/i.test(String(d.status || "")) && latestNum >= 2 && !referencesIdInLastChapters(ev, 2)) {
+          push({
+            id: "ins-stall-ev-" + ev.id, kind: "stalled-thread", severity: "warn", entityRef: ref(ev),
+            title: `Event "${ev.name}" is unresolved and quiet`,
+            body: "Marked open, but the recent chapters don't touch it.",
+          });
+        }
+      }
+
+      // ---- 5. contradictions (cheap textual heuristics) -------------------
+      const canonText = (byType.lore || []).map((l) => {
+        const d = l.data || {};
+        return [l.name, d.body, d.summary].filter(Boolean).join(" ");
+      }).join("\n").toLowerCase();
+      const intel = ProjectIntelService.loadSync() || {};
+      const intelText = JSON.stringify(intel).toLowerCase();
+      const canonForbids = (value) => {
+        const v = String(value).toLowerCase();
+        return canonText.includes("never " + v) || canonText.includes("not " + v)
+          || intelText.includes("never " + v) || intelText.includes("not " + v);
+      };
+
+      const addContradiction = (e, attr, found) => {
+        // found: [{value, chapter, quote}] with ≥2 distinct values
+        const values = [...new Set(found.map((f) => f.value.toLowerCase()))];
+        if (values.length < 2) return;
+        const severity = found.some((f) => canonForbids(f.value)) ? "high" : "warn";
+        push({
+          id: "ins-conf-" + e.id + "-" + attr, kind: "contradiction", severity, entityRef: ref(e),
+          title: `${e.name}'s ${attr} changes between chapters (${values.join(" vs ")})`,
+          body: "Both versions are on the page. Pick the canon one and fix the stray.",
+          evidence: found.slice(0, 3).map((f) => ({ chapter: f.chapter, quote: f.quote })),
+        });
+      };
+
+      if (chapters.length >= 2) {
+        for (const c of byType.cast) {
+          if (!c.name || c.name.length < 3) continue;
+          const nameRe = _escapeRe(c.name.split(/\s+/)[0]);
+          const eyeFound = [];
+          const titleFound = [];
+          const oathFound = [];
+          for (const ch of chapters) {
+            const text = chapterText(ch);
+            if (!text) continue;
+            const n = chapterNum.get(ch.id);
+            let m;
+            const eyeRe = new RegExp("\\b" + nameRe + "\\b[^.!?\\n]{0,60}?\\b(" + INSIGHT_EYE_COLOURS + ")\\s+eyes", "gi");
+            while ((m = eyeRe.exec(text))) eyeFound.push({ value: m[1], chapter: n, quote: m[0].slice(0, 120) });
+            const titleRe = new RegExp("\\b(" + INSIGHT_TITLES + ")\\s+" + nameRe + "\\b", "g");
+            while ((m = titleRe.exec(text))) titleFound.push({ value: m[1], chapter: n, quote: m[0] });
+            const oathRe = new RegExp("\\b" + nameRe + "\\b[^.!?\\n]{0,80}?(?:swore|sworn|pledged)\\s+(?:fealty\\s+|allegiance\\s+)?to\\s+(?:the\\s+)?([A-Z][\\w'’-]+(?:\\s+[A-Z][\\w'’-]+)?)", "g");
+            while ((m = oathRe.exec(text))) oathFound.push({ value: m[1], chapter: n, quote: m[0].slice(0, 140) });
+          }
+          const distinctChapters = (found) => new Set(found.map((f) => f.chapter)).size >= 2 || new Set(found.map((f) => f.value.toLowerCase())).size >= 2;
+          if (eyeFound.length >= 2 && distinctChapters(eyeFound)) addContradiction(c, "eye colour", eyeFound);
+          if (titleFound.length >= 2 && distinctChapters(titleFound)) addContradiction(c, "title", titleFound);
+          if (oathFound.length >= 2 && distinctChapters(oathFound)) addContradiction(c, "allegiance", oathFound);
+        }
+      }
+
+      // ---- 6. possession conflicts (from the ownership ledger) ------------
+      if (typeof buildOwnershipLedgerSync === "function") {
+        try {
+          for (const row of buildOwnershipLedgerSync()) {
+            if (row.conflict) {
+              push({
+                id: "ins-own-" + row.itemId, kind: "contradiction", severity: "warn",
+                entityRef: { id: row.itemId, type: "items", label: row.itemName },
+                title: `Who holds ${row.itemName}?`,
+                body: row.conflict,
+                evidence: row.evidence || [],
+              });
+            }
+          }
+        } catch (_) {}
+      }
+
+      const order = { high: 0, warn: 1, info: 2 };
+      insights.sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3));
+      return { generatedAt: nowIso(), insights };
+    },
+  };
+
   const SampleProjectService = {
     async loadSample() {
       const demo = window.WR_DEMO_PROJECT || {};
@@ -7374,6 +7672,11 @@ Only evidenced pairs. Return JSON only.`;
     installDelegates();
     // Build the initial search index once the live store is hydrated.
     try { SearchService.rebuildIndex(); } catch (err) { console.warn("[SearchService] initial build failed", err); }
+    // Insight cache invalidation — recompute lazily after any store change.
+    try {
+      ["lw:entity-store-updated", "lw:manuscript-chapters-updated", "lw:occurrences-updated", "lw:review-queue-updated", "lw:project-imported"]
+        .forEach((ev) => window.addEventListener(ev, () => InsightService.bump()));
+    } catch (_) {}
     window.dispatchEvent(new CustomEvent("lw:backend-ready"));
     return true;
   }
@@ -7430,6 +7733,7 @@ Only evidenced pairs. Return JSON only.`;
     OccurrenceService,
     isOccurrenceStale,
     SelectionLockService,
+    InsightService,
     SampleProjectService,
     exportProject,
     importProject,

@@ -1719,6 +1719,43 @@ async function main() {
     log("[enrich] local mode surfaces the pending count", local.ok === false && local.mode === "local" && local.pending === 1);
   }
 
+  // ---- [insights] InsightService is deterministic + detects the basics --
+  {
+    const B = win.LoomwrightBackend;
+    // Orphan: a fresh entity with no occurrences/links among several others.
+    await B.EntityService.save("cast", { name: "Orphan Olya", data: {} }, { status: "active" });
+    // Stalled quest: open steps, no recent mention.
+    await B.EntityService.save("quests", { name: "The Silent Errand", data: { status: "active", steps: [{ title: "Begin", status: "open" }] } }, { status: "active" });
+    // Contradiction: eye colour flips between chapters.
+    await B.ManuscriptChapterService.save({
+      chapters: [
+        { id: "ich-1", num: 1, title: "One", state: "saved", bodyText: "Anwen had blue eyes that night." },
+        { id: "ich-2", num: 2, title: "Two", state: "saved", bodyText: "Anwen turned, her brown eyes catching the light." },
+      ],
+      activeChapterId: "ich-1",
+      manuscripts: { "ich-1": { text: "Anwen had blue eyes that night." }, "ich-2": { text: "Anwen turned, her brown eyes catching the light." } },
+      trashedChapters: [],
+    });
+    B.InsightService.bump();
+    const r1 = B.InsightService.computeInsights();
+    const r2 = B.InsightService.computeInsights();
+    log("[insights] cached result is stable between calls", r1 === r2);
+    const kinds = new Set(r1.insights.map((i) => i.kind));
+    log("[insights] detects the contradiction (eye colour)", r1.insights.some((i) => i.kind === "contradiction" && /eye colour/.test(i.title)));
+    log("[insights] detects the stalled quest", r1.insights.some((i) => i.kind === "stalled-thread" && /Silent Errand/.test(i.title)));
+    log("[insights] detects an orphan", r1.insights.some((i) => i.kind === "orphan"));
+    log("[insights] severity ordering puts high/warn first", (() => {
+      const order = { high: 0, warn: 1, info: 2 };
+      const sevs = r1.insights.map((i) => order[i.severity] ?? 3);
+      return sevs.every((s, i) => i === 0 || sevs[i - 1] <= s);
+    })());
+    log("[insights] deterministic re-compute after bump", (() => {
+      B.InsightService.bump();
+      const r3 = B.InsightService.computeInsights();
+      return JSON.stringify(r3.insights.map((i) => i.id)) === JSON.stringify(r1.insights.map((i) => i.id));
+    })());
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

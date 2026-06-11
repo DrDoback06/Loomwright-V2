@@ -45,6 +45,53 @@ function buildTodaySuggestions() {
       why: "Pick up where the last draft left off.",
       related: [], action: "Open Writer's Room", chapter: c.title || "—" });
   }
+
+  // Code-first insight engine — staleness / incomplete / orphans / broken
+  // links / stalled threads / contradictions, all zero-token. Fills the
+  // sections that used to be placeholders (threads, callbacks, intel,
+  // continuity beyond the AI check).
+  const INSIGHT_SECTION = {
+    "stalled-thread": "threads",
+    "contradiction": "continuity",
+    "broken-link": "continuity",
+    "staleness": "callbacks",
+    "incomplete": "intel",
+    "orphan": "untouched",
+  };
+  const INSIGHT_ACTION = {
+    "stalled-thread": "Open in Quests panel",
+    "contradiction": "Open in manuscript",
+    "broken-link": "Open editor",
+    "staleness": "Open editor",
+    "incomplete": "Open editor",
+    "orphan": "Open editor",
+  };
+  const conf = { high: "high", warn: "strong", info: "uncertain" };
+  try {
+    const { insights } = B.InsightService?.computeInsights?.() || { insights: [] };
+    for (const ins of insights) {
+      push({
+        id: ins.id,
+        section: INSIGHT_SECTION[ins.kind] || "untouched",
+        title: ins.title,
+        why: ins.body + (ins.evidence?.length ? ` — e.g. Ch. ${ins.evidence[0].chapter}: "${ins.evidence[0].quote}"` : ""),
+        related: ins.entityRef ? [{ id: ins.entityRef.id, type: ins.entityRef.type, label: ins.entityRef.label, sectionId: ins.sectionId }] : [],
+        action: INSIGHT_ACTION[ins.kind] || "Open",
+        confidence: conf[ins.severity] || "uncertain",
+        chapter: ins.evidence?.[0]?.chapter != null ? "Ch. " + ins.evidence[0].chapter : "—",
+      });
+    }
+  } catch (_) {}
+
+  // Project-intelligence gaps: nudge when the core intel sections are empty.
+  try {
+    const intel = B.ProjectIntelService?.loadSync?.() || {};
+    if (out.length > 0 && !intel.writingStyleGuide && !intel.styleDials) {
+      push({ id: "td-intel-style", section: "intel", title: "No writing style profile yet",
+        why: "Capture your voice in Onboarding or Settings ▸ Project Intelligence so AI drafts (and the style critique) match your prose.",
+        action: "Open Control Centre", confidence: "uncertain" });
+    }
+  } catch (_) {}
   return out;
 }
 
