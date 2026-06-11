@@ -32,6 +32,8 @@ const PALETTE_DATA = {
     { id: "a-open-atlas",   icon: "compass", title: "Open Atlas",          sub: "Panel" },
     { id: "a-open-quests",  icon: "scroll",  title: "Open Quests",         sub: "Panel" },
     { id: "a-open-review",  icon: "bell",    title: "Open Review Queue",   sub: "Panel" },
+    { id: "a-open-tangle",  icon: "knot",    title: "Open Tangle board",   sub: "Panel" },
+    { id: "a-open-tangle-canvas", icon: "knot", title: "Open Tangle canvas (full screen)", sub: "Workspace" },
   ],
 };
 
@@ -125,13 +127,16 @@ const CommandPalette = ({
         { id: "review",     label: "Review queue",  rows: groupRows.review },
         { id: "other",      label: "Other",         rows: groupRows.other },
         { id: "suggested",  label: "Suggested actions", rows: filterRows(PALETTE_DATA.suggested) },
+        // Navigation commands must survive live-index mode — otherwise
+        // "Open Tangle/Atlas/Quests" vanish the moment a project has data.
+        { id: "tabs",       label: "Tabs & navigation", rows: filterRows(PALETTE_DATA.tabs) },
       ];
       // Scope filter (live mode reuses the same scope tabs)
       const byScope = (g) => {
         if (scope === "all") return true;
         if (scope === "entities") return g.id === "entities";
         if (scope === "chapters") return g.id === "chapters";
-        if (scope === "actions")  return g.id === "suggested" || g.id === "settings";
+        if (scope === "actions")  return g.id === "suggested" || g.id === "settings" || g.id === "tabs";
         return true;
       };
       return groups.filter((g) => g.rows.length && byScope(g));

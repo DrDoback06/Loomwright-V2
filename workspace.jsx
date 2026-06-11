@@ -21,7 +21,7 @@ const ROUTE_META = {
   "events":       { eyebrow: "Entities",         title: "Events",                       sub: "Discrete things that happened — battles, meetings, deaths.",                       entity: "events" },
   "timeline":     { eyebrow: "Entities",         title: "Timeline",                     sub: "Time, ordered. Eras, days, hours.",                                                entity: "timeline" },
   "lore":         { eyebrow: "Entities",         title: "Lore / Canon",                 sub: "Facts you've ratified about the world.",                                          entity: "lore" },
-  "tangle":       { eyebrow: "Tools",            title: "Tangle",                       sub: "A canvas for non-linear thinking.",                                               icon: "knot",  soon: true },
+  "tangle":       { eyebrow: "Tools",            title: "Tangle",                       sub: "A canvas for non-linear thinking.",                                               icon: "knot" },
   "speedReader":  { eyebrow: "Tools",            title: "Speed Reader",                 sub: "Read your manuscript at pace; flag inconsistencies.",                              icon: "eye" },
   "references":   { eyebrow: "Tools",            title: "References",                   sub: "External sources, mood boards, archive uploads.",                                  entity: "references" },
   "trash":        { eyebrow: "System",           title: "Trash",                        sub: "Deleted entities sit here for 30 days before they vanish.",                        icon: "trash" },

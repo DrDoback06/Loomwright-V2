@@ -135,3 +135,44 @@ test.describe("U28. Tangle — live story board", () => {
     await expect(side).toContainText("1 nodes · 0 threads");
   });
 });
+
+// Phase-3 discoverability: Tangle is reachable from the command palette
+// (panel + full-screen canvas), and nothing anywhere still says
+// "Coming soon" about it.
+test.describe("U28b. Tangle — discoverable", () => {
+  test("command palette opens the Tangle panel and the full canvas", async ({ page }) => {
+    const { openFreshApp } = require("./helpers");
+    await openFreshApp(page);
+    // Palette → "Open Tangle board" opens the panel.
+    await page.keyboard.press("ControlOrMeta+p");
+    const palette = page.locator("[data-ui='CommandPalette']");
+    await expect(palette).toBeVisible({ timeout: 4000 });
+    await palette.locator("input").fill("tangle");
+    await palette.locator("text=Open Tangle board").first().click();
+    await expect(page.locator("[data-ui='TanglePanelBody']")).toBeVisible({ timeout: 4000 });
+
+    // Palette → full-screen canvas from cold.
+    await page.keyboard.press("ControlOrMeta+p");
+    await expect(palette).toBeVisible();
+    await palette.locator("input").fill("tangle canvas");
+    await palette.locator("text=Open Tangle canvas").first().click();
+    await expect(page.locator("[data-ui='FullWorkspaceHost'][data-workspace-id='tangle-canvas']")).toBeVisible({ timeout: 6000 });
+    await expect(page.locator("[data-ui='TangleCanvas'], [data-ui='TangleFullScreen']").first()).toBeVisible({ timeout: 4000 });
+  });
+
+  test("no surface calls Tangle 'coming soon' any more", async ({ page }) => {
+    const { openFreshApp } = require("./helpers");
+    await openFreshApp(page);
+    const meta = await page.evaluate(() => (window.ROUTE_META || {}).tangle || null);
+    if (meta) {
+      expect(meta.soon || false).toBe(false);
+    }
+    // Left rail renders Tangle without the Soon badge.
+    const railItem = page.locator("[data-testid='leftrail-tangle']");
+    if (await railItem.count()) {
+      await expect(railItem).not.toContainText(/soon/i);
+      const cls = await railItem.getAttribute("class");
+      expect(cls).not.toMatch(/disabled/);
+    }
+  });
+});
