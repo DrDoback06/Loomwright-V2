@@ -227,4 +227,7 @@ if (process.env.AUDIT_VERBOSE) {
   for (const n of PROVIDER_GATED) console.log("  -", n);
   console.log("\nBucket D — React-owned callbacks:");
   for (const n of REACT_OWNED) console.log("  -", n);
+  const defaulted = unimplemented.filter((n) => !REACT_OWNED.has(n)).sort();
+  console.log("\nCallbacks falling to the generic default notice (" + defaulted.length + "):");
+  for (const n of defaulted) console.log("  -", n);
 }

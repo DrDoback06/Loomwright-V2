@@ -335,9 +335,9 @@ const AppShell = () => {
   // Opening a different workspace REPLACES the current one (the per-tab
   // exit/restore behaviour preserves panel state regardless because we
   // never destroy panels when entering/leaving a workspace).
-  const [panelWorkspace, setPanelWorkspace] = _us_a({ open: false, id: null, panelKind: null, sourcePanel: null, name: null });
+  const [panelWorkspace, setPanelWorkspace] = _us_a({ open: false, id: null, panelKind: null, sourcePanel: null, name: null, entityId: null });
   const openPanelWorkspace = _uc_a((opts = {}) => {
-    const { workspaceId, panelKind, sourcePanel } = opts;
+    const { workspaceId, panelKind, sourcePanel, entityId } = opts;
     if (!workspaceId) return;
     // Lookup the access entry to get the workspace display name
     const access = (typeof PANEL_ACCESS !== "undefined") ? PANEL_ACCESS[panelKind] || PANEL_ACCESS[sourcePanel] : null;
@@ -354,7 +354,7 @@ const AppShell = () => {
       // registered its `lw:open-existing-fullscreen` listener before we fire.
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent("lw:open-existing-fullscreen", {
-          detail: { panelKind, workspaceId, sourcePanel },
+          detail: { panelKind, workspaceId, sourcePanel, entityId: entityId || null },
         }));
       }, 60);
       return;
@@ -364,6 +364,7 @@ const AppShell = () => {
       id: workspaceId,
       panelKind,
       sourcePanel,
+      entityId: entityId || null,
       name: access ? access.workspaceName : workspaceId,
     });
   }, []);

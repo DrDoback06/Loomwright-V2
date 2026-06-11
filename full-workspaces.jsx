@@ -222,8 +222,8 @@ const WorkspaceTabs = ({ tabs, active, onChange }) => (
   </div>
 );
 
-const WorkspaceCard = ({ title, sub, action, children, style }) => (
-  <div className="fws-card" style={style}>
+const WorkspaceCard = ({ title, sub, action, children, style, testId }) => (
+  <div className="fws-card" style={style} data-testid={testId || undefined}>
     {(title || sub || action) && (
       <div className="fws-card__head">
         {title && <span className="fws-card__title">{title}</span>}
@@ -246,6 +246,245 @@ const WorkspaceKV = ({ rows }) => (
     ))}
   </div>
 );
+
+// ---------------------------------------------------------------------
+// Live-store plumbing shared by every full workspace.
+//
+// Workspaces must read the LIVE entity store (EntityService) — never the
+// boot-time ENTITY_SAMPLES globals, which are quarantined to {} on real
+// projects (see backend-services sample handling). useLiveEntities
+// subscribes to store updates; useWorkspaceSelection honours the entityId
+// the opening panel passed so the full editor lands on the tab's
+// selected record instead of items[0].
+// ---------------------------------------------------------------------
+const useLiveEntities = (type, map) => {
+  const [tick, setTick] = _fw_us(0);
+  _fw_ue(() => {
+    const bump = () => setTick((t) => t + 1);
+    const evs = ["lw:entity-store-updated", "lw:backend-ready", "lw:project-imported", "lw:occurrences-updated"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+  return _fw_um(() => {
+    const rows = (window.LoomwrightBackend?.EntityService?.listSync?.(type) || [])
+      .filter((e) => e && e.status !== "deleted");
+    return map ? rows.map(map).filter(Boolean) : rows;
+  }, [type, tick]);
+};
+
+const useWorkspaceSelection = (items, entityId) => {
+  const [selectedId, setSelectedId] = _fw_us(() => entityId || items[0]?.id || null);
+  // Re-focus when the host hands us a (new) entityId — e.g. the user
+  // selected a different row in the panel and reopened the workspace.
+  _fw_ue(() => {
+    if (entityId) setSelectedId(entityId);
+  }, [entityId]);
+  // If the selected record vanishes from the store (deleted elsewhere),
+  // fall back to the first row rather than rendering a ghost.
+  _fw_ue(() => {
+    if (!items.length) { if (selectedId !== null) setSelectedId(null); return; }
+    if (!items.some((x) => x.id === selectedId)) setSelectedId(entityId && items.some((x) => x.id === entityId) ? entityId : items[0].id);
+  }, [items, selectedId, entityId]);
+  return [selectedId, setSelectedId];
+};
+
+const WorkspaceEmptyState = ({ entityType, noun, onCreate }) => (
+  <div className="fws-empty" data-ui="WorkspaceEmptyState">
+    <div className="fws-empty__icon"><Icon name={(typeof ENTITY_TYPES !== "undefined" && ENTITY_TYPES[entityType]?.icon) || "stack"} size={22}/></div>
+    <h3>No {noun || "records"} yet</h3>
+    <p>Nothing has been recorded here. Create one by hand, or let extraction find them in your manuscript.</p>
+    <div className="fws-empty__actions">
+      {onCreate && (
+        <button type="button" className="fws-topbar__primary" onClick={onCreate} data-callback="onWorkspaceCreateEntity">
+          <Icon name="plus" size={11}/> Create
+        </button>
+      )}
+      <button type="button" className="fws-topbar__exit"
+        data-callback="onRunChapterExtraction"
+        onClick={() => window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "manuscript", typeFocus: entityType || null } }))}>
+        <Icon name="sparkle" size={11}/> Extract from manuscript
+      </button>
+    </div>
+  </div>
+);
+
+// Generic record/reference helpers shared by all workspace files
+// (this file loads before workspaces-rpg/-narrative/-system in the shell).
+const _fwData = (e) => (e && e.data && typeof e.data === "object" ? e.data : {});
+const _fwRefId = (v) => (v == null ? null : (typeof v === "object" ? (v.id || null) : String(v)));
+const _fwInitials = (name) => (name || "?").split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+
+// Chapter id → number map + ordered chapter list (live read).
+const _fwChapterState = () => {
+  const B = window.LoomwrightBackend;
+  let chapters = [];
+  try { chapters = (B?.ManuscriptChapterService?.loadSync?.()?.chapters || []).filter((c) => c && !c.reserved); } catch (_) {}
+  const num = new Map();
+  chapters.forEach((c, i) => num.set(c.id, c.num || i + 1));
+  return { chapters, num };
+};
+
+// Occurrences for an entity, decorated with chapter numbers, prose first.
+const _fwOccsFor = (entityId) => {
+  const B = window.LoomwrightBackend;
+  if (!entityId || !B?.OccurrenceService?.listByEntitySync) return [];
+  const { num } = _fwChapterState();
+  return (B.OccurrenceService.listByEntitySync(entityId) || [])
+    .map((o) => ({ ...o, chapterNum: num.get(o.chapterId) ?? null }))
+    .sort((a, b) => (a.chapterNum ?? 999) - (b.chapterNum ?? 999) || (a.isPronounResolution ? 1 : 0) - (b.isPronounResolution ? 1 : 0));
+};
+
+const _fwSpan = (occs) => {
+  const nums = [...new Set(occs.map((o) => o.chapterNum).filter((n) => n != null))].sort((a, b) => a - b);
+  if (!nums.length) return "";
+  return nums.length === 1 ? "Ch." + nums[0] : "Ch." + nums[0] + "–" + nums[nums.length - 1];
+};
+
+// Does a record's data reference the given entity id anywhere? Ids are
+// uuids, so a substring scan over the serialised data is exact enough
+// and far cheaper than walking every related-multi field by name.
+const _fwReferencesEntity = (rec, id) => {
+  if (!rec || !id) return false;
+  try { return JSON.stringify(rec.data || {}).includes(id); } catch (_) { return false; }
+};
+
+const _fwQuoteCard = (m, i) => (
+  <div key={i} style={{ padding: 10, background: "var(--bg-paper-2)", border: "1px solid var(--line-2)", borderRadius: "var(--r-2)", marginBottom: 6, fontSize: 12 }}>
+    <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 4 }}>{m.ch}</div>
+    <div style={{ fontFamily: "var(--font-serif)", fontStyle: "italic", color: "var(--ink-1)" }}>"{m.q}"</div>
+  </div>
+);
+
+const _fwTabEmpty = (text) => <div className="fws-empty" style={{ padding: 20 }}>{text}</div>;
+
+// ---------------------------------------------------------------------
+// FullRecordSection — the config-driven "everything the schema knows"
+// renderer appended to every full workspace. Reads the same
+// ENTITY_EDITOR_CONFIGS the entity editor uses, so the workspace is a
+// strict superset of the panel view and can never drift from the schema.
+// ---------------------------------------------------------------------
+const _fwRefName = (ref, relatedType) => {
+  if (ref == null || ref === "") return null;
+  const ES = window.LoomwrightBackend?.EntityService;
+  if (typeof ref === "string" || typeof ref === "number") {
+    const ent = ES?.getSync?.(String(ref), relatedType);
+    return ent ? (ent.name || ent.title || String(ref)) : String(ref);
+  }
+  if (typeof ref === "object") {
+    if (ref.id) {
+      const ent = ES?.getSync?.(ref.id, ref.type || relatedType);
+      if (ent) return ent.name || ent.title || ref.name || ref.id;
+    }
+    return ref.name || ref.title || ref.label || (ref.id ? String(ref.id) : null);
+  }
+  return String(ref);
+};
+
+const _fwHasValue = (v) => {
+  if (v == null || v === "") return false;
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === "object") return Object.values(v).some((x) => x != null && x !== "");
+  return true;
+};
+
+const _fwFieldBody = (field, value) => {
+  const kind = field.kind || "text";
+  if (kind === "toggle") return <span>{value ? "Yes" : "No"}</span>;
+  if (kind === "related" || kind === "parent-picker") return <span>{_fwRefName(value, field.related) || "—"}</span>;
+  if (Array.isArray(value)) {
+    if (kind === "step-list" || kind === "branch-list") {
+      return (
+        <ol className="fws-frs__list">
+          {value.map((s, i) => (
+            <li key={i}>
+              {(s && typeof s === "object" ? (s.title || s.label || s.name || "Step " + (i + 1)) : String(s))}
+              {s && typeof s === "object" && (s.status || s.chapter != null) && (
+                <span className="fws-frs__list-meta">
+                  {[s.status, s.chapter != null ? "Ch. " + s.chapter : null].filter(Boolean).join(" · ")}
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      );
+    }
+    if (kind === "stat-grid") {
+      return <span>{value.map((s) => (s?.name || "?") + (s?.value != null ? " " + s.value : "")).join(" · ")}</span>;
+    }
+    if (kind === "rule-list" || kind === "effects-list" || kind === "extraction-rule-list") {
+      return (
+        <ul className="fws-frs__list">
+          {value.map((r, i) => (
+            <li key={i}>{[
+              r?.target || r?.name || r?.phrase || r?.trigger,
+              r?.delta != null ? (r.delta > 0 ? "+" + r.delta : String(r.delta)) : null,
+              r?.note || r?.effect || r?.treatedAs,
+            ].filter(Boolean).join(" — ") || JSON.stringify(r)}</li>
+          ))}
+        </ul>
+      );
+    }
+    return (
+      <div className="fws-frs__chips">
+        {value.map((v, i) => (
+          <span key={i} className="fws-chip">{typeof v === "object" ? (_fwRefName(v, field.related) || "?") : String(v)}</span>
+        ))}
+      </div>
+    );
+  }
+  if (typeof value === "object") {
+    if (kind === "dual-number" || (value.x != null && value.y != null)) return <span>{value.x + ", " + value.y}</span>;
+    if (value.id || value.name) return <span>{_fwRefName(value, field.related)}</span>;
+    const entries = Object.entries(value).filter(([, v2]) => v2 != null && v2 !== "");
+    return <span>{entries.map(([k, v2]) => k + ": " + (typeof v2 === "object" ? JSON.stringify(v2) : v2)).join(" · ")}</span>;
+  }
+  if (kind === "longtext" || kind === "textarea") return <p className="fws-frs__para">{String(value)}</p>;
+  return <span>{String(value)}</span>;
+};
+
+const FullRecordSection = ({ entity, type, title }) => {
+  if (!entity) return null;
+  const reg = window.ENTITY_EDITOR_CONFIGS || {};
+  const cfg = reg[type] || reg.generic;
+  if (!cfg) return null;
+  const data = entity.data && typeof entity.data === "object" ? entity.data : {};
+  const valueFor = (f) => (data[f.id] !== undefined ? data[f.id] : entity[f.id]);
+  const sections = (cfg.sections || [])
+    .map((s) => ({ ...s, populated: (s.fields || []).filter((f) => _fwHasValue(valueFor(f))) }))
+    .filter((s) => s.populated.length > 0);
+  const openEditor = (sectionId) => {
+    window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
+      detail: { type, initial: { id: entity.id }, mode: "full", sectionId: sectionId || undefined },
+    }));
+  };
+  return (
+    <div className="fws-frs" data-ui="FullRecordSection">
+      <WorkspaceSection title={title || "Full record"}
+        count={sections.reduce((n, s) => n + s.populated.length, 0)}
+        action={{ label: "Open editor", onClick: () => openEditor() }}/>
+      {sections.length === 0 && (
+        <WorkspaceCard>
+          <p className="fws-frs__para" style={{ color: "var(--ink-3)" }}>
+            Only the basics are recorded so far. Open the editor to fill out this record.
+          </p>
+        </WorkspaceCard>
+      )}
+      {sections.map((s) => (
+        <WorkspaceCard key={s.id} title={s.title} testId={"frs-" + s.id}
+          action={<button className="fws-section__action" data-callback="onEditEntity" onClick={() => openEditor(s.id)}>Edit</button>}>
+          <div className="fws-frs__grid">
+            {s.populated.map((f) => (
+              <React.Fragment key={f.id}>
+                <div className="fws-kv__k">{f.label}</div>
+                <div className="fws-kv__v">{_fwFieldBody(f, valueFor(f))}</div>
+              </React.Fragment>
+            ))}
+          </div>
+        </WorkspaceCard>
+      ))}
+    </div>
+  );
+};
 
 // ---------------------------------------------------------------------
 // FullWorkspaceHost — dispatcher. Picks the right workspace by id.
@@ -400,6 +639,10 @@ Object.assign(window, {
   WorkspaceTabs,
   WorkspaceCard,
   WorkspaceKV,
+  useLiveEntities,
+  useWorkspaceSelection,
+  WorkspaceEmptyState,
+  FullRecordSection,
   FullWorkspaceHost,
 });
 

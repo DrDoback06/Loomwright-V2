@@ -338,11 +338,19 @@ const PanelHeaderActions = ({ panel, access, compact = false }) => {
 
   const handleWorkspace = (e) => {
     e.stopPropagation();
+    // Carry the panel's current selection so the full workspace opens
+    // focused on the record the user was looking at, not items[0].
+    const lastSel = window.__LW_LAST_SELECTION__;
+    const entityId = panel.selected?.id
+      || panel.selectedId
+      || (lastSel && lastSel.entityType === panel.entityType ? lastSel.entityId : null)
+      || null;
     window.dispatchEvent(new CustomEvent("lw:open-panel-workspace", {
       detail: {
         workspaceId: access.workspaceId,
         sourcePanel: panel.id,
         panelKind: panel.entityType || panel.kind || panel.id,
+        entityId,
       },
     }));
   };
