@@ -15,10 +15,12 @@ const { useState: _crab_us } = React;
 // ---------------------------------------------------------------------
 // ClassesPanelBody
 // ---------------------------------------------------------------------
-const ClassesPanelBody = ({ panel, onSelectEntity }) => {
+const ClassesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const entities = window.LoomwrightBackend?.EntityService?.listSync?.("classes") || [];
   const [search, setSearch] = _crab_us("");
-  const [selectedId, setSelectedId] = _crab_us(entities[0]?.id || null);
+  const [selectedId, setSelectedId] = _crab_us(panel?.selected?.id || entities[0]?.id || null);
+  // Follow host-driven selection (locked entities, lw:focus-entity).
+  React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const selected = entities.find((e) => e.id === selectedId);
   const filtered = search ? entities.filter((e) => (e.name || "").toLowerCase().includes(search.toLowerCase())) : entities;
   return (
@@ -93,10 +95,12 @@ const ClassesPanelBody = ({ panel, onSelectEntity }) => {
 // ---------------------------------------------------------------------
 // RacesPanelBody
 // ---------------------------------------------------------------------
-const RacesPanelBody = ({ panel, onSelectEntity }) => {
+const RacesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const entities = window.LoomwrightBackend?.EntityService?.listSync?.("races") || [];
   const [search, setSearch] = _crab_us("");
-  const [selectedId, setSelectedId] = _crab_us(entities[0]?.id || null);
+  const [selectedId, setSelectedId] = _crab_us(panel?.selected?.id || entities[0]?.id || null);
+  // Follow host-driven selection (locked entities, lw:focus-entity).
+  React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const selected = entities.find((e) => e.id === selectedId);
   const filtered = search ? entities.filter((e) => (e.name || "").toLowerCase().includes(search.toLowerCase())) : entities;
   return (

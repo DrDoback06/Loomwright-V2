@@ -203,23 +203,30 @@ const ItemReviewCard = ({ item }) => {
 // ---------------------------------------------------------------------
 // ItemsPanelBody — bespoke panel body
 // ---------------------------------------------------------------------
-const ItemsPanelBody = ({ panel, onSelectEntity }) => {
+const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   // Live items only — never the demo RPG_ITEM_DATA.
   const data = (window.LoomwrightBackend?.EntityService?.listSync("items")) || [];
-  const [selectedId, setSelectedId] = _it_us((data[0] && data[0].id) || null);
+  const [selectedId, setSelectedId] = _it_us(panel?.selected?.id || (data[0] && data[0].id) || null);
   const [search, setSearch]         = _it_us("");
   const [statusFilter, setStatus]   = _it_us("all");
   const [rarityFilter, setRarity]   = _it_us("all");
   const [tab, setTab]               = _it_us("dossier"); // dossier | history | review | mentions
+
+  // Follow host-driven selection (locked entities, lw:focus-entity).
+  React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
+  // Cross-tab focus: another panel's selection (a cast member, a location)
+  // narrows the vault to items that reference it (owner, location, links).
+  const ff = panelContext?.focusedEntity || null;
 
   const filtered = _it_um(() => {
     return data.filter((d) => {
       if (search && !(d.name || "").toLowerCase().includes(search.toLowerCase())) return false;
       if (statusFilter !== "all" && (d.status || "").toLowerCase() !== statusFilter) return false;
       if (rarityFilter !== "all" && (d.rarity || "")             !== rarityFilter) return false;
+      if (ff && typeof _fwReferencesEntity !== "undefined" && !_fwReferencesEntity(d, ff.id)) return false;
       return true;
     });
-  }, [data, search, statusFilter, rarityFilter]);
+  }, [data, search, statusFilter, rarityFilter, ff && ff.id]);
 
   const selected = data.find((d) => d.id === selectedId) || filtered[0] || data[0];
 

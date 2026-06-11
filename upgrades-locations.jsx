@@ -621,9 +621,11 @@ const LocationDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSource
 // Wired in panels.jsx via entityType === "locations". The dispatcher
 // renders this in place of the generic framework body.
 // ---------------------------------------------------------------------
-const LocationsPanelBody = ({ panel, onSelectEntity }) => {
+const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const [search, setSearch] = _loc_us("");
-  const [selectedId, setSelectedId] = _loc_us("a1");
+  const [selectedId, setSelectedId] = _loc_us(panel?.selected?.id || "a1");
+  // Follow host-driven selection (locked entities, lw:focus-entity).
+  React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [tab, setTab] = _loc_us("dossier"); // dossier | mentions | review | references
   const [kindFilter, setKindFilter] = _loc_us("all");
   const [placedFilter, setPlacedFilter] = _loc_us("all"); // all | placed | unplaced

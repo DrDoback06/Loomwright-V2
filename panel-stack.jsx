@@ -68,6 +68,7 @@ const PanelFilterChip = ({ focus, onClear }) => {
     <button
       className="pstk__filter-chip"
       title={"Filtered by " + focus.label + ". Click to clear."}
+      onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); onClear && onClear(); }}
       style={t ? { "--ec": t.color, "--es": t.soft, "--ed": t.deep } : {}}
       data-callback="onClearPanelFilter"
@@ -83,6 +84,17 @@ const PanelFilterChip = ({ focus, onClear }) => {
 // PanelChrome — header. Pin / Expand / Close. (No dock/float/full-screen.)
 // Also renders the standardised PanelHeaderActions (+ Create / Open Workspace).
 // ---------------------------------------------------------------------
+// Re-render on lock changes so the lock toggle reflects live state.
+const useLocksVersion = () => {
+  const [v, setV] = React.useState(0);
+  React.useEffect(() => {
+    const bump = () => setV((x) => x + 1);
+    window.addEventListener("lw:locks-updated", bump);
+    return () => window.removeEventListener("lw:locks-updated", bump);
+  }, []);
+  return v;
+};
+
 const PanelChrome = ({
   panel, isFront, panelFilter,
   onPinPanel, onExpandPanel, onClosePanel, onBringPanelToFront, onClearPanelFilter,
@@ -91,6 +103,22 @@ const PanelChrome = ({
   const style = t ? { "--ec": t.color, "--es": t.soft, "--ed": t.deep } : {};
   // Resolve standardised access (+ Create / Open Workspace labels).
   const access = (typeof resolveAccess !== "undefined") ? resolveAccess(panel) : null;
+  // Lock / keep-selected — entity panels only, acts on the current selection.
+  useLocksVersion();
+  const Locks = window.LoomwrightBackend?.SelectionLockService;
+  const lockTarget = panel.entityType ? (panel.selected || null) : null;
+  const lockTargetId = lockTarget && (lockTarget.id || lockTarget.entityId) || null;
+  const isLocked = !!(Locks && lockTargetId && Locks.isLocked(lockTargetId));
+  const onToggleLock = (e) => {
+    e.stopPropagation();
+    if (!Locks) return;
+    if (!lockTargetId) {
+      window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Select an entry first, then lock it to keep it selected across tabs." } }));
+      return;
+    }
+    // Lock under the SELECTION's type (the Atlas panel selects locations).
+    Locks.toggle({ id: lockTargetId, type: lockTarget.entityType || panel.entityType, label: lockTarget.label || lockTarget.name || "" });
+  };
   return (
     <div
       className="pstk__head"
@@ -108,13 +136,27 @@ const PanelChrome = ({
           <div className="pstk__head__title">{panel.title}</div>
           <div className="pstk__head__meta">
             {panel.subtitle && <span className="pstk__head__sub">{panel.subtitle}</span>}
-            <PanelFilterChip focus={panelFilter} onClear={() => onClearPanelFilter && onClearPanelFilter(panel.id)}/>
+            <PanelFilterChip focus={panelFilter} onClear={() => onClearPanelFilter && onClearPanelFilter(panel.id, panel.entityType)}/>
           </div>
         </div>
       </div>
-      <div className="pstk__head__actions">
+      <div className="pstk__head__actions" onMouseDown={(e) => e.stopPropagation()}>
         {access && typeof PanelHeaderActions !== "undefined" && (
           <PanelHeaderActions panel={panel} access={access} compact={!panel.expanded}/>
+        )}
+        {panel.entityType && (
+          <button
+            className={"pstk__btn pstk__btn--lock " + (isLocked ? "is-active" : "")}
+            onClick={onToggleLock}
+            data-callback="onLockSelection"
+            title={isLocked
+              ? "Unlock " + (lockTarget?.label || "selection")
+              : lockTargetId
+                ? "Lock " + (lockTarget?.label || "selection") + " (keep selected across tabs)"
+                : "Lock selection (select an entry first)"}
+          >
+            <Icon name="lock" size={12}/>
+          </button>
         )}
         <button
           className={"pstk__btn " + (panel.pinned ? "is-active" : "")}
@@ -264,13 +306,25 @@ const DockedPanel = ({
             panelId: panel.id,
             selectedEntityId: panel.selected?.id || panel.selectedId || null,
             focusedEntity: panelFilter || null,
+            lockedEntityId: window.LoomwrightBackend?.SelectionLockService?.getLockForType?.(panel.entityType)?.id || null,
             activeChapterId: (typeof document !== "undefined" && document.querySelector?.("[data-ui='ManuscriptCanvas']")?.getAttribute("data-chapter-id")) || null,
             activeWorkspaceId: panel.workspaceId || null,
           };
           const bespokeProps = {
             panel,
             panelContext,
-            onSelectEntity,
+            // Inject this panel when the body doesn't pass one, so every
+            // bespoke body's selection lands in panel.selected AND broadcasts
+            // into focusedByType. Only when the row's type matches the panel —
+            // bodies also pass related-entity chips (a quest's cast refs)
+            // which must keep the legacy find-the-owning-panel behaviour.
+            onSelectEntity: (row, p) => {
+              const rowType = row && (row.entityType || row.type);
+              const mine = !rowType
+                || rowType === panel.entityType
+                || (panel.entityType === "atlas" && rowType === "locations");
+              onSelectEntity && onSelectEntity(rowType && !row.entityType ? { ...row, entityType: rowType } : row, p || (mine ? panel : undefined));
+            },
             onCreateEntity: (opts) => panelActions?.onCreateEntity?.(opts, panel),
             onEditEntity: (e) => panelActions?.onEditEntity?.(e, panel),
             onImportEntity: () => panelActions?.onImportEntity?.(panel),

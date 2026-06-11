@@ -727,6 +727,14 @@ const AppShell = () => {
   const onOpenCommandPalette = _uc_a(() => setPaletteOpen(true), []);
   const onCloseCommandPalette = _uc_a(() => setPaletteOpen(false), []);
 
+  // Locked selection for a panel preset — a "keep selected" lock set by the
+  // user survives tab switches and reloads; new panels of that type open
+  // with the locked entity already selected.
+  const lockedSelectionFor = (preset) => {
+    const lock = window.LoomwrightBackend?.SelectionLockService?.getLockForType?.(preset?.entityType);
+    return lock ? { id: lock.id, label: lock.label, entityType: lock.type } : undefined;
+  };
+
   // Open a panel. If a panel for this kind already exists, bring it to front
   // (newest order = right-most position in the unpinned stack).
   const onOpenPanel = _uc_a((kind, ctx = {}) => {
@@ -739,7 +747,7 @@ const AppShell = () => {
         // Already open — bring to front and uncollapse.
         return curr.map((p) => p.id === preset.id ? { ...p, order: maxOrder + 1, collapsed: false } : p);
       }
-      return [...curr, { ...preset, pinned: !!ctx.pinned, expanded: false, collapsed: false, order: maxOrder + 1 }];
+      return [...curr, { ...preset, pinned: !!ctx.pinned, expanded: false, collapsed: false, order: maxOrder + 1, selected: lockedSelectionFor(preset) }];
     });
   }, []);
 
@@ -785,6 +793,7 @@ const AppShell = () => {
         fullScreen: false,
         dockMode: "docked",
         order: maxOrder + 1,
+        selected: lockedSelectionFor(preset),
       }];
     });
     setLastRailClick({ panelKind, ctx, ts: Date.now() });
@@ -836,25 +845,58 @@ const AppShell = () => {
     setPanels((curr) => curr.map((p) => p.id === (panel && panel.id) || (!panel && (p.rows || []).find((r) => r.id === row.id))
       ? { ...p, rows: (p.rows || []).map((r) => ({ ...r, selected: r.id === row.id })), selected: row, state: "selected" }
       : p));
-    const type = (panel && panel.entityType) || row.entityType;
+    // Prefer the row's own type — panels can select entities of another
+    // type than their own (the Atlas panel selects locations).
+    const type = row.entityType || (panel && panel.entityType);
     if (type) {
       setFocusedByType((m) => ({ ...m, [type]: { id: row.id, label: row.label, ts: Date.now() } }));
       window.__LW_LAST_SELECTION__ = { entityId: row.id, entityType: type, label: row.label };
     }
   }, []);
-  const onClearPanelFilter = _uc_a((panelId) => {
-    // Clear ALL focuses except this panel's own type — i.e. clear other-panel filters.
-    setPanels((curr) => {
-      const me = curr.find((p) => p.id === panelId);
-      if (!me) return curr;
-      setFocusedByType((m) => {
-        const next = {};
-        for (const k of Object.keys(m)) if (k === me.entityType) next[k] = m[k];
-        return next;
-      });
-      return curr;
+  // Clear ALL focuses except this panel's own type — i.e. clear other-panel
+  // filters. The chip passes the panel's entityType directly; updating
+  // focusedByType inside a setPanels updater is a side effect React may
+  // drop, so this must stay a plain state update.
+  const onClearPanelFilter = _uc_a((panelId, entityType) => {
+    setFocusedByType((m) => {
+      const next = {};
+      for (const k of Object.keys(m)) if (k === entityType) next[k] = m[k];
+      return next;
     });
   }, []);
+
+  // lw:focus-entity — open the panel for an entity and select it there.
+  // Dispatched by cast/relationships/timeline "Show on Atlas →" flows, the
+  // LockTray chips, and callback-registry's focusEntity helper. The panel's
+  // selection rail kind may differ from the entity's type (atlas panels
+  // select locations; the skill-tree panel selects skills).
+  const FOCUS_SELECTION_TYPE = { atlas: "locations", skillTrees: "skills" };
+  const focusEntityById = _uc_a((detail = {}) => {
+    const { panelKind, entityId, label, entityType } = detail;
+    if (!entityId) return;
+    const kind = panelKind || (typeof ENTITY_TYPE_TO_PANEL_KIND !== "undefined" && ENTITY_TYPE_TO_PANEL_KIND[entityType]) || entityType;
+    const preset = kind ? PANEL_PRESETS[kind] : null;
+    if (preset) onOpenPanel(kind);
+    const type = entityType || FOCUS_SELECTION_TYPE[kind] || preset?.entityType || null;
+    const row = { id: entityId, label: label || entityId, entityType: type };
+    // Defer one frame so a freshly-opened panel exists before selecting in it.
+    setTimeout(() => {
+      if (preset) {
+        setPanels((curr) => curr.map((p) => p.id === preset.id
+          ? { ...p, rows: (p.rows || []).map((r) => ({ ...r, selected: r.id === entityId })), selected: row, state: "selected" }
+          : p));
+      }
+      if (type) {
+        setFocusedByType((m) => ({ ...m, [type]: { id: entityId, label: row.label, ts: Date.now() } }));
+        window.__LW_LAST_SELECTION__ = { entityId, entityType: type, label: row.label };
+      }
+    }, 80);
+  }, [onOpenPanel]);
+  _ue_a(() => {
+    const onFocus = (e) => focusEntityById(e.detail || {});
+    window.addEventListener("lw:focus-entity", onFocus);
+    return () => window.removeEventListener("lw:focus-entity", onFocus);
+  }, [focusEntityById]);
   const onOpenReviewQueue = _uc_a(() => onOpenPanel("review"), [onOpenPanel]);
 
   // Settings opens the Control Centre as a full-screen workspace OVER the
@@ -1257,6 +1299,7 @@ const AppShell = () => {
         </div>
 
         <div className="app-work">
+          {view === "shell" && !isMobile && typeof LockTray !== "undefined" && <LockTray/>}
           {view === "shell" ? (
             routeId === "writers-room" ? (
               <WritersRoomScreen
@@ -1314,9 +1357,10 @@ const AppShell = () => {
               onReorderPanels={onReorderPanels}
               onRestorePanel={onRestorePanel}
               onOpenReviewQueue={onOpenReviewQueue}
-              onSelectEntity={(row) => {
-                // Find the panel that owns this row
-                const owner = livePanels.find((p) => (p.rows || []).some((r) => r.id === row.id));
+              onSelectEntity={(row, panel) => {
+                // Prefer the panel the stack hands us (the body that made the
+                // selection); fall back to finding the row's owning panel.
+                const owner = panel || livePanels.find((p) => (p.rows || []).some((r) => r.id === row.id));
                 onSelectEntity(row, owner);
               }}
               onClearPanelFilter={onClearPanelFilter}
@@ -1350,6 +1394,7 @@ const AppShell = () => {
         </div>
 
         {/* Phone bottom navigation — replaces the left rail ≤700px. */}
+        {isMobile && view === "shell" && typeof LockTray !== "undefined" && <LockTray mobile/>}
         {isMobile && view === "shell" && typeof MobileBottomNav !== "undefined" && (
           <MobileBottomNav
             routeId={routeId}

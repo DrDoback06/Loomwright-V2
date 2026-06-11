@@ -437,8 +437,10 @@ const StatDetailUpgraded = ({ entity, onSelectEntity, onOpenSourceMention }) => 
 // ---------------------------------------------------------------------
 // StatsPanelBody — bespoke side panel
 // ---------------------------------------------------------------------
-const StatsPanelBody = ({ panel, onSelectEntity }) => {
-  const [selectedId, setSelectedId] = _sx_us("s1");
+const StatsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
+  const [selectedId, setSelectedId] = _sx_us(panel?.selected?.id || "s1");
+  // Follow host-driven selection (locked entities, lw:focus-entity).
+  React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [search, setSearch] = _sx_us("");
   const _src = (window.LoomwrightBackend?.EntityService?.listSync("stats")) || [];
   const filtered = _src.filter((s) => !search || (s.name || "").toLowerCase().includes(search.toLowerCase()));

@@ -455,7 +455,7 @@ const TLEmptyState = () => (
 // ---------------------------------------------------------------------
 // TimelinePanelBody — main entry
 // ---------------------------------------------------------------------
-const TimelinePanelBody = ({ panel, onSelectEntity }) => {
+const TimelinePanelBody = ({ panel, panelContext, onSelectEntity }) => {
   // Re-snapshot the live context when the store / queue / chapters move.
   const [storeVersion, setStoreVersion] = _tl_us(0);
   React.useEffect(() => {
@@ -469,8 +469,13 @@ const TimelinePanelBody = ({ panel, onSelectEntity }) => {
 
   const [mode, setMode] = _tl_us("book");
   const [filters, setFilters] = _tl_us({ character: [], location: [], quest: [], faction: [] });
-  const [selectedId, setSelectedId] = _tl_us(null);
+  const [selectedId, setSelectedId] = _tl_us(panel?.selected?.id || null);
   const [showFilters, setShowFilters] = _tl_us(false);
+  // Follow host-driven selection (locked entities, lw:focus-entity).
+  React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
+  // Cross-tab focus: another panel's selection narrows the track to events
+  // that reference it (participants, location, quests, factions).
+  const ff = panelContext?.focusedEntity || null;
 
   const onToggleFilter = _tl_uc((k, id) => {
     setFilters((f) => {
@@ -500,6 +505,15 @@ const TimelinePanelBody = ({ panel, onSelectEntity }) => {
       const ids = _tlIds(rec?.data?.factions);
       return ids.some((id) => filters.faction.includes(id));
     });
+    if (ff) {
+      const B = window.LoomwrightBackend;
+      list = list.filter((e) => {
+        if (e.id === ff.id || e.locationId === ff.id || e.quest === ff.id) return true;
+        if (Array.isArray(e.entities) && e.entities.includes(ff.id)) return true;
+        const rec = B?.EntityService?.getSync?.(e.id, e.entityType);
+        return rec && typeof _fwReferencesEntity !== "undefined" && _fwReferencesEntity(rec, ff.id);
+      });
+    }
     if (mode === "book") {
       return [...list].sort((a, b) => (a.chapter ?? 99) - (b.chapter ?? 99));
     }
@@ -507,7 +521,7 @@ const TimelinePanelBody = ({ panel, onSelectEntity }) => {
     const eraIx = { pre: 0, ch: 1, after: 2 };
     return [...list].sort((a, b) =>
       (eraIx[a.era] - eraIx[b.era]) || ((a.chapter ?? 999) - (b.chapter ?? 999)) || a.label.localeCompare(b.label));
-  }, [ctx, mode, filters]);
+  }, [ctx, mode, filters, ff && ff.id]);
 
   const selected = ctx.events.find((e) => e.id === selectedId);
   const expanded = panel?.expanded;

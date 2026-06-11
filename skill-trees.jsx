@@ -1352,7 +1352,16 @@ const SkillsPanelBody = ({ panel }) => {
     const onOpen = (e) => {
       const d = e?.detail || {};
       if (d.panelKind === "skills" || d.panelKind === "abilities" || d.workspaceId === "skill-tree-editor") {
-        setEditor({ treeId: null });
+        // Honour a selected entity: if it names a tree (or a skill inside
+        // one), the editor opens on that tree instead of the first.
+        let treeId = null;
+        if (d.entityId) {
+          const trees = window.LoomwrightBackend?.SkillTreeService?.loadSync?.()?.trees || [];
+          const hit = trees.find((t) => t.id === d.entityId)
+            || trees.find((t) => (t.nodes || []).some((n) => n.id === d.entityId || n.skillId === d.entityId));
+          if (hit) treeId = hit.id;
+        }
+        setEditor({ treeId });
       }
     };
     window.addEventListener("lw:open-existing-fullscreen", onOpen);

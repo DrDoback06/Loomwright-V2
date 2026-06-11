@@ -41,6 +41,7 @@
     auditLog: "audit_log",
     aiRouting: "ai_routing",
     manuscriptNotes: "manuscript_notes",
+    selectionLocks: "selection_locks",
   };
 
   // Synchronously read the sample-loaded flag from localStorage BEFORE any
@@ -2930,6 +2931,51 @@
       }
       return edges;
     },
+
+    // Context for a PAIR of cast members: their recorded bonds (both
+    // directions, synthetic included), the chapters they share, and a few
+    // co-mention quotes. Powers the "select two cast → see their
+    // relationship" pair view.
+    pairContextSync(aId, bId) {
+      const empty = { edges: [], sharedChapters: [], quotes: [] };
+      if (!aId || !bId || aId === bId) return empty;
+      const edges = this.listRelationshipEdgesSync().filter(
+        (r) => (r.a === aId && r.b === bId) || (r.a === bId && r.b === aId)
+      );
+      const chapterNum = new Map();
+      try {
+        const chState = ManuscriptChapterService.loadSync() || {};
+        (chState.chapters || []).filter((c) => !c.reserved).forEach((c, i) => chapterNum.set(c.id, c.num || i + 1));
+      } catch (_) {}
+      const occsOf = (id) => {
+        try { return OccurrenceService.listByEntitySync(id) || []; } catch (_) { return []; }
+      };
+      const chaptersOf = (id) => {
+        const set = new Set();
+        for (const o of occsOf(id)) {
+          const n = chapterNum.get(o.chapterId);
+          if (n != null) set.add(n);
+        }
+        return set;
+      };
+      const bSet = chaptersOf(bId);
+      const sharedChapters = [...chaptersOf(aId)].filter((n) => bSet.has(n)).sort((x, y) => x - y);
+      const want = new Set(sharedChapters);
+      const quotes = [];
+      for (const id of [aId, bId]) {
+        for (const o of occsOf(id)) {
+          const n = chapterNum.get(o.chapterId);
+          const text = String(o.exactText || "").trim();
+          if (n == null || !want.has(n) || !text || o.isPronounResolution) continue;
+          if (quotes.some((q) => q.quote === text)) continue;
+          quotes.push({ chapter: n, quote: text });
+          if (quotes.length >= 4) break;
+        }
+        if (quotes.length >= 4) break;
+      }
+      quotes.sort((x, y) => x.chapter - y.chapter);
+      return { edges, sharedChapters: sharedChapters.slice(0, 12), quotes };
+    },
     async linkField(entityId, entityType, field, targetId, targetType) {
       const entity = EntityService.getSync(entityId, entityType);
       if (!entity) return null;
@@ -5186,6 +5232,49 @@ Only evidenced pairs. Return JSON only.`;
     },
   };
 
+  // -------------------------------------------------------------------
+  // SelectionLockService — "keep selected" locks that survive tab
+  // switches and reloads. An ordered list of entity refs; panels seed
+  // their initial selection from the most recent lock of their type, and
+  // the LockTray (shell) renders one chip per lock. Stored in
+  // localStorage (synchronous, tiny) under the lw-v2: prefix.
+  // -------------------------------------------------------------------
+  const LOCKS_MAX = 8;
+  const SelectionLockService = {
+    listSync() {
+      const raw = localMirror.get(KEYS.selectionLocks, []);
+      return Array.isArray(raw) ? raw.filter((l) => l && l.id && l.type) : [];
+    },
+    _save(list) {
+      localMirror.set(KEYS.selectionLocks, list.slice(0, LOCKS_MAX));
+      try { window.dispatchEvent(new CustomEvent("lw:locks-updated", { detail: { locks: list } })); } catch (_) {}
+      return list;
+    },
+    lockEntity(ref = {}) {
+      const { id, type, label } = ref;
+      if (!id || !type) return this.listSync();
+      const rest = this.listSync().filter((l) => l.id !== id);
+      return this._save([{ id, type: normaliseType(type), label: label || id, ts: Date.now() }, ...rest]);
+    },
+    unlockEntity(id) {
+      return this._save(this.listSync().filter((l) => l.id !== id));
+    },
+    toggle(ref = {}) {
+      return this.isLocked(ref.id) ? this.unlockEntity(ref.id) : this.lockEntity(ref);
+    },
+    isLocked(id) {
+      return !!id && this.listSync().some((l) => l.id === id);
+    },
+    getLockForType(type) {
+      if (!type) return null;
+      const t = normaliseType(type);
+      return this.listSync().find((l) => l.type === t) || null;
+    },
+    clear() {
+      return this._save([]);
+    },
+  };
+
   const SampleProjectService = {
     async loadSample() {
       const demo = window.WR_DEMO_PROJECT || {};
@@ -7340,6 +7429,7 @@ Only evidenced pairs. Return JSON only.`;
     autoApplyCandidate,
     OccurrenceService,
     isOccurrenceStale,
+    SelectionLockService,
     SampleProjectService,
     exportProject,
     importProject,

@@ -669,7 +669,7 @@ const RelEmptyState = () => (
 // ---------------------------------------------------------------------
 // RelationshipsPanelBody — entry point
 // ---------------------------------------------------------------------
-const RelationshipsPanelBody = ({ panel }) => {
+const RelationshipsPanelBody = ({ panel, panelContext }) => {
   // Re-snapshot the live context when the store / queue / audit log move.
   const [storeVersion, setStoreVersion] = _re_us(0);
   React.useEffect(() => {
@@ -684,6 +684,28 @@ const RelationshipsPanelBody = ({ panel }) => {
   const [mode, setMode] = _re_us("single");
   const [characterId, setCharacterId] = _re_us(null);
   const [compareWith, setCompareWith] = _re_us(null);
+
+  // Cross-tab context: when another panel focuses a cast member, centre the
+  // relationship views on them. (panelContext is optional — the
+  // RelationshipMapWorkspace mounts this body without it.)
+  const focusedCastId = panelContext?.focusedEntity?.type === "cast" ? panelContext.focusedEntity.id : null;
+  React.useEffect(() => {
+    if (focusedCastId && ctx.cast[focusedCastId]) setCharacterId(focusedCastId);
+  }, [focusedCastId, ctx]);
+
+  // Pair focus — "two cast selected elsewhere → show their relationship".
+  // Dispatched by the cast multibar's View-relationship action.
+  React.useEffect(() => {
+    const onPair = (e) => {
+      const { aId, bId } = e?.detail || {};
+      if (!aId || !bId) return;
+      setCharacterId(aId);
+      setCompareWith(bId);
+      setMode("compare");
+    };
+    window.addEventListener("lw:pair-focus", onPair);
+    return () => window.removeEventListener("lw:pair-focus", onPair);
+  }, []);
 
   // Keep selections valid as the live cast changes (first protagonist wins).
   React.useEffect(() => {
@@ -794,8 +816,119 @@ const RelationshipsPanelBody = ({ panel }) => {
   );
 };
 
+// ---------------------------------------------------------------------
+// RelationshipPairView — compact "what binds these two?" card, rendered
+// by the Cast panel when exactly two cast members are multi-selected.
+// Live data via LinkService.pairContextSync: recorded bonds (synthetic
+// dossier ties included), shared chapters, and co-mention quotes.
+// ---------------------------------------------------------------------
+const RelationshipPairView = ({ aId, bId, onClose }) => {
+  const [tick, setTick] = _re_us(0);
+  React.useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    const evs = ["lw:entity-store-updated", "lw:occurrences-updated", "lw:manuscript-chapters-updated"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+  const Bk = window.LoomwrightBackend;
+  const pair = _re_um(() => Bk?.LinkService?.pairContextSync?.(aId, bId) || { edges: [], sharedChapters: [], quotes: [] }, [aId, bId, tick]);
+  const nameOf = (id) => Bk?.EntityService?.getSync?.(id, "cast")?.name || "Unknown";
+  const aName = nameOf(aId);
+  const bName = nameOf(bId);
+
+  const openInRelationships = () => {
+    window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "relationships" } }));
+    // Defer so a freshly-mounted panel registers its lw:pair-focus listener.
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("lw:pair-focus", { detail: { aId, bId } }));
+    }, 120);
+  };
+  const createBond = () => {
+    const mk = (id) => ({ id, name: nameOf(id), type: "cast" });
+    window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
+      detail: { type: "relationships", initial: { data: { from: mk(aId), to: mk(bId) } }, mode: "full" },
+    }));
+  };
+
+  return (
+    <div className="rel-pairview" data-ui="RelationshipPairView">
+      <div className="rel-pairview__head">
+        <div className="rel-pairview__names">
+          <strong>{aName}</strong>
+          <Icon name="link" size={11}/>
+          <strong>{bName}</strong>
+        </div>
+        <span className="rel-pairview__spacer"/>
+        <button className="rel-pairview__act" data-callback="onOpenPairInRelationships" onClick={openInRelationships}>Open in Relationships →</button>
+        {onClose && (
+          <button className="rel-pairview__x" data-callback="onClosePairView" onClick={onClose} title="Close pair view">
+            <Icon name="close" size={10}/>
+          </button>
+        )}
+      </div>
+
+      {pair.edges.length === 0 && (
+        <div className="rel-pairview__none">
+          <p>No recorded bond between {aName} and {bName} yet.</p>
+          <button className="rel-pairview__act rel-pairview__act--primary" data-callback="onCreateRelationship" onClick={createBond}>
+            <Icon name="plus" size={10}/> Record their relationship
+          </button>
+        </div>
+      )}
+
+      {pair.edges.map((edge) => {
+        const meta = REL_TYPES[edge.type] || REL_TYPES.unknown;
+        return (
+          <div key={edge.id} className="rel-pairview__bond" style={{ "--c": meta.color }}>
+            <div className="rel-pairview__bond-head">
+              <span className="rel-pairview__type">{meta.label}</span>
+              {edge.rawType && edge.rawType !== edge.type && <span className="rel-pairview__raw">({edge.rawType})</span>}
+              {edge.secret && <span className="rel-pairview__secret">secret</span>}
+              {edge.synthetic && <span className="rel-pairview__syn" title="Derived from the cast dossier — record it to edit.">from dossier</span>}
+            </div>
+            {edge.summary && <p className="rel-pairview__summary">{edge.summary}</p>}
+            <div className="rel-pairview__meters">
+              <RelMeter k="Strength" v={edge.strength} tone="neutral"/>
+              <RelMeter k="Trust" v={edge.trust} tone="good"/>
+              <RelMeter k="Conflict" v={edge.conflict} tone="bad"/>
+            </div>
+            {edge.evidence && edge.evidence.length > 0 && (
+              <div className="rel-pairview__evidence">
+                {edge.evidence.slice(0, 2).map((ev) => (
+                  <div key={ev.id} className="rel-pairview__quote">
+                    <span className="rel-pairview__quote-ch">{ev.chapter !== "—" ? "Ch. " + ev.chapter : "—"}</span>
+                    <em>"{ev.quote}"</em>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {(pair.sharedChapters.length > 0 || pair.quotes.length > 0) && (
+        <div className="rel-pairview__shared">
+          {pair.sharedChapters.length > 0 && (
+            <div className="rel-pairview__chapters">
+              <span className="rel-pairview__lbl">Together in</span>
+              {pair.sharedChapters.map((n) => <span key={n} className="rel-pairview__ch">Ch. {n}</span>)}
+            </div>
+          )}
+          {pair.quotes.slice(0, 2).map((q, i) => (
+            <div key={i} className="rel-pairview__quote">
+              <span className="rel-pairview__quote-ch">Ch. {q.chapter}</span>
+              <em>"{q.quote}"</em>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 Object.assign(window, {
   REL_TYPES, REL_MODES, buildRelContext,
   RelationshipsPanelBody, RelSingleView, RelCompareView, RelNetworkView,
   RelTimelineView, RelConflictView, RelReviewView, RelEmptyState,
+  RelationshipPairView,
 });

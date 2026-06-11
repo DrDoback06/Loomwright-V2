@@ -32,7 +32,7 @@ const _initLegendState = () => ({
 // AtlasPanelBody — invoked by SlidingPanel when entityKind === "atlas".
 // Hosts the side panel + editor overlay + tweaks panel together.
 // ---------------------------------------------------------------------
-const AtlasPanelBody = ({ panel }) => {
+const AtlasPanelBody = ({ panel, panelContext, onSelectEntity: onHostSelectEntity }) => {
   // -------- Live data ------------------------------------------------
   // AtlasService.buildAtlasDataSync() produces the exact shapes the
   // designed Atlas components consume, from the live stores. The result
@@ -239,7 +239,14 @@ const AtlasPanelBody = ({ panel }) => {
   const onSetOverlayMode = _uc_atx((mode) => setOverlayMode(mode), []);
 
   // -------- Selection / map handlers --------------------------------
-  const onSelect = _uc_atx((loc) => setSelected(loc), []);
+  const onSelect = _uc_atx((loc) => {
+    setSelected(loc);
+    // Broadcast the location selection so other panels (cast, items,
+    // relationships…) can filter by it — and the lock button can act on it.
+    if (loc && loc.id && onHostSelectEntity) {
+      onHostSelectEntity({ id: loc.id, label: loc.name || loc.label || "Location", entityType: "locations" });
+    }
+  }, [onHostSelectEntity]);
 
   // External request: a panel selects an entity → push it into focus
   const onSelectEntity = _uc_atx((entity) => {
@@ -259,6 +266,18 @@ const AtlasPanelBody = ({ panel }) => {
     setLastFocusChange({ at: Date.now(), via: "cross-panel", entity: entity.label });
   }, [cast, beasts, items, factions]);
 
+  // Cross-tab focus: a selection broadcast from another panel lands on the
+  // map — focus chips for any type; locations are also selected outright.
+  const ffAtlas = panelContext?.focusedEntity || null;
+  _ue_atx(() => {
+    if (!ffAtlas || !ffAtlas.id) return;
+    onSelectEntity({ type: ffAtlas.type, id: ffAtlas.id, label: ffAtlas.label });
+    if (ffAtlas.type === "locations") {
+      const loc = (locations || []).find((l) => l.id === ffAtlas.id);
+      if (loc) setSelected(loc);
+    }
+  }, [ffAtlas && ffAtlas.id]);
+
   const onSetScrub      = _uc_atx((i) => setScrubChapter(i), []);
   const onJumpCurrent   = _uc_atx(() => setScrubChapter(null), []);
   const onToggleLayer   = _uc_atx((id) => setLayerState((s) => ({ ...s, [id]: !(s[id] !== false) })), []);
@@ -277,11 +296,17 @@ const AtlasPanelBody = ({ panel }) => {
     const onOpen = (e) => {
       if (e?.detail?.panelKind === "atlas" || e?.detail?.workspaceId === "atlas-editor") {
         setFullScreen(true);
+        // Honour the panel's selected entity — the editor opens focused on it.
+        const id = e?.detail?.entityId;
+        if (id) {
+          const loc = (locations || []).find((l) => l.id === id);
+          if (loc) setSelected(loc);
+        }
       }
     };
     window.addEventListener("lw:open-existing-fullscreen", onOpen);
     return () => window.removeEventListener("lw:open-existing-fullscreen", onOpen);
-  }, []);
+  }, [locations]);
   const onOpenSearch    = _uc_atx(() => {}, []);
   const onOpenQueue     = _uc_atx(() => { setFullScreen(true); setRightTab("queue"); }, []);
   const onOpenSourceMention = _uc_atx(() => { setFullScreen(true); setRightTab("source"); }, []);

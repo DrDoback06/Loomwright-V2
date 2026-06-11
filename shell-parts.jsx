@@ -432,4 +432,59 @@ const BottomStatusStrip = ({
 // Backwards-compat shim: export a no-op RightUtilityRail so existing imports don't crash.
 const RightUtilityRail = () => null;
 
-Object.assign(window, { TopBar, LeftRail, LeftRailItem, RightUtilityRail, BottomStatusStrip });
+// ---------------------------------------------------------------------
+// LockTray — chips for "keep selected" entity locks. Renders nothing
+// when no locks exist. Desktop: slim strip under the topbar. Mobile:
+// chips row above the bottom nav ("Cast: Aelinor"). Tapping a chip
+// re-opens that entity's panel focused on it (lw:focus-entity); the ×
+// releases the lock.
+// ---------------------------------------------------------------------
+const LockTray = ({ mobile = false }) => {
+  const [locks, setLocks] = React.useState(() => window.LoomwrightBackend?.SelectionLockService?.listSync?.() || []);
+  React.useEffect(() => {
+    const sync = () => setLocks(window.LoomwrightBackend?.SelectionLockService?.listSync?.() || []);
+    const evs = ["lw:locks-updated", "lw:backend-ready"];
+    evs.forEach((e) => window.addEventListener(e, sync));
+    return () => evs.forEach((e) => window.removeEventListener(e, sync));
+  }, []);
+  if (!locks.length) return null;
+  const typeLabel = (t) => (typeof ENTITY_TYPES !== "undefined" && ENTITY_TYPES[t]?.label) || t;
+  return (
+    <div className={"locktray " + (mobile ? "locktray--mobile" : "")} data-ui="LockTray" role="toolbar" aria-label="Locked selections">
+      <span className="locktray__lead" title="Locked selections stay selected as you move between tabs.">
+        <Icon name="lock" size={10}/>
+      </span>
+      {locks.map((l) => {
+        const t = (typeof ENTITY_TYPES !== "undefined") ? ENTITY_TYPES[l.type] : null;
+        return (
+          <span key={l.id} className="locktray__chip" style={t ? { "--ec": t.color, "--es": t.soft, "--ed": t.deep } : {}}>
+            <button
+              type="button"
+              className="locktray__chip__open"
+              data-callback="onFocusLockedEntity"
+              title={"Show " + typeLabel(l.type) + ": " + l.label}
+              onClick={() => window.dispatchEvent(new CustomEvent("lw:focus-entity", {
+                detail: { entityType: l.type, entityId: l.id, label: l.label },
+              }))}
+            >
+              {t && <span className="locktray__chip__glyph">{t.glyph}</span>}
+              <span className="locktray__chip__type">{typeLabel(l.type)}:</span>
+              <span className="locktray__chip__label">{l.label}</span>
+            </button>
+            <button
+              type="button"
+              className="locktray__chip__x"
+              data-callback="onUnlockEntity"
+              title={"Unlock " + l.label}
+              onClick={() => window.LoomwrightBackend?.SelectionLockService?.unlockEntity?.(l.id)}
+            >
+              <Icon name="close" size={9}/>
+            </button>
+          </span>
+        );
+      })}
+    </div>
+  );
+};
+
+Object.assign(window, { TopBar, LeftRail, LeftRailItem, RightUtilityRail, BottomStatusStrip, LockTray });

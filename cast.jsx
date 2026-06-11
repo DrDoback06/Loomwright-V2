@@ -597,7 +597,7 @@ const CastRow = ({ c, isSelected, isMulti, multiMode, onSelect, onToggleMulti })
 // ---------------------------------------------------------------------
 // CastBrowse — the list with filters + group-by-role + multi-select bar
 // ---------------------------------------------------------------------
-const CastBrowse = ({ cast, suggestions = [], selectedId, multiSelected, multiMode, onSelect, onToggleMulti, onClearMulti, onMergeMulti, onTagMulti, onDeleteMulti, onCreate, onEnterMultiMode }) => {
+const CastBrowse = ({ cast, suggestions = [], selectedId, multiSelected, multiMode, onSelect, onToggleMulti, onClearMulti, onMergeMulti, onTagMulti, onDeleteMulti, onCreate, onEnterMultiMode, pair, onViewPair, onClosePair }) => {
   const [tab, setTab] = _us_cast("browse"); // browse | review | suggestions
   const [statusFilter, setStatusFilter] = _us_cast("all"); // all | alive | dead | missing | unknown
   const [groupBy, setGroupBy] = _us_cast("role"); // role | none | status
@@ -689,11 +689,19 @@ const CastBrowse = ({ cast, suggestions = [], selectedId, multiSelected, multiMo
           {multiMode && multiSelected && multiSelected.size > 0 && (
             <div className="cast-multibar" data-ui="CastMultiBar">
               <div className="cast-multibar__count"><strong>{multiSelected.size}</strong> selected</div>
+              {multiSelected.size === 2 && onViewPair && (
+                <Btn variant="solid" size="sm" icon="link" onClick={() => onViewPair([...multiSelected])} data-callback="onViewPairRelationship">View relationship</Btn>
+              )}
               <Btn variant="outline" size="sm" icon="link" onClick={onMergeMulti} data-callback="onMergeEntity">Merge</Btn>
               <Btn variant="outline" size="sm" icon="bookmark" onClick={onTagMulti} data-callback="onTagEntities">Tag</Btn>
               <Btn variant="ghost" size="sm" icon="trash" onClick={onDeleteMulti} data-callback="onDeleteEntities">Delete</Btn>
               <Btn variant="ghost" size="sm" icon="close" onClick={onClearMulti} title="Cancel multi-select"/>
             </div>
+          )}
+
+          {/* Pair view — exactly two selected → their relationship */}
+          {multiMode && pair && typeof RelationshipPairView !== "undefined" && (
+            <RelationshipPairView aId={pair.aId} bId={pair.bId} onClose={onClosePair}/>
           )}
         </>
       )}
@@ -1426,12 +1434,18 @@ const _buildCastSuggestions = (ctx) => {
     });
 };
 
-const CastPanelBody = ({ panel, onSelectEntity }) => {
+const CastPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   // Always render the LIVE store — never the CAST_SAMPLE demo. The decorator
   // sets panel.cast from EntityService; we re-listSync as a fallback.
-  const liveEntities = (panel && Array.isArray(panel.cast))
+  const allEntities = (panel && Array.isArray(panel.cast))
     ? panel.cast
     : (window.LoomwrightBackend?.EntityService?.listSync("cast") || []);
+  // Cross-tab focus: a location/faction/item focused elsewhere narrows the
+  // roster to members whose dossier references it.
+  const ff = panelContext?.focusedEntity || null;
+  const liveEntities = (ff && ff.type !== "cast" && typeof _fwReferencesEntity !== "undefined")
+    ? allEntities.filter((e) => _fwReferencesEntity(e, ff.id))
+    : allEntities;
   const incomingState = panel?.state || "overview";
 
   // Bump on entity / occurrence / manuscript / review events so derived
@@ -1461,9 +1475,15 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
       || null
   );
   const [multi, setMulti] = _us_cast(() => new Set());
+  // Pair view: exactly two multi-selected cast → show their relationship.
+  const [pair, setPair] = _us_cast(null);
 
   // Follow host-driven panel.state.
   React.useEffect(() => { setView(incomingState); }, [incomingState]);
+  // Follow host-driven selection (locked entities, lw:focus-entity, lock-tray chips).
+  React.useEffect(() => {
+    if (panel?.selected?.id) { setSelectedId(panel.selected.id); setView("selected"); }
+  }, [panel?.selected?.id]);
 
   // External dossier selection (e.g. Relationships' "Open both dossiers").
   React.useEffect(() => {
@@ -1490,6 +1510,7 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
       if (n.has(c.id)) n.delete(c.id); else n.add(c.id);
       return n;
     });
+    setPair(null); // selection changed — any open pair view is stale
     setView("multi");
   };
 
@@ -1591,7 +1612,15 @@ const CastPanelBody = ({ panel, onSelectEntity }) => {
       onEnterMultiMode={() => setView("multi")}
       onSelect={onSelect}
       onToggleMulti={onToggleMulti}
-      onClearMulti={() => { setMulti(new Set()); setView("overview"); }}
+      pair={pair}
+      onViewPair={(ids) => {
+        if (!ids || ids.length !== 2) return;
+        setPair({ aId: ids[0], bId: ids[1] });
+        // Broadcast so an open Relationships panel jumps into compare mode.
+        window.dispatchEvent(new CustomEvent("lw:pair-focus", { detail: { aId: ids[0], bId: ids[1] } }));
+      }}
+      onClosePair={() => setPair(null)}
+      onClearMulti={() => { setMulti(new Set()); setPair(null); setView("overview"); }}
       onMergeMulti={async () => {
         const ids = [...multi];
         if (ids.length < 2) { _castNotice("Select at least two characters to merge."); return; }

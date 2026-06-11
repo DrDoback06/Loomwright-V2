@@ -808,16 +808,21 @@ const EventsFullScreen = ({ onClose }) => {
 // ---------------------------------------------------------------------
 // QuestsPanelBody — side panel for Quests
 // ---------------------------------------------------------------------
-const QuestsPanelBody = ({ panel, onSelectEntity }) => {
-  const [selectedId, setSelectedId] = _qe_us("q1");
+const QuestsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
+  const [selectedId, setSelectedId] = _qe_us(panel?.selected?.id || "q1");
   const [search, setSearch] = _qe_us("");
   const [statusFilter, setStatusFilter] = _qe_us("all");
   const [fullScreen, setFullScreen] = _qe_us(false);
+  // Follow host-driven selection (locked entities, lw:focus-entity).
+  React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
+  // Cross-tab focus: keep quests that reference the focused entity.
+  const ff = panelContext?.focusedEntity || null;
 
   const _qsrc = (window.LoomwrightBackend?.EntityService?.listSync("quests")) || [];
   const filtered = _qsrc.filter((q) => {
     if (search && !(q.name || "").toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== "all" && q.status !== statusFilter) return false;
+    if (ff && typeof _fwReferencesEntity !== "undefined" && !_fwReferencesEntity(q, ff.id)) return false;
     return true;
   });
   const selected = filtered.find((q) => q.id === selectedId) || null;
@@ -897,16 +902,21 @@ const QuestsPanelBody = ({ panel, onSelectEntity }) => {
 // ---------------------------------------------------------------------
 // EventsPanelBody — side panel for Events
 // ---------------------------------------------------------------------
-const EventsPanelBody = ({ panel, onSelectEntity }) => {
-  const [selectedId, setSelectedId] = _qe_us("e1");
+const EventsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
+  const [selectedId, setSelectedId] = _qe_us(panel?.selected?.id || "e1");
   const [search, setSearch] = _qe_us("");
   const [typeFilter, setTypeFilter] = _qe_us("all");
   const [fullScreen, setFullScreen] = _qe_us(false);
+  // Follow host-driven selection (locked entities, lw:focus-entity).
+  React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
+  // Cross-tab focus: keep events that reference the focused entity.
+  const ff = panelContext?.focusedEntity || null;
 
   const _esrc = (window.LoomwrightBackend?.EntityService?.listSync("events")) || [];
   const filtered = _esrc.filter((e) => {
     if (search && !(e.name || "").toLowerCase().includes(search.toLowerCase())) return false;
     if (typeFilter !== "all" && e.eventType !== typeFilter) return false;
+    if (ff && typeof _fwReferencesEntity !== "undefined" && !_fwReferencesEntity(e, ff.id)) return false;
     return true;
   });
   const selected = filtered.find((e) => e.id === selectedId) || null;

@@ -228,8 +228,10 @@ const BestiaryDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRel
 // ---------------------------------------------------------------------
 // BestiaryPanelBody
 // ---------------------------------------------------------------------
-const BestiaryPanelBody = ({ panel, onSelectEntity }) => {
-  const [selectedId, setSelectedId] = _bf_us("b1");
+const BestiaryPanelBody = ({ panel, panelContext, onSelectEntity }) => {
+  const [selectedId, setSelectedId] = _bf_us(panel?.selected?.id || "b1");
+  // Follow host-driven selection (locked entities, lw:focus-entity).
+  React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [search, setSearch] = _bf_us("");
   // Live bestiary entries only — never the demo BESTIARY_DATA.
   const _src = (window.LoomwrightBackend?.EntityService?.listSync("bestiary")) || [];
@@ -577,8 +579,10 @@ const FactionDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRela
 // ---------------------------------------------------------------------
 // FactionsPanelBody
 // ---------------------------------------------------------------------
-const FactionsPanelBody = ({ panel, onSelectEntity }) => {
-  const [selectedId, setSelectedId] = _bf_us("f1");
+const FactionsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
+  const [selectedId, setSelectedId] = _bf_us(panel?.selected?.id || "f1");
+  // Follow host-driven selection (locked entities, lw:focus-entity).
+  React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [search, setSearch] = _bf_us("");
   const _src = (window.LoomwrightBackend?.EntityService?.listSync("factions")) || [];
   const filtered = _src.filter((f) => !search || (f.name || "").toLowerCase().includes(search.toLowerCase()));

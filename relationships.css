@@ -600,3 +600,110 @@
   color: var(--rl-ink-1);
   cursor: pointer;
 }
+
+/* ---------------------------------------------------------------------
+   RelationshipPairView — two-cast pair card (rendered in the Cast panel)
+   --------------------------------------------------------------------- */
+.rel-pairview {
+  margin: 8px 10px;
+  padding: 10px;
+  background: var(--bg-paper);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-3);
+  font-size: 12px;
+}
+.rel-pairview__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rel-pairview__names {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  color: var(--ink-1);
+}
+.rel-pairview__spacer { flex: 1; }
+.rel-pairview__act {
+  border: 1px solid var(--line-2);
+  background: var(--bg-paper-2);
+  border-radius: var(--r-2);
+  padding: 4px 8px;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.rel-pairview__act:hover { color: var(--ink-1); border-color: var(--line-strong); }
+.rel-pairview__act--primary { background: var(--accent-soft); color: var(--accent-deep); border-color: var(--accent); }
+.rel-pairview__x {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 4px;
+}
+.rel-pairview__none p { margin: 0 0 8px; color: var(--ink-3); font-style: italic; }
+.rel-pairview__bond {
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--c, var(--line-strong));
+  border-radius: var(--r-2);
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: var(--bg-paper-2);
+}
+.rel-pairview__bond-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.rel-pairview__type { font-weight: 600; color: var(--c, var(--ink-1)); }
+.rel-pairview__raw { color: var(--ink-3); font-size: 10.5px; }
+.rel-pairview__secret {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(168, 74, 58, 0.12);
+  color: #a84a3a;
+}
+.rel-pairview__syn {
+  font-size: 9.5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-paper);
+  border: 1px dashed var(--line-2);
+  color: var(--ink-3);
+}
+.rel-pairview__summary { margin: 0 0 6px; font-family: var(--font-serif); color: var(--ink-2); }
+.rel-pairview__meters { display: flex; flex-direction: column; gap: 3px; }
+.rel-pairview__evidence { margin-top: 6px; }
+.rel-pairview__quote {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 5px 8px;
+  background: var(--bg-paper);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-2);
+  margin-bottom: 4px;
+}
+.rel-pairview__quote em { font-family: var(--font-serif); color: var(--ink-2); }
+.rel-pairview__quote-ch { font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); white-space: nowrap; }
+.rel-pairview__shared { margin-top: 8px; border-top: 1px dashed var(--line-2); padding-top: 8px; }
+.rel-pairview__chapters { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.rel-pairview__lbl { color: var(--ink-3); font-size: 10.5px; margin-right: 2px; }
+.rel-pairview__ch {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-paper-2);
+  color: var(--ink-2);
+}
