@@ -121,3 +121,50 @@ test.describe("U22. Timeline — live panel", () => {
     expect(count).toBe(2);
   });
 });
+
+// Phase-2 follow-through: a selected event shows its participants'
+// relationship state AS OF that chapter (shared scenes up to it; bonds
+// whose first traced chapter lies later are marked not-yet-formed).
+test.describe("U22b. Timeline — relationship snapshot at the event's chapter", () => {
+  test("inspector renders the pair bond filtered to the event's chapter", async ({ page }) => {
+    const { openFreshApp, saveEntity } = require("./helpers");
+    await openFreshApp(page);
+    const a = await saveEntity(page, "cast", { name: "Snap Alpha", data: {} }, { status: "active" });
+    const b = await saveEntity(page, "cast", { name: "Snap Bravo", data: {} }, { status: "active" });
+    await saveEntity(page, "relationships", {
+      name: "Alpha-Bravo pact",
+      data: { from: { id: a.id, type: "cast" }, to: { id: b.id, type: "cast" }, bondType: "friend", chapters: [1] },
+    }, { status: "active" });
+    await page.evaluate(async ({ aId, bId }) => {
+      const B = window.LoomwrightBackend;
+      await B.ManuscriptChapterService.save({
+        chapters: [
+          { id: "tl-1", num: 1, title: "One", state: "saved", bodyText: "Alpha met Bravo." },
+          { id: "tl-2", num: 2, title: "Two", state: "saved", bodyText: "They rode together." },
+        ],
+        activeChapterId: "tl-2",
+        manuscripts: { "tl-1": { text: "Alpha met Bravo." }, "tl-2": { text: "They rode together." } },
+        trashedChapters: [],
+      });
+      await B.OccurrenceService.saveMany([
+        { entityId: aId, entityType: "cast", chapterId: "tl-1", exactText: "Alpha met Bravo." },
+        { entityId: bId, entityType: "cast", chapterId: "tl-1", exactText: "Alpha met Bravo." },
+      ]);
+    }, { aId: a.id, bId: b.id });
+    await saveEntity(page, "events", {
+      name: "The Pact Holds",
+      data: { eventType: "Reveal", chapter: "Ch. 2", participants: [{ id: a.id, type: "cast" }, { id: b.id, type: "cast" }] },
+    }, { status: "active" });
+
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "timeline" } })));
+    await page.waitForTimeout(300);
+    const panel = page.locator(".pstk__panel[data-panel-id='p-timeline']");
+    await panel.locator(".tl-card:has-text('The Pact Holds'), [data-ui='TLEventCard']:has-text('The Pact Holds')").first().click();
+    const snap = panel.locator("[data-testid='tl-rel-snapshot']");
+    await expect(snap).toBeVisible({ timeout: 5000 });
+    await expect(snap).toContainText("as of Ch. 2");
+    await expect(snap).toContainText("Snap Alpha ↔ Snap Bravo");
+    await expect(snap).toContainText("Friend");
+    await expect(snap).toContainText("Ch. 1");
+  });
+});

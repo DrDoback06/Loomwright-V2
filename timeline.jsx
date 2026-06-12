@@ -340,6 +340,49 @@ const TLInspector = ({ ctx, event, onClose }) => {
           {event.entities.length === 0 && <span className="tl-insp__source">No cast linked yet.</span>}
         </div>
       </div>
+      {/* Relationship snapshot — the bonds between this event's
+          participants AS OF this chapter: shared scenes up to here, and
+          recorded bonds marked "not yet formed" when their first traced
+          chapter lies later in the book. Code-first via pairContextSync. */}
+      {event.entities.length >= 2 && (() => {
+        const chN = Number(event.chapter) || null;
+        const pairs = [];
+        for (let i = 0; i < event.entities.length && pairs.length < 6; i++) {
+          for (let j = i + 1; j < event.entities.length && pairs.length < 6; j++) {
+            pairs.push([event.entities[i], event.entities[j]]);
+          }
+        }
+        const rows = pairs.map(([a, b]) => {
+          const pc = B?.LinkService?.pairContextSync?.(a, b) || { edges: [], sharedChapters: [] };
+          const edge = pc.edges[0] || null;
+          const upTo = chN ? pc.sharedChapters.filter((n) => Number(n) <= chN) : pc.sharedChapters;
+          const edgeChs = (edge && edge.chapters || []).map(Number).filter((n) => Number.isFinite(n));
+          const formed = !!edge && (!chN || edgeChs.length === 0 || edgeChs.some((n) => n <= chN));
+          return { a, b, edge, formed, upTo };
+        }).filter((r) => r.edge || r.upTo.length);
+        if (!rows.length) return null;
+        const typeLabel = (edge) => (typeof REL_TYPES !== "undefined" && REL_TYPES[edge.type]?.label) || edge.rawType || edge.type;
+        return (
+          <div className="tl-insp__sec" data-testid="tl-rel-snapshot">
+            <div className="tl-insp__sech">Relationships at this point{chN ? " (as of Ch. " + chN + ")" : ""}</div>
+            {rows.map((r, i) => (
+              <div key={i} className="tl-insp__relsnap">
+                <span className="tl-insp__relsnap-pair">
+                  {(ctx.cast[r.a]?.name || "?")} ↔ {(ctx.cast[r.b]?.name || "?")}
+                </span>
+                <span className="tl-insp__relsnap-bond">
+                  {r.edge
+                    ? (r.formed ? typeLabel(r.edge) : typeLabel(r.edge) + " — not yet formed by this chapter")
+                    : "no recorded bond yet"}
+                </span>
+                {r.upTo.length > 0 && (
+                  <span className="tl-insp__relsnap-chs">together in {r.upTo.slice(0, 5).map((n) => "Ch. " + n).join(", ")}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
       <div className="tl-insp__sec">
         <div className="tl-insp__sech">Source</div>
         <div className="tl-insp__source">{event.source}</div>
