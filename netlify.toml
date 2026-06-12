@@ -1,0 +1,26 @@
+# Netlify deploy configuration for Loomwright v2.
+#
+# This file overrides the site-level UI build settings, so the deploy
+# can't drift from the repo: `npm run build` precompiles every .jsx
+# (scripts/build-production.js, pure Node + @babel/standalone — no
+# browser needed at build time) into dist/, and dist/ is what ships.
+#
+# Note: the app is fully client-side and BYOK — server-side env vars
+# like ANTHROPIC_API_KEY / OPENAI_API_KEY are NOT read by the build or
+# the site. Users add their own keys in Settings ▸ AI Providers, stored
+# locally in their browser.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Single-page app served from index.html; the service worker and
+# manifest live alongside it in dist/. No path routing — no redirects
+# needed — but make sure the SW is never cached stale.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
