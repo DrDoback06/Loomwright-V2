@@ -210,6 +210,16 @@ const RandomTablesPanelBody = ({ panel }) => {
                   <div key={h.id} className="rt__hist">
                     <span className="rt__hist-table">{h.tableName}</span>
                     <span className="rt__hist-text">{h.results.join(" · ")}</span>
+                    <span className="rt__hist-acts">
+                      <button className="rt__hist-btn" data-callback="onRerollHistoryEntry" title="Roll this table again"
+                        onClick={async () => {
+                          const { results: out } = await B().RandomTableService.rollAndLog(h.tableId, { count: h.results.length || 1, unique });
+                          if (out.length) { setSelectedId(h.tableId); setResults(out); }
+                          else _rtNotice("That table is gone — its rolls stay in the log.");
+                        }}>↻</button>
+                      <button className="rt__hist-btn" data-callback="onSendSuggestionToWriter" title="Send to the Writer's Room"
+                        onClick={() => sendToWriter(h.results.join(", "))}>✎</button>
+                    </span>
                   </div>
                 ))}
               </div>

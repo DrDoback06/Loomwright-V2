@@ -88,6 +88,38 @@ const CommandPalette = ({
     const ql = q.trim().toLowerCase();
     const filterRows = (rows) => !ql ? rows : rows.filter((r) => r.title.toLowerCase().includes(ql) || (r.sub || "").toLowerCase().includes(ql));
 
+    // Recent — the last few records you touched (AuditService), one tap
+    // away. Same typed pointers as live search rows so the host's
+    // lw:open-search-result handler reopens them.
+    const recents = (() => {
+      const A = (typeof window !== "undefined") ? window.LoomwrightBackend?.AuditService : null;
+      const evs = A?.getRecentSync ? (A.getRecentSync(10) || []) : [];
+      const seen = new Set();
+      const rows = [];
+      for (const e of evs) {
+        if (!e || !e.targetType || !e.targetId || seen.has(e.targetType + ":" + e.targetId)) continue;
+        seen.add(e.targetType + ":" + e.targetId);
+        rows.push({
+          id: "recent-" + (e.id || rows.length),
+          icon: "clock",
+          entity: e.targetType === "entity" ? e.entityType : undefined,
+          title: e.targetName || e.label || "Recent item",
+          sub: "Recent · " + String(e.action || "").replace(/^[a-z]+\./, ""),
+          _searchResult: {
+            type: e.targetType, entityType: e.entityType,
+            entityId: e.targetType === "entity" ? e.targetId : null,
+            chapterId: e.targetType === "chapter" ? e.targetId : null,
+            referenceId: e.targetType === "reference" ? e.targetId : null,
+            settingsSectionId: e.targetType === "settings" ? e.targetId : null,
+            reviewItemId: e.targetType === "review" ? e.targetId : null,
+            title: e.targetName || e.label,
+          },
+        });
+        if (rows.length >= 6) break;
+      }
+      return rows;
+    })();
+
     // Live mode — index has entries, route through SearchService.
     if (liveResults && (liveResults.length > 0 || (liveStats && liveStats.total > 0))) {
       const groupRows = { entities: [], chapters: [], references: [], settings: [], review: [], other: [] };
@@ -120,6 +152,7 @@ const CommandPalette = ({
         bucket.push(row);
       }
       const groups = [
+        { id: "recents",    label: "Recent",        rows: ql ? filterRows(recents) : recents },
         { id: "entities",   label: "Entities",      rows: groupRows.entities },
         { id: "chapters",   label: "Chapters",      rows: groupRows.chapters },
         { id: "references", label: "References",    rows: groupRows.references },
@@ -137,7 +170,7 @@ const CommandPalette = ({
         if (scope === "entities") return g.id === "entities";
         if (scope === "chapters") return g.id === "chapters";
         if (scope === "actions")  return g.id === "suggested" || g.id === "settings" || g.id === "tabs";
-        return true;
+        return g.id !== "recents";
       };
       return groups.filter((g) => g.rows.length && byScope(g));
     }
@@ -146,6 +179,7 @@ const CommandPalette = ({
     // never sample entities/chapters. The hint above the groups tells
     // the user the search index is waiting on their project.
     const groups = [
+      { id: "recents",   label: "Recent",            rows: ql ? filterRows(recents) : recents },
       { id: "suggested", label: "Suggested actions", rows: filterRows(PALETTE_DATA.suggested) },
       { id: "tabs",      label: "Tabs & navigation", rows: filterRows(PALETTE_DATA.tabs) },
     ];
@@ -438,7 +472,7 @@ const DEFAULT_WHEEL_SLOTS = [
   { id: "create",  icon: "plus",    lbl: "Create" },
   { id: "tag",     icon: "bookmark",lbl: "Tag" },
   { id: "merge",   icon: "link",    lbl: "Merge" },
-  { id: "review",  icon: "bell",    lbl: "Review",  queue: 12 },
+  { id: "review",  icon: "bell",    lbl: "Review" }, // queue badge comes live from the app
   { id: "speed",   icon: "eye",     lbl: "Speed" },
   { id: "tangle",  icon: "knot",    lbl: "Tangle" },
   { id: "more",    icon: "more",    lbl: "More…" },

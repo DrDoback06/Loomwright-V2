@@ -596,8 +596,36 @@ const ReviewPanelBody = ({ panel }) => {
     );
   }
 
+  // Fast triage: every pending high-band candidate across all types,
+  // accepted in one click (high = the engine is ≥95% sure; these are the
+  // ones you'd wave through one by one anyway).
+  const highIds = byType.flatMap(([t, items]) =>
+    items.filter((i) => (i.confidenceBand || i.confidence?.band) === "high").map((i) => ({ id: i.id, t })));
+  const acceptAllHigh = async () => {
+    const grouped = new Map();
+    for (const { id, t } of highIds) {
+      if (!grouped.has(t)) grouped.set(t, []);
+      grouped.get(t).push(id);
+    }
+    // Sequential — parallel bulk accepts would race the queue's
+    // read-modify-write and drop one group's status changes.
+    for (const [t, ids] of grouped) await dispatchBulk("onBulkAcceptQueueItems", ids, t);
+  };
+
   return (
     <div data-ui="ReviewPanelBody" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {highIds.length > 0 && (
+        <div className="rq-triage" data-testid="rq-triage">
+          <span className="rq-triage__lbl">
+            <b>{highIds.length}</b> high-confidence candidate{highIds.length === 1 ? "" : "s"} ready
+          </span>
+          <button className="rpg-btn rpg-btn--small rpg-btn--primary"
+            data-callback="onBulkAcceptQueueItems" data-testid="rq-accept-all-high"
+            onClick={acceptAllHigh}>
+            Accept all high
+          </button>
+        </div>
+      )}
       {byType.map(([entityType, items]) => (
         <EntityReviewQueue
           key={entityType}

@@ -1438,3 +1438,7 @@
   -webkit-overflow-scrolling: touch;
 }
 .locktray--mobile .locktray__chip { flex: 0 0 auto; }
+
+/* Trash recovery countdown */
+.trash__days { color: var(--ink-3); }
+.trash__days--low { color: #a84a3a; font-weight: 600; }

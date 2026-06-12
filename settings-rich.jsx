@@ -866,6 +866,20 @@ const SetDebug = () => (
       <button className="set-btn set-btn--outline" data-callback="onClearLocalDemoData"><Icon name="trash" size={11}/> Clear sample data</button>
       <button className="set-btn set-btn--outline" data-callback="onResetProjectData"><Icon name="trash" size={11}/> Reset project data</button>
       <button className="set-btn set-btn--outline" data-callback="onShowLastAIHandoff"><Icon name="sparkle" size={11}/> Show last AI handoff pack</button>
+      <button className="set-btn set-btn--outline" data-callback="onResetHelpHints" data-testid="set-reset-help"
+        onClick={() => {
+          window.HelpService?.resetAll?.();
+          window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Help reset — every page's \"?\" and tour count as unseen again." } }));
+        }}>
+        <Icon name="info" size={11}/> Reset help & tours
+      </button>
+      <button className="set-btn set-btn--outline" data-callback="onClearSelectionLocks" data-testid="set-clear-locks"
+        onClick={() => {
+          window.LoomwrightBackend?.SelectionLockService?.clear?.();
+          window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "All selection locks released." } }));
+        }}>
+        <Icon name="lock" size={11}/> Clear selection locks
+      </button>
     </div>
   </SetGroupCard>
 );

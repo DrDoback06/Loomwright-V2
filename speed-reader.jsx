@@ -127,6 +127,39 @@ function srPauseMultiplier(beat, opts) {
 
 // Compute the "pivot" letter index (ORP) and split the word into thirds
 // so the centre red letter can be rendered.
+// Entity-aware reading: a live name→type/colour lookup so known entities
+// tint as they flash past (worldbuilding eyes catch their own names).
+// Capitalised tokens only, min 3 letters, full names + name parts.
+function srUseEntityLookup() {
+  const [tick, setTick] = _sr_us(0);
+  _sr_ue(() => {
+    const bump = () => setTick((t) => t + 1);
+    const evs = ["lw:entity-store-updated", "lw:backend-ready", "lw:project-imported"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+  return _sr_um(() => {
+    const map = new Map();
+    const B = window.LoomwrightBackend;
+    for (const t of ["cast", "locations", "items", "factions", "bestiary"]) {
+      const meta = (typeof ENTITY_TYPES !== "undefined" && ENTITY_TYPES[t]) || {};
+      for (const e of (B?.EntityService?.listSync?.(t) || [])) {
+        if (!e || e.status === "deleted" || !e.name) continue;
+        const entry = { type: t, color: meta.color, glyph: meta.glyph, name: e.name };
+        for (const token of [e.name, ...String(e.name).split(/\s+/)]) {
+          const k = String(token).toLowerCase().replace(/[^a-z'’-]/gi, "");
+          if (k.length >= 3 && !map.has(k)) map.set(k, entry);
+        }
+      }
+    }
+    return map;
+  }, [tick]);
+}
+function srEntityFor(map, word) {
+  if (!map || !word || !/^[A-Z]/.test(String(word))) return null;
+  return map.get(String(word).toLowerCase().replace(/[^a-z'’-]/gi, "")) || null;
+}
+
 function srSplitWord(word) {
   if (!word) return { before: "", pivot: "", after: "" };
   const len = word.length;
@@ -459,6 +492,8 @@ function useSpeedReader(initialSourceId = "ch7") {
 const SpeedReaderPanelBody = ({ panel }) => {
   const sr = useSpeedReader("ch7");
   const split = srSplitWord(sr.beat ? sr.beat.word : "—");
+  const srEntityMap = srUseEntityLookup();
+  const entityHit = srEntityFor(srEntityMap, sr.beat ? sr.beat.word : "");
   const wordsLeft = Math.max(0, sr.beats.length - (sr.idx + 1));
   const secsLeft  = Math.ceil(wordsLeft / Math.max(60, sr.wpm) * 60);
 
@@ -496,6 +531,11 @@ const SpeedReaderPanelBody = ({ panel }) => {
             <option key={s.id} value={s.id}>{s.label}</option>
           ))}
         </select>
+        <button className="sr-panel__icon-btn" title="Flag this sentence as difficult — it resurfaces on Today"
+          data-callback="onSpeedReaderNoteDifficulty"
+          onClick={() => { sr.noteCurrentSentence("difficulty", ""); window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Flagged — it'll appear on Today under Writing prompts." } })); }}>
+          <Icon name="alert" size={11}/>
+        </button>
         <button className="sr-panel__icon-btn" title="Paste text"
           onClick={onPaste}
           data-callback="onSpeedReaderPasteText">
@@ -504,10 +544,15 @@ const SpeedReaderPanelBody = ({ panel }) => {
       </div>
 
       <div className={"sr-panel__stage " + (sr.focusMode ? "is-focus" : "")}>
-        <div className="sr-panel__word" data-ui="SpeedReaderWord" data-testid="sr-word" style={{ fontSize: Math.min(sr.fontSize, 44) }}>
+        <div className={"sr-panel__word" + (entityHit ? " is-entity" : "")}
+          data-ui="SpeedReaderWord" data-testid="sr-word"
+          data-entity-type={entityHit ? entityHit.type : undefined}
+          title={entityHit ? entityHit.name + " — known " + entityHit.type : undefined}
+          style={{ fontSize: Math.min(sr.fontSize, 44), "--ec": entityHit ? entityHit.color : undefined }}>
           <span className="sr-panel__word-side">{split.before}</span>
           <span className="sr-panel__word-pivot" data-testid="sr-pivot">{split.pivot}</span>
           <span className="sr-panel__word-side">{split.after}</span>
+          {entityHit && <span className="sr-entity-glyph" aria-hidden>{entityHit.glyph}</span>}
         </div>
         <div className="sr-panel__progress">
           <div className="sr-panel__progress-fill" style={{ width: (sr.fraction * 100) + "%" }}/>
@@ -608,6 +653,8 @@ const SpeedReaderWorkspaceFull = ({ workspace, onExit, onRequest, dragTargetVisi
   const [pasteLabel, setPasteLabel] = _sr_us("");
 
   const split = srSplitWord(sr.beat ? sr.beat.word : "—");
+  const srEntityMap = srUseEntityLookup();
+  const entityHit = srEntityFor(srEntityMap, sr.beat ? sr.beat.word : "");
 
   // Current sentence + neighbour context lines
   const ctx = _sr_um(() => {
@@ -743,10 +790,15 @@ const SpeedReaderWorkspaceFull = ({ workspace, onExit, onRequest, dragTargetVisi
             <div className="sr-context sr-context--before">{ctx.before}</div>
 
             {/* The word */}
-            <div className="fws-reader-word sr-stage-word" data-ui="SpeedReaderWord" data-testid="sr-word-stage" style={{ fontSize: sr.fontSize }}>
+            <div className={"fws-reader-word sr-stage-word" + (entityHit ? " is-entity" : "")}
+              data-ui="SpeedReaderWord" data-testid="sr-word-stage"
+              data-entity-type={entityHit ? entityHit.type : undefined}
+              title={entityHit ? entityHit.name + " — known " + entityHit.type : undefined}
+              style={{ fontSize: sr.fontSize, "--ec": entityHit ? entityHit.color : undefined }}>
               <span className="sr-side">{split.before}</span>
               <span className="fws-reader-word__pivot" data-testid="sr-pivot-stage">{split.pivot}</span>
               <span className="sr-side">{split.after}</span>
+              {entityHit && <span className="sr-entity-glyph" aria-hidden>{entityHit.glyph}</span>}
             </div>
 
             {/* Sentence under the word */}

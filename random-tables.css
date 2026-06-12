@@ -164,3 +164,17 @@
   border: 1px dashed var(--rt-line-2);
   border-radius: 6px;
 }
+
+/* History row quick actions */
+.rt__hist { display: flex; align-items: baseline; gap: 6px; }
+.rt__hist-acts { margin-left: auto; display: inline-flex; gap: 2px; }
+.rt__hist-btn {
+  border: 1px solid var(--line-2);
+  background: var(--bg-paper);
+  border-radius: var(--r-1, 4px);
+  padding: 0 5px;
+  font-size: 11px;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.rt__hist-btn:hover { color: var(--accent-deep); border-color: var(--accent); }

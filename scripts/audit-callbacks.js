@@ -148,6 +148,7 @@ const REACT_OWNED = new Set([
   "onSaveEdit",                // EditCandidateModal
   "onOpenEntityFromManuscript",// EntityBrushHighlight onDoubleClick
   "onRunChapterExtraction",    // Writer's Room canvasbar Extract button
+  "onRestoreTrashItemAndOpen", // Trash panel "Restore & open" onClick
 ]);
 
 // Bucket B — AI/provider-gated callbacks. Allowed to surface an unavailable

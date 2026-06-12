@@ -271,3 +271,66 @@ suite against its provisioned chromium-1194.)
   first listener for `lw:focus-entity`; `entityId` added to
   `lw:open-panel-workspace` / `lw:open-existing-fullscreen`.
 - Specs: `tests/e2e/38-full-workspaces` … `44-help-tour`.
+
+---
+
+# Addendum — The Upgrade Pass
+
+A second full sweep after the Definition of Done was met: every surface
+received a real enhancement, several latent bugs surfaced and were fixed,
+and the help registry was extended so each upgrade ships with its tutorial.
+Verified by `tests/e2e/45-upgrade-pass.spec.js` (9 DOM-level tests) plus
+the full suite.
+
+**Organisation / cross-cutting**
+- **Panel layout persistence** (new `PanelLayoutService`): the docked
+  arrangement — which panels are open, their order, pins, expansion, and
+  each panel's selection — now survives reloads. First run keeps the
+  showcase defaults; an intentionally cleared layout stays cleared;
+  Settings ▸ "Reset layout" also resets the stored arrangement.
+- **Entity saves are now audited** (`entity.create` / `entity.update`,
+  honouring `skipAudit`), which enriches Home's Recent activity and powers
+  the palette's new Recent group.
+
+**Per-surface upgrades**
+- **Command palette**: a live **Recent** group (last-touched records from
+  the audit trail) above search results; rows reopen the record. Fixing
+  its open-path exposed a pre-existing bug: search-result entity rows
+  dispatched a malformed editor event (`{entityType, entity}` instead of
+  `{type, initial}`) and never selected anything — entity hits now route
+  through the focus path (panel opens, record selected), with the correct
+  panel-kind mapping for factions/skills/abilities. "Open Adaptive Wheel
+  here" also no-oped on routes without a `[data-ui='Workspace']` element —
+  it now centres on the window as a fallback.
+- **Speed Reader**: entity-aware RSVP — known cast/location/item/faction/
+  bestiary names tint in their type colour (with glyph) as they flash;
+  the panel body gains a Flag button, and **difficulty flags resurface on
+  Today** as "Smooth a sentence you flagged while speed-reading" prompts.
+- **Review Queue**: a fast-triage strip — "**Accept all high**" accepts
+  every ≥95%-band candidate across all types in one click (sequential
+  bulk dispatch; parallel dispatch raced the queue's read-modify-write
+  and dropped a group — fixed).
+- **Trash**: each row shows the **30-day recovery countdown** (red in the
+  final five days) and a **Restore & open** action that restores and
+  jumps straight to the record.
+- **Random Tables**: the roll history gains per-entry quick actions —
+  **reroll** the same table and **send** a past result to the Writer's
+  Room.
+- **Lore / Canon**: **hardness filter chips** (All / Hard canon / Soft /
+  Contradicted, with a live contradicted count) slice the fact list.
+- **Settings (Control Centre)**: housekeeping utilities — **Reset help &
+  tours** (help seen-state) and **Clear selection locks** — beside the
+  existing layout/data tools.
+- **Adaptive wheel**: a **Help** slot opens the contextual help for
+  whatever you're looking at; the unused default ring's fake `queue: 12`
+  badge removed.
+- **Today**: now also surfaces the Speed Reader's flagged sentences (see
+  above) alongside the insight cards.
+
+**Tutorials**: every upgrade above has matching help-content — new
+controls listed with their real selectors (review triage, trash countdown
+and Restore & open, table history actions, reader flag + tinted word,
+lore hardness chips, Settings utilities, palette Recent group, wheel Help
+slot), intros rewritten where behaviour grew, and the shared panel-chrome
+copy now teaches layout persistence. The registry-completeness test keeps
+guarding that no surface ships without an entry.

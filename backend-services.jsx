@@ -42,6 +42,7 @@
     aiRouting: "ai_routing",
     manuscriptNotes: "manuscript_notes",
     selectionLocks: "selection_locks",
+    panelLayout: "panel_layout",
   };
 
   // Synchronously read the sample-loaded flag from localStorage BEFORE any
@@ -356,6 +357,22 @@
       all[entityType] = { ...byType, [id]: entity };
       await StorageService.set(KEYS.entities, all);
       applyEntityGlobals(all);
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: previous ? "entity.update" : "entity.create",
+            label: (previous ? "Updated " : "Created ") + (entity.name || id) + " (" + entityType + ")",
+            targetType: "entity",
+            targetId: id,
+            targetName: entity.name,
+            entityType,
+            before: previous,
+            after: entity,
+            source: "EntityService",
+            sourceSurface: opts.sourceSurface || null,
+          });
+        } catch (_) {}
+      }
       if (status === "draft") await ReviewService.add({
         id: uuid("rq"),
         entityId: id,
@@ -5931,6 +5948,39 @@ Only evidenced pairs. Return JSON only.`;
     },
   };
 
+  // -------------------------------------------------------------------
+  // PanelLayoutService — the docked panel arrangement survives reloads.
+  // Stores only re-hydratable facts (panel id + flags + selection); the
+  // app re-derives everything else from PANEL_PRESETS, so stale entries
+  // for removed presets are dropped silently. localStorage (synchronous)
+  // so the very first paint already shows the user's layout.
+  // -------------------------------------------------------------------
+  const PanelLayoutService = {
+    loadSync() {
+      const raw = localMirror.get(KEYS.panelLayout, null);
+      return Array.isArray(raw) ? raw.filter((p) => p && p.id) : null;
+    },
+    save(panels) {
+      const rows = (Array.isArray(panels) ? panels : [])
+        .filter((p) => p && p.id && !String(p.id).startsWith("missing-"))
+        .map((p) => ({
+          id: p.id,
+          order: p.order || 0,
+          pinned: !!p.pinned,
+          expanded: !!p.expanded,
+          collapsed: !!p.collapsed,
+          selected: p.selected && p.selected.id
+            ? { id: p.selected.id, label: p.selected.label || "", entityType: p.selected.entityType || null }
+            : null,
+        }));
+      localMirror.set(KEYS.panelLayout, rows);
+      return rows;
+    },
+    clear() {
+      localMirror.remove(KEYS.panelLayout);
+    },
+  };
+
   const SampleProjectService = {
     async loadSample() {
       const demo = window.WR_DEMO_PROJECT || {};
@@ -8091,6 +8141,7 @@ Only evidenced pairs. Return JSON only.`;
     OccurrenceService,
     isOccurrenceStale,
     SelectionLockService,
+    PanelLayoutService,
     InsightService,
     buildOwnershipLedgerSync,
     SampleProjectService,

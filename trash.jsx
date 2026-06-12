@@ -46,6 +46,7 @@ const mapTrashItem = (it) => ({
   name: it.name || it.title || "Untitled",
   from: it.type ? (it.type.charAt(0).toUpperCase() + it.type.slice(1)) : "Entity",
   deletedAt: _trAgo(it.deletedAt),
+  deletedTs: Date.parse(it.deletedAt || "") || null,
   by: it.by || "",
   note: it.summary || it.note || "",
   raw: it,
@@ -82,9 +83,20 @@ const TrashPanelBody = ({ panel }) => {
     };
   }, []);
 
-  const onRestore = async (item) => {
+  const onRestore = async (item, openAfter = false) => {
     await window.LoomwrightBackend?.TrashService?.restore(item.id);
     setItems(loadTrash());
+    if (openAfter && item.raw?.id) {
+      window.dispatchEvent(new CustomEvent("lw:focus-entity", {
+        detail: { entityType: item.raw.type, entityId: item.raw.id, label: item.name },
+      }));
+    }
+  };
+  // 30-day recovery window — show what's left so nothing vanishes silently.
+  const daysLeft = (item) => {
+    if (!item.deletedTs) return null;
+    const left = 30 - Math.floor((Date.now() - item.deletedTs) / 86400000);
+    return Math.max(0, left);
   };
   const onDeleteForever = async (item) => {
     if (confirming !== item.id) { setConfirming(item.id); return; }
@@ -139,6 +151,13 @@ const TrashPanelBody = ({ panel }) => {
                     <span>{t.label}</span>
                     {it.from && <span>· {it.from}</span>}
                     <span>· {it.deletedAt}</span>
+                    {daysLeft(it) != null && (
+                      <span className={"trash__days" + (daysLeft(it) <= 5 ? " trash__days--low" : "")}
+                        data-testid="trash-days-left"
+                        title="Days until permanent deletion">
+                        · {daysLeft(it)}d left
+                      </span>
+                    )}
                     {it.by && <span>· by {it.by}</span>}
                     {it.note && <span>· <em>{it.note}</em></span>}
                   </div>
@@ -149,6 +168,8 @@ const TrashPanelBody = ({ panel }) => {
                     {previewing === it.id ? "Hide" : "Preview"}
                   </button>
                   <button className="rpg-btn rpg-btn--small rpg-btn--primary" data-callback="onRestoreTrashItem" onClick={() => onRestore(it)}>Restore</button>
+                  <button className="rpg-btn rpg-btn--small" data-callback="onRestoreTrashItemAndOpen" title="Restore and jump to the record"
+                    onClick={() => onRestore(it, true)}>Restore & open</button>
                   <button className="rpg-btn rpg-btn--small rpg-btn--ghost" data-callback="onDeleteTrashItemForever" onClick={() => onDeleteForever(it)}>Delete forever</button>
                 </div>
               </div>

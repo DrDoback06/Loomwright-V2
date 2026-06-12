@@ -22,7 +22,7 @@
     { selector: "[data-callback='onLockSelection']", label: "Lock selection", desc: "Keep the selected entry selected as you move between tabs (and across reloads). Locked entries appear as chips in the lock tray." },
     { selector: "[data-callback='onPinPanel']", label: "Pin", desc: "Anchor this panel next to the manuscript so other panels never push it away." },
     { selector: "[data-callback='onExpandPanel']", label: "Widen", desc: "Toggle a wider layout for this panel." },
-    { selector: "[data-callback='onClosePanel']", label: "Close", desc: "Close the panel. Reopen it any time from the left rail." },
+    { selector: "[data-callback='onClosePanel']", label: "Close", desc: "Close the panel. Reopen it any time from the left rail — your arrangement (open panels, order, pins, selections) persists across reloads." },
   ];
   const FILTER_CHIP = { selector: ".pstk__filter-chip", label: "Filtered-by chip", desc: "Shows when another panel's selection is filtering this one. Click to clear the cross-tab filter." };
 
@@ -50,7 +50,7 @@
     },
     "route:today": {
       title: "Today",
-      intro: "An editor reading over your shoulder: writing prompts, unfinished quests, dangling threads, continuity warnings, callbacks worth weaving back in, and project-intelligence gaps — all computed locally from your project, with dismissible cards.",
+      intro: "An editor reading over your shoulder: writing prompts (including sentences you flagged in the Speed Reader), unfinished quests, dangling threads, continuity warnings, callbacks worth weaving back in, and project-intelligence gaps — all computed locally from your project, with dismissible cards.",
       controls: [
         { selector: ".today__filter", label: "Section filters", desc: "Focus one kind of suggestion: threads, continuity, callbacks, intel gaps…" },
         { selector: "[data-callback='onDismissTodaySuggestion']", label: "Dismiss (×)", desc: "Hide a suggestion you've handled. Dismissals persist." },
@@ -127,7 +127,11 @@
     "panel:quests": panel("Quests", "Threads in motion — steps, branches, participants. Quests gone quiet show up on Today as stalled threads."),
     "panel:events": panel("Events", "Discrete happenings with causes and consequences. Extraction's chain detector links cause → effect when your prose states it."),
     "panel:timeline": panel("Timeline", "Events in book order or chronology, filterable by character, place, quest, or faction — and by whatever entity another panel has focused."),
-    "panel:lore": panel("Lore / Canon", "World rules with hard/soft bands and evidence. Hard canon feeds AI constraints; contradictions flag on Today."),
+    "panel:lore": panel(
+      "Lore / Canon",
+      "World rules with hard/soft bands and evidence. Hard canon feeds AI constraints; contradictions flag on Today — and the hardness chips slice the fact list to exactly the band you're auditing.",
+      [{ selector: "[data-testid='lore-hardness']", label: "Hardness chips", desc: "All / Hard canon / Soft / Contradicted — the contradicted chip carries a live count." }]
+    ),
     "panel:references": panel("References", "External sources and research. Toggle a reference into the AI context or mark it as a style influence."),
     "panel:tangle": panel(
       "Tangle",
@@ -136,10 +140,21 @@
     ),
     "panel:speedReader": panel(
       "Speed Reader",
-      "Read your manuscript at pace (RSVP) to catch inconsistencies — flag a moment without stopping the flow.",
-      [{ selector: "[data-callback='onOpenPanelWorkspace']", label: "Open reader", desc: "The full-screen reader with speed, progress, and flags." }]
+      "Read your manuscript at pace (RSVP) to catch inconsistencies. Known entity names tint in their type colour as they flash past, and any sentence you flag as difficult resurfaces on Today as a revision prompt.",
+      [
+        { selector: "[data-testid='sr-word']", label: "The flashing word", desc: "Tints with the entity's colour (and shows its glyph) whenever a known cast/location/item name flashes past." },
+        { selector: "[data-callback='onSpeedReaderNoteDifficulty']", label: "Flag as difficult", desc: "Saves the surrounding sentence with the session — it appears on Today under Writing prompts until you smooth it." },
+        { selector: "[data-callback='onOpenPanelWorkspace']", label: "Open reader", desc: "The full-screen reader with speed, progress, and flags." },
+      ]
     ),
-    "panel:randomTables": panel("Random Tables", "Roll-able generators (names, weather, complications). Build your own tables; rolls avoid repeats until a table exhausts."),
+    "panel:randomTables": panel(
+      "Random Tables",
+      "Roll-able generators (names, weather, complications). Build your own tables; rolls avoid repeats until a table exhausts, results can land in the Writer's Room or become entities, and your roll history keeps the good ones reachable.",
+      [
+        { selector: "[data-callback='onRerollHistoryEntry']", label: "↻ on a past roll", desc: "Roll that table again with the same count, straight from the history." },
+        { selector: ".rt__hist-acts [data-callback='onSendSuggestionToWriter']", label: "✎ on a past roll", desc: "Send a previous result into the Writer's Room composition." },
+      ]
+    ),
     "panel:aiWriter": panel(
       "AI Writer",
       "Mode-based drafting (revise / continue / write chapter…) with your project's context riding along. No provider configured? Generate still produces a local draft brief you can use or paste elsewhere.",
@@ -150,10 +165,20 @@
     ),
     "panel:review": panel(
       "Review Queue",
-      "Every extraction candidate waits here with its evidence quote and confidence band. Accept, edit, merge, or deny — singly or in bulk.",
-      [{ selector: "[data-callback='onAcceptQueueItem']", label: "Accept", desc: "Apply the candidate to the live store — it appears in its tab immediately." }]
+      "Every extraction candidate waits here with its evidence quote and confidence band. Accept, edit, merge, or deny — singly, in bulk, or all the sure ones at once.",
+      [
+        { selector: "[data-callback='onAcceptQueueItem']", label: "Accept", desc: "Apply the candidate to the live store — it appears in its tab immediately." },
+        { selector: "[data-testid='rq-accept-all-high']", label: "Accept all high", desc: "One click accepts every ≥95%-confidence candidate across all types — the ones you'd wave through anyway." },
+      ]
     ),
-    "panel:trash": panel("Trash", "Deleted records rest here for 30 days. Restore brings everything (links included) back; purge is permanent."),
+    "panel:trash": panel(
+      "Trash",
+      "Deleted records rest here for 30 days — each row shows exactly how many days remain. Restore brings everything (links included) back; purge is permanent.",
+      [
+        { selector: "[data-testid='trash-days-left']", label: "Days-left chip", desc: "The recovery countdown per record; it turns red in the final five days." },
+        { selector: "[data-callback='onRestoreTrashItemAndOpen']", label: "Restore & open", desc: "Restore the record and jump straight to it in its panel." },
+      ]
+    ),
     "panel:today": panel("Today (panel)", "The compact Today desk — same live insight cards as the Today route, beside your manuscript."),
     "panel:recent": panel("Recent", "Your latest touched records, for quick hops."),
     "panel:refs": panel("Active References", "The references currently flagged into your AI context and style influence — a quick toggle surface beside the manuscript."),
@@ -186,22 +211,34 @@
     "workspace:stat-lab": { title: "Stat Lab", intro: "Extraction phrase rules per stat with a live test box — paste a sentence and see which rules fire before you save them.", controls: [{ selector: ".fws-phrase-test__input", label: "Test phrase", desc: "Type a manuscript sentence; matching rules light up with their effects." }], tour: [] },
     "workspace:faction-registry": { title: "Faction Registry", intro: "Leaders, members (including everyone sworn via extraction), territory, allies and enemies.", controls: [], tour: [] },
     "workspace:research-library": { title: "Research Library", intro: "References with AI-context and style-influence toggles, linkable to entities; also the home of your onboarding answers.", controls: [], tour: [] },
-    "workspace:control-centre": { title: "Control Centre (Settings)", intro: "Workspace, privacy, AI providers and routing, extraction tuning (per-detector confidence), project intelligence, import/export, and keyboard shortcuts.", controls: [], tour: [] },
+    "workspace:control-centre": {
+      title: "Control Centre (Settings)",
+      intro: "Workspace, privacy, AI providers and routing, extraction tuning (per-detector confidence), project intelligence, import/export, and keyboard shortcuts — plus housekeeping for the layout, help system, and selection locks.",
+      controls: [
+        { selector: "[data-callback='onResetLayout']", label: "Reset layout", desc: "Restore the default docked-panel arrangement (the layout otherwise persists across reloads)." },
+        { selector: "[data-testid='set-reset-help']", label: "Reset help & tours", desc: "Mark every page's help and tour as unseen again." },
+        { selector: "[data-testid='set-clear-locks']", label: "Clear selection locks", desc: "Release every keep-selected lock at once." },
+      ],
+      tour: [],
+    },
     "workspace:trash-manager": { title: "Trash Manager", intro: "Everything deleted in the last 30 days, restorable with links intact.", controls: [], tour: [] },
     "workspace:relationship-map": { title: "Relationship Workspace", intro: "The full relationships surface: single/compare/network/timeline views over live bonds.", controls: [], tour: [] },
     "workspace:tangle-canvas": { title: "Tangle Canvas", intro: "Full-screen non-linear board: drag cards, draw labelled edges, bind cards to real entities. Persists locally.", controls: [], tour: [] },
-    "workspace:speed-reader": { title: "Speed Reader", intro: "RSVP reading of your chapters with speed control and inconsistency flags.", controls: [], tour: [] },
+    "workspace:speed-reader": { title: "Speed Reader", intro: "RSVP reading of your chapters with speed control and inconsistency flags. Known entity names tint in their type colour as they flash; flagged sentences resurface on Today as revision prompts.", controls: [], tour: [] },
 
     // ----- overlays ------------------------------------------------------
     "overlay:palette": {
       title: "Command Palette",
-      intro: "⌘/Ctrl-P anywhere. Search entities, chapters, references, settings and actions — or run navigation commands (Open Tangle, Open Atlas…).",
-      controls: [{ selector: "[data-ui='CommandPalette'] input", label: "Search", desc: "Type to search everything local; Enter runs the highlighted row." }],
+      intro: "⌘/Ctrl-P anywhere. A Recent group lists the last records you touched, live search covers entities/chapters/references/settings, and navigation commands (Open Tangle, Open Atlas…) are always one Enter away.",
+      controls: [
+        { selector: "[data-ui='CommandPalette'] input", label: "Search", desc: "Type to search everything local; Enter runs the highlighted row." },
+        { selector: "[data-ui='CommandPalette']", label: "Recent group", desc: "Your last-touched records (from the audit trail) — reopen any of them in one tap." },
+      ],
       tour: [],
     },
     "overlay:wheel": {
       title: "Adaptive Wheel",
-      intro: "Right-click (or long-press) for the radial menu — context-aware actions like extracting the selection or creating an entity from it.",
+      intro: "Right-click (or long-press) for the radial menu — context-aware actions like extracting the selection, creating an entity from it, rolling a table, or opening this Help for whatever you're looking at.",
       controls: [],
       tour: [],
     },

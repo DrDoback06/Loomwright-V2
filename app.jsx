@@ -39,6 +39,7 @@ function wheelSlotsForContext(ctx, queueCount) {
     { id: "speed", icon: "eye", lbl: "Speed" },
     { id: "tangle", icon: "knot", lbl: "Tangle" },
     { id: "roll", icon: "stack", lbl: "Roll" },
+    { id: "help", icon: "info", lbl: "Help" },
     { id: "more", icon: "more", lbl: "More…" },
   ];
 }
@@ -289,8 +290,44 @@ const AppShell = () => {
     return "saved " + Math.round(m / 60) + "h ago";
   };
 
-  // Panels (docked side-panel stack)
-  const [panels, setPanels] = _us_a(INITIAL_PANELS);
+  // Panels (docked side-panel stack). The arrangement persists across
+  // reloads (PanelLayoutService): stored rows re-hydrate from
+  // PANEL_PRESETS so removed presets drop out, and the saved selection
+  // comes back with each panel. First run (nothing stored) shows the
+  // showcase defaults; "Reset layout" in Settings restores them.
+  const [panels, setPanels] = _us_a(() => {
+    try {
+      const stored = window.LoomwrightBackend?.PanelLayoutService?.loadSync?.();
+      if (!Array.isArray(stored)) return INITIAL_PANELS;
+      const rows = stored
+        .map((row) => {
+          const kind = PANELKIND_BY_ID[row.id];
+          const preset = kind ? PANEL_PRESETS[kind] : null;
+          if (!preset) return null;
+          return {
+            ...preset,
+            pinned: !!row.pinned,
+            expanded: !!row.expanded,
+            collapsed: !!row.collapsed,
+            fullScreen: false,
+            dockMode: "docked",
+            order: row.order || 0,
+            selected: row.selected && row.selected.id ? row.selected : undefined,
+          };
+        })
+        .filter(Boolean);
+      return rows; // an intentionally cleared layout stays cleared
+    } catch (_) {
+      return INITIAL_PANELS;
+    }
+  });
+  // Debounced layout persistence — every arrangement change survives.
+  _ue_a(() => {
+    const t = setTimeout(() => {
+      try { window.LoomwrightBackend?.PanelLayoutService?.save?.(panels); } catch (_) {}
+    }, 250);
+    return () => clearTimeout(t);
+  }, [panels]);
   const [dataVersion, setDataVersion] = _us_a(0);
   const [lastRailClick, setLastRailClick] = _us_a(null);
 
@@ -646,16 +683,13 @@ const AppShell = () => {
       setPaletteOpen(false);
       switch (r.type) {
         case "entity": {
-          // Map entity type to its panel kind. Default = the entity type name.
-          const kind = r.entityType || r.subtype;
-          if (kind) onOpenPanel(kind);
-          if (r.entityId && r.entityType) {
-            const ent = window.LoomwrightBackend?.EntityService?.getSync?.(r.entityId, r.entityType);
-            if (ent) {
-              window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
-                detail: { entityType: r.entityType, entity: ent, mode: "full" },
-              }));
-            }
+          // A search/recents hit should land you ON the record: open its
+          // panel and select it there (focusEntityById maps entity types
+          // to panel kinds — factions→lore, skills→skillTrees, …). The
+          // old path dispatched a malformed editor event ({entityType,
+          // entity} instead of {type, initial}) and selected nothing.
+          if (r.entityId) {
+            focusEntityById({ entityType: r.entityType || r.subtype, entityId: r.entityId, label: r.title || "" });
           }
           break;
         }
@@ -719,7 +753,7 @@ const AppShell = () => {
       window.removeEventListener("lw:chapter-created", onChapterCreated);
       window.removeEventListener("lw:open-search-result", onOpenSearchResult);
     };
-  }, [openEntityEditor, openPanelWorkspace, exitPanelWorkspace, onOpenPanel]);
+  }, [openEntityEditor, openPanelWorkspace, exitPanelWorkspace, onOpenPanel, focusEntityById]);
 
   // ----- callbacks -----
   const onToggleLeftRail = _uc_a(() => setLeftExpanded((v) => !v), []);
@@ -1171,6 +1205,7 @@ const AppShell = () => {
         else onOpenPanel("review");
         break;
       case "speed": onOpenPanel("speedReader"); break;
+      case "help": window.dispatchEvent(new CustomEvent("lw:open-help", { detail: {} })); break;
       case "tangle": onOpenPanel("tangle"); break;
       case "roll": onOpenPanel("randomTables"); break;
       case "tag":
@@ -1435,8 +1470,13 @@ const AppShell = () => {
               window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "manuscript" } }));
               break;
             case "a-wheel": {
+              // Centre on the workspace when present, else the window —
+              // the command must work on every route (Writer's Room has
+              // no [data-ui='Workspace'] element).
               const r = document.querySelector("[data-ui='Workspace']")?.getBoundingClientRect();
-              if (r) onOpenAdaptiveWheel({ x: r.left + r.width / 2, y: r.top + r.height / 2, contextLabel: "Workspace" });
+              const x = r ? r.left + r.width / 2 : window.innerWidth / 2;
+              const y = r ? r.top + r.height / 2 : window.innerHeight / 2;
+              onOpenAdaptiveWheel({ x, y, contextLabel: r ? "Workspace" : "App" });
               break;
             }
             case "a-privacy":

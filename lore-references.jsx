@@ -133,13 +133,19 @@ const LorePanelBody = ({ panel }) => {
   const ctx = _lr_um(() => buildLoreContext(), [storeVersion]);
 
   const [scope, setScope] = _lr_us("all");
+  const [hardness, setHardness] = _lr_us("all"); // all | hard | soft | contradicted
   const [view, setView] = _lr_us("facts"); // facts | contradictions | ai
   const [newRule, setNewRule] = _lr_us(null); // null | "" | text being typed
   const B = () => window.LoomwrightBackend;
 
-  const filteredFacts = scope === "all"
+  const scoped = scope === "all"
     ? ctx.facts
     : ctx.facts.filter((f) => f.scope.includes(scope === "history" ? "historical" : scope));
+  const filteredFacts = hardness === "all"
+    ? scoped
+    : hardness === "contradicted"
+      ? scoped.filter((f) => (f.contradictions || 0) > 0)
+      : scoped.filter((f) => f.hardness === hardness);
 
   const updateFact = async (fact, patch) => {
     const rec = fact.raw;
@@ -174,6 +180,21 @@ const LorePanelBody = ({ panel }) => {
         </button>
       </div>
 
+      {view === "facts" && (
+        <div className="lore-hardness" data-testid="lore-hardness">
+          {[["all", "All"], ["hard", "Hard canon"], ["soft", "Soft"], ["contradicted", "Contradicted"]].map(([id, lbl]) => (
+            <button key={id}
+              className={"lore-hard" + (hardness === id ? " is-on" : "") + (id === "contradicted" ? " lore-hard--warn" : "")}
+              data-callback="onFilterStatus"
+              onClick={() => setHardness(id)}>
+              {lbl}
+              {id === "contradicted" && ctx.facts.filter((f) => (f.contradictions || 0) > 0).length > 0 && (
+                <span className="lore-bar__q">{ctx.facts.filter((f) => (f.contradictions || 0) > 0).length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
       {view === "facts" && (
         <div className="lore-scopes">
           {CANON_SCOPES.map((s) => (

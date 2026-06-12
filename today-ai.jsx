@@ -83,6 +83,27 @@ function buildTodaySuggestions() {
     }
   } catch (_) {}
 
+  // Speed Reader difficulty flags → revision prompts (the reader marked
+  // these sentences as stumbling points mid-read).
+  try {
+    const srState = B.SpeedReaderService?.loadSync?.() || { sessions: [] };
+    let srCount = 0;
+    for (const sess of srState.sessions || []) {
+      for (const n of sess.notes || []) {
+        if (!n || n.kind !== "difficulty" || !n.sentence || srCount >= 4) continue;
+        srCount += 1;
+        push({
+          id: "td-sr-" + n.id,
+          section: "prompts",
+          title: "Smooth a sentence you flagged while speed-reading",
+          why: "“" + String(n.sentence).slice(0, 140) + (String(n.sentence).length > 140 ? "…" : "") + "”" + (sess.label ? " — " + sess.label : ""),
+          action: "Open Speed Reader",
+          confidence: "uncertain",
+        });
+      }
+    }
+  } catch (_) {}
+
   // Project-intelligence gaps: nudge when the core intel sections are empty.
   try {
     const intel = B.ProjectIntelService?.loadSync?.() || {};
