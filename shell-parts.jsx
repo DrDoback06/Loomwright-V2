@@ -4,6 +4,22 @@
 
 const { useState: _useState_sp, useEffect: _useEffect_sp, useRef: _useRef_sp } = React;
 
+// Dev-only affordance gate. The Shell ↔ Design System view toggle drives an
+// internal component showcase (the Specimen view) — useful for development,
+// not for end users. It renders only when dev mode is on:
+//   • URL has ?dev or ?design, or
+//   • localStorage 'lw:v2:devMode' is set ("1"/"true").
+// Default (shipped) = off, so users never see or reach the showcase.
+const LW_DEV_MODE = (() => {
+  try {
+    const q = new URLSearchParams(window.location.search || "");
+    if (q.has("dev") || q.has("design")) return true;
+    const raw = window.localStorage.getItem("lw:v2:devMode");
+    return raw === "1" || raw === "true" || raw === '"true"' || raw === '"1"';
+  } catch (_) { return false; }
+})();
+try { window.__LW_DEV__ = LW_DEV_MODE; } catch (_) {}
+
 // ---------------------------------------------------------------------
 // TopBar
 // ---------------------------------------------------------------------
@@ -68,10 +84,12 @@ const TopBar = ({
 
       <div className="topbar__spacer"/>
 
-      <div className="view-tabs" role="tablist" aria-label="View">
-        <button className={"view-tabs__btn " + (view === "shell" ? "is-active" : "")} onClick={() => onSetView("shell")} role="tab">Shell</button>
-        <button className={"view-tabs__btn " + (view === "system" ? "is-active" : "")} onClick={() => onSetView("system")} role="tab">Design System</button>
-      </div>
+      {LW_DEV_MODE && (
+        <div className="view-tabs" role="tablist" aria-label="View">
+          <button className={"view-tabs__btn " + (view === "shell" ? "is-active" : "")} onClick={() => onSetView("shell")} role="tab">Shell</button>
+          <button className={"view-tabs__btn " + (view === "system" ? "is-active" : "")} onClick={() => onSetView("system")} role="tab">Design System</button>
+        </div>
+      )}
 
       <div className="topbar__right">
         {selectedEntity && (

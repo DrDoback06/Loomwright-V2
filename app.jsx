@@ -1370,7 +1370,8 @@ const AppShell = () => {
                 onOpenProjectIntelligence={() => onOpenPanel("references")}
                 onOpenContinuityWarning={(w) => onOpenPanel(w?.link?.type)}
                 onOpenRecentEntity={(row) => onOpenPanel(row?.link?.type)}
-                onOpenImportFlow={() => openEntityEditor({ type: "locations", mode: "json" })}
+                onImportProjectData={() => { try { window.LoomwrightBackend?.importProject?.(); } catch (_) {} }}
+                onOpenImportFlow={() => { setRouteId("writers-room"); window.dispatchEvent(new CustomEvent("lw:open-manuscript-import")); }}
               />
             ) : (
               <Workspace

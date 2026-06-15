@@ -101,7 +101,7 @@ function _homeKindForAction(action) {
 const HomeScreen = ({
   onOpenPanel, onSetRoute, onOpenReviewQueue,
   onOpenProjectIntelligence, onOpenContinuityWarning,
-  onOpenRecentEntity, onOpenImportFlow,
+  onOpenRecentEntity, onOpenImportFlow, onImportProjectData,
 }) => {
   // Live project stats — recomputed on every store mutation. A fresh
   // project yields zeros, never the static demo numbers.
@@ -338,7 +338,7 @@ const HomeScreen = ({
               </button>
               <button
                 className="home__hero-cta home__hero-cta--ghost"
-                onClick={onOpenImportFlow}
+                onClick={onImportProjectData}
                 data-callback="onImportProjectData"
                 data-testid="home-empty-import"
               >
