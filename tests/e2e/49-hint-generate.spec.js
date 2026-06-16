@@ -16,7 +16,7 @@ async function openEditorInAIMode(page) {
   return ed;
 }
 
-test.describe("T45. Hint-seeded AI generation", () => {
+test.describe("T49. Hint-seeded AI generation", () => {
   test("offline: generating without a provider shows a graceful message", async ({ page }) => {
     await openFreshApp(page);
     await openEditorInAIMode(page);

@@ -46,7 +46,7 @@ const EEField = ({ field, value, onChange, all, ctx }) => {
       return (
         <div className="ee-field" style={field.span === 2 ? { gridColumn: "1 / -1" } : {}}>
           {lbl}
-          <input className="ee-input" placeholder={field.placeholder} value={value || ""} onChange={(e) => onChange(e.target.value)}/>
+          <input className="ee-input" data-testid={"ee-field-" + field.id} placeholder={field.placeholder} value={value || ""} onChange={(e) => onChange(e.target.value)}/>
           {field.hint && <span className="ee-field__hint">{field.hint}</span>}
         </div>
       );

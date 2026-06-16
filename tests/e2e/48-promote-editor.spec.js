@@ -29,7 +29,7 @@ async function seedAndOpen(page) {
   await expect(page.locator("[data-ui='EntityEditor']")).toBeVisible({ timeout: 6000 });
 }
 
-test.describe("T44. Promote-from-queue universal editor", () => {
+test.describe("T48. Promote-from-queue universal editor", () => {
   test("Edit opens the universal editor with the four-button promote flow", async ({ page }) => {
     await openFreshApp(page);
     await seedAndOpen(page);

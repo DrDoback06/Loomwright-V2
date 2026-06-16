@@ -44,7 +44,7 @@ async function openToday(page) {
   return reel;
 }
 
-test.describe("T42. Today Foresight Reel", () => {
+test.describe("T46. Today Foresight Reel", () => {
   test("renders insight-derived foresight with rotation controls", async ({ page }) => {
     await openFreshApp(page);
     await seedReelProject(page);

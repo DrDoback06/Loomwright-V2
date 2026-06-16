@@ -53,16 +53,17 @@ test.describe("T17. Unified extraction surfaces", () => {
     expect(multi.ids).toContain("b");
   });
 
-  test("Edit opens the global modal pre-filled, applies edits, creates the entity", async ({ page }) => {
+  test("Edit opens the universal editor pre-filled, applies edits, creates the entity", async ({ page }) => {
     await openFreshApp(page);
     const id = await seedReview(page, { entityType: "locations", name: "Vraskaa" });
     await page.evaluate((i) => window.LoomwrightDispatchCallback("onEditQueueItem", { detail: { id: i } }), id);
-    const modal = page.locator("[data-testid='edit-candidate-modal']");
-    await expect(modal).toBeVisible({ timeout: 5000 });
-    await expect(page.locator("[data-testid='edit-name']")).toHaveValue("Vraskaa");
-    await page.locator("[data-testid='edit-name']").fill("Vraska Pass");
-    await page.locator("[data-testid='edit-accept']").click();
-    await expect(modal).toHaveCount(0);
+    const ed = page.locator("[data-ui='EntityEditor']");
+    await expect(ed).toBeVisible({ timeout: 5000 });
+    const nameInput = page.locator("[data-testid='ee-field-name']");
+    await expect(nameInput).toHaveValue("Vraskaa");
+    await nameInput.fill("Vraska Pass");
+    await page.locator("[data-testid='ee-promote-assign']").click();
+    await expect(ed).toHaveCount(0);
     const live = await page.evaluate(() => window.LoomwrightBackend.EntityService.listSync("locations"));
     expect(live.some((e) => e.name === "Vraska Pass")).toBe(true);
     const stillPending = await page.evaluate((i) => window.LoomwrightBackend.ReviewService.listSync().some((q) => q.id === i && q.status === "pending"), id);

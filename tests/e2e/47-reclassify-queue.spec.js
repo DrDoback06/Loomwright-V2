@@ -7,7 +7,7 @@
 const { test, expect } = require("@playwright/test");
 const { openFreshApp } = require("./helpers");
 
-test.describe("T43. Review-queue inline reclassification", () => {
+test.describe("T47. Review-queue inline reclassification", () => {
   test("retype a candidate on the card, then Accept lands it under the new type", async ({ page }) => {
     await openFreshApp(page);
 
