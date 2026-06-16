@@ -1414,6 +1414,98 @@
 }
 
 /* =====================================================================
+   FORESIGHT REEL — the bold co-author hub at the top of Today
+   ===================================================================== */
+.foresight-reel {
+  margin: 4px 0 8px;
+  padding: 14px 16px 12px;
+  background: var(--bg-paper-2);
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-4);
+  box-shadow: var(--shadow-1);
+}
+.foresight-reel--high { border-left-color: var(--danger, #b4453a); }
+.foresight-reel--warn { border-left-color: var(--warn, #c98a2b); }
+.foresight-reel--info { border-left-color: var(--accent); }
+.foresight-reel__bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.foresight-reel__eyebrow {
+  font-family: var(--font-sans); font-weight: 700;
+  font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--accent-deep, var(--ink-1));
+}
+.foresight-reel__lede {
+  font-family: var(--font-serif); font-style: italic;
+  color: var(--ink-3); font-size: var(--fs-sm);
+}
+.foresight-reel__focus {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-sans); font-size: var(--fs-2xs);
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-4);
+}
+.foresight-reel__focus select {
+  font-family: var(--font-sans); font-size: var(--fs-xs);
+  padding: 3px 6px; border: 1px solid var(--line-2);
+  border-radius: var(--r-pill); background: var(--bg-paper-1, var(--bg-paper-2)); color: var(--ink-2);
+  text-transform: none; letter-spacing: 0; cursor: pointer;
+}
+.foresight-reel__stage { display: flex; align-items: stretch; gap: 8px; }
+.foresight-reel__nav {
+  flex: 0 0 auto; width: 32px; border: 1px solid var(--line-2);
+  background: var(--bg-paper-1, transparent); color: var(--ink-2);
+  border-radius: var(--r-3, 8px); font-size: var(--fs-xl); cursor: pointer; line-height: 1;
+}
+.foresight-reel__nav:disabled { opacity: 0.3; cursor: default; }
+.foresight-reel__card {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column; gap: 7px;
+  animation: foresight-fade 0.32s ease;
+}
+@keyframes foresight-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.foresight-reel__card-head {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-sans); font-size: var(--fs-2xs);
+  text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-4);
+}
+.foresight-reel__kind { font-weight: 700; color: var(--accent-deep, var(--ink-2)); }
+.foresight-reel__chapter { margin-left: auto; }
+.foresight-reel__title {
+  font-family: var(--font-display); font-size: var(--fs-2xl);
+  color: var(--ink-1); line-height: 1.12;
+}
+.foresight-reel__why {
+  font-family: var(--font-serif); font-style: italic;
+  color: var(--ink-3); font-size: var(--fs-md, var(--fs-sm));
+}
+.foresight-reel__chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.foresight-reel__actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.foresight-reel__empty {
+  padding: 14px 6px; color: var(--ink-3);
+  font-family: var(--font-serif); font-style: italic; font-size: var(--fs-md, var(--fs-sm));
+}
+.foresight-reel__foot {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line-2);
+}
+.foresight-reel__play {
+  border: 1px solid var(--line-2); background: transparent; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: var(--fs-2xs);
+  padding: 3px 8px; border-radius: var(--r-pill); cursor: pointer;
+}
+.foresight-reel__dots { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; }
+.foresight-reel__dot {
+  width: 8px; height: 8px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--line-3, var(--line-2)); background: transparent; cursor: pointer;
+}
+.foresight-reel__dot.is-on { background: var(--accent); border-color: var(--accent-deep, var(--accent)); }
+.foresight-reel__count {
+  font-family: var(--font-sans); font-size: var(--fs-2xs); color: var(--ink-4);
+}
+
+/* =====================================================================
    AI WRITER PANEL
    ===================================================================== */
 .aiw {

@@ -91,6 +91,8 @@ function buildTodaySuggestions() {
     for (const ins of insights) {
       push({
         id: ins.id,
+        kind: ins.kind,
+        relatedIds: ins.relatedIds || [],
         section: INSIGHT_SECTION[ins.kind] || "untouched",
         title: ins.title,
         why: ins.body + (ins.evidence?.length ? ` — e.g. Ch. ${ins.evidence[0].chapter}: "${ins.evidence[0].quote}"` : ""),
@@ -258,11 +260,136 @@ const TodayCardCompact = ({ s, onSelectEntity, onDismiss }) => (
 );
 
 // ---------------------------------------------------------------------
+// ForesightReel — the "bold co-author" hub at the top of Today: a
+// rotating, ranked feed of the engine's foresight (continuity risks,
+// dangling threads, callbacks, relationship & payoff nudges). Reads the
+// same live suggestions but shows only insight-derived items (id "ins-…").
+// "Run on" scopes the reel to one character (computeForEntity-equivalent).
+// ---------------------------------------------------------------------
+const REEL_KIND_LABELS = {
+  "contradiction": "Continuity risk",
+  "broken-link": "Continuity risk",
+  "stalled-thread": "Dangling thread",
+  "relationship-thread": "Relationship",
+  "absence-gap": "Absent character",
+  "promise-payoff": "Setup & payoff",
+  "staleness": "Gone quiet",
+  "incomplete": "Thin record",
+  "orphan": "Unconnected",
+};
+const reelKindLabel = (s) => REEL_KIND_LABELS[s && s.kind] || "Insight";
+
+const ForesightReel = ({ suggestions, onSelectEntity, onDismiss }) => {
+  const B = () => (typeof window !== "undefined") && window.LoomwrightBackend;
+  const [idx, setIdx] = _td_us(0);
+  const [paused, setPaused] = _td_us(false);
+  const [focusId, setFocusId] = _td_us("");
+
+  const cast = _td_um(() => {
+    try { return (B()?.EntityService?.listSync("cast") || []).filter((c) => c && c.status !== "deleted"); }
+    catch (_) { return []; }
+  }, [suggestions]);
+
+  const foresightAll = _td_um(() => suggestions.filter((s) => String(s.id).startsWith("ins-")), [suggestions]);
+  const items = _td_um(() => {
+    if (!focusId) return foresightAll;
+    return foresightAll.filter((s) => (s.related || []).some((r) => r.id === focusId) || (s.relatedIds || []).includes(focusId));
+  }, [foresightAll, focusId]);
+
+  _td_ue(() => { if (idx >= items.length && items.length) setIdx(0); }, [items.length, idx]);
+  _td_ue(() => {
+    if (paused || items.length <= 1) return;
+    const t = setInterval(() => setIdx((i) => (i + 1) % items.length), 7000);
+    return () => clearInterval(t);
+  }, [paused, items.length]);
+
+  // Empty project (no foresight and no characters to scope to): render nothing.
+  if (!foresightAll.length && !cast.length) return null;
+
+  const cur = items[idx] || null;
+  const tone = cur ? (cur.confidence === "high" ? "high" : cur.confidence === "strong" ? "warn" : "info") : "info";
+  const focusName = focusId ? (cast.find((c) => c.id === focusId)?.name || "this character") : null;
+
+  return (
+    <section className={"foresight-reel foresight-reel--" + tone} data-ui="ForesightReel">
+      <div className="foresight-reel__bar">
+        <span className="foresight-reel__eyebrow">⚡ Foresight</span>
+        <span className="foresight-reel__lede">Your co-author's read on where the story stands.</span>
+        <span style={{ flex: 1 }}/>
+        <label className="foresight-reel__focus">
+          Run on
+          <select value={focusId} onChange={(e) => { setFocusId(e.target.value); setIdx(0); }}>
+            <option value="">the whole story</option>
+            {cast.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+      </div>
+
+      {!cur ? (
+        <div className="foresight-reel__empty">
+          {focusName
+            ? `Nothing flags for ${focusName} right now — their thread is holding.`
+            : "No continuity risks or loose threads right now. The story's holding together — keep writing."}
+        </div>
+      ) : (
+        <div className="foresight-reel__stage">
+          <button className="foresight-reel__nav" title="Previous" disabled={items.length <= 1}
+            onClick={() => setIdx((i) => (i - 1 + items.length) % items.length)}>‹</button>
+          <div className="foresight-reel__card" key={cur.id}>
+            <div className="foresight-reel__card-head">
+              <span className="foresight-reel__kind">{reelKindLabel(cur)}</span>
+              <ConfidenceBadge level={cur.confidence} value={cur.confidence === "high" ? 95 : cur.confidence === "strong" ? 78 : 56}/>
+              {cur.chapter && cur.chapter !== "—" && <span className="foresight-reel__chapter">{cur.chapter}</span>}
+            </div>
+            <div className="foresight-reel__title">{cur.title}</div>
+            <div className="foresight-reel__why">{cur.why}</div>
+            {(cur.related || []).length > 0 && (
+              <div className="foresight-reel__chips">
+                {cur.related.map((r) => (
+                  <button key={r.id} className="rpg-chip" data-callback="onOpenRelatedTab"
+                    onClick={() => onSelectEntity && onSelectEntity(r)}>
+                    {(ENTITY_TYPES[r.type]?.glyph || "·")} {r.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="foresight-reel__actions">
+              <button className="rpg-btn rpg-btn--small rpg-btn--primary" data-callback="onSendSuggestionToWriter">{cur.action}</button>
+              <button className="rpg-btn rpg-btn--small" data-callback="onSendSuggestionToTangle">→ Tangle</button>
+              <button className="rpg-btn rpg-btn--small rpg-btn--ghost" data-callback="onDismissTodaySuggestion"
+                onClick={() => onDismiss && onDismiss(cur.id)}>Dismiss</button>
+            </div>
+          </div>
+          <button className="foresight-reel__nav" title="Next" disabled={items.length <= 1}
+            onClick={() => setIdx((i) => (i + 1) % items.length)}>›</button>
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <div className="foresight-reel__foot">
+          <button className="foresight-reel__play" onClick={() => setPaused((p) => !p)}
+            title={paused ? "Resume rotation" : "Pause rotation"}>{paused ? "▶ Play" : "⏸ Pause"}</button>
+          <div className="foresight-reel__dots">
+            {items.slice(0, 14).map((s, i) => (
+              <button key={s.id} className={"foresight-reel__dot" + (i === idx ? " is-on" : "")}
+                title={s.title} onClick={() => setIdx(i)}/>
+            ))}
+          </div>
+          <span className="foresight-reel__count">{idx + 1} / {items.length}</span>
+        </div>
+      )}
+    </section>
+  );
+};
+
+// ---------------------------------------------------------------------
 // TodayScreen — full-width route (when routeId === "today")
 // ---------------------------------------------------------------------
 const TodayScreen = ({ onSelectEntity }) => {
   const [filter, setFilter] = _td_us("all");
-  const suggestions = useTodaySuggestions();
+  const [dismissed, setDismissed] = _td_us(_tdLoadDismissed);
+  const onDismiss = (id) => setDismissed((s) => { const n = new Set(s); n.add(id); _tdSaveDismissed(n); return n; });
+  const suggestions = useTodaySuggestions().filter((s) => !dismissed.has(s.id));
   const filtered = filter === "all" ? suggestions : suggestions.filter((s) => s.section === filter);
   const bySection = _td_um(() => {
     const m = {};
@@ -289,6 +416,8 @@ const TodayScreen = ({ onSelectEntity }) => {
           </div>
         </header>
 
+        <ForesightReel suggestions={suggestions} onSelectEntity={onSelectEntity} onDismiss={onDismiss}/>
+
         {filtered.length === 0 && (
           <section className="today__section" data-ui="TodayEmpty">
             <div className="today__section-head">
@@ -308,7 +437,7 @@ const TodayScreen = ({ onSelectEntity }) => {
                 <span className="today__section-sub">{sec.sub}</span>
               </div>
               <div className="today__cards">
-                {items.map((s) => <TodayCardCompact key={s.id} s={s} onSelectEntity={onSelectEntity}/>)}
+                {items.map((s) => <TodayCardCompact key={s.id} s={s} onSelectEntity={onSelectEntity} onDismiss={() => onDismiss(s.id)}/>)}
               </div>
             </section>
           );
