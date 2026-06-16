@@ -97,6 +97,22 @@ function _homeKindForAction(action) {
   if (action === "audit.undo") return "panel";
   return "panel";
 }
+// A project counts as "empty" (show the start card) only when the sample
+// isn't loaded AND there are no live entities AND no drafted chapters.
+function _homeProjectIsEmpty() {
+  if (window.__LW_SAMPLE_LOADED__) return false;
+  const B = window.LoomwrightBackend;
+  try {
+    const live = B?.EntityService ? B.EntityService.listAllSync() : {};
+    if (Object.values(live).some((byId) => byId && Object.keys(byId).length)) return false;
+    const st = B?.ManuscriptChapterService?.loadSync?.() || {};
+    const chs = st.chapters || [];
+    const mans = st.manuscripts || {};
+    const hasText = (c) => (c.words || 0) > 0 || (c.bodyText && c.bodyText.trim()) || (mans[c.id] && mans[c.id].text && String(mans[c.id].text).trim());
+    if (chs.some((c) => !c.reserved && hasText(c))) return false;
+  } catch (_) {}
+  return true;
+}
 
 const HomeScreen = ({
   onOpenPanel, onSetRoute, onOpenReviewQueue,
@@ -257,26 +273,16 @@ const HomeScreen = ({
   // never staring at a fake-but-static "Pale Reach" dashboard. The
   // demo cards below render as inspiration; the empty-state card is
   // the actionable surface.
-  const [emptyState, setEmptyState] = _hm_us(() => {
-    const sampleLoaded = !!window.__LW_SAMPLE_LOADED__;
-    const ES = window.LoomwrightBackend?.EntityService;
-    const live = ES ? ES.listAllSync() : {};
-    const hasAny = Object.values(live).some((byId) => byId && Object.keys(byId).length);
-    return !sampleLoaded && !hasAny;
-  });
+  const [emptyState, setEmptyState] = _hm_us(() => _homeProjectIsEmpty());
   React.useEffect(() => {
-    const recompute = () => {
-      const sampleLoaded = !!window.__LW_SAMPLE_LOADED__;
-      const ES = window.LoomwrightBackend?.EntityService;
-      const live = ES ? ES.listAllSync() : {};
-      const hasAny = Object.values(live).some((byId) => byId && Object.keys(byId).length);
-      setEmptyState(!sampleLoaded && !hasAny);
-    };
+    const recompute = () => setEmptyState(_homeProjectIsEmpty());
     window.addEventListener("lw:entity-store-updated", recompute);
+    window.addEventListener("lw:manuscript-chapters-updated", recompute);
     window.addEventListener("lw:project-imported", recompute);
     window.addEventListener("lw:backend-ready", recompute);
     return () => {
       window.removeEventListener("lw:entity-store-updated", recompute);
+      window.removeEventListener("lw:manuscript-chapters-updated", recompute);
       window.removeEventListener("lw:project-imported", recompute);
       window.removeEventListener("lw:backend-ready", recompute);
     };
