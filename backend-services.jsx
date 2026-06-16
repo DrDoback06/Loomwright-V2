@@ -4772,6 +4772,35 @@
   const NER_ITEM_VERB_BEFORE = /\b(?:called|named|wielded|carried|drew|sheathed|forged|enchanted|found|holding|held|equipped|gripped|raised)\s+$/i;
   const NER_ITEM_NOUN_END = /(?:sword|blade|dagger|knife|axe|bow|spear|lance|mace|hammer|flail|club|whip|ring|amulet|crown|circlet|cloak|robe|staff|wand|rod|sceptre|scepter|shield|tome|grimoire|chalice|goblet|orb|gauntlets?|helm|helmet|pendant|necklace|locket|relic|key|crystal|gem|jewel|stone|elixir|potion|scroll|banner|horn|bell|mirror|talisman|charm|armour|armor|plate|mail|boots|gloves|belt|brooch)$/i;
   const NER_SKILL_BEFORE = /\b(?:skill|spell|ability|technique|power|talent|art|incantation|maneuver|manoeuvre)\s+(?:(?:called|named|known\s+as)\s+)?$/i;
+  // Place head-nouns that appear *inside* a proper-noun surface ("Pale
+  // Cathedral", "Drowned Marsh", "Keep of Ashfall"). When the LAST token is
+  // one of these the span is almost certainly a location; a non-final hit is
+  // a weaker signal. Mirrors NER_ITEM_NOUN_END for items.
+  const NER_LOC_NOUN_SRC = "city|keep|village|town|castle|fortress|hold|port|harbour|harbor|isle|island|river|mountain|mountains|forest|gate|gates|tower|temple|cathedral|shrine|abbey|monastery|sanctum|spire|inn|tavern|kingdom|realm|valley|vale|peak|pass|road|sea|ocean|lake|mere|hall|palace|citadel|manor|estate|court|province|county|shire|domain|territory|wastes|plains|desert|swamp|marsh|fen|moor|heath|caverns|caves|crypt|vault|barrow|ruins|district|quarter|bridge|ford|crossing|reach|march|hollow|downs|fields|garden|gardens|grove|glade|wood|woods|hill|hills|cliffs|coast|shore|bay|cove|basin|ridge|gorge|canyon|chasm";
+  const NER_LOC_NOUN_TOKENS = new Set(NER_LOC_NOUN_SRC.split("|"));
+  // A proper noun immediately followed by one of these verbs is the SUBJECT
+  // of an action/speech — a strong "this is a character" cue that catches
+  // single-mention principals ("Korrin sharpened…", "Brannick only laughed").
+  // Deliberately EXCLUDES ambiguous motion/time verbs (came, passed, arrived,
+  // rang, fell, grew, began, ended) so capitalised common nouns aren't caught.
+  // Up to two leading adverbs are tolerated ("Brannick only laughed").
+  const NER_PERSON_VERB_AFTER = new RegExp(
+    "^[,\"'”’\\s]*(?:(?:just|then|also|only|simply|merely|again|once|now|soon|still|even|slowly|quickly|quietly|softly|suddenly|finally|barely|nearly|almost|\\w+ly)\\s+){0,2}" +
+    "\\b(?:said|asked|replied|whispered|shouted|murmured|cried|answered|muttered|growled|hissed|breathed|snapped|wondered|added|continued|exclaimed|declared|warned|" +
+    "laughed|smiled|grinned|frowned|sighed|nodded|shrugged|gasped|spat|cursed|prayed|sang|wept|sobbed|knelt|crouched|leapt|lunged|sprang|" +
+    "drew|raised|lowered|gripped|clenched|seized|grabbed|snatched|hurled|swung|struck|stabbed|slashed|parried|sharpened|whittled|carved|forged|sheathed|" +
+    "drank|ate|sipped|gulped|glanced|stared|glared|watched|studied|gestured|pointed|beckoned|waved|turned|spun|paused|hesitated|counted|read|wrote|drafted|" +
+    "rode|spurred|dismounted|climbed|scaled|crept|stalked|dashed|bolted|fled|chased|" +
+    "carried|held|lifted|bore|brought|took|gave|handed|threw|tossed|dropped|pulled|pushed|opened|shut|closed|lit|poured|wiped|slung|shouldered|mounted|halted|wielded|clutched|cradled|tucked|fastened|buckled|donned)\\b", "i");
+  // Capitalised common-noun traps (sentence-initial "Time", "Morning",
+  // "Spring", "North") and bare honorific/title words ("Captain", "Lord") that
+  // must never become discovery cards on their own.
+  const NER_COMMON_CAP = new Set(("time morning noon afternoon evening night midnight dawn dusk twilight day days week weeks month months year years " +
+    "today tomorrow yesterday spring summer autumn fall winter north south east west later soon nearby beyond ahead behind above below " +
+    "nothing something anything everything someone anyone everyone nobody somewhere anywhere everywhere here there").split(" "));
+  const NER_TITLE_WORDS = new Set(("lord lady ser sir dame king queen prince princess captain commander lieutenant colonel major sergeant master mistress " +
+    "maester archon general admiral doctor dr professor mr mrs ms miss father brother sister aunt uncle saint st emperor empress duke duchess " +
+    "baron baroness count countess elder mother").split(" "));
 
   // Find runs of capitalised words (multi-word proper nouns), trimming
   // leading stopwords (sentence-initial "The Keep" → "Keep") and recording
@@ -4814,8 +4843,12 @@
       while (s <= last && NER_STOPWORDS.has(tokens[s].word.toLowerCase())) s++;
       if (s <= last) {
         const start = tokens[s].start;
-        const end = tokens[last].end;
-        const surface = text.slice(start, end);
+        let end = tokens[last].end;
+        let surface = text.slice(start, end);
+        // Strip a trailing possessive ("Vorrik's" -> "Vorrik") so the bare
+        // form groups and names cleanly; shrink `end` to keep offsets valid.
+        const pm = /['’]s?$/.exec(surface);
+        if (pm) { end -= pm[0].length; surface = surface.slice(0, -pm[0].length); }
         if (surface.length >= 2 && !NER_STOPWORDS.has(surface.toLowerCase())) {
           spans.push({ surface, start, end, atSentenceStart: atStart && s === i });
         }
@@ -4832,11 +4865,23 @@
     let best = null;
     const consider = (c) => { if (c && (!best || c.confidence > best.confidence)) best = c; };
     if (NER_ITEM_NOUN_END.test(surface)) consider({ type: "items", signal: "item-name", confidence: 0.68 });
+    // Location head-noun *within* the surface ("Pale Cathedral", "Drowned
+    // Marsh"). The LAST token is the head (strong); a non-final hit ("Keep of
+    // Ashfall") is weaker. Skip when the head is an item noun, so "Hollow
+    // Crown" (head "crown") stays an item rather than a place.
+    {
+      const toks = surface.toLowerCase().split(/\s+/).filter(Boolean);
+      const head = toks[toks.length - 1];
+      const headIsItem = NER_ITEM_NOUN_END.test(surface);
+      if (!headIsItem && toks.length >= 2 && head && NER_LOC_NOUN_TOKENS.has(head)) consider({ type: "locations", signal: "loc-headnoun", confidence: 0.78 });
+      else if (!headIsItem && toks.length >= 2 && toks.some((t) => NER_LOC_NOUN_TOKENS.has(t))) consider({ type: "locations", signal: "loc-kind", confidence: 0.62 });
+    }
     for (const o of occurrences) {
       const before = text.slice(Math.max(0, o.start - 32), o.start);
       const after = text.slice(o.end, Math.min(text.length, o.end + 28));
       if (NER_HONORIFICS_BEFORE.test(before)) return { type: "cast", signal: "honorific", confidence: 0.82 };
       if (NER_DIALOGUE_AFTER.test(after) || NER_DIALOGUE_BEFORE.test(before)) consider({ type: "cast", signal: "dialogue", confidence: 0.8 });
+      if (NER_PERSON_VERB_AFTER.test(after)) consider({ type: "cast", signal: "action-verb", confidence: 0.7 });
       if (NER_LOC_OF_BEFORE.test(before)) { consider({ type: "locations", signal: "loc-cue", confidence: 0.8 }); }
       if (NER_LOC_HEADNOUN_AFTER.test(after)) consider({ type: "locations", signal: "loc-headnoun", confidence: 0.7 });
       if (NER_SKILL_BEFORE.test(before)) consider({ type: "skills", signal: "skill-cue", confidence: 0.72 });
@@ -4845,6 +4890,45 @@
       if (NER_LOC_PREP_BEFORE.test(before)) consider({ type: "locations", signal: "loc-prep", confidence: 0.62 });
     }
     return best;
+  }
+
+  // Merge discovery groups whose significant tokens are subset-related, so a
+  // recurring name split across surface forms ("Saren" + "Saren of Hess" +
+  // "Lord Saren") pools its occurrences and clears the recurrence floor as one
+  // entity instead of vanishing as three singletons. Canonical = the most
+  // frequent surface (tie: fewest tokens); the others become aliases.
+  // Connectors and bare titles are ignored when comparing.
+  function mergeVariantGroups(list) {
+    const sig = (s) => String(s || "").toLowerCase().split(/\s+/)
+      .filter((t) => t && !NER_CONNECTORS.has(t) && !NER_TITLE_WORDS.has(t));
+    const entries = [];
+    const passthrough = [];
+    for (const g of list) {
+      const set = new Set(sig(g.surface));
+      if (set.size) entries.push({ g, sig: set }); else passthrough.push(g);
+    }
+    // Canonical bases first: more occurrences, then fewer tokens.
+    entries.sort((a, b) => (b.g.occ.length - a.g.occ.length) || (a.sig.size - b.sig.size));
+    const used = new Set();
+    const out = [];
+    const subset = (small, big) => [...small].every((t) => big.has(t));
+    for (let i = 0; i < entries.length; i++) {
+      if (used.has(i)) continue;
+      const base = entries[i];
+      const aliases = [];
+      for (let j = i + 1; j < entries.length; j++) {
+        if (used.has(j)) continue;
+        const other = entries[j];
+        if (subset(other.sig, base.sig) || subset(base.sig, other.sig)) {
+          used.add(j);
+          base.g.occ.push(...other.g.occ);
+          if (other.g.surface !== base.g.surface) aliases.push(other.g.surface);
+        }
+      }
+      if (aliases.length) base.g.variantAliases = [...new Set(aliases)];
+      out.push(base.g);
+    }
+    return out.concat(passthrough);
   }
 
   // Discover brand-new entities from prose. Returns { candidates,
@@ -4866,10 +4950,14 @@
       g.occ.push(sp);
       if (!sp.atSentenceStart) g.surface = sp.surface; // prefer a mid-sentence form
     }
-    for (const g of groups.values()) {
+    for (const g of mergeVariantGroups([...groups.values()])) {
       if (out.length >= maxCandidates) break;
       const surface = g.surface;
       const count = g.occ.length;
+      // Veto bare capitalised common nouns ("Time", "Spring") and lone titles
+      // ("Captain") regardless of any local signal — they aren't entities.
+      const surfLc = surface.toLowerCase();
+      if (!/\s/.test(surface) && (NER_COMMON_CAP.has(surfLc) || NER_TITLE_WORDS.has(surfLc))) continue;
       const known = findKnownEntityMention(surface, { threshold: 0.9 });
       let matchType = "new";
       if (known && (known.matchType === "exact" || known.matchType === "nickname")) continue;
@@ -4911,6 +4999,10 @@
       if (signal === "honorific") {
         const stripped = surface.replace(NER_HONORIFIC_LEAD, "").trim();
         if (stripped.length >= 2) { aliases.push(surface); name = stripped; }
+      }
+      // Carry merged variant forms ("Saren of Hess" for canonical "Saren").
+      if (g.variantAliases) for (const a of g.variantAliases) {
+        if (a && a !== name && !aliases.includes(a)) aliases.push(a);
       }
       const rep = g.occ.find((o) => !o.atSentenceStart) || g.occ[0];
       const cand = buildCandidate({
