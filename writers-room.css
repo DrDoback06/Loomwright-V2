@@ -477,6 +477,22 @@
 }
 .wr-scene-break__line { flex: 1; height: 1px; background: var(--line-2); }
 
+/* Block formats inserted from the toolbar (Heading / Quote). */
+.wr-h {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  color: var(--ink-1);
+  line-height: 1.2;
+  margin: var(--sp-9) 0 var(--sp-4);
+}
+.wr-q {
+  margin: var(--sp-6) 0;
+  padding: var(--sp-2) 0 var(--sp-2) var(--sp-6);
+  border-left: 3px solid var(--accent);
+  color: var(--ink-2);
+  font-style: italic;
+}
+
 /* Empty / loading / error chapter states */
 .wr-canvas--empty,
 .wr-canvas--loading,

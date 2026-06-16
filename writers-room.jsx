@@ -411,9 +411,9 @@ const ManuscriptToolbar = ({
         <TB label="Strikethrough"       testid="wr-tb-strike"    className="wr-toolbar__btn--text wr-toolbar__btn--strike" onClick={() => onAction("strike")}>S</TB>
       </div>
       <div className="wr-toolbar__group">
-        <TB label="Heading"             disabled className="wr-toolbar__btn--text">H</TB>
-        <TB label="Scene break"         disabled icon="bars"/>
-        <TB label="Quote"               disabled className="wr-toolbar__btn--text">"</TB>
+        <TB label="Heading"     testid="wr-tb-heading"    className="wr-toolbar__btn--text" onClick={() => onAction("heading")}>H</TB>
+        <TB label="Scene break" testid="wr-tb-scenebreak" icon="bars" onClick={() => onAction("scene-break")}/>
+        <TB label="Quote"       testid="wr-tb-quote"      className="wr-toolbar__btn--text" onClick={() => onAction("quote")}>"</TB>
       </div>
       <div className="wr-toolbar__group">
         <TB label="Add paragraph note"  testid="wr-tb-note" icon="paper" onClick={() => onAction("inline-note")}/>
@@ -967,6 +967,8 @@ function _wrBuildBodyHtml(paragraphs, lookup) {
     const text = _wrParagraphText(p);
     const inner = _wrHighlightHtml(text, lookup) || "<br>";
     const author = p && p.author ? ` data-author="${_wrEscapeHtml(p.author)}"` : "";
+    if (p && p.kind === "heading") return `<h2 class="wr-h" data-paragraph-id="${_wrEscapeHtml(id)}"${author}>${inner}</h2>`;
+    if (p && p.kind === "quote") return `<blockquote class="wr-q" data-paragraph-id="${_wrEscapeHtml(id)}"${author}>${inner}</blockquote>`;
     return `<p class="wr-p" data-paragraph-id="${_wrEscapeHtml(id)}"${author}>${inner}</p>`;
   }).join("");
 }
@@ -984,6 +986,9 @@ function _wrSnapshotBody(bodyEl) {
       let id = el.getAttribute("data-paragraph-id");
       if (!id) { id = _wrGenId("p"); try { el.setAttribute("data-paragraph-id", id); } catch (_e) {} }
       const text = (el.textContent || "").replace(/ /g, " ");
+      const tag = el.tagName;
+      if (tag === "H1" || tag === "H2" || tag === "H3") { out.push({ id, text, kind: "heading" }); return; }
+      if (tag === "BLOCKQUOTE") { out.push({ id, text, kind: "quote" }); return; }
       out.push({ id, text });
     });
   } else {
@@ -993,6 +998,47 @@ function _wrSnapshotBody(bodyEl) {
   }
   const text = out.filter((p) => !p.sceneBreak).map((p) => p.text || "").join("\n\n");
   return { paragraphs: out, text, html: bodyEl.innerHTML, words: _wrCountWords(text) };
+}
+
+// Toolbar block-format helpers over the uncontrolled contentEditable. The
+// snapshot maps the resulting <h2>/<blockquote>/scene-break back to a
+// paragraph `kind` so block formatting survives save + reload.
+function _wrCurrentBlockTag(body) {
+  const sel = window.getSelection && window.getSelection();
+  let n = sel && sel.anchorNode;
+  while (n && n !== body) {
+    if (n.nodeType === 1 && /^(H1|H2|H3|BLOCKQUOTE|P)$/.test(n.tagName)) return n.tagName;
+    n = n.parentNode;
+  }
+  return "";
+}
+function _wrInsertSceneBreak(body) {
+  if (!body) return;
+  const sel = window.getSelection && window.getSelection();
+  let p = sel && sel.anchorNode;
+  while (p && p.parentNode !== body) p = p.parentNode;
+  const sb = document.createElement("div");
+  sb.className = "wr-scene-break";
+  sb.setAttribute("data-kind", "scene-break");
+  sb.setAttribute("data-paragraph-id", _wrGenId("sb"));
+  sb.setAttribute("contenteditable", "false");
+  sb.innerHTML = '<span class="wr-scene-break__line"></span><span aria-hidden="true">※   ※   ※</span><span class="wr-scene-break__line"></span>';
+  const after = document.createElement("p");
+  after.className = "wr-p";
+  after.setAttribute("data-paragraph-id", _wrGenId("p"));
+  after.innerHTML = "<br>";
+  if (p && p.parentNode === body) {
+    body.insertBefore(sb, p.nextSibling);
+    body.insertBefore(after, sb.nextSibling);
+  } else {
+    body.appendChild(sb);
+    body.appendChild(after);
+  }
+  try {
+    const range = document.createRange();
+    range.setStart(after, 0); range.collapse(true);
+    sel.removeAllRanges(); sel.addRange(range);
+  } catch (_e) {}
 }
 
 const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, spellCheck, onInput, onDoubleClick, onMouseOver, onMouseOut }) => {
@@ -1703,6 +1749,26 @@ const WritersRoomScreen = ({
     if (action === "bold" || action === "italic" || action === "underline" || action === "strike") {
       const cmd = action === "strike" ? "strikeThrough" : action;
       try { if (bodyRef.current) bodyRef.current.focus(); if (document.execCommand) document.execCommand(cmd, false, null); } catch (_e) {}
+      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      return;
+    }
+    if (action === "heading" || action === "quote") {
+      const body = bodyRef.current;
+      if (body) {
+        try {
+          body.focus();
+          const want = action === "heading" ? "H2" : "BLOCKQUOTE";
+          const cur = _wrCurrentBlockTag(body);
+          const tag = (cur === want) ? "p" : (action === "heading" ? "h2" : "blockquote");
+          if (document.execCommand) document.execCommand("formatBlock", false, tag);
+        } catch (_e) {}
+      }
+      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      return;
+    }
+    if (action === "scene-break") {
+      const body = bodyRef.current;
+      if (body) { try { body.focus(); _wrInsertSceneBreak(body); } catch (_e) {} }
       if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
       return;
     }
