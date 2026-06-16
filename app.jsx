@@ -568,6 +568,44 @@ const AppShell = () => {
     window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Saved edited entity." } }));
   }, []);
 
+  // Promote-from-queue commit: the universal EntityEditor's four-button flow
+  // (Accept & Assign / Accept & return to extraction). Saves the edited entity
+  // (under the candidate's — possibly reclassified — type), backfills its
+  // occurrences, and resolves the queue row. `return` mode reopens the queue.
+  const promoteFromEditor = _uc_a(async (payload, opts = {}) => {
+    const B = window.LoomwrightBackend;
+    const pf = (payload && payload.promoteFrom) || {};
+    const entityType = payload?.entityType || "references";
+    const flat = payload?.payload || {};
+    const IDENTITY_KEYS = new Set(["id", "name", "title", "summary", "aliases", "glyphChar", "status", "kind", "content", "sourceMentions", "reviewQueueCount", "source", "createdAt", "updatedAt", "chapterId"]);
+    const fields = { data: {} };
+    for (const [k, v] of Object.entries(flat)) {
+      if (k === "type" || k === "entityType" || k === "data") continue;
+      if (IDENTITY_KEYS.has(k)) fields[k] = v; else fields.data[k] = v;
+    }
+    if (flat.aliases != null) fields.data.aliases = flat.aliases;
+    if (flat.summary != null) fields.data.summary = flat.summary;
+    if (!B?.EntityService) return;
+    try {
+      const existingId = pf.existingEntityId || flat.id || null;
+      let saved;
+      if (existingId) {
+        const existing = B.EntityService.getSync(existingId, entityType);
+        const nextData = { ...((existing && existing.data) || {}), ...fields.data };
+        saved = await B.EntityService.update(entityType, existingId, { ...fields, id: existingId, data: nextData });
+      } else {
+        saved = await B.EntityService.save(entityType, fields, { status: "active" });
+      }
+      if (saved && saved.id && pf.candidateId && B.OccurrenceService) {
+        await B.OccurrenceService.linkCandidateToEntity(pf.candidateId, saved.id, entityType);
+      }
+      if (pf.queueId) await B.ReviewService.resolve(pf.queueId, "accepted");
+    } catch (_) {}
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+    window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: opts.mode === "return" ? "Accepted — back to the queue to keep triaging." : "Accepted & assigned to your project." } }));
+    if (opts.mode === "return") window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "review" } }));
+  }, []);
+
   const confirmMerge = _uc_a(async (altId) => {
     const { item, sourceId, type } = mergeModal;
     const targetType = type || item?.entityType;
@@ -1546,6 +1584,7 @@ const AppShell = () => {
         promoteFrom={editor.promoteFrom}
         onClose={closeEntityEditor}
         onSave={saveEntityFromEditor}
+        onPromoteAccept={promoteFromEditor}
       />
 
       {/* Writer's Room Composition Overlay — only over the manuscript. */}

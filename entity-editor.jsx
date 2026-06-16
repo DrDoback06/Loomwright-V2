@@ -954,6 +954,7 @@ const EntityEditor = ({
   onClose,
   onSave,             // (payload, { mode: "draft" | "active" | "compose" })
   onSaveAndCompose,
+  onPromoteAccept,    // (payload, { mode: "assign" | "return" }) — queue promote flow
 }) => {
   const config = (window.ENTITY_EDITOR_CONFIGS && window.ENTITY_EDITOR_CONFIGS[type]) || window.ENTITY_EDITOR_CONFIGS?.generic;
   const [mode, setMode] = _ee_us(initialMode || "full");
@@ -1160,15 +1161,37 @@ const EntityEditor = ({
               }}>
               <Icon name="stack" size={11}/> Save as template
             </button>
-            <button type="button" className="ee-btn ee-btn--outline" data-callback="onSaveEntityDraft" onClick={() => handleSave("draft")}>
-              <Icon name="bookmark" size={11}/> Save as Draft
-            </button>
-            <button type="button" className="ee-btn ee-btn--primary" data-callback="onSaveEntity" onClick={() => handleSave("active")} disabled={!(data.name || data.title)}>
-              <Icon name="check" size={11}/> Save (Active)
-            </button>
-            <button type="button" className="ee-btn ee-btn--accent" data-callback="onSaveAndAddToComposition" onClick={() => handleSave("compose")} disabled={!(data.name || data.title)} title="Save and drop into the Writer's Room composition overlay">
-              <Icon name="sparkle" size={11}/> Save + Add to Composition
-            </button>
+            {promoteFrom && promoteFrom.queueId ? (
+              <>
+                <button type="button" className="ee-btn ee-btn--outline" data-testid="ee-promote-revert"
+                  title="Undo your edits — restore the values extraction proposed"
+                  onClick={() => setData(promoteFrom.original || initial || {})}>
+                  ↺ Revert
+                </button>
+                <button type="button" className="ee-btn ee-btn--primary" data-testid="ee-promote-return" disabled={!(data.name || data.title)}
+                  title="Accept this entity, then jump back to the extraction queue to keep triaging"
+                  onClick={() => { onPromoteAccept && onPromoteAccept(payload(), { mode: "return" }); onClose && onClose(); }}>
+                  <Icon name="check" size={11}/> Accept &amp; return to extraction
+                </button>
+                <button type="button" className="ee-btn ee-btn--accent" data-testid="ee-promote-assign" disabled={!(data.name || data.title)}
+                  title="Accept this entity and assign it to your project"
+                  onClick={() => { onPromoteAccept && onPromoteAccept(payload(), { mode: "assign" }); onClose && onClose(); }}>
+                  <Icon name="check" size={11}/> Accept &amp; Assign
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="ee-btn ee-btn--outline" data-callback="onSaveEntityDraft" onClick={() => handleSave("draft")}>
+                  <Icon name="bookmark" size={11}/> Save as Draft
+                </button>
+                <button type="button" className="ee-btn ee-btn--primary" data-callback="onSaveEntity" onClick={() => handleSave("active")} disabled={!(data.name || data.title)}>
+                  <Icon name="check" size={11}/> Save (Active)
+                </button>
+                <button type="button" className="ee-btn ee-btn--accent" data-callback="onSaveAndAddToComposition" onClick={() => handleSave("compose")} disabled={!(data.name || data.title)} title="Save and drop into the Writer's Room composition overlay">
+                  <Icon name="sparkle" size={11}/> Save + Add to Composition
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

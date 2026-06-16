@@ -591,7 +591,34 @@
       const detail = ctx.detail || {};
       const itemId = detail.id;
       const row = itemId ? (ReviewService.listSync().find((q) => q.id === itemId) || detail) : detail;
-      window.dispatchEvent(new CustomEvent("lw:open-edit-candidate", { detail: { item: row } }));
+      // Edit opens the UNIVERSAL entity editor (not the light modal) pre-filled
+      // from the candidate, with a promote context so it shows the four-button
+      // flow (Accept & Assign / Accept & return / Revert / Cancel).
+      const card = (window.candidateToCardItem ? window.candidateToCardItem(row) : row) || {};
+      const cand = card.candidate || {};
+      const changes = (row.suggestedChanges && typeof row.suggestedChanges === "object") ? row.suggestedChanges : {};
+      const existingId = row.existingEntityId || row.targetEntityId || null;
+      const initial = {
+        ...(existingId ? { id: existingId } : {}),
+        name: cand.name || row.name || "",
+        summary: cand.summary || row.summary || "",
+        aliases: cand.aliases || changes.aliases || [],
+        ...changes,
+      };
+      delete initial.entityType; delete initial.type;
+      window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: {
+        type: row.entityType || "references",
+        initial,
+        mode: "full",
+        promoteFrom: {
+          queueId: row.id,
+          candidateId: row.candidateId || null,
+          existingEntityId: existingId,
+          original: initial,
+          confidence: card.confidence || null,
+          band: card.confidence && card.confidence.band,
+        },
+      } }));
       return;
     }
     if (/^onMerge\w*QueueItem$/.test(name)) {
