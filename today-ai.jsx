@@ -38,12 +38,25 @@ function buildTodaySuggestions() {
       related: r.entityId && r.entityType ? [{ id: r.entityId, type: r.entityType, label: r.name || "entity" }] : [],
       action: "Open Review Queue", confidence: "high" });
   }
-  // Recent chapters → writing prompts.
-  const chapters = (B.ManuscriptChapterService?.loadSync()?.chapters || []).slice(-2);
-  for (const c of chapters) {
-    push({ id: "td-c-" + c.id, section: "prompts", title: `Continue "${c.title || "chapter"}"`,
-      why: "Pick up where the last draft left off.",
-      related: [], action: "Open Writer's Room", chapter: c.title || "—" });
+  // Chapters → continue the story, or go back and finish an old one.
+  // Completeness-aware: the latest unfinished chapter is "continue";
+  // earlier drafted-but-not-complete chapters are "finish".
+  const realChapters = (B.ManuscriptChapterService?.loadSync()?.chapters || []).filter((c) => !c.reserved);
+  const lastCh = realChapters[realChapters.length - 1];
+  if (lastCh && !lastCh.complete) {
+    push({ id: "td-continue-" + lastCh.id, section: "prompts", title: `Continue "${lastCh.title || "the latest chapter"}"`,
+      why: "Pick up the draft where you left off.",
+      related: [], action: "Open Writer's Room", chapter: lastCh.title || "—", confidence: "strong" });
+  }
+  let _finish = 0;
+  for (const c of realChapters) {
+    if (lastCh && c.id === lastCh.id) continue;
+    if (!c.complete && (c.words || 0) >= 150 && _finish < 3) {
+      _finish += 1;
+      push({ id: "td-finish-" + c.id, section: "prompts", title: `Finish "${c.title || "chapter"}"`,
+        why: `${(c.words || 0).toLocaleString()} words drafted, not yet marked complete.`,
+        related: [], action: "Open Writer's Room", chapter: c.title || "—", confidence: "uncertain" });
+    }
   }
 
   // Code-first insight engine — staleness / incomplete / orphans / broken
@@ -142,11 +155,13 @@ function useTodaySuggestions() {
     window.addEventListener("lw:entity-store-updated", bump);
     window.addEventListener("lw:review-queue-updated", bump);
     window.addEventListener("lw:manuscript-chapters-updated", bump);
+    window.addEventListener("lw:occurrences-updated", bump);
     window.addEventListener("lw:backend-ready", bump);
     return () => {
       window.removeEventListener("lw:entity-store-updated", bump);
       window.removeEventListener("lw:review-queue-updated", bump);
       window.removeEventListener("lw:manuscript-chapters-updated", bump);
+      window.removeEventListener("lw:occurrences-updated", bump);
       window.removeEventListener("lw:backend-ready", bump);
     };
   }, []);

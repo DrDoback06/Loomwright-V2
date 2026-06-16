@@ -149,15 +149,11 @@ const PANELKIND_BY_ID = Object.fromEntries(
   Object.entries(PANEL_PRESETS).map(([k, p]) => [p.id, k])
 );
 
-// First-paint open panels — read straight from PANEL_PRESETS so we
-// never define a phantom panel that doesn't match the rail's lookup.
-// Showcase the v2 upgraded panels alongside Atlas so the user sees
-// the new work immediately.
-const INITIAL_PANELS = [
-  { ...PANEL_PRESETS.locations, pinned: false, expanded: false, collapsed: false, fullScreen: false, dockMode: "docked", order: 1 },
-  { ...PANEL_PRESETS.quests,    pinned: false, expanded: false, collapsed: false, fullScreen: false, dockMode: "docked", order: 2 },
-  { ...PANEL_PRESETS.tangle,    pinned: false, expanded: false, collapsed: false, fullScreen: false, dockMode: "docked", order: 3 },
-];
+// First-paint open panels. A fresh project opens to a clean Home so the
+// story snapshot is the opening "how is my story progressing" view; panels
+// still dock alongside Home the moment the user opens one from the rail.
+// (Previously this auto-opened three showcase panels, which crushed Home.)
+const INITIAL_PANELS = [];
 
 // ---------------------------------------------------------------------
 // AppShell
@@ -255,6 +251,19 @@ const AppShell = () => {
     const onCloseOb = () => setOnboarding({ open: false, initial: null });
     window.addEventListener("lw:close-onboarding", onCloseOb);
     return () => window.removeEventListener("lw:close-onboarding", onCloseOb);
+  }, []);
+
+  // Chapter completion can be toggled from Writer's Room or the Home story
+  // snapshot; handle it app-level so it works on any route, then every
+  // surface re-syncs via lw:manuscript-chapters-updated.
+  _ue_a(() => {
+    const onToggle = (e) => {
+      const id = e && e.detail && e.detail.chapterId;
+      if (!id) return;
+      try { window.LoomwrightBackend?.ManuscriptChapterService?.toggleComplete?.(id); } catch (_) {}
+    };
+    window.addEventListener("lw:toggle-chapter-complete", onToggle);
+    return () => window.removeEventListener("lw:toggle-chapter-complete", onToggle);
   }, []);
   const handleMinimizeOnboarding = _uc_a(async () => {
     try { await window.LoomwrightBackend?.OnboardingService?.setStatus("in-progress"); } catch (_e) {}

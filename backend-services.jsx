@@ -2388,6 +2388,37 @@
     loadSync() {
       return StorageService.getSync(KEYS.manuscriptChapters, this.defaultState());
     },
+    // Chapter completion — set/toggle a chapter's `complete` flag. Used by the
+    // Writer's Room header checkbox and the Home story-snapshot board. Persists,
+    // logs, notifies, and emits lw:manuscript-chapters-updated so every surface
+    // re-syncs (Writer's Room rail, Home board, Today).
+    setComplete(chapterId, complete, opts = {}) {
+      const state = this.loadSync();
+      let changed = null;
+      const chapters = (state.chapters || []).map((c) => {
+        if (c.id !== chapterId) return c;
+        changed = { ...c, complete: !!complete, completedAt: complete ? nowIso() : null };
+        return changed;
+      });
+      if (!changed) return null;
+      this.save({ ...state, chapters });
+      const name = changed.title || ("Chapter " + (changed.num != null ? changed.num : changed.slotNumber || ""));
+      if (!opts.skipAudit) {
+        try {
+          AuditService.log({
+            action: complete ? "chapter.complete" : "chapter.reopen",
+            label: (complete ? "Marked complete: " : "Reopened: ") + name,
+            targetType: "chapter", targetId: chapterId, targetName: changed.title || null,
+          });
+        } catch (_) {}
+      }
+      try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "“" + name + (complete ? "” marked complete" : "” reopened") } })); } catch (_) {}
+      return changed;
+    },
+    toggleComplete(chapterId) {
+      const c = (this.loadSync().chapters || []).find((x) => x.id === chapterId);
+      return this.setComplete(chapterId, !(c && c.complete));
+    },
     async save(state, opts = {}) {
       // Daily writing-stats baseline: on the first save of a new day,
       // remember the word count BEFORE this save so Home can report
@@ -8089,6 +8120,136 @@ Only evidenced pairs. Return JSON only.`;
     return true;
   }
 
+  // -------------------------------------------------------------------
+  // ChapterSnapshotService — at-a-glance, fully-offline snapshot of every
+  // chapter for the Home "story snapshot" board and the Today brain:
+  //   • blurb       — a few sentences of what the chapter contains
+  //                   (chapter.summary if set by AI/user, else derived)
+  //   • featuring   — entities + freshly-extracted candidates that appear
+  //   • complete    — the chapter completion flag (set in Writer's Room)
+  //   • todos       — chapter-grounded "things to do" (review, extract,
+  //                   flesh out a thin entity, finish & mark complete)
+  // Zero tokens; AI can later store a richer chapter.summary that wins.
+  // -------------------------------------------------------------------
+  const ChapterSnapshotService = {
+    _cap(s) { return s ? String(s)[0].toUpperCase() + String(s).slice(1) : ""; },
+    _chapterText(chapter, manuscripts) {
+      const m = manuscripts && manuscripts[chapter.id];
+      return (m && m.text) || chapter.bodyText || "";
+    },
+    _sentences(text) {
+      const parts = String(text || "").replace(/\s+/g, " ").match(/[^.!?]+[.!?]+["”’)]?|\S.+$/g);
+      return (parts || []).map((s) => s.trim()).filter(Boolean);
+    },
+    blurbSync(chapter, manuscripts) {
+      if (chapter.summary && String(chapter.summary).trim()) return String(chapter.summary).trim();
+      const text = this._chapterText(chapter, manuscripts);
+      if (!text.trim()) return "";
+      let body = text.trim();
+      const firstNL = body.indexOf("\n");
+      if (firstNL > 0 && firstNL < 90 && /chapter\s+\w+|^#/i.test(body.slice(0, firstNL))) body = body.slice(firstNL + 1).trim();
+      const sents = this._sentences(body).slice(0, 2).join(" ");
+      return sents.length > 240 ? sents.slice(0, 237).trimEnd() + "…" : sents;
+    },
+    _entityIndex() {
+      const idx = {};
+      try {
+        const all = EntityService.listAllSync() || {};
+        for (const type of Object.keys(all)) {
+          const byId = all[type] || {};
+          for (const id of Object.keys(byId)) {
+            const e = byId[id];
+            if (e && e.status !== "deleted") idx[id] = { id, type: e.type || type, name: e.name || e.title || "Unnamed" };
+          }
+        }
+      } catch (_) {}
+      return idx;
+    },
+    entitiesForChapterSync(chapterId, idx) {
+      const index = idx || this._entityIndex();
+      const out = []; const seen = new Set();
+      try {
+        for (const o of (OccurrenceService.listByChapterSync(chapterId) || [])) {
+          if (!o || !o.entityId || seen.has(o.entityId)) continue;
+          const e = index[o.entityId];
+          if (e) { out.push(e); seen.add(o.entityId); }
+        }
+      } catch (_) {}
+      return out;
+    },
+    candidatesForChapterSync(chapterId) {
+      const out = [];
+      try {
+        for (const c of (ReviewService.listSync() || [])) {
+          if (c && c.chapterId === chapterId && (c.status === "pending" || c.status === "auto-added")) {
+            out.push({ name: c.name, type: c.entityType, status: c.status });
+          }
+        }
+      } catch (_) {}
+      return out;
+    },
+    todosForChapterSync(chapter, ctx) {
+      const c = ctx || {};
+      const text = this._chapterText(chapter, c.manuscripts);
+      const words = chapter.words || (text.trim() ? text.trim().split(/\s+/).length : 0);
+      const ents = c.entities || this.entitiesForChapterSync(chapter.id, c.entityIndex);
+      const cands = c.candidates || this.candidatesForChapterSync(chapter.id);
+      const todos = [];
+      const push = (id, label, action, link) => { if (todos.length < 4) todos.push({ id: "td-" + chapter.id + "-" + id, label, action, link }); };
+      if (chapter.reserved) { push("reserved", "Reserved slot — start this chapter", "Open Writer's Room", { type: "writers-room", chapterId: chapter.id }); return todos; }
+      if (!words) { push("write", "Empty chapter — paste or write this scene", "Open Writer's Room", { type: "writers-room", chapterId: chapter.id }); return todos; }
+      if (cands.length) push("review", `${cands.length} new ${cands.length === 1 ? "entity" : "entities"} found here — review`, "Open Review Queue", { type: "review" });
+      else if (!ents.length) push("extract", "No entities captured yet — run extraction", "Open Writer's Room", { type: "writers-room", chapterId: chapter.id });
+      if (c.incompleteByEntity) {
+        for (const e of ents) {
+          if (c.incompleteByEntity[e.id]) { push("thin-" + e.id, `Flesh out ${e.name}`, "Open " + this._cap(e.type), { type: e.type, id: e.id }); break; }
+        }
+      }
+      if (!chapter.complete && words > 40) push("finish", "Polish and mark complete", "Open Writer's Room", { type: "writers-room", chapterId: chapter.id });
+      return todos;
+    },
+    snapshotSync(chapter, ctx) {
+      const c = ctx || {};
+      const entities = this.entitiesForChapterSync(chapter.id, c.entityIndex);
+      const candidates = this.candidatesForChapterSync(chapter.id);
+      const blurb = this.blurbSync(chapter, c.manuscripts);
+      const text = this._chapterText(chapter, c.manuscripts);
+      const words = chapter.words || (text.trim() ? text.trim().split(/\s+/).length : 0);
+      const featuring = [
+        ...entities.map((e) => ({ ...e, known: true })),
+        ...candidates.filter((x) => !entities.some((e) => e.name === x.name)).map((x) => ({ id: null, type: x.type, name: x.name, known: false })),
+      ].slice(0, 8);
+      return {
+        id: chapter.id,
+        num: chapter.num != null ? chapter.num : (chapter.slotNumber != null ? chapter.slotNumber : null),
+        title: chapter.title || "Untitled",
+        words,
+        reserved: !!chapter.reserved,
+        complete: !!chapter.complete,
+        completedAt: chapter.completedAt || null,
+        blurb,
+        featuring,
+        entityCount: entities.length,
+        candidateCount: candidates.length,
+        todos: this.todosForChapterSync(chapter, { ...c, entities, candidates }),
+      };
+    },
+    allSync() {
+      let chapters = [], manuscripts = {};
+      try { const s = ManuscriptChapterService.loadSync(); chapters = s.chapters || []; manuscripts = s.manuscripts || {}; } catch (_) {}
+      const entityIndex = this._entityIndex();
+      const incompleteByEntity = {};
+      try {
+        const { insights } = InsightService.computeInsights() || { insights: [] };
+        for (const ins of (insights || [])) {
+          if (ins.kind === "incomplete" && ins.entityRef && ins.entityRef.id) incompleteByEntity[ins.entityRef.id] = ins;
+        }
+      } catch (_) {}
+      const ctx = { manuscripts, entityIndex, incompleteByEntity };
+      return chapters.map((ch) => this.snapshotSync(ch, ctx));
+    },
+  };
+
   const Backend = {
     keys: KEYS,
     nowIso,
@@ -8096,6 +8257,7 @@ Only evidenced pairs. Return JSON only.`;
     StorageService,
     EntityService,
     ReviewService,
+    ChapterSnapshotService,
     ReferencesService,
     OnboardingService,
     ProjectIntelService,

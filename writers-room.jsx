@@ -101,6 +101,7 @@ const ChapterNode = ({
     "wr-node",
     active && "is-active",
     reserved && "is-reserved",
+    !reserved && chapter.complete && "is-complete",
   ].filter(Boolean).join(" ");
 
   const handleContext = (e) => {
@@ -137,6 +138,7 @@ const ChapterNode = ({
           </div>
           <div className="wr-node__title">{chapter.title || "Untitled"}</div>
           <div className="wr-node__meta">
+            {chapter.complete && <span title="Marked complete" style={{ color: "var(--ok, #4a7a4a)", fontWeight: 700 }}>✓</span>}
             {chapter.state === "unsaved"    && <span className="wr-node__dot wr-node__dot--unsaved"    title="Unsaved changes"/>}
             {chapter.state === "extracting" && <span className="wr-node__dot wr-node__dot--extracting" title="Extracting…"/>}
             {chapter.state === "extracted"  && <span className="wr-node__dot wr-node__dot--extracted"  title="Extracted"/>}
@@ -1140,6 +1142,20 @@ const ManuscriptCanvas = ({
           onInput={onBodyInput}
         />
         <div className="wr-canvas__sub">{(chapter.words || 0).toLocaleString()} words</div>
+        <label
+          data-ui="ChapterCompleteToggle"
+          title="Mark this chapter complete — shows on the Home story snapshot"
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: "var(--fs-2xs, 12px)", color: chapter.complete ? "var(--ok, #4a7a4a)" : "var(--ink-3, #8a7a5a)", cursor: "pointer", userSelect: "none" }}
+        >
+          <input
+            type="checkbox"
+            checked={!!chapter.complete}
+            data-testid="wr-chapter-complete"
+            onChange={() => window.dispatchEvent(new CustomEvent("lw:toggle-chapter-complete", { detail: { chapterId: chapter.id } }))}
+            style={{ cursor: "pointer" }}
+          />
+          <span>{chapter.complete ? "Chapter complete" : "Mark chapter complete"}</span>
+        </label>
       </header>
       <div className="wr-canvas__bodywrap" style={{ position: "relative" }}>
         <EditableManuscriptBody

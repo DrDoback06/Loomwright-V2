@@ -111,12 +111,14 @@ const HomeScreen = ({
     window.addEventListener("lw:entity-store-updated", bump);
     window.addEventListener("lw:review-queue-updated", bump);
     window.addEventListener("lw:manuscript-chapters-updated", bump);
+    window.addEventListener("lw:occurrences-updated", bump);
     window.addEventListener("lw:project-imported", bump);
     window.addEventListener("lw:backend-ready", bump);
     return () => {
       window.removeEventListener("lw:entity-store-updated", bump);
       window.removeEventListener("lw:review-queue-updated", bump);
       window.removeEventListener("lw:manuscript-chapters-updated", bump);
+      window.removeEventListener("lw:occurrences-updated", bump);
       window.removeEventListener("lw:project-imported", bump);
       window.removeEventListener("lw:backend-ready", bump);
     };
@@ -241,6 +243,14 @@ const HomeScreen = ({
 
   const totalEntities = entityHealth.reduce((s, e) => s + e.count, 0);
 
+  // Per-chapter story snapshot (blurb, who/what appears, suggested actions,
+  // completion). Recomputed on the same tick as the rest of the dashboard.
+  const chapterSnaps = React.useMemo(() => {
+    void statsTick;
+    try { return window.LoomwrightBackend?.ChapterSnapshotService?.allSync() || []; }
+    catch (_) { return []; }
+  }, [statsTick]);
+
   // ----- Fresh-project detection -----
   // When sample data has not been loaded AND the live entity store is
   // empty, show an explicit empty-state card at the top so the user is
@@ -291,6 +301,24 @@ const HomeScreen = ({
     if (w.link.type === "writers-room") onSetRoute && onSetRoute("writers-room");
     else onOpenPanel && onOpenPanel(w.link.type);
     onOpenContinuityWarning && onOpenContinuityWarning(w);
+  };
+
+  // Story-snapshot navigation: open a chapter in Writer's Room, or follow a
+  // per-chapter "to do" to the right surface (Writer's Room / Review / panel).
+  const openChapter = (snap) => {
+    if (!snap) return;
+    onSetRoute && onSetRoute("writers-room");
+    if (snap.id) setTimeout(() => window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: snap.id } })), 0);
+  };
+  const handleTodo = (todo) => {
+    const link = (todo && todo.link) || {};
+    if (link.type === "review") { onOpenReviewQueue && onOpenReviewQueue(); return; }
+    if (link.type === "writers-room") {
+      onSetRoute && onSetRoute("writers-room");
+      if (link.chapterId) setTimeout(() => window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: link.chapterId } })), 0);
+      return;
+    }
+    if (link.type) onOpenPanel && onOpenPanel(link.type);
   };
 
   return (
@@ -405,6 +433,79 @@ const HomeScreen = ({
             </button>
           </div>
         </header>
+
+        {/* Story snapshot — per-chapter, at-a-glance: what each chapter
+            contains, who/what appears, suggested next actions (→ Today),
+            and completion status. The opening view of "how the story is
+            progressing". */}
+        <section className="home-snapshot" data-ui="HomeStorySnapshot">
+          <div className="home-snapshot__head">
+            <div>
+              <div className="home-card__eyebrow">Story snapshot</div>
+              <div className="home-snapshot__title">Chapters at a glance</div>
+            </div>
+            <button className="home-link" onClick={() => onSetRoute && onSetRoute("today")} data-callback="onOpenTodayFromHome">
+              What to work on today →
+            </button>
+          </div>
+          {chapterSnaps.length === 0 ? (
+            <div className="home-snapshot__empty">
+              No chapters yet.{" "}
+              <button className="home-link" onClick={() => onSetRoute && onSetRoute("writers-room")} data-callback="onOpenWriterRoom">
+                Open Writer&apos;s Room
+              </button>{" "}
+              to write or paste your first chapter, then run extraction to populate this snapshot.
+            </div>
+          ) : (
+            <div className="home-chapters">
+              {chapterSnaps.map((s, idx) => (
+                <article key={s.id} className="home-chapter-card" data-complete={s.complete ? "true" : "false"} data-reserved={s.reserved ? "true" : "false"} data-testid={"home-chapter-" + s.id}>
+                  <div className="home-chapter-card__top">
+                    <span className="home-chapter-card__num">Ch. {s.num != null ? s.num : idx + 1}</span>
+                    {!s.reserved && (
+                      <label className="home-chapter-card__complete" title="Mark this chapter complete">
+                        <input
+                          type="checkbox"
+                          checked={!!s.complete}
+                          data-testid={"home-chapter-complete-" + s.id}
+                          onChange={() => window.dispatchEvent(new CustomEvent("lw:toggle-chapter-complete", { detail: { chapterId: s.id } }))}
+                        />
+                        {s.complete ? "Complete" : "Mark done"}
+                      </label>
+                    )}
+                  </div>
+                  <div className="home-chapter-card__title" onClick={() => openChapter(s)} title="Open in Writer's Room">{s.title}</div>
+                  <div className="home-chapter-card__meta">
+                    {s.reserved ? "Reserved slot" : (
+                      (s.words || 0).toLocaleString() + " words" +
+                      (s.entityCount ? " · " + s.entityCount + " entities" : "") +
+                      (s.candidateCount ? " · " + s.candidateCount + " to review" : "")
+                    )}
+                  </div>
+                  {s.blurb
+                    ? <p className="home-chapter-card__blurb">{s.blurb}</p>
+                    : <p className="home-chapter-card__blurb home-chapter-card__blurb--empty">{s.reserved ? "Reserved for a future scene." : "No text yet — open this chapter to write or paste it, then run extraction."}</p>}
+                  {s.featuring && s.featuring.length > 0 && (
+                    <div className="home-chapter-card__chips">
+                      {s.featuring.map((f, i) => (
+                        <span key={i} className={"home-chip" + (f.known ? "" : " home-chip--pending")} title={f.known ? f.type : (f.type + " · pending review")}>{f.name}</span>
+                      ))}
+                    </div>
+                  )}
+                  {s.todos && s.todos.length > 0 && (
+                    <div className="home-chapter-card__todos">
+                      {s.todos.map((t) => (
+                        <button key={t.id} className="home-todo" onClick={() => handleTodo(t)} title={t.action}>
+                          <span className="home-todo__dot">›</span><span>{t.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* Body grid */}
         <div className="home__grid">
