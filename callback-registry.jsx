@@ -984,6 +984,25 @@
       } catch (e) { notify(e.message); }
       return;
     }
+    if (name === "onGenerateEntityFromHint") {
+      const d = ctx.detail || {};
+      const entityType = d.entityType || "generic";
+      const route = await requireProviderOrNotice("AI entity generation", "entityGeneration");
+      if (!route) { window.dispatchEvent(new CustomEvent("lw:entity-hint-generated", { detail: { ok: false, mode: "no-provider" } })); return; }
+      // Sends the author's rules (intel) + the brief — never manuscript text.
+      const guardCtx = { includesManuscript: false, includesReferences: false, includesIntel: true, approxChars: JSON.stringify(d).length };
+      if (!aiPrivacyGuard({ task: "entityGeneration", providerId: route.providerId, model: route.model, context: guardCtx })) {
+        window.dispatchEvent(new CustomEvent("lw:entity-hint-generated", { detail: { ok: false, mode: "cancelled" } }));
+        return;
+      }
+      let res;
+      try {
+        res = await B().generateEntityFromHint(entityType, { name: d.name, hint: d.hint, currentData: d.currentData, route });
+      } catch (e) { res = { ok: false, mode: "ai-error", message: e.message }; }
+      window.dispatchEvent(new CustomEvent("lw:entity-hint-generated", { detail: res || { ok: false } }));
+      if (res && res.ok) notify("Draft generated from your brief."); else if (res && res.message) notify(res.message);
+      return;
+    }
     if (name === "onFillEntityFromManuscript") {
       const entityId = ctx.detail?.entityId || id;
       const entityType = ctx.detail?.entityType || type || "cast";
@@ -1721,6 +1740,12 @@
     const names = window.__LW_CALLBACK_NAMES || [];
     names.forEach((name) => {
       registerHandler(name, async (ctx) => dispatchCallback(name, ctx));
+    });
+    // Programmatic-only callbacks (dispatched from code, not via a markup
+    // data-callback attribute, so absent from the generated names list) still
+    // need a handler entry for the lw:dispatch-callback event path.
+    ["onGenerateEntityFromHint"].forEach((name) => {
+      if (!handlers[name]) registerHandler(name, async (ctx) => dispatchCallback(name, ctx));
     });
 
     window.LoomwrightCallbacks = handlers;

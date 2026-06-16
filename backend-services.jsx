@@ -3348,7 +3348,7 @@
   const AI_TASKS = [
     "quickExtraction", "deepExtraction", "writingDraft", "rewritePassage",
     "continueWriting", "projectIntelligence", "referenceSummary",
-    "continuityCheck", "skillTreeGeneration", "aiHandoffAssist",
+    "continuityCheck", "skillTreeGeneration", "aiHandoffAssist", "entityGeneration",
   ];
   const AIRoutingService = {
     defaultState() {
@@ -5357,6 +5357,72 @@ Return a JSON object mapping fieldId to value for ONLY clearly-evidenced fields.
       AuditService.log({ action: "ai.entityEnrichment", label: "Field-fill suggestions for " + entity.name, targetType: "entity", targetId: entityId, entityType: type, source: "AIService", metadata: { fields: Object.keys(changes) }, reversible: false });
     } catch (_) {}
     return { ok: true, mode: "ai", fields: Object.keys(changes), candidateId: cand.id };
+  }
+
+  // Hint-seeded entity generation: from a chosen type + optional partial fields
+  // + a free-text brief, ask the routed model to draft a complete, world-
+  // consistent record. Grounds the model in the author's rules and the existing
+  // entity roster (so referenced names resolve to real records), and NEVER
+  // overwrites fields the author already filled. Returns flat fields for the
+  // editor form (the user reviews + saves) — not a review candidate. Pure
+  // shaping reuses shapeEnrichmentChanges; AIService is monkeypatchable for
+  // tests. The more the author provides, the more the draft obeys.
+  async function generateEntityFromHint(entityType, { name, hint, currentData, route } = {}) {
+    const type = normaliseType(entityType);
+    if (!route) return { ok: false, mode: "local" };
+    const schema = enrichmentFieldSchema(type);
+    const authorCtx = buildAuthorContext({ maxChars: 900 });
+    const roster = [];
+    for (const t of ["cast", "locations", "factions", "items", "races", "classes"]) {
+      for (const e of EntityService.listSync(t)) {
+        if (e && e.status !== "deleted" && e.name) roster.push(e.name + " (" + t + ")");
+        if (roster.length >= 40) break;
+      }
+      if (roster.length >= 40) break;
+    }
+    const cfg = (typeof window !== "undefined" && window.ENTITY_EDITOR_CONFIGS) ? window.ENTITY_EDITOR_CONFIGS[type] : null;
+    const typeLabel = (cfg && cfg.displayName) || type;
+    const cur = (currentData && typeof currentData === "object") ? currentData : {};
+    const partial = {};
+    if (name) partial.name = name;
+    for (const f of schema) { const v = cur[f.id]; if (v != null && v !== "" && !(Array.isArray(v) && !v.length)) partial[f.id] = v; }
+    const prompt = `Create a believable ${typeLabel} for this story, fully consistent with the author's world.${hint ? "\n\nAuthor's brief: " + String(hint).slice(0, 600) : ""}
+
+Author's rules / world:
+${authorCtx || "(none provided)"}
+
+Existing entities you MAY reference by EXACT name (don't contradict them, don't invent duplicates): ${roster.length ? roster.join("; ") : "(none yet)"}
+
+Already provided by the author — keep these verbatim and build around them: ${JSON.stringify(partial)}
+
+Fill these fields (id — label): ${schema.map((f) => f.id + " — " + f.label + (f.options ? " (one of: " + f.options.join(", ") + ")" : "")).join("; ")}
+Also include a "name" (only if not already provided) and a concise "summary".
+
+Return ONE JSON object mapping fieldId to value, using only the listed ids plus name and summary. Keep it concise and world-consistent. Return JSON only.`;
+    let parsed = null;
+    try {
+      const raw = await AIService.complete({
+        providerId: route.providerId, model: route.model,
+        prompt, system: "Return valid JSON only. No markdown fences.", maxTokens: 1100,
+        purpose: "entityGeneration",
+      });
+      parsed = JSON.parse(String(raw).replace(/^```json\s*|\s*```$/g, "").trim());
+    } catch (e) {
+      return { ok: false, mode: "ai-error", message: e.message };
+    }
+    // Shape schema fields against what the author already filled (blanks only),
+    // then add name/summary which sit outside the fillable schema.
+    const fields = shapeEnrichmentChanges({ data: cur }, parsed, schema);
+    if (parsed.name && !name && !cur.name) fields.name = String(parsed.name).slice(0, 120);
+    if (parsed.summary && !cur.summary && !fields.summary) {
+      const s = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
+      if (s) fields.summary = s.slice(0, 600);
+    }
+    if (!Object.keys(fields).length) return { ok: false, mode: "nothing-new" };
+    try {
+      AuditService.log({ action: "ai.entityGeneration", label: "Generated " + type + " draft from a brief", targetType: "entity", entityType: type, source: "AIService", metadata: { fields: Object.keys(fields), hasHint: !!hint }, reversible: false });
+    } catch (_) {}
+    return { ok: true, fields };
   }
 
   const ExtractionService = {
@@ -8513,6 +8579,7 @@ Only evidenced pairs. Return JSON only.`;
     detectorConfidence,
     resolvePronounsInText,
     enrichEntityFromManuscript,
+    generateEntityFromHint,
     shapeEnrichmentChanges,
     enrichmentFieldSchema,
     collectEnrichmentEvidence,

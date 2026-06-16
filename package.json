@@ -15,6 +15,7 @@
     "test:smoke": "node scripts/smoke-services.js",
     "test:extraction": "node scripts/extraction-precision.js",
     "test:foresight": "node scripts/foresight-check.js",
+    "test:hintgen": "node scripts/hint-gen-check.js",
     "test:e2e": "playwright test",
     "test:e2e:preview": "playwright test --config playwright.preview.config.js",
     "test:e2e:headed": "playwright test --headed"

@@ -24,7 +24,7 @@ const { useState: _ee_us, useEffect: _ee_ue, useMemo: _ee_um, useCallback: _ee_u
 const EE_MODES = [
   { id: "quick",   label: "Quick Create",      hint: "Just the essentials.",       icon: "bolt" },
   { id: "full",    label: "Full Editor",       hint: "Every field for this type.", icon: "paper" },
-  { id: "ai",      label: "AI-Assisted Draft", hint: "Describe it; preview a generated draft. (Simulated)", icon: "sparkle" },
+  { id: "ai",      label: "AI-Assisted Draft", hint: "Brief it; AI drafts the rest from your world.", icon: "sparkle" },
   { id: "json",    label: "Paste JSON",        hint: "Import a structured payload.", icon: "command" },
   { id: "review",  label: "Review Before Save", hint: "Preview the entity as the rest of the project will see it.", icon: "eye" },
 ];
@@ -681,60 +681,81 @@ const EEAIDraft = ({ config, data, setData, ctx }) => {
   const [prompt, setPrompt] = _ee_us("");
   const [generating, setGenerating] = _ee_us(false);
   const [draft, setDraft] = _ee_us(null);
-  const generate = () => {
-    setGenerating(true);
-    setDraft(null);
-    setTimeout(() => {
-      const canned = EE_AI_DRAFTS[config.type] || EE_AI_DRAFTS.locations;
-      setDraft(canned);
+  const [error, setError] = _ee_us(null);
+  // The registry resolves a provider, guards privacy, calls the backend, and
+  // echoes the result back on this event. Empty/offline → a graceful message.
+  _ee_ue(() => {
+    const onResult = (e) => {
+      const d = (e && e.detail) || {};
       setGenerating(false);
-    }, 1100);
+      if (d.ok && d.fields && Object.keys(d.fields).length) { setDraft(d.fields); setError(null); }
+      else {
+        setDraft(null);
+        setError(
+          d.mode === "no-provider" ? "Add an AI provider in Settings ▸ AI to generate — or fill the fields by hand."
+          : d.mode === "cancelled" ? "Generation cancelled."
+          : d.mode === "nothing-new" ? "The model didn't return usable fields. Try a more specific brief."
+          : d.message ? ("Couldn't generate: " + d.message)
+          : "Couldn't generate a draft right now."
+        );
+      }
+    };
+    window.addEventListener("lw:entity-hint-generated", onResult);
+    return () => window.removeEventListener("lw:entity-hint-generated", onResult);
+  }, []);
+  const generate = () => {
+    setGenerating(true); setDraft(null); setError(null);
+    const detail = { entityType: config.type, name: data.name || data.title || "", hint: prompt, currentData: data };
+    if (window.LoomwrightDispatchCallback) window.LoomwrightDispatchCallback("onGenerateEntityFromHint", { detail });
+    else window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onGenerateEntityFromHint", detail } }));
   };
-  const applyDraft = () => {
-    if (!draft) return;
-    setData(draft);
-  };
+  // Merge (never replace): keep anything the author already typed.
+  const applyDraft = () => { if (draft) setData({ ...data, ...draft }); };
   return (
     <div className="ee-sec">
       <div className="ee-sec__head">
         <span className="ee-sec__title">AI-Assisted Draft</span>
-        <span className="ee-ai-badge"><Icon name="sparkle" size={9}/> Preview / simulated</span>
+        <span className="ee-ai-badge"><Icon name="sparkle" size={9}/> Uses your provider · grounded in your world</span>
       </div>
       <div className="ee-sec__body">
         <div className="ee-field" style={{ gridColumn: "1 / -1" }}>
-          <span className="ee-field__lbl">Describe what you want</span>
+          <span className="ee-field__lbl">Give it a brief — a category, a name, a relationship, anything</span>
           <textarea
             className="ee-textarea ee-textarea--lg"
-            placeholder={"e.g. A " + config.displayName.toLowerCase() + " that " + (config.defaultSummary || "fits this story")}
+            data-testid="ee-ai-hint"
+            placeholder={config.displayName + " — e.g. main character, best friends with Graham, hiding a debt"}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
           />
-          <span className="ee-field__hint">No real model is wired in this build — generate shows a fixed canned draft you can accept, edit, or discard.</span>
+          <span className="ee-field__hint">The more you give (a type, a name, a fact or two), the more the draft obeys. It follows your onboarding rules and can reference your existing entities. Only blank fields are filled — anything you've already typed is kept.</span>
         </div>
         <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-          <button type="button" className="ee-btn ee-btn--primary" onClick={generate} disabled={generating}>
+          <button type="button" className="ee-btn ee-btn--primary" data-testid="ee-ai-generate" onClick={generate} disabled={generating}>
             <Icon name="sparkle" size={12}/>
-            {generating ? "Generating draft…" : "Generate draft"}
+            {generating ? "Generating…" : "Generate with AI"}
           </button>
           {draft && (
-            <button type="button" className="ee-btn ee-btn--accent" onClick={applyDraft}>
-              <Icon name="check" size={11}/> Apply draft to fields
+            <button type="button" className="ee-btn ee-btn--accent" data-testid="ee-ai-apply" onClick={applyDraft}>
+              <Icon name="check" size={11}/> Apply to fields
             </button>
           )}
           {draft && (
             <button type="button" className="ee-btn ee-btn--ghost" onClick={() => setDraft(null)}>Discard</button>
           )}
         </div>
+        {error && (
+          <div className="ee-field__hint" data-testid="ee-ai-error" style={{ marginTop: 10, color: "var(--danger, #b4453a)" }}>{error}</div>
+        )}
         {generating && (
           <div style={{ marginTop: 14 }}>
-            <LoadingState title="Drafting…" lines={5}/>
+            <LoadingState title="Drafting from your brief…" lines={5}/>
           </div>
         )}
         {draft && (
           <div className="ee-review-block" style={{ marginTop: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <span className="ee-ai-badge"><Icon name="sparkle" size={9}/> Simulated draft</span>
-              <span style={{ fontSize: 12, color: "var(--ink-3)", fontStyle: "italic" }}>Edit any field after applying — this is just a starting point.</span>
+              <span className="ee-ai-badge"><Icon name="sparkle" size={9}/> Draft</span>
+              <span style={{ fontSize: 12, color: "var(--ink-3)", fontStyle: "italic" }}>Apply it, then edit any field — it's a starting point.</span>
             </div>
             {Object.entries(draft).map(([k, v]) => (
               <div key={k} className="ee-review-row">
