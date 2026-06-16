@@ -522,6 +522,14 @@
     }
 
     // —— Review queue ——
+    if (/^onReclassify\w*QueueItem$/.test(name)) {
+      const detail = ctx.detail || {};
+      if (detail.id && detail.entityType) {
+        await B().ReviewService.reclassify(detail.id, detail.entityType);
+        notify("Reclassified to " + detail.entityType + ".");
+      }
+      return;
+    }
     if (/^onAccept\w*QueueItem$/.test(name)) {
       await acceptQueueItem(ctx, ctx.detail);
       return;

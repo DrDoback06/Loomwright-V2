@@ -588,6 +588,29 @@
       }
       return next;
     },
+    // Inline reclassification from the review card: move a pending candidate to
+    // a different entity type before it's accepted. acceptQueueItem reads the
+    // persisted row, so the new type flows straight through to the saved entity.
+    async reclassify(id, entityType) {
+      const t = entityType ? normaliseType(entityType) : null;
+      if (!id || !t) return this.listSync();
+      const all = await StorageService.get(KEYS.reviewQueue, []);
+      const before = all.find((item) => item.id === id) || null;
+      if (!before || normaliseType(before.entityType) === t) return all;
+      const next = all.map((item) => item.id === id ? { ...item, entityType: t, type: t, updatedAt: nowIso() } : item);
+      await StorageService.set(KEYS.reviewQueue, next);
+      window.dispatchEvent(new CustomEvent("lw:review-queue-updated"));
+      try {
+        AuditService.log({
+          action: "review.reclassify",
+          label: `Reclassified "${before.name || id}" → ${t}`,
+          targetType: "review", targetId: id, targetName: before.name,
+          entityType: t, before, after: next.find((item) => item.id === id) || null,
+          source: "ReviewService",
+        });
+      } catch (_) {}
+      return next;
+    },
   };
 
   const ReferencesService = {

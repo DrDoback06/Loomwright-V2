@@ -243,7 +243,31 @@ const ReviewQueueCard = ({
       <ConfidenceStrip band={item.confidence?.band}/>
       <div className="rqc__main">
         <div className="rqc__head">
-          <EntityTypeBadge type={item.entityType} size="xs"/>
+          {isAuto ? (
+            <EntityTypeBadge type={item.entityType} size="xs"/>
+          ) : (
+            <select
+              className="rqc__retype"
+              data-testid={"rqc-retype-" + item.id}
+              value={item.entityType}
+              title="Reclassify before accepting — sends it to the right place"
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                const nt = e.target.value;
+                if (nt && nt !== item.entityType && window.LoomwrightDispatchCallback) {
+                  window.LoomwrightDispatchCallback("onReclassifyQueueItem", { detail: { id: item.id, entityType: nt } });
+                }
+              }}
+              style={{
+                font: "inherit", fontSize: "var(--fs-2xs)", textTransform: "uppercase", letterSpacing: "0.06em",
+                padding: "1px 4px", borderRadius: "var(--r-pill)",
+                border: "1px solid var(--ed, var(--line-2))", background: "var(--es, var(--bg-paper-1))",
+                color: "var(--ed, var(--ink-2))", cursor: "pointer",
+              }}
+            >
+              {Object.values(ENTITY_TYPES).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          )}
           <ConfidenceBadge level={item.confidence?.band} value={item.confidence?.value}/>
           <span className="rqc__head__suggestion">· {SUGGESTION_LABELS[item.suggestion] || item.suggestion}</span>
           <ConfidenceBandBadge band={item.confidence?.band}/>
