@@ -70,6 +70,9 @@ function buildTodaySuggestions() {
     "staleness": "callbacks",
     "incomplete": "intel",
     "orphan": "untouched",
+    "absence-gap": "callbacks",
+    "relationship-thread": "threads",
+    "promise-payoff": "callbacks",
   };
   const INSIGHT_ACTION = {
     "stalled-thread": "Open in Quests panel",
@@ -78,6 +81,9 @@ function buildTodaySuggestions() {
     "staleness": "Open editor",
     "incomplete": "Open editor",
     "orphan": "Open editor",
+    "absence-gap": "Open in manuscript",
+    "relationship-thread": "Open editor",
+    "promise-payoff": "Open editor",
   };
   const conf = { high: "high", warn: "strong", info: "uncertain" };
   try {

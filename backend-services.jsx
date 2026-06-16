@@ -5835,6 +5835,19 @@ Only evidenced pairs. Return JSON only.`;
       return result;
     },
 
+    // "Run continuity on this character/entity": the same deterministic
+    // insights, scoped to one record — either its own (entityRef.id) or one
+    // it's a party to (relatedIds, e.g. a relationship thread). Powers the
+    // dossier "Check continuity" button and the reel's run-on-a-character.
+    computeForEntity(entityId) {
+      if (!entityId) return { generatedAt: nowIso(), insights: [] };
+      const all = (this.computeInsights().insights) || [];
+      const insights = all.filter((i) =>
+        (i.entityRef && i.entityRef.id === entityId)
+        || (Array.isArray(i.relatedIds) && i.relatedIds.includes(entityId)));
+      return { generatedAt: nowIso(), entityId, insights };
+    },
+
     _compute() {
       const insights = [];
       const push = (o) => insights.push({ severity: "info", evidence: [], ...o });
@@ -6027,6 +6040,7 @@ Only evidenced pairs. Return JSON only.`;
           if (!c.name || c.name.length < 3) continue;
           const nameRe = _escapeRe(c.name.split(/\s+/)[0]);
           const eyeFound = [];
+          const hairFound = [];
           const titleFound = [];
           const oathFound = [];
           for (const ch of chapters) {
@@ -6036,6 +6050,8 @@ Only evidenced pairs. Return JSON only.`;
             let m;
             const eyeRe = new RegExp("\\b" + nameRe + "\\b[^.!?\\n]{0,60}?\\b(" + INSIGHT_EYE_COLOURS + ")\\s+eyes", "gi");
             while ((m = eyeRe.exec(text))) eyeFound.push({ value: m[1], chapter: n, quote: m[0].slice(0, 120) });
+            const hairRe = new RegExp("\\b" + nameRe + "\\b[^.!?\\n]{0,60}?\\b(" + INSIGHT_EYE_COLOURS + ")\\s+hair", "gi");
+            while ((m = hairRe.exec(text))) hairFound.push({ value: m[1], chapter: n, quote: m[0].slice(0, 120) });
             const titleRe = new RegExp("\\b(" + INSIGHT_TITLES + ")\\s+" + nameRe + "\\b", "g");
             while ((m = titleRe.exec(text))) titleFound.push({ value: m[1], chapter: n, quote: m[0] });
             const oathRe = new RegExp("\\b" + nameRe + "\\b[^.!?\\n]{0,80}?(?:swore|sworn|pledged)\\s+(?:fealty\\s+|allegiance\\s+)?to\\s+(?:the\\s+)?([A-Z][\\w'’-]+(?:\\s+[A-Z][\\w'’-]+)?)", "g");
@@ -6043,6 +6059,7 @@ Only evidenced pairs. Return JSON only.`;
           }
           const distinctChapters = (found) => new Set(found.map((f) => f.chapter)).size >= 2 || new Set(found.map((f) => f.value.toLowerCase())).size >= 2;
           if (eyeFound.length >= 2 && distinctChapters(eyeFound)) addContradiction(c, "eye colour", eyeFound);
+          if (hairFound.length >= 2 && distinctChapters(hairFound)) addContradiction(c, "hair colour", hairFound);
           if (titleFound.length >= 2 && distinctChapters(titleFound)) addContradiction(c, "title", titleFound);
           if (oathFound.length >= 2 && distinctChapters(oathFound)) addContradiction(c, "allegiance", oathFound);
         }
@@ -6063,6 +6080,92 @@ Only evidenced pairs. Return JSON only.`;
             }
           }
         } catch (_) {}
+      }
+
+      // ---- 7. mid-story absence gaps (a lead drops out, story moves on) ---
+      // Distinct from staleness (which is *trailing* absence): this catches an
+      // internal gap between two appearances ("in Ch.2, back in Ch.8, nothing
+      // between") — the "did you forget about them?" nudge.
+      for (const e of byType.cast) {
+        const nums = [...new Set((occByEntity.get(e.id) || [])
+          .map((o) => chapterNum.get(o.chapterId)).filter((n) => n != null))].sort((a, b) => a - b);
+        if (nums.length < 2) continue;
+        let gap = 0, gapStart = 0, gapEnd = 0;
+        for (let i = 1; i < nums.length; i++) {
+          const g = nums[i] - nums[i - 1];
+          if (g > gap) { gap = g; gapStart = nums[i - 1]; gapEnd = nums[i]; }
+        }
+        if (gap >= 4) {
+          push({
+            id: "ins-gap-" + e.id, kind: "absence-gap", severity: "info", entityRef: ref(e),
+            title: `${e.name} disappears for ${gap - 1} chapters (Ch. ${gapStart}–${gapEnd})`,
+            body: `${e.name} is in Ch. ${gapStart} and again in Ch. ${gapEnd}, but nothing between. A deliberate offstage stretch — or a thread left dangling?`,
+          });
+        }
+      }
+
+      // ---- 8. relationship-thread foresight (reads the relationship graph) -
+      // High-tension bonds that have gone quiet, and recorded bonds whose
+      // parties never actually share the page.
+      let relEdges = [];
+      try { if (typeof LinkService?.listRelationshipEdgesSync === "function") relEdges = LinkService.listRelationshipEdgesSync() || []; } catch (_) {}
+      const castNameOf = (id) => { const c = EntityService.getSync(id, "cast"); return c && c.status !== "deleted" ? c.name : null; };
+      const seenPair = new Set();
+      for (const edge of relEdges) {
+        if (!edge || !edge.a || !edge.b) continue;
+        const pk = [edge.a, edge.b].sort().join("|");
+        if (seenPair.has(pk)) continue; seenPair.add(pk);
+        const an = castNameOf(edge.a), bn = castNameOf(edge.b);
+        if (!an || !bn) continue;
+        const shared = Array.isArray(edge.chapters) ? edge.chapters : [];
+        const lastShared = shared.length ? Math.max(...shared) : 0;
+        const conflict = Number(edge.conflict) || 0;
+        const strength = Number(edge.strength) || 0;
+        const hasOccs = ((occByEntity.get(edge.a) || []).length || (occByEntity.get(edge.b) || []).length);
+        if (conflict >= 50 && latestNum >= 3 && lastShared > 0 && latestNum - lastShared >= 2) {
+          push({
+            id: "ins-rel-quiet-" + (edge.id || pk), kind: "relationship-thread", severity: "warn",
+            entityRef: { id: edge.a, type: "cast", label: an }, relatedIds: [edge.a, edge.b],
+            title: `${an} & ${bn}: their ${edge.type || "conflict"} has gone quiet`,
+            body: `High tension that last shared the page in Ch. ${lastShared} (now Ch. ${latestNum}). Escalate it, resolve it, or it quietly cools.`,
+          });
+        } else if (strength >= 40 && shared.length === 0 && hasOccs) {
+          push({
+            id: "ins-rel-apart-" + (edge.id || pk), kind: "relationship-thread", severity: "info",
+            entityRef: { id: edge.a, type: "cast", label: an }, relatedIds: [edge.a, edge.b],
+            title: `${an} & ${bn} are bonded but never share a scene`,
+            body: `A ${edge.type || "bond"} is on record, yet they've never appeared together. A scene between them might earn it.`,
+          });
+        }
+      }
+
+      // ---- 9. promise / payoff (Chekhov's gun) ---------------------------
+      // Significant items introduced with weight but never used, and
+      // provisional lore/foreshadowing that's never resolved into canon.
+      const SIGNIF_RARITY = /legendary|heirloom|unique|cursed|artifact|relic|fabled|mythic/i;
+      for (const it of byType.items) {
+        const d = it.data || {};
+        const mentions = (occByEntity.get(it.id) || []).length;
+        const significant = SIGNIF_RARITY.test(String(d.rarity || "")) || SIGNIF_RARITY.test(String(d.itemType || "")) || !!d.significance;
+        if (significant && mentions <= 1 && latestNum >= 3) {
+          push({
+            id: "ins-payoff-" + it.id, kind: "promise-payoff", severity: "info", entityRef: ref(it),
+            title: `${it.name} was introduced with weight but never used`,
+            body: `A ${String(d.rarity || "significant").toLowerCase()} item that's barely touched the page. A planted gun should go off — or be cut.`,
+          });
+        }
+      }
+      for (const lo of byType.lore) {
+        const d = lo.data || {};
+        const band = String(d.band || d.loreKind || d.kind || "").toLowerCase();
+        const provisional = /provisional|working.?theory|foreshadow|rumou?r|prophec/.test(band);
+        if (provisional && latestNum >= 3 && ((occByEntity.get(lo.id) || []).length === 0 || ageDays(lo.updatedAt) > 7)) {
+          push({
+            id: "ins-payoff-lore-" + lo.id, kind: "promise-payoff", severity: "info", entityRef: ref(lo),
+            title: `Provisional lore "${lo.name}" is still unresolved`,
+            body: "Set up as provisional/foreshadowed but never confirmed or paid off. Resolve it into canon, contradict it on purpose, or let it go.",
+          });
+        }
       }
 
       const order = { high: 0, warn: 1, info: 2 };
