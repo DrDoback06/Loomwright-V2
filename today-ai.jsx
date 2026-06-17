@@ -626,13 +626,13 @@ const AiWriterPanelBody = ({ panel }) => {
       window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onRunContinuityCheck" } }));
       return;
     }
-    // Provider-less path: render the local brief instead of only a notice.
+    // Provider-less path: the local brief IS the result — show it and make it
+    // the Copy/Accept target. Don't also fire the provider-gated notice popup.
     const route = window.LoomwrightBackend?.AIRoutingService?.resolveRoute?.("writingDraft");
     if (!route) {
-      setGenerated({ text: buildLocalBrief(), mode: "local-brief" });
-      window.dispatchEvent(new CustomEvent("lw:dispatch-callback", {
-        detail: { name: "onGenerateAIWriterDraft", detail: { prompt: composePrompt(), chapterId: live.chapterId, entityIds: chips.map((c) => c.id) } },
-      }));
+      const brief = buildLocalBrief();
+      try { window.__LW_LAST_GENERATED_DRAFT__ = brief; } catch (_e) {}
+      setGenerated({ text: brief, mode: "local-brief" });
       return;
     }
     window.dispatchEvent(new CustomEvent("lw:dispatch-callback", {
