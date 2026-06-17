@@ -866,6 +866,27 @@ const AtlasEditor = ({
     // zoom toward the plate centre (600, 350 in user units)
     return { z: nz, x: 600 - ((600 - v.x) / v.z) * nz, y: 350 - ((350 - v.y) / v.z) * nz };
   });
+  // Drill-down interiors: a stack of maps. "world" is the root; opening a
+  // place enters a sub-map keyed by its id (its children draw inside it).
+  const [mapStack, setMapStack] = _us_ae([{ id: "world", name: "World" }]);
+  const activeMap = mapStack[mapStack.length - 1].id;
+  const mapLocations = _um_ae(() => locations.filter((l) => (l.atlasMap || "world") === activeMap), [locations, activeMap]);
+  const onDrillDown = (loc) => {
+    if (!loc || !loc.id || loc.id === activeMap) return;
+    setMapStack((s) => (s.some((m) => m.id === loc.id) ? s : [...s, { id: loc.id, name: loc.name || "Inside" }]));
+    setView({ z: 1, x: 0, y: 0 });
+    setTool("select");
+    _aeNotice("Inside " + (loc.name || "the place") + " — draw what's within. Double-click a place to go deeper.");
+  };
+  const onCrumb = (i) => { setMapStack((s) => s.slice(0, Math.max(1, i + 1))); setView({ z: 1, x: 0, y: 0 }); };
+  // Stamp a location onto the current map (atlasMap + parent for interiors).
+  const _aeAssignToMap = async (id) => {
+    const B = window.LoomwrightBackend; const e = B?.EntityService?.getSync?.(id, "locations");
+    if (!e) return;
+    const data = { ...(e.data || {}), atlasMap: activeMap };
+    if (activeMap !== "world") data.parentId = activeMap;
+    await B.EntityService.update("locations", id, { data });
+  };
   const locById = _um_ae(() => Object.fromEntries(locations.map((l) => [l.id, l])), [locations]);
 
   // ---- Live tool actions (persist through AtlasService) -------------
@@ -879,13 +900,14 @@ const AtlasEditor = ({
       // If an unplaced location is selected, pin IT here; otherwise
       // create a fresh location at the tapped point and open its editor.
       if (selected && selected.placed === false) {
-        await B.AtlasService.placeLocation(selected.id, pct);
+        await B.AtlasService.placeLocation(selected.id, pct, { atlasMap: activeMap });
+        await _aeAssignToMap(selected.id);
         _aeNotice(selected.name + " pinned to the map.");
         return;
       }
       const ent = await B.EntityService.save("locations", {
         name: "New location",
-        data: { placed: true, coords: { x: pct.x, y: pct.y }, kind: "city" },
+        data: { placed: true, coords: { x: pct.x, y: pct.y }, kind: activeMap === "world" ? "city" : "room", atlasMap: activeMap, parentId: activeMap !== "world" ? activeMap : undefined },
       }, { status: "active" });
       window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations", initial: ent, mode: "full" } }));
     }
@@ -901,13 +923,17 @@ const AtlasEditor = ({
     const B = window.LoomwrightBackend;
     if (!B || !shape) return;
     if (selected && selected.id) {
-      await B.AtlasService.setLocationShape(selected.id, shape);
+      await B.AtlasService.setLocationShape(selected.id, shape, { atlasMap: activeMap });
+      await _aeAssignToMap(selected.id);
       window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
       _aeNotice("Drew " + (selected.name || "the place") + ".");
       return;
     }
-    const ent = await B.EntityService.save("locations", { name: "New area", data: { kind: "region" } }, { status: "active" });
-    await B.AtlasService.setLocationShape(ent.id, shape);
+    const ent = await B.EntityService.save("locations", {
+      name: "New area",
+      data: { kind: activeMap === "world" ? "region" : "room", atlasMap: activeMap, parentId: activeMap !== "world" ? activeMap : undefined },
+    }, { status: "active" });
+    await B.AtlasService.setLocationShape(ent.id, shape, { atlasMap: activeMap });
     window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
     onSelect && onSelect({ id: ent.id, type: "locations", name: ent.name, placed: true });
     _aeNotice("Drew a new area — rename it in the inspector.");
@@ -966,22 +992,39 @@ const AtlasEditor = ({
         <AtlasEdLeftRail
           collapsed={leftRailCollapsed} onToggle={onToggleLeftRail}
           tab={leftTab} onSetTab={onSetLeftTab}
-          locations={locations} layers={layers} layerState={layerState}
+          locations={mapLocations} layers={layers} layerState={layerState}
           cast={cast} selectedId={selected?.id}
           query={query} onSetQuery={setQuery}
           onSelectLoc={onSelect} onSelectEntity={onSelectEntity}
           onToggleLayer={onToggleLayer}/>
 
         <main className="atlas-editor__canvas">
+          {mapStack.length > 1 && (
+            <div className="atlas-editor__breadcrumb" data-ui="AtlasBreadcrumb"
+                 style={{ position: "absolute", top: 8, left: 8, zIndex: 5, display: "flex", alignItems: "center", gap: 4,
+                          background: "rgba(250,242,221,0.95)", border: "1px solid var(--line-2, rgba(74,56,28,0.3))",
+                          borderRadius: "var(--r-pill, 999px)", padding: "3px 10px", fontSize: "var(--fs-xs)", boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }}>
+              {mapStack.map((m, i) => (
+                <React.Fragment key={m.id}>
+                  {i > 0 && <span style={{ opacity: 0.45 }}>›</span>}
+                  <button data-atlas-crumb={m.id} onClick={() => onCrumb(i)}
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "1px 3px",
+                                   color: i === mapStack.length - 1 ? "var(--ink-1)" : "var(--accent-deep, #8a5a1c)",
+                                   fontWeight: i === mapStack.length - 1 ? 700 : 500,
+                                   fontFamily: "var(--font-display)", fontSize: "var(--fs-xs)" }}>{m.name}</button>
+                </React.Fragment>
+              ))}
+            </div>
+          )}
           <AtlasMap
-            locations={locations} routes={routes} beasts={beasts} items={items} factions={factions} chapters={chapters}
+            locations={mapLocations} routes={routes} beasts={beasts} items={items} factions={factions} chapters={chapters}
             layers={layerState} selectedId={selected?.id}
             context={context} scrubChapter={scrubChapter}
             showLabels={showLabels} showIso={showIso} showGrid={showGrid} showTexture={showTexture}
             variant="editor" onSelect={handleSelect} cleanStyle={cleanStyle}
             tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin} onDrawShape={onDrawShape} onReshape={onReshape}
-            view={view} onViewChange={setView}/>
-          {miniMapVisible && <AtlasMiniMap locations={locations} routes={routes} selectedId={selected?.id} context={context}/>}
+            view={view} onViewChange={setView} onDrillDown={onDrillDown}/>
+          {miniMapVisible && <AtlasMiniMap locations={mapLocations} routes={routes} selectedId={selected?.id} context={context}/>}
           {context && context.source && (
             <div className="atlas-editor__ctxbanner">
               <Icon name="link" size={11}/>

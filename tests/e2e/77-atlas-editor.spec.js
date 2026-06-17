@@ -135,4 +135,35 @@ test.describe("T77. Atlas editor — shapes + unplaced tray", () => {
     const nowActive = await styleBtn.evaluate((el) => el.classList.contains("is-active"));
     expect(nowActive).toBe(!wasActive);
   });
+
+  test("double-click drills into a place's interior; breadcrumb returns", async ({ page }) => {
+    await openFreshApp(page);
+    const court = await saveEntity(page, "locations", {
+      name: "Glass Court", data: { kind: "building", shape: { type: "rect", x: 28, y: 28, w: 30, h: 30 } },
+    }, { status: "active" });
+    const hall = await saveEntity(page, "locations", {
+      name: "Throne Hall",
+      data: { kind: "room", atlasMap: court.id, parentId: court.id, shape: { type: "rect", x: 34, y: 34, w: 22, h: 22 } },
+    }, { status: "active" });
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    // World map: the building shows; its interior room does NOT
+    await expect(editor.locator(`[data-atm-shape='${court.id}']`)).toBeVisible({ timeout: 5000 });
+    await expect(editor.locator(`[data-atm-shape='${hall.id}']`)).toHaveCount(0);
+
+    // drill into the building
+    await editor.locator(`[data-atm-shape='${court.id}']`).dblclick();
+    await expect(editor.locator(`[data-atlas-crumb='${court.id}']`)).toBeVisible({ timeout: 5000 });
+    // now the room shows; the building (parent map) does not
+    await expect(editor.locator(`[data-atm-shape='${hall.id}']`)).toBeVisible({ timeout: 5000 });
+    await expect(editor.locator(`[data-atm-shape='${court.id}']`)).toHaveCount(0);
+
+    // breadcrumb back to the world
+    await editor.locator("[data-atlas-crumb='world']").click();
+    await expect(editor.locator(`[data-atm-shape='${court.id}']`)).toBeVisible({ timeout: 5000 });
+    await expect(editor.locator(`[data-atm-shape='${hall.id}']`)).toHaveCount(0);
+    if (process.env.SHOT) await page.screenshot({ path: "/tmp/atlas-drill.png" });
+  });
 });

@@ -207,7 +207,7 @@ const AtlasRegions = ({ locations, layers, highlight }) => {
 // Drawn regions — user-authored shapes (rect/circle/polygon/freehand)
 // for rooms / areas / lands. Filled + labelled at the centroid; clickable.
 // ---------------------------------------------------------------------
-const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, showLabels = true, clean = false, shapeOf, onShapePointerDown }) => (
+const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, showLabels = true, clean = false, shapeOf, onShapePointerDown, onDoubleClick }) => (
   <g className="atm-shapes">
     {locations.map((loc) => {
       const shape = shapeOf ? shapeOf(loc) : loc.shape;
@@ -224,6 +224,7 @@ const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, sho
         <g key={loc.id} data-atm-shape={loc.id} className={"atm-shape" + (focused ? " is-focused" : "")}
            opacity={dim ? 0.3 : 1} style={{ cursor: focused ? "move" : "pointer" }}
            onPointerDown={(e) => onShapePointerDown && onShapePointerDown(e, loc)}
+           onDoubleClick={(e) => { if (onDoubleClick) { e.stopPropagation(); onDoubleClick(loc); } }}
            onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc); }}>
           <Tag {...geom.props}
                fill={clean ? st.fill.replace(/0\.\d+\)/, "0.28)") : st.fill}
@@ -496,7 +497,7 @@ const AtlasMap = ({
   variant = "side", className = "", cleanStyle = false,
   // Live editing (editor variant): active tool + placement callbacks.
   tool = "select", onMapPoint = null, onMovePin = null, onDrawShape = null, onReshape = null,
-  view = null, onViewChange = null,
+  view = null, onViewChange = null, onDrillDown = null,
 }) => {
   const vt = view || { z: 1, x: 0, y: 0 };
   const locById = _um_am(() => Object.fromEntries(locations.map((l) => [l.id, l])), [locations]);
@@ -609,13 +610,13 @@ const AtlasMap = ({
     dragRef.current = { id: loc.id, moved: false };
     svgRef.current.setPointerCapture?.(e.pointerId);
   };
-  // Drag the body of the SELECTED region to move it (select tool only).
+  // Drag the body of the SELECTED region to move it (select tool only). Armed
+  // as "pending" — it only becomes a move once the pointer travels far enough,
+  // so a plain click still selects and a double-click can drill down.
   const onShapePointerDown = (e, loc) => {
     if (variant !== "editor" || tool !== "select" || !onReshape) return;
     if (loc.id !== focusId) return; // first click selects; once selected, drag moves
-    e.stopPropagation();
-    try { svgRef.current.setPointerCapture?.(e.pointerId); } catch (_e) {}
-    reshapeRef.current = { locId: loc.id, mode: "move", orig: loc.shape, startPct: toPct(e) };
+    reshapeRef.current = { locId: loc.id, mode: "move", orig: loc.shape, startPct: toPct(e), pointerId: e.pointerId, pending: true };
   };
   // Drag a resize/vertex handle.
   const onHandlePointerDown = (e, loc, mode, index) => {
@@ -635,6 +636,12 @@ const AtlasMap = ({
     const rs = reshapeRef.current;
     if (rs) {
       const p = toPct(e);
+      if (rs.pending) {
+        const moved = Math.hypot(((p.x - rs.startPct.x) / 100) * 1200, ((p.y - rs.startPct.y) / 100) * 700);
+        if (moved < 4) return; // still a click/double-click, not a drag
+        rs.pending = false;
+        try { svgRef.current.setPointerCapture?.(rs.pointerId); } catch (_e) {}
+      }
       const next = _amReshape(rs.orig, rs.mode, rs.index, p.x - rs.startPct.x, p.y - rs.startPct.y, p);
       editShapeRef.current = { locId: rs.locId, shape: next };
       setEditShape(editShapeRef.current);
@@ -666,7 +673,8 @@ const AtlasMap = ({
       reshapeRef.current = null;
       const es = editShapeRef.current; editShapeRef.current = null;
       setEditShape(null);
-      if (es && es.locId === rs.locId && onReshape) onReshape(rs.locId, es.shape);
+      // Only commit a real drag; a "pending" (no-movement) press was just a click.
+      if (!rs.pending && es && es.locId === rs.locId && onReshape) onReshape(rs.locId, es.shape);
       return;
     }
     const d = dragRef.current;
@@ -738,7 +746,8 @@ const AtlasMap = ({
       <AtlasShapes locations={locations} layers={layers} onSelect={onSelect} focusId={focusId}
                    ctxLocs={ctxLocs} dimFn={scrubFn} clean={cleanStyle}
                    showLabels={showLabels && variant === "editor"}
-                   shapeOf={shapeOf} onShapePointerDown={onReshape ? onShapePointerDown : null}/>
+                   shapeOf={shapeOf} onShapePointerDown={onReshape ? onShapePointerDown : null}
+                   onDoubleClick={onDrillDown}/>
 
       {/* Resize/vertex handles for the selected region */}
       {variant === "editor" && onReshape && tool === "select" && (() => {
@@ -796,7 +805,8 @@ const AtlasMap = ({
           // Queue badge
           const badge = loc.queue ? { text: String(loc.queue), color: loc.queueLevel === "high" ? "#5d6d4e" : "#c98a2c" } : null;
           return (
-            <g key={loc.id} data-atm-pin={loc.id} opacity={opOf(pinLayerId(loc))} onPointerDown={(e) => onPinPointerDown(e, loc)}>
+            <g key={loc.id} data-atm-pin={loc.id} opacity={opOf(pinLayerId(loc))} onPointerDown={(e) => onPinPointerDown(e, loc)}
+               onDoubleClick={(e) => { if (onDrillDown) { e.stopPropagation(); onDrillDown(loc); } }}>
               <AtlasPin loc={pinLoc(loc)} focused={focused} dim={dim} badge={badge}
                         scaleLabel={variant === "side" ? 1 : 0.95}
                         showLabel={showLabels && (variant === "editor" || ["country","city","town","region"].includes(loc.type))}
