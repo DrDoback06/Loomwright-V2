@@ -601,11 +601,18 @@ const CastBrowse = ({ cast, suggestions = [], selectedId, multiSelected, multiMo
   const [tab, setTab] = _us_cast("browse"); // browse | review | suggestions
   const [statusFilter, setStatusFilter] = _us_cast("all"); // all | alive | dead | missing | unknown
   const [groupBy, setGroupBy] = _us_cast("role"); // role | none | status
+  const [query, setQuery] = _us_cast("");
 
   const filtered = _um_cast(() => {
-    if (statusFilter === "all") return cast;
-    return cast.filter((c) => c.status === statusFilter);
-  }, [cast, statusFilter]);
+    let xs = statusFilter === "all" ? cast : cast.filter((c) => c.status === statusFilter);
+    const q = query.trim().toLowerCase();
+    if (q) xs = xs.filter((c) => {
+      const traits = Array.isArray(c.traits) ? c.traits.map((t) => (t && t.label) || t) : [];
+      const hay = [c.name, c.epithet, c.title, c.summary, c.affiliation, c.origin, ...(Array.isArray(c.tags) ? c.tags : []), ...traits].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+    return xs;
+  }, [cast, statusFilter, query]);
 
   const grouped = _um_cast(() => {
     if (groupBy === "none") return [{ key: "all", label: null, items: filtered }];
@@ -639,6 +646,12 @@ const CastBrowse = ({ cast, suggestions = [], selectedId, multiSelected, multiMo
 
       {tab === "browse" && (
         <>
+          <div className="cast__search">
+            <Icon name="search" size={12}/>
+            <input className="cast__search__input" data-testid="cast-search" type="search"
+              placeholder="Search cast — name, epithet, tags…" value={query} onChange={(e) => setQuery(e.target.value)}/>
+            {query && <button className="cast__search__clear" title="Clear" onClick={() => setQuery("")}><Icon name="close" size={11}/></button>}
+          </div>
           {/* Filter bar */}
           <div className="cast__filterbar">
             <span className="cast__filterbar__lbl">Status</span>
@@ -1047,7 +1060,7 @@ const CastDetail = ({
       {/* Footer actions */}
       <div style={{ display: "flex", gap: 6, paddingTop: "var(--sp-4)", borderTop: "1px dashed var(--line-2)" }}>
         <Btn variant="primary" size="sm" icon="paper" onClick={onJumpManuscript}>Open in manuscript</Btn>
-        <Btn variant="outline" size="sm" icon="link" data-callback="onLinkEntity">Link…</Btn>
+        <Btn variant="outline" size="sm" icon="link" data-testid="cast-link" onClick={onAddRelationship} title="Link this character to another entity">Link…</Btn>
         <Btn variant="ghost" size="sm" icon="more" onClick={onCastMore} title="More"/>
       </div>
     </div>
@@ -1575,7 +1588,6 @@ const CastPanelBody = ({ panel, panelContext, onSelectEntity }) => {
       onExtract={() => window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "manuscript", typeFocus: "cast" } }))}
     />;
   }
-  if (view === "edit")    return <CastEdit c={selected} onCancel={() => setView("selected")} onSave={() => setView("selected")}/>;
   if (view === "review")    return <div className="cast"><CastReviewList cast={dossierList.filter((c) => c.queue)}/></div>;
   if (view === "suggestion")return <div className="cast"><CastSuggestionList items={liveSuggestions}/></div>;
   if (view === "selected" && selected) {
@@ -1750,6 +1762,27 @@ const CastEquipmentSlots = ({ cast }) => {
             onDrop={(e) => {
               e.preventDefault();
               e.currentTarget.classList.remove("is-over");
+              let payload = null;
+              try { const raw = e.dataTransfer.getData("application/x-loom-entity") || e.dataTransfer.getData("text/loomwright-entity"); if (raw) payload = JSON.parse(raw); } catch (_err) {}
+              const itemId = payload && payload.id;
+              const ptype = payload && (payload.entityType || payload.type);
+              const castId = cast && cast.id;
+              const B = window.LoomwrightBackend;
+              if (!itemId || (ptype && ptype !== "items") || !castId || !B || !B.EntityService) return;
+              (async () => {
+                try {
+                  const it = B.EntityService.getSync(itemId, "items");
+                  if (it) await B.EntityService.update("items", itemId, { data: { ...(it.data || {}), slot: slot.id, equipped: true, currentOwner: { id: castId, name: cast.name, type: "cast" } } });
+                  const ce = B.EntityService.getSync(castId, "cast");
+                  if (ce) {
+                    const eq = (Array.isArray(ce.data && ce.data.equippedItems) ? ce.data.equippedItems : []).filter((x) => (x && (x.id || x)) !== itemId);
+                    eq.push({ id: itemId, name: (payload.name || (it && it.name) || "Item"), type: "items", slot: slot.id });
+                    await B.EntityService.update("cast", castId, { data: { ...(ce.data || {}), equippedItems: eq } });
+                  }
+                  window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+                  try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Equipped " + (payload.name || "item") + " to " + slot.label + "." } })); } catch (_e) {}
+                } catch (_err) {}
+              })();
             }}
           >
             <div className="cast-equip__slot__lbl">{slot.label}</div>

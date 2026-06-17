@@ -65,6 +65,22 @@
   border-color: color-mix(in srgb, var(--cast-accent) 40%, transparent);
 }
 
+/* ----- Roster search ----- */
+.cast__search {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; margin-bottom: var(--sp-3, 8px);
+  border: 1px solid var(--line-2); border-radius: var(--r-pill, 999px);
+  color: var(--ink-4);
+}
+.cast__search__input {
+  flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
+  font-family: var(--font-sans); font-size: var(--fs-sm); color: var(--ink-1);
+}
+.cast__search__clear {
+  border: 0; background: transparent; color: var(--ink-4);
+  cursor: pointer; padding: 2px; display: inline-flex;
+}
+
 /* ----- Filter bar (group-by + status filter chips) ----- */
 .cast__filterbar {
   display: flex; flex-wrap: wrap; align-items: center;
