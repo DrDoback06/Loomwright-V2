@@ -530,6 +530,23 @@
 .wr-mk--footnote { border-bottom: 1px dotted var(--ink-4); cursor: help; }
 .wr-mk--footnote::after { content: "※"; font-size: 0.7em; vertical-align: super; color: var(--accent-deep, var(--accent)); margin-left: 1px; }
 
+/* Footnote note editor popover */
+.wr-fn-pop {
+  position: fixed; z-index: 60; width: 260px;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px; border-radius: var(--r-3, 8px);
+  background: var(--bg-paper-1, #fff); border: 1px solid var(--line-2);
+  box-shadow: var(--shadow-2, 0 8px 28px rgba(0,0,0,0.18));
+}
+.wr-fn-pop__ta {
+  width: 100%; min-height: 64px; resize: vertical;
+  padding: 6px 8px; font-family: var(--font-serif); font-size: var(--fs-sm);
+  border: 1px solid var(--line-2); border-radius: var(--r-2, 6px);
+  background: var(--bg-paper-2); color: var(--ink-1);
+}
+.wr-fn-pop__ta:focus { outline: none; border-color: var(--accent); }
+.wr-fn-pop__row { display: flex; gap: 6px; justify-content: flex-end; }
+
 /* Empty / loading / error chapter states */
 .wr-canvas--empty,
 .wr-canvas--loading,

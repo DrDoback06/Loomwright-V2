@@ -423,8 +423,8 @@ const ManuscriptToolbar = ({
       <div className="wr-toolbar__group">
         <TB label="Link to entity"      icon="link" onClick={() => onAction("link-entity")}/>
         <TB label="Create entity from selection" icon="plus" onClick={() => onAction("create-entity")}/>
-        <TB label="Insert reference"    disabled icon="bookmark"/>
-        <TB label="Insert footnote"     disabled icon="paper"/>
+        <TB label="Insert reference"    testid="wr-tb-reference" icon="bookmark" onClick={() => onAction("reference")}/>
+        <TB label="Insert footnote"     testid="wr-tb-footnote" icon="paper" onClick={() => onAction("footnote")}/>
       </div>
       <div className="wr-toolbar__group">
         <TB label="Find / replace"      testid="wr-tb-find" icon="search" onClick={() => onAction("find")}/>
@@ -1227,6 +1227,23 @@ const FindReplaceBar = ({ query, replace, count, caseSensitive, onQuery, onRepla
   );
 };
 
+const FootnotePopover = ({ note, top, left, onChange, onSave, onRemove, onClose }) => {
+  const ref = _wrUR(null);
+  _wrUE(() => { try { ref.current && ref.current.focus(); } catch (_e) {} }, []);
+  return (
+    <div className="wr-fn-pop" data-ui="FootnotePopover" style={{ top: top + "px", left: left + "px" }} onMouseDown={(e) => e.stopPropagation()}>
+      <textarea ref={ref} className="wr-fn-pop__ta" data-testid="wr-fn-note" placeholder="Footnote text…" value={note}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onSave(); } }}/>
+      <div className="wr-fn-pop__row">
+        <button type="button" className="wr-find__btn wr-find__btn--text" data-testid="wr-fn-save" onClick={onSave}>Save</button>
+        <button type="button" className="wr-find__btn wr-find__btn--text" data-testid="wr-fn-remove" onClick={onRemove}>Remove</button>
+        <button type="button" className="wr-find__btn" title="Close" onClick={onClose}><Icon name="close" size={11}/></button>
+      </div>
+    </div>
+  );
+};
+
 const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, marks, spellCheck, onInput, onDoubleClick, onMouseOver, onMouseOut }) => {
   const localRef = _wrUR(null);
   const htmlRef = _wrUR(html);
@@ -1519,6 +1536,7 @@ const WritersRoomScreen = ({
   const [findCount, setFindCount] = _wrUS({ total: 0, index: 0 });
   const [findCase, setFindCase] = _wrUS(false);
   const findRangesRef = _wrUR([]);
+  const [footnoteEdit, setFootnoteEdit] = _wrUS(null);
   // Derive focus/margins from layout mode
   const focusMode = L.writingLayoutMode === "clean";
   const marginsHidden = L.writingLayoutMode === "clean" || L.writingLayoutMode === "manuscript-focus";
@@ -1997,6 +2015,26 @@ const WritersRoomScreen = ({
     findRangesRef.current = [];
     setFindCount({ total: 0, index: 0 });
   }, []);
+  const saveFootnote = _wrUC(() => {
+    setFootnoteEdit((fe) => {
+      if (!fe) return null;
+      const body = bodyRef.current;
+      const span = body && body.querySelector('[data-mark-id="' + fe.id + '"]');
+      if (span) { span.setAttribute("data-note", fe.note || ""); span.setAttribute("title", fe.note || "Footnote"); }
+      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      return null;
+    });
+  }, [canvasState, onSetSyncState]);
+  const removeFootnote = _wrUC(() => {
+    setFootnoteEdit((fe) => {
+      if (!fe) return null;
+      const body = bodyRef.current;
+      const span = body && body.querySelector('[data-mark-id="' + fe.id + '"]');
+      if (span) { const parent = span.parentNode; while (span.firstChild) parent.insertBefore(span.firstChild, span); parent.removeChild(span); try { parent.normalize(); } catch (_e) {} }
+      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      return null;
+    });
+  }, [canvasState, onSetSyncState]);
   // Cmd/Ctrl+F opens Find when the focus is inside the Writer's Room.
   _wrUE(() => {
     const onKey = (e) => {
@@ -2044,6 +2082,34 @@ const WritersRoomScreen = ({
       const body = bodyRef.current;
       if (body) { try { body.focus(); _wrToggleHighlight(body); } catch (_e) {} }
       if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      return;
+    }
+    if (action === "reference") {
+      const body = bodyRef.current;
+      const sel = window.getSelection && window.getSelection();
+      if (!body || !sel || sel.isCollapsed) { try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Select the text to turn into a reference first." } })); } catch (_e) {} return; }
+      const txt = String(sel.toString() || "").trim();
+      let extra = { "title": "Reference" };
+      try {
+        const hit = window.LoomwrightBackend && window.LoomwrightBackend.findKnownEntityMention ? window.LoomwrightBackend.findKnownEntityMention(txt, { threshold: 0.6 }) : null;
+        if (hit && hit.entity) extra = { "data-ref-id": hit.entity.id, "data-ref-type": hit.entity.type, "title": (hit.entity.name || txt) + " — double-click to open" };
+      } catch (_e) {}
+      try { body.focus(); _wrInsertMark(body, "reference", extra); } catch (_e) {}
+      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      return;
+    }
+    if (action === "footnote") {
+      const body = bodyRef.current;
+      const sel = window.getSelection && window.getSelection();
+      if (!body || !sel || sel.isCollapsed) { try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Select the text to footnote first." } })); } catch (_e) {} return; }
+      const id = "mk-fn-" + Math.random().toString(36).slice(2, 8);
+      body.focus();
+      const ok = _wrInsertMark(body, "footnote", { "data-mark-id": id, "data-note": "" });
+      if (!ok) return;
+      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      let top = 140, left = 140;
+      try { const span = body.querySelector('[data-mark-id="' + id + '"]'); if (span) { const r = span.getBoundingClientRect(); top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 172)); left = Math.max(8, Math.min(r.left, window.innerWidth - 280)); } } catch (_e) {}
+      setFootnoteEdit({ id, note: "", top, left });
       return;
     }
   }, [onCreateEntityFromSelection, onLinkEntity, onAddNote, canvasState, onSetSyncState]);
@@ -2105,6 +2171,13 @@ const WritersRoomScreen = ({
   // (contenteditable=false). Double-click opens the entity; hover shows the
   // floating chip. Delegation survives innerHTML rewrites.
   const onEntityDoubleClickDelegated = _wrUC((e) => {
+    const ref = e.target && e.target.closest && e.target.closest(".wr-mk--reference[data-ref-id]");
+    if (ref) {
+      if (e.preventDefault) e.preventDefault();
+      try { const s = window.getSelection && window.getSelection(); if (s) s.removeAllRanges(); } catch (_e) {}
+      handleEntityDoubleClick({ type: ref.getAttribute("data-ref-type"), id: ref.getAttribute("data-ref-id"), label: ref.textContent });
+      return;
+    }
     const span = e.target && e.target.closest && e.target.closest("[data-entity-id]");
     if (!span) return;
     if (e.preventDefault) e.preventDefault();
@@ -2337,6 +2410,15 @@ const WritersRoomScreen = ({
               onNext={() => gotoMatch(1)} onPrev={() => gotoMatch(-1)}
               onReplaceOne={replaceOne} onReplaceAll={replaceAllFind}
               onClose={closeFind}
+            />
+          )}
+
+          {footnoteEdit && (
+            <FootnotePopover
+              note={footnoteEdit.note} top={footnoteEdit.top} left={footnoteEdit.left}
+              onChange={(v) => setFootnoteEdit((fe) => (fe ? { ...fe, note: v } : fe))}
+              onSave={saveFootnote} onRemove={removeFootnote}
+              onClose={() => setFootnoteEdit(null)}
             />
           )}
 
