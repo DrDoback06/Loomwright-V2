@@ -434,7 +434,7 @@ const ManuscriptToolbar = ({
         <TB label="Voice consistency (preference)" active={voice} className="wr-toolbar__btn--small" onClick={onToggleVoice}>VO</TB>
       </div>
       <div className="wr-toolbar__group">
-        <TB label="Thesaurus"           disabled icon="book"/>
+        <TB label="Thesaurus"           testid="wr-tb-thesaurus" icon="book" onClick={() => onAction("thesaurus")}/>
         <TB label="Revision mode (preference)"       active={revision}    className="wr-toolbar__btn--small" onClick={onToggleRevision}>REV</TB>
         <TB label="Author attribution"  active={attribution} className="wr-toolbar__btn--small" onClick={onToggleAttribution}>AUT</TB>
         <TB label="Focus mode"          active={focusMode}   icon="eye" onClick={onToggleFocusMode}/>
@@ -1227,6 +1227,55 @@ const FindReplaceBar = ({ query, replace, count, caseSensitive, onQuery, onRepla
   );
 };
 
+// Offline thesaurus — a bundled set of common writing words. Zero-token; the
+// AI "deeper synonyms" path can layer on top later.
+const WR_THESAURUS = {
+  said: ["replied", "answered", "remarked", "murmured", "stated", "noted"],
+  asked: ["queried", "inquired", "questioned", "wondered", "pressed"],
+  walked: ["strode", "ambled", "paced", "wandered", "trudged", "strolled"],
+  ran: ["sprinted", "dashed", "bolted", "raced", "fled", "darted"],
+  looked: ["gazed", "glanced", "stared", "peered", "watched", "regarded"],
+  big: ["large", "vast", "immense", "huge", "massive", "towering"],
+  small: ["little", "tiny", "slight", "minute", "compact", "diminutive"],
+  happy: ["glad", "joyful", "content", "cheerful", "elated", "pleased"],
+  sad: ["unhappy", "sorrowful", "mournful", "downcast", "forlorn", "dejected"],
+  angry: ["furious", "irate", "enraged", "incensed", "livid", "seething"],
+  afraid: ["scared", "fearful", "terrified", "frightened", "alarmed", "anxious"],
+  beautiful: ["lovely", "gorgeous", "stunning", "exquisite", "radiant", "striking"],
+  cold: ["chilly", "frigid", "icy", "bitter", "freezing", "raw"],
+  dark: ["dim", "gloomy", "murky", "shadowy", "black", "unlit"],
+  bright: ["radiant", "brilliant", "luminous", "gleaming", "vivid", "dazzling"],
+  old: ["ancient", "aged", "elderly", "antiquated", "weathered", "timeworn"],
+  quiet: ["silent", "hushed", "still", "muted", "noiseless", "subdued"],
+  loud: ["deafening", "booming", "thunderous", "blaring", "raucous", "piercing"],
+  fast: ["quick", "swift", "rapid", "speedy", "brisk", "fleet"],
+  slow: ["sluggish", "unhurried", "leisurely", "gradual", "plodding", "languid"],
+  strong: ["powerful", "mighty", "sturdy", "robust", "forceful", "formidable"],
+  weak: ["feeble", "frail", "faint", "fragile", "delicate", "infirm"],
+  good: ["fine", "excellent", "worthy", "admirable", "superior", "splendid"],
+  bad: ["poor", "awful", "dreadful", "terrible", "wretched", "dire"],
+  tired: ["weary", "exhausted", "fatigued", "drained", "spent", "worn"],
+  whispered: ["murmured", "breathed", "muttered", "hissed", "mumbled"],
+  shouted: ["yelled", "bellowed", "roared", "cried", "hollered", "exclaimed"],
+};
+
+const ThesaurusPopover = ({ word, synonyms, top, left, onPick, onClose }) => {
+  return (
+    <div className="wr-thes" data-ui="ThesaurusPopover" style={{ top: top + "px", left: left + "px" }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="wr-thes__head"><span className="wr-thes__word">{word}</span><button type="button" className="wr-find__btn" title="Close" onClick={onClose}><Icon name="close" size={11}/></button></div>
+      {synonyms && synonyms.length ? (
+        <div className="wr-thes__list" data-testid="wr-thes-list">
+          {synonyms.map((s) => (
+            <button key={s} type="button" className="wr-thes__syn" data-testid="wr-thes-syn" onClick={() => onPick(s)}>{s}</button>
+          ))}
+        </div>
+      ) : (
+        <div className="wr-thes__empty">No built-in synonyms for “{word}”.</div>
+      )}
+    </div>
+  );
+};
+
 const FootnotePopover = ({ note, top, left, onChange, onSave, onRemove, onClose }) => {
   const ref = _wrUR(null);
   _wrUE(() => { try { ref.current && ref.current.focus(); } catch (_e) {} }, []);
@@ -1537,6 +1586,8 @@ const WritersRoomScreen = ({
   const [findCase, setFindCase] = _wrUS(false);
   const findRangesRef = _wrUR([]);
   const [footnoteEdit, setFootnoteEdit] = _wrUS(null);
+  const [thesaurus, setThesaurus] = _wrUS(null);
+  const thesaurusRangeRef = _wrUR(null);
   // Derive focus/margins from layout mode
   const focusMode = L.writingLayoutMode === "clean";
   const marginsHidden = L.writingLayoutMode === "clean" || L.writingLayoutMode === "manuscript-focus";
@@ -2035,6 +2086,20 @@ const WritersRoomScreen = ({
       return null;
     });
   }, [canvasState, onSetSyncState]);
+  const pickSynonym = _wrUC((syn) => {
+    const range = thesaurusRangeRef.current;
+    if (range) {
+      try {
+        const orig = range.toString();
+        const out = (orig && orig[0] === orig[0].toUpperCase()) ? syn.charAt(0).toUpperCase() + syn.slice(1) : syn;
+        range.deleteContents();
+        range.insertNode(document.createTextNode(out));
+        if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      } catch (_e) {}
+    }
+    thesaurusRangeRef.current = null;
+    setThesaurus(null);
+  }, [canvasState, onSetSyncState]);
   // Cmd/Ctrl+F opens Find when the focus is inside the Writer's Room.
   _wrUE(() => {
     const onKey = (e) => {
@@ -2110,6 +2175,27 @@ const WritersRoomScreen = ({
       let top = 140, left = 140;
       try { const span = body.querySelector('[data-mark-id="' + id + '"]'); if (span) { const r = span.getBoundingClientRect(); top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 172)); left = Math.max(8, Math.min(r.left, window.innerWidth - 280)); } } catch (_e) {}
       setFootnoteEdit({ id, note: "", top, left });
+      return;
+    }
+    if (action === "thesaurus") {
+      const body = bodyRef.current;
+      const sel = window.getSelection && window.getSelection();
+      if (!body || !sel || sel.rangeCount === 0) { try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Select a word for synonyms." } })); } catch (_e) {} return; }
+      let word = String(sel.toString() || "").trim();
+      if (!word && sel.anchorNode && sel.anchorNode.nodeType === 3) {
+        const t = sel.anchorNode.nodeValue; let a = sel.anchorOffset, b = sel.anchorOffset;
+        while (a > 0 && /\w/.test(t[a - 1])) a--;
+        while (b < t.length && /\w/.test(t[b])) b++;
+        word = t.slice(a, b);
+        if (word) { try { const r = document.createRange(); r.setStart(sel.anchorNode, a); r.setEnd(sel.anchorNode, b); sel.removeAllRanges(); sel.addRange(r); } catch (_e) {} }
+      }
+      word = word.replace(/[^A-Za-z]/g, "");
+      if (!word) { try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Select a single word for synonyms." } })); } catch (_e) {} return; }
+      try { thesaurusRangeRef.current = sel.getRangeAt(0).cloneRange(); } catch (_e) { thesaurusRangeRef.current = null; }
+      let top = 140, left = 140;
+      try { const r = (thesaurusRangeRef.current || sel.getRangeAt(0)).getBoundingClientRect(); top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 180)); left = Math.max(8, Math.min(r.left, window.innerWidth - 240)); } catch (_e) {}
+      try { sel.removeAllRanges(); } catch (_e) {} // hide the floating selection toolbar; the cloned range drives the replace
+      setThesaurus({ word, synonyms: WR_THESAURUS[word.toLowerCase()] || [], top, left });
       return;
     }
   }, [onCreateEntityFromSelection, onLinkEntity, onAddNote, canvasState, onSetSyncState]);
@@ -2419,6 +2505,13 @@ const WritersRoomScreen = ({
               onChange={(v) => setFootnoteEdit((fe) => (fe ? { ...fe, note: v } : fe))}
               onSave={saveFootnote} onRemove={removeFootnote}
               onClose={() => setFootnoteEdit(null)}
+            />
+          )}
+
+          {thesaurus && (
+            <ThesaurusPopover
+              word={thesaurus.word} synonyms={thesaurus.synonyms} top={thesaurus.top} left={thesaurus.left}
+              onPick={pickSynonym} onClose={() => { thesaurusRangeRef.current = null; setThesaurus(null); }}
             />
           )}
 

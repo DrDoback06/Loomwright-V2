@@ -547,6 +547,23 @@
 .wr-fn-pop__ta:focus { outline: none; border-color: var(--accent); }
 .wr-fn-pop__row { display: flex; gap: 6px; justify-content: flex-end; }
 
+/* Thesaurus popover */
+.wr-thes {
+  position: fixed; z-index: 60; width: 212px; padding: 8px;
+  border-radius: var(--r-3, 8px); background: var(--bg-paper-1, #fff);
+  border: 1px solid var(--line-2); box-shadow: var(--shadow-2, 0 8px 28px rgba(0,0,0,0.18));
+}
+.wr-thes__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.wr-thes__word { font-family: var(--font-display); font-size: var(--fs-lg, var(--fs-md)); color: var(--ink-1); }
+.wr-thes__list { display: flex; flex-wrap: wrap; gap: 4px; }
+.wr-thes__syn {
+  padding: 3px 8px; border: 1px solid var(--line-2); border-radius: var(--r-pill);
+  background: var(--bg-paper-2); color: var(--ink-2); cursor: pointer;
+  font-family: var(--font-serif); font-size: var(--fs-sm);
+}
+.wr-thes__syn:hover { background: var(--accent); color: var(--accent-on); border-color: var(--accent-deep, var(--accent)); }
+.wr-thes__empty { color: var(--ink-3); font-style: italic; font-size: var(--fs-sm); }
+
 /* Empty / loading / error chapter states */
 .wr-canvas--empty,
 .wr-canvas--loading,
