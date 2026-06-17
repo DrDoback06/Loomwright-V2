@@ -461,6 +461,29 @@ const SaveModeControls = ({ onSave, syncing }) => {
   );
 };
 
+// Author controls: live word count + per-chapter goal/progress, typewriter
+// mode, and autosave on/off.
+const WriterStatsBar = ({ words, goal, onSetGoal, typewriter, onToggleTypewriter, autosave, onToggleAutosave }) => {
+  const pct = goal ? Math.min(100, Math.round((words / goal) * 100)) : 0;
+  return (
+    <div className="wr-stats" data-ui="WriterStatsBar">
+      <span className="wr-stats__words" data-testid="wr-stats-words">
+        {words.toLocaleString()}{goal ? " / " + goal.toLocaleString() : ""} words{goal ? " · " + pct + "%" : ""}
+      </span>
+      {goal ? <span className="wr-stats__bar"><span className="wr-stats__fill" data-testid="wr-stats-fill" style={{ width: pct + "%" }}/></span> : null}
+      <label className="wr-stats__goal" title="Word-count goal for this chapter">
+        <span className="wr-stats__goallbl">Goal</span>
+        <input type="number" min="0" step="100" className="wr-stats__goalinput" data-testid="wr-goal-input"
+          value={goal || ""} placeholder="—" onChange={(e) => onSetGoal(e.target.value)}/>
+      </label>
+      <button type="button" className={"wr-stats__toggle" + (typewriter ? " is-active" : "")} data-testid="wr-typewriter"
+        aria-pressed={typewriter} title="Typewriter mode — keep the current line centred" onClick={onToggleTypewriter}>TW</button>
+      <button type="button" className={"wr-stats__toggle" + (autosave ? " is-active" : "")} data-testid="wr-autosave"
+        aria-pressed={autosave} title={autosave ? "Autosave is on" : "Autosave is off"} onClick={onToggleAutosave}>{autosave ? "Auto" : "Manual"}</button>
+    </div>
+  );
+};
+
 // ---------------------------------------------------------------------
 // AuthorSelector
 // ---------------------------------------------------------------------
@@ -1594,6 +1617,8 @@ const WritersRoomScreen = ({
   const leftMarginVisible  = !L.leftMarginCollapsed  && (L.writingLayoutMode === "full" || L.writingLayoutMode === "notes");
   const rightMarginVisible = !L.rightMarginCollapsed && (L.writingLayoutMode === "full" || L.writingLayoutMode === "review");
   const [typewriter, setTypewriter] = _wrUS(false);
+  const [autosaveOn, setAutosaveOn] = _wrUS(true);
+  const autosaveTimerRef = _wrUR(null);
 
   // Mobile / compact layout — side margins become bottom-sheet drawers and the
   // toolbar wraps. Driven by viewport width OR the onboarding `workspace.mobileCompact` pref.
@@ -1865,7 +1890,23 @@ const WritersRoomScreen = ({
 
   const onManuscriptChange = _wrUC(() => {
     if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
-  }, [canvasState, onSetSyncState]);
+    if (typewriter) {
+      try { const sel = window.getSelection(); let el = sel && sel.anchorNode; if (el && el.nodeType === 3) el = el.parentNode; if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", behavior: "auto" }); } catch (_e) {}
+    }
+    if (autosaveOn) {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = setTimeout(() => { autosaveTimerRef.current = null; try { onSave(); } catch (_e) {} }, 2000);
+    }
+  }, [canvasState, onSetSyncState, typewriter, autosaveOn, onSave]);
+  _wrUE(() => () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); }, []);
+  const onSetChapterGoal = _wrUC((goal) => {
+    const g = Math.max(0, parseInt(goal, 10) || 0);
+    setChapters((curr) => {
+      const next = curr.map((c) => c.id === activeId ? { ...c, goal: g || null } : c);
+      try { persistChapters(next, manuscriptsByChapter, activeId); } catch (_e) {}
+      return next;
+    });
+  }, [activeId, manuscriptsByChapter, persistChapters]);
   const onStartWriting = _wrUC(() => {
     const el = bodyRef.current;
     if (!el) return;
@@ -2569,6 +2610,15 @@ const WritersRoomScreen = ({
                 title="Save this chapter and scan it for characters, places, items, and events — results land in the review queue.">
                 {extractionState === "running" ? "Extracting…" : "Extract"}
               </Btn>
+              <WriterStatsBar
+                words={activeChapter ? (activeChapter.words || 0) : 0}
+                goal={activeChapter ? (activeChapter.goal || null) : null}
+                onSetGoal={onSetChapterGoal}
+                typewriter={typewriter}
+                onToggleTypewriter={() => setTypewriter((v) => !v)}
+                autosave={autosaveOn}
+                onToggleAutosave={() => setAutosaveOn((v) => !v)}
+              />
               <SaveModeControls
                 onSave={onSave}
                 syncing={canvasState === "saving" || extractionState === "running"}
