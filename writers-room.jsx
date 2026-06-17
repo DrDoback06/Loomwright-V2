@@ -418,7 +418,7 @@ const ManuscriptToolbar = ({
       <div className="wr-toolbar__group">
         <TB label="Add paragraph note"  testid="wr-tb-note" icon="paper" onClick={() => onAction("inline-note")}/>
         <TB label="Add paragraph note (comment)" icon="bell" onClick={() => onAction("comment")}/>
-        <TB label="Highlight"           disabled icon="drop"/>
+        <TB label="Highlight"           testid="wr-tb-highlight" icon="drop" onClick={() => onAction("highlight")}/>
       </div>
       <div className="wr-toolbar__group">
         <TB label="Link to entity"      icon="link" onClick={() => onAction("link-entity")}/>
@@ -933,15 +933,16 @@ function _wrParagraphText(p) {
   return "";
 }
 function _wrNormalizeManuscript(m) {
-  if (!m) return { paragraphs: [] };
-  if (Array.isArray(m)) return { paragraphs: m };
-  if (Array.isArray(m.paragraphs)) return { paragraphs: m.paragraphs };
+  const marks = (m && Array.isArray(m.marks)) ? m.marks : [];
+  if (!m) return { paragraphs: [], marks: [] };
+  if (Array.isArray(m)) return { paragraphs: m, marks: [] };
+  if (Array.isArray(m.paragraphs)) return { paragraphs: m.paragraphs, marks };
   if (typeof m.text === "string" && m.text.trim()) {
     const parts = m.text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
-    return { paragraphs: parts.map((text) => ({ id: _wrGenId("p"), text })) };
+    return { paragraphs: parts.map((text) => ({ id: _wrGenId("p"), text })), marks };
   }
-  if (typeof m.html === "string" && m.html.trim()) return { paragraphs: [], html: m.html };
-  return { paragraphs: [] };
+  if (typeof m.html === "string" && m.html.trim()) return { paragraphs: [], html: m.html, marks };
+  return { paragraphs: [], marks };
 }
 function _wrHighlightHtml(text, lookup) {
   const chunks = splitByOccurrences(text || "", lookup);
@@ -997,7 +998,7 @@ function _wrSnapshotBody(bodyEl) {
       .forEach((text) => out.push({ id: _wrGenId("p"), text }));
   }
   const text = out.filter((p) => !p.sceneBreak).map((p) => p.text || "").join("\n\n");
-  return { paragraphs: out, text, html: bodyEl.innerHTML, words: _wrCountWords(text) };
+  return { paragraphs: out, text, html: bodyEl.innerHTML, words: _wrCountWords(text), marks: _wrCollectMarks(bodyEl) };
 }
 
 // Toolbar block-format helpers over the uncontrolled contentEditable. The
@@ -1091,6 +1092,115 @@ function _wrScrollRangeIntoView(range) {
   } catch (_e) {}
 }
 
+// Inline marks (Highlight / Reference / Footnote) — persistent decorations
+// keyed by paragraph + text. Applied as a DOM pass after the body HTML is
+// written, collected on snapshot, and stored on the manuscript so they survive
+// reload. Decoupled from entity-occurrence highlighting (which is re-derived).
+function _wrMarkTextNodes(scope) {
+  const out = [];
+  if (!scope) return out;
+  const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+      let p = node.parentNode;
+      while (p && p !== scope) {
+        if (p.getAttribute && (p.getAttribute("contenteditable") === "false" || (p.classList && p.classList.contains("wr-mk")))) return NodeFilter.FILTER_REJECT;
+        p = p.parentNode;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  let n; while ((n = walker.nextNode())) out.push(n);
+  return out;
+}
+function _wrMakeMarkSpan(mk) {
+  const span = document.createElement("span");
+  const kind = mk.kind || "highlight";
+  span.className = "wr-mk wr-mk--" + kind;
+  span.setAttribute("data-mark-id", mk.id || _wrGenId("mk"));
+  span.setAttribute("data-mark-kind", kind);
+  if (mk.color) span.setAttribute("data-color", mk.color);
+  if (mk.note != null && mk.note !== "") { span.setAttribute("data-note", mk.note); span.setAttribute("title", String(mk.note)); }
+  if (mk.refId) {
+    span.setAttribute("data-ref-id", mk.refId);
+    span.setAttribute("data-ref-type", mk.refType || "");
+    span.setAttribute("contenteditable", "false");
+    if (!span.getAttribute("title")) span.setAttribute("title", "Reference — double-click to open");
+  }
+  if (kind === "footnote") span.setAttribute("contenteditable", "false");
+  return span;
+}
+function _wrApplyMarks(body, marks) {
+  if (!body || !Array.isArray(marks) || !marks.length) return;
+  for (const mk of marks) {
+    if (!mk || !mk.text || !mk.paragraphId) continue;
+    let p = null;
+    try { p = body.querySelector('[data-paragraph-id="' + (typeof CSS !== "undefined" && CSS.escape ? CSS.escape(mk.paragraphId) : mk.paragraphId) + '"]'); } catch (_e) {}
+    if (!p) continue;
+    let done = false;
+    for (const node of _wrMarkTextNodes(p)) {
+      const idx = node.nodeValue.indexOf(mk.text);
+      if (idx < 0) continue;
+      try {
+        const range = document.createRange();
+        range.setStart(node, idx); range.setEnd(node, idx + mk.text.length);
+        range.surroundContents(_wrMakeMarkSpan(mk));
+        done = true;
+      } catch (_e) {}
+      if (done) break;
+    }
+  }
+}
+function _wrCollectMarks(body) {
+  const marks = [];
+  if (!body) return marks;
+  body.querySelectorAll(".wr-mk").forEach((span) => {
+    const p = span.closest("[data-paragraph-id]");
+    if (!p) return;
+    const mk = {
+      id: span.getAttribute("data-mark-id") || _wrGenId("mk"),
+      paragraphId: p.getAttribute("data-paragraph-id"),
+      text: span.textContent || "",
+      kind: span.getAttribute("data-mark-kind") || "highlight",
+    };
+    if (span.getAttribute("data-color")) mk.color = span.getAttribute("data-color");
+    const note = span.getAttribute("data-note");
+    if (note != null && note !== "") mk.note = note;
+    if (span.getAttribute("data-ref-id")) { mk.refId = span.getAttribute("data-ref-id"); mk.refType = span.getAttribute("data-ref-type") || ""; }
+    if (mk.text) marks.push(mk);
+  });
+  return marks;
+}
+function _wrInsertMark(body, kind, extra) {
+  const sel = window.getSelection && window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  const range = sel.getRangeAt(0);
+  const span = document.createElement("span");
+  span.className = "wr-mk wr-mk--" + kind;
+  span.setAttribute("data-mark-id", _wrGenId("mk"));
+  span.setAttribute("data-mark-kind", kind);
+  if (extra) for (const k of Object.keys(extra)) { if (extra[k] != null) span.setAttribute(k, String(extra[k])); }
+  if (kind === "footnote" || (extra && extra["data-ref-id"])) span.setAttribute("contenteditable", "false");
+  if (extra && extra["data-note"] != null) span.setAttribute("title", String(extra["data-note"]));
+  try { range.surroundContents(span); sel.removeAllRanges(); return true; } catch (_e) { return false; }
+}
+function _wrToggleHighlight(body) {
+  const sel = window.getSelection && window.getSelection();
+  if (!sel) return;
+  let n = sel.anchorNode;
+  while (n && n !== body) {
+    if (n.nodeType === 1 && n.classList && n.classList.contains("wr-mk--highlight")) {
+      const parent = n.parentNode;
+      while (n.firstChild) parent.insertBefore(n.firstChild, n);
+      parent.removeChild(n);
+      try { parent.normalize && parent.normalize(); } catch (_e) {}
+      return;
+    }
+    n = n.parentNode;
+  }
+  if (!sel.isCollapsed) _wrInsertMark(body, "highlight");
+}
+
 const FindReplaceBar = ({ query, replace, count, caseSensitive, onQuery, onReplace, onToggleCase, onNext, onPrev, onReplaceOne, onReplaceAll, onClose }) => {
   const inputRef = _wrUR(null);
   _wrUE(() => { try { inputRef.current && inputRef.current.focus(); inputRef.current && inputRef.current.select(); } catch (_e) {} }, []);
@@ -1117,10 +1227,12 @@ const FindReplaceBar = ({ query, replace, count, caseSensitive, onQuery, onRepla
   );
 };
 
-const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, spellCheck, onInput, onDoubleClick, onMouseOver, onMouseOut }) => {
+const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, marks, spellCheck, onInput, onDoubleClick, onMouseOver, onMouseOut }) => {
   const localRef = _wrUR(null);
   const htmlRef = _wrUR(html);
   htmlRef.current = html;
+  const marksRef = _wrUR(marks);
+  marksRef.current = marks;
   const assign = (el) => { localRef.current = el; if (bodyRef) bodyRef.current = el; };
   // Write innerHTML ONLY on chapter switch / explicit epoch bump — never on
   // keystroke. The JSX has no children, so React never touches typed nodes.
@@ -1129,6 +1241,7 @@ const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, spellChec
     if (!el) return;
     el.innerHTML = htmlRef.current || "";
     try { if (document.execCommand) document.execCommand("defaultParagraphSeparator", false, "p"); } catch (_e) {}
+    try { _wrApplyMarks(el, marksRef.current); } catch (_e) {}
   }, [chapterId, bodyEpoch]);
   return (
     <div
@@ -1285,6 +1398,7 @@ const ManuscriptCanvas = ({
           chapterId={chapter.id}
           bodyEpoch={bodyEpoch}
           html={bodyHtml}
+          marks={norm.marks}
           spellCheck={spellCheck}
           onInput={(e) => { setHintDismissed(true); onBodyInput && onBodyInput(e); }}
           onDoubleClick={onEntityDoubleClickDelegated}
@@ -1923,6 +2037,12 @@ const WritersRoomScreen = ({
     if (action === "scene-break") {
       const body = bodyRef.current;
       if (body) { try { body.focus(); _wrInsertSceneBreak(body); } catch (_e) {} }
+      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      return;
+    }
+    if (action === "highlight") {
+      const body = bodyRef.current;
+      if (body) { try { body.focus(); _wrToggleHighlight(body); } catch (_e) {} }
       if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
       return;
     }

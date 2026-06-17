@@ -524,6 +524,12 @@
 .wr-find__btn--toggle.is-active { background: var(--accent); color: var(--accent-on); border-color: var(--accent-deep, var(--accent)); }
 .wr-find__btn--text { min-width: auto; }
 
+/* Inline marks: Highlight / Reference / Footnote (persistent decorations). */
+.wr-mk--highlight { background-color: rgba(214, 179, 69, 0.40); border-radius: 2px; padding: 0 1px; }
+.wr-mk--reference { color: var(--accent-deep, var(--accent)); border-bottom: 1px dashed var(--accent); cursor: pointer; }
+.wr-mk--footnote { border-bottom: 1px dotted var(--ink-4); cursor: help; }
+.wr-mk--footnote::after { content: "※"; font-size: 0.7em; vertical-align: super; color: var(--accent-deep, var(--accent)); margin-left: 1px; }
+
 /* Empty / loading / error chapter states */
 .wr-canvas--empty,
 .wr-canvas--loading,
