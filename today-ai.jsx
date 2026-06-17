@@ -184,6 +184,26 @@ const _tdSaveDismissed = (set) => {
   try { window.localStorage.setItem(TODAY_DISMISSED_KEY, JSON.stringify([...set].slice(-200))); } catch (_) {}
 };
 
+// Run a suggestion's primary action: open the most relevant surface. The card
+// button's label IS the action ("Open in Quests panel", "Open Writer's Room",
+// "Open editor"…); navigate accordingly, preferring the related entity.
+function _tdRunAction(s, onSelectEntity) {
+  if (!s) return;
+  const a = (s.action || "").toLowerCase();
+  const rel = (s.related && s.related[0]) || null;
+  if (a.includes("editor") && rel) { window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: rel.type, initial: { id: rel.id }, mode: "full" } })); return; }
+  if (rel && onSelectEntity) { onSelectEntity(rel); return; }
+  if (a.includes("review")) { window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "review" } })); return; }
+  if (a.includes("quest")) { window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "quests" } })); return; }
+  // "Open Writer's Room" / "Open in manuscript" / fallback → the manuscript.
+  window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } }));
+}
+// Send a suggestion to Tangle as a sticky note (persists via TangleService).
+function _tdSendToTangle(s) {
+  if (!s) return;
+  window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onSendSuggestionToTangle", detail: { title: s.title, text: s.why || "" } } }));
+}
+
 const TodayPanelBody = ({ panel, onSelectEntity }) => {
   const [filter, setFilter] = _td_us("all");
   const [dismissed, setDismissed] = _td_us(_tdLoadDismissed);
@@ -252,9 +272,9 @@ const TodayCardCompact = ({ s, onSelectEntity, onDismiss }) => (
       </div>
     )}
     <div className="today__card-actions">
-      <button className="rpg-btn rpg-btn--small rpg-btn--primary" data-callback="onSendSuggestionToWriter">{s.action}</button>
-      <button className="rpg-btn rpg-btn--small" data-callback="onSendSuggestionToTangle">→ Tangle</button>
-      <button className="rpg-btn rpg-btn--small rpg-btn--ghost" data-callback="onDismissTodaySuggestion">Dismiss</button>
+      <button className="rpg-btn rpg-btn--small rpg-btn--primary" data-callback="onOpenRelatedTab" onClick={() => _tdRunAction(s, onSelectEntity)}>{s.action}</button>
+      <button className="rpg-btn rpg-btn--small" data-callback="onSendSuggestionToTangle" onClick={() => _tdSendToTangle(s)}>→ Tangle</button>
+      {onDismiss && <button className="rpg-btn rpg-btn--small rpg-btn--ghost" onClick={onDismiss}>Dismiss</button>}
     </div>
   </div>
 );
@@ -354,9 +374,9 @@ const ForesightReel = ({ suggestions, onSelectEntity, onDismiss }) => {
               </div>
             )}
             <div className="foresight-reel__actions">
-              <button className="rpg-btn rpg-btn--small rpg-btn--primary" data-callback="onSendSuggestionToWriter">{cur.action}</button>
-              <button className="rpg-btn rpg-btn--small" data-callback="onSendSuggestionToTangle">→ Tangle</button>
-              <button className="rpg-btn rpg-btn--small rpg-btn--ghost" data-callback="onDismissTodaySuggestion"
+              <button className="rpg-btn rpg-btn--small rpg-btn--primary" data-callback="onOpenRelatedTab" onClick={() => _tdRunAction(cur, onSelectEntity)}>{cur.action}</button>
+              <button className="rpg-btn rpg-btn--small" data-callback="onSendSuggestionToTangle" onClick={() => _tdSendToTangle(cur)}>→ Tangle</button>
+              <button className="rpg-btn rpg-btn--small rpg-btn--ghost"
                 onClick={() => onDismiss && onDismiss(cur.id)}>Dismiss</button>
             </div>
           </div>
