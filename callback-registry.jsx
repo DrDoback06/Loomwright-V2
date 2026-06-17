@@ -442,6 +442,11 @@
       openPanel("review");
       return;
     }
+    if (/^onShow\w+Characters$/.test(name)) {
+      // "Show all →" on a class/race dossier — jump to the Cast roster.
+      openPanel("cast");
+      return;
+    }
     if (name === "onOpenEntityEditor") {
       openEditor(ctx.detail?.type || type, ctx.detail?.initial || entity, ctx.detail?.mode);
       return;

@@ -14,6 +14,118 @@
 const { useState: _crab_us } = React;
 
 // ---------------------------------------------------------------------
+// Live-data adapters
+//
+// Live class/race entities keep identity fields top-level (name, summary,
+// status…) and ALL custom fields under entity.data.* using the editor's
+// field ids. ClassDetail / RaceDetail (rpg-entities.jsx) were written
+// against flat demo objects, so a real class/race rendered with default
+// facets and every section empty. Mirrors liveBestiaryToDetail etc.
+// ---------------------------------------------------------------------
+const _crB = () => (typeof window !== "undefined") && window.LoomwrightBackend;
+function _crResolveRef(r) {
+  if (!r) return null;
+  if (typeof r === "object") return { id: r.id, name: r.name || r.label || r.id, label: r.name || r.label || r.id, type: r.type || "" };
+  let nm = r, ty = "";
+  try { const B = _crB(); const ent = B && B.EntityService && B.EntityService.getSync(r); if (ent) { nm = ent.name || r; ty = ent.type || ""; } } catch (_e) {}
+  return { id: r, name: nm, label: nm, type: ty };
+}
+function _crRefList(arr, ty) {
+  return (Array.isArray(arr) ? arr : []).map((r) => { const x = _crResolveRef(r); if (x && ty && !x.type) x.type = ty; return x; }).filter(Boolean);
+}
+// rule-list rows / chips -> readable strings for bullet lists
+function _crRuleStrings(arr) {
+  return (Array.isArray(arr) ? arr : []).map((r) => {
+    if (r == null) return "";
+    if (typeof r === "string") return r;
+    if (typeof r === "object") {
+      const target = r.target || r.stat || r.name || r.label || "";
+      const delta = (r.delta != null ? r.delta : (r.value != null ? r.value : r.amount));
+      const note = r.note || r.detail || r.text || "";
+      const deltaStr = (delta != null && delta !== "") ? (typeof delta === "number" ? (delta > 0 ? "+" + delta : String(delta)) : String(delta)) : "";
+      return [target, deltaStr, note].filter(Boolean).join(" ").trim() || "";
+    }
+    return String(r);
+  }).filter(Boolean);
+}
+function _crStrList(arr) {
+  return (Array.isArray(arr) ? arr : []).map((x) => (x && typeof x === "object" ? (x.name || x.label || "") : x)).filter(Boolean);
+}
+function _crUniqById(arr) {
+  const seen = new Set(); const out = [];
+  for (const x of arr) { if (!x || seen.has(x.id)) continue; seen.add(x.id); out.push(x); }
+  return out;
+}
+// Reverse-lookup: cast members that reference this class/race id (or name)
+// on any of the given data.* field ids.
+function _crCastMembers(entityId, entityName, fieldIds) {
+  const out = [];
+  try {
+    const B = _crB();
+    const cast = (B && B.EntityService && B.EntityService.listSync("cast")) || [];
+    for (const c of cast) {
+      const cd = c.data || {};
+      let hit = false;
+      for (const f of fieldIds) {
+        const v = cd[f];
+        if (!v) continue;
+        const match = (x) => { const id = (x && x.id) ? x.id : x; return id === entityId || id === entityName || (x && x.name) === entityName; };
+        if (Array.isArray(v) ? v.some(match) : match(v)) { hit = true; break; }
+      }
+      if (hit) out.push({ id: c.id, name: c.name, label: c.name, type: "cast" });
+    }
+  } catch (_e) {}
+  return out;
+}
+
+function liveClassToDetail(entity) {
+  if (!entity) return entity;
+  const top = entity, d = entity.data || {};
+  const members = _crUniqById([
+    ..._crRefList(d.assignedCharacters, "cast"),
+    ..._crCastMembers(entity.id, entity.name, ["class", "classId", "className", "classes"]),
+  ]);
+  return {
+    ...entity,
+    category: d.category || "",
+    role: d.role || "",
+    first: d.firstChapter || "",
+    summary: top.summary || d.summary || "",
+    defaultStats: (Array.isArray(d.defaultStats) && d.defaultStats.length) ? d.defaultStats : null,
+    allowedAbilities: _crRefList(d.allowedSkills, "skills"),
+    skillTrees: _crRefList(d.linkedSkillTrees, "skills"),
+    restrictions: _crRuleStrings(d.restrictions),
+    typicalRoles: [],
+    examples: members,
+  };
+}
+
+function liveRaceToDetail(entity) {
+  if (!entity) return entity;
+  const top = entity, d = entity.data || {};
+  const members = _crUniqById([
+    ..._crRefList(d.linkedCast, "cast"),
+    ..._crCastMembers(entity.id, entity.name, ["species", "race", "raceId", "raceName"]),
+  ]);
+  const originLocs = _crRefList(d.originLocations, "locations");
+  return {
+    ...entity,
+    category: d.category || "",
+    first: d.firstChapter || "",
+    summary: top.summary || d.summary || "",
+    origin: originLocs[0] || (d.habitat ? { name: d.habitat } : null),
+    traits: _crStrList(d.traits),
+    defaultStats: (Array.isArray(d.defaultStats) && d.defaultStats.length) ? d.defaultStats : null,
+    abilities: _crRefList(d.innateSkills, "skills"),
+    cultureNotes: d.culture || "",
+    originLocations: originLocs,
+    factions: _crRefList(d.factions, "factions"),
+    bestiaryLinks: _crRefList(d.bestiary, "bestiary"),
+    examples: members,
+  };
+}
+
+// ---------------------------------------------------------------------
 // ClassesPanelBody
 // ---------------------------------------------------------------------
 const ClassesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
@@ -66,8 +178,8 @@ const ClassesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
               <div className="upg__item__sub">{e.subtitle || e.summary}</div>
             </div>
             <div className="upg__item__meta">
-              <span>{e.role || "—"}</span>
-              {e.queue ? <ReviewCountBadge count={e.queue}/> : null}
+              <span>{e.data?.role || "—"}</span>
+              {(e.reviewQueueCount || e.queue) ? <ReviewCountBadge count={e.reviewQueueCount || e.queue}/> : null}
               {e.status && e.status !== "active" && <EntityStatusPill status={e.status}/>}
             </div>
           </div>
@@ -78,7 +190,7 @@ const ClassesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
         <div className="upg__detail">
           <div className="upg__detail__head">
             <div>
-              <div className="upg__detail__eyebrow">Class · {selected.category || "Archetype"}</div>
+              <div className="upg__detail__eyebrow">Class · {selected.data?.category || "Archetype"}</div>
               <div className="upg__detail__title">{selected.name}</div>
             </div>
             <div style={{ display: "flex", gap: 6 }}>
@@ -86,7 +198,7 @@ const ClassesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
             </div>
           </div>
           {selected.summary && <p className="upg__detail__lede">{selected.summary}</p>}
-          <ClassDetail entity={selected} onSelectEntity={onSelectEntity}/>
+          <ClassDetail entity={liveClassToDetail(selected)} onSelectEntity={onSelectEntity}/>
         </div>
       )}
     </div>
@@ -146,8 +258,8 @@ const RacesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
               <div className="upg__item__sub">{e.subtitle || e.summary}</div>
             </div>
             <div className="upg__item__meta">
-              <span>{e.category || "Folk"}</span>
-              {e.queue ? <ReviewCountBadge count={e.queue}/> : null}
+              <span>{e.data?.category || "Folk"}</span>
+              {(e.reviewQueueCount || e.queue) ? <ReviewCountBadge count={e.reviewQueueCount || e.queue}/> : null}
               {e.status && e.status !== "active" && <EntityStatusPill status={e.status}/>}
             </div>
           </div>
@@ -158,13 +270,13 @@ const RacesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
         <div className="upg__detail">
           <div className="upg__detail__head">
             <div>
-              <div className="upg__detail__eyebrow">Race / Species · {selected.category || "Folk"}</div>
+              <div className="upg__detail__eyebrow">Race / Species · {selected.data?.category || "Folk"}</div>
               <div className="upg__detail__title">{selected.name}</div>
             </div>
             <EntityCardChrome entity={selected} callbacks={{}}/>
           </div>
           {selected.summary && <p className="upg__detail__lede">{selected.summary}</p>}
-          <RaceDetail entity={selected} onSelectEntity={onSelectEntity}/>
+          <RaceDetail entity={liveRaceToDetail(selected)} onSelectEntity={onSelectEntity}/>
         </div>
       )}
     </div>
