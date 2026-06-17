@@ -63,6 +63,112 @@ const LOCATION_KINDS = [
 ];
 const LOCATION_KIND_BY_ID = Object.fromEntries(LOCATION_KINDS.map((k) => [k.id, k]));
 
+// ---------------------------------------------------------------------
+// Live-data adapters
+//
+// Live location entities store identity fields top-level (name, kind,
+// summary, aliases, status…) and ALL other custom fields under
+// `entity.data.*` using the editor's field ids. The bespoke tree +
+// dossier below were written against flat demo objects, so without these
+// adapters a real location renders empty. Mirrors liveCastToDossier /
+// liveBestiaryToDetail.
+// ---------------------------------------------------------------------
+// The editor's "kind" options are capitalised / multi-word ("Capital
+// City", "Mountain Pass"); the tree keys glyphs off the lowercase ids in
+// LOCATION_KIND_BY_ID. Normalise.
+const _LOC_KIND_ALIAS = {
+  "capital city": "city", "hill": "mountain", "lake": "river", "swamp": "forest",
+  "jungle": "forest", "cave": "ruins", "glacier": "mountain", "volcano": "mountain",
+  "graveyard": "ruins", "desert": "other", "plain": "other", "steppe": "other",
+  "barracks": "building", "workshop": "building", "shop": "building", "house": "building",
+  "farm": "building", "laboratory": "building", "arena": "building", "school": "library",
+  "sewer": "dungeon", "tunnel": "dungeon", "quest location": "landmark",
+  "event site": "landmark", "character home": "building", "faction hq": "building",
+};
+function _locKindNorm(v) {
+  if (!v) return "other";
+  const s = String(v).toLowerCase().trim();
+  if (LOCATION_KIND_BY_ID[s]) return s;
+  if (_LOC_KIND_ALIAS[s]) return _LOC_KIND_ALIAS[s];
+  const first = s.split(/[\s/]+/)[0];
+  if (LOCATION_KIND_BY_ID[first]) return first;
+  return "other";
+}
+
+// Cheap projection for the hierarchy tree + filters (no occurrence scan).
+function liveLocationToRow(entity) {
+  if (!entity) return entity;
+  const d = entity.data || {};
+  return {
+    ...entity,
+    kind: _locKindNorm(entity.kind || d.kind || d.customKind),
+    parentId: d.parentId || entity.parentId || null,
+    placed: (d.placed ?? entity.placed) === true,
+    queue: entity.reviewQueueCount || entity.queue || 0,
+  };
+}
+
+// Full projection for the selected dossier — maps every field LocationDetail
+// renders and derives mentions / per-chapter spark from the occurrence index.
+function liveLocationToDetail(entity) {
+  if (!entity) return entity;
+  const top = entity, d = entity.data || {};
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  const refItems = (arr) => (Array.isArray(arr) ? arr : []).filter(Boolean).map((r) => {
+    if (r && typeof r === "object") return { id: r.id, label: r.name || r.label || r.id, name: r.name || r.label || r.id, type: r.type || "" };
+    let nm = r, ty = "";
+    try { const ent = B && B.EntityService && B.EntityService.getSync(r); if (ent) { nm = ent.name || r; ty = ent.type || ""; } } catch (_e) {}
+    return { id: r, label: nm, name: nm, type: ty };
+  });
+  const strList = (arr) => (Array.isArray(arr) ? arr : []).map((x) => (x && typeof x === "object" ? (x.name || x.label || "") : x)).filter(Boolean);
+  let occ = [], chapters = [];
+  try { occ = (B && B.OccurrenceService && (B.OccurrenceService.listByEntitySync ? B.OccurrenceService.listByEntitySync(entity.id) : (B.OccurrenceService.listAllSync() || []).filter((o) => o.entityId === entity.id))) || []; } catch (_e) {}
+  try { chapters = ((B && B.ManuscriptChapterService && B.ManuscriptChapterService.loadSync().chapters) || []).filter((c) => c && !c.reserved); } catch (_e) {}
+  const numById = new Map(); chapters.forEach((c, i) => numById.set(c.id, c.num || i + 1));
+  const maxNum = chapters.reduce((m, c) => Math.max(m, numById.get(c.id) || 0), 0);
+  const mentionsByChapter = maxNum ? new Array(maxNum).fill(0) : [];
+  const mentions = [];
+  let mentionCount = 0;
+  for (const o of occ) {
+    if (!o || o.isPronounResolution) continue;
+    mentionCount += 1;
+    const n = numById.get(o.chapterId);
+    if (n != null && mentionsByChapter[n - 1] != null) mentionsByChapter[n - 1] += 1;
+    if (mentions.length < 8 && o.exactText) mentions.push({ id: o.occurrenceId || ("occ-" + mentions.length), cite: n != null ? "Ch. " + n : "—", excerpt: o.exactText, chapterId: o.chapterId });
+  }
+  return {
+    ...entity,
+    kind: _locKindNorm(top.kind || d.kind || d.customKind),
+    parentId: d.parentId || top.parentId || null,
+    placed: (d.placed ?? top.placed) === true,
+    status: top.status || "active",
+    summary: top.summary || d.summary || "",
+    description: d.description || "",
+    aliases: strList(top.aliases || d.aliases),
+    danger: d.danger || "",
+    currentStatus: d.currentStatus || "",
+    culture: d.culture || "",
+    climate: d.climate || "",
+    historyText: typeof d.history === "string" ? d.history : "",
+    first: d.firstChapter || top.first || "",
+    last: d.lastChapter || top.last || "",
+    mentionCount,
+    mentionsByChapter,
+    characters: refItems(d.characters),
+    bestiary: refItems(d.bestiary),
+    items: refItems(d.items),
+    quests: refItems(d.quests),
+    events: refItems(d.events),
+    factions: refItems(d.factions),
+    references: refItems(d.references),
+    roads: strList(d.routes),
+    travel: [],
+    history: [],
+    mentions,
+    contradictions: [],
+  };
+}
+
 // Rich location dataset, anchored in existing sample world.
 // Shape: { id, type:"locations", name, kind, parentId?, placed, first,
 //   last, mentionCount, childCount, queue?, summary, status, history,
@@ -439,6 +545,8 @@ const LocationDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSource
         { k: "Type",         v: kind.label },
         { k: "Status",       v: e.status || "active" },
         { k: "Placed",       v: e.placed ? "Yes" : "No", tone: e.placed ? "good" : "warn" },
+        e.danger ? { k: "Danger", v: e.danger, tone: (e.danger === "dangerous" || e.danger === "forbidden") ? "warn" : undefined } : null,
+        e.currentStatus ? { k: "Now", v: e.currentStatus } : null,
         e.first ? { k: "First seen", v: e.first } : null,
         e.last  ? { k: "Last seen",  v: e.last  } : null,
         { k: "Mentions",     v: e.mentionCount ?? (e.mentionsByChapter ? e.mentionsByChapter.reduce((a, b) => a + b, 0) : 0) },
@@ -461,9 +569,20 @@ const LocationDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSource
         </RpgSection>
       </div>
 
-      <RpgSection title="Seen across chapters">
-        <LocChapterTimeline data={e.mentionsByChapter || []} first={e.first} last={e.last}/>
-      </RpgSection>
+      {((e.aliases || []).length > 0 || e.culture || e.climate || e.historyText) ? (
+        <RpgSection title="World context">
+          {(e.aliases || []).length > 0 && <p className="rpg-prose"><b>Also known as:</b> {e.aliases.join(", ")}</p>}
+          {e.culture  && <p className="rpg-prose" style={{ marginTop: 6 }}><b>Culture:</b> {e.culture}</p>}
+          {e.climate  && <p className="rpg-prose" style={{ marginTop: 6 }}><b>Climate:</b> {e.climate}</p>}
+          {e.historyText && <p className="rpg-prose" style={{ marginTop: 6 }}>{e.historyText}</p>}
+        </RpgSection>
+      ) : null}
+
+      {(e.mentionsByChapter || []).length > 0 && (
+        <RpgSection title="Seen across chapters">
+          <LocChapterTimeline data={e.mentionsByChapter || []} first={e.first} last={e.last}/>
+        </RpgSection>
+      )}
 
       <RpgSection title="Connected entities">
         <div className="loc-cluster">
@@ -623,15 +742,18 @@ const LocationDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSource
 // ---------------------------------------------------------------------
 const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const [search, setSearch] = _loc_us("");
-  const [selectedId, setSelectedId] = _loc_us(panel?.selected?.id || "a1");
+  const [selectedId, setSelectedId] = _loc_us(panel?.selected?.id || "");
   // Follow host-driven selection (locked entities, lw:focus-entity).
   React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [tab, setTab] = _loc_us("dossier"); // dossier | mentions | review | references
   const [kindFilter, setKindFilter] = _loc_us("all");
   const [placedFilter, setPlacedFilter] = _loc_us("all"); // all | placed | unplaced
 
-  // Live locations only — never the demo LOCATIONS_DATA.
-  const data = (window.LoomwrightBackend?.EntityService?.listSync("locations")) || [];
+  // Live locations only — never the demo LOCATIONS_DATA. Project each row
+  // through liveLocationToRow so kind/placed/parent read off entity.data.*;
+  // the selected dossier gets the full liveLocationToDetail adapter.
+  const rawData = (window.LoomwrightBackend?.EntityService?.listSync("locations")) || [];
+  const data = rawData.map(liveLocationToRow);
   const filtered = data.filter((d) => {
     if (search && !(d.name || "").toLowerCase().includes(search.toLowerCase())) return false;
     if (kindFilter !== "all" && d.kind !== kindFilter) return false;
@@ -640,7 +762,12 @@ const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
     return true;
   });
 
-  const selected = filtered.find((d) => d.id === selectedId) || data.find((d) => d.id === selectedId);
+  // Resolve selection against live data; fall back to the first visible row
+  // so a fresh open shows a real dossier instead of the empty plate.
+  const _selRaw = rawData.find((d) => d.id === selectedId)
+    || rawData.find((d) => d.id === (filtered[0] || {}).id)
+    || null;
+  const selected = _selRaw ? liveLocationToDetail(_selRaw) : null;
 
   const onOpenEditor = _loc_uc(() => {
     // Route into Atlas full-screen via cross-panel context. We don't own
@@ -648,6 +775,14 @@ const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
     // can wire it.
     if (selected) onSelectEntity && onSelectEntity({ type: "atlas", id: selected.id, label: selected.name });
   }, [selected, onSelectEntity]);
+
+  // Open a manuscript mention in the Writer's Room at its cited chapter.
+  const openSource = _loc_uc((m) => {
+    if (m && m.chapterId) {
+      window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: m.chapterId } }));
+      window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } }));
+    }
+  }, []);
 
   return (
     <div className="loc-body" data-ui="LocationsPanelBody">
@@ -686,7 +821,7 @@ const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
             data={filtered}
             selectedId={selected?.id}
             onSelect={(n) => { setSelectedId(n.id); onSelectEntity && onSelectEntity({ id: n.id, type: "locations", label: n.name }); }}
-            onAddChild={() => {}}
+            onAddChild={(node) => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations", initial: { parentId: node.id, data: { parentId: node.id } } } }))}
             onSetParent={() => {}}
             onDragToAtlas={() => {}}
           />
@@ -721,12 +856,12 @@ const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                   entity={selected}
                   onSelectEntity={onSelectEntity}
                   onOpenRelatedTab={(row) => onSelectEntity && onSelectEntity(row)}
-                  onOpenSourceMention={() => {}}
+                  onOpenSourceMention={openSource}
                 />
               )}
               {tab === "mentions" && (
                 <div style={{ padding: 12 }}>
-                  <LocMentionStack mentions={selected.mentions} onOpenSourceMention={() => {}}/>
+                  <LocMentionStack mentions={selected.mentions} onOpenSourceMention={openSource}/>
                 </div>
               )}
               {tab === "review" && (
