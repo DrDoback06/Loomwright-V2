@@ -243,6 +243,18 @@ const ReviewQueueCard = ({
       <ConfidenceStrip band={item.confidence?.band}/>
       <div className="rqc__main">
         <div className="rqc__head">
+          {!isAuto && onToggleSelect && (
+            <input
+              type="checkbox"
+              className="rqc__select"
+              data-testid={"rqc-select-" + item.id}
+              checked={!!selected}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() => onToggleSelect(item)}
+              title="Select for bulk actions"
+              style={{ marginRight: 6, cursor: "pointer", flex: "0 0 auto" }}
+            />
+          )}
           {isAuto ? (
             <EntityTypeBadge type={item.entityType} size="xs"/>
           ) : (
@@ -422,10 +434,10 @@ const EntityReviewQueue = ({
   chapters = [],
   sessions = [],
   state = "default",       // default | empty | loading | error
-  filters = {},
-  setFilters,
-  selectedIds = [],
-  setSelectedIds,
+  filters: filtersProp = {},
+  setFilters: setFiltersProp,
+  selectedIds: selectedIdsProp = [],
+  setSelectedIds: setSelectedIdsProp,
   onAcceptQueueItem, onEditQueueItem, onMergeQueueItem, onDenyQueueItem,
   onBulkAcceptQueueItems, onBulkDenyQueueItems, onBulkMergeQueueItems,
   onOpenSourceInManuscript, onOpenRelatedTab,
@@ -434,7 +446,21 @@ const EntityReviewQueue = ({
   const t = ENTITY_TYPES[entityType] || ENTITY_TYPES.cast;
   const [autoOpen, setAutoOpen] = _rqUS(false);
 
-  const set = (k, v) => setFilters && setFilters({ ...filters, [k]: v });
+  // Self-manage filters + selection so the filter bar, multi-select, and
+  // bulk-actions work even when the host passes inert stubs (the inline
+  // panel-stack review surface does). Prop setters are still called if given.
+  const [filtersState, setFiltersState] = _rqUS(filtersProp || {});
+  const [selectedState, setSelectedState] = _rqUS(selectedIdsProp || []);
+  const filters = filtersState;
+  const setFilters = (next) => { setFiltersState(next); setFiltersProp && setFiltersProp(next); };
+  const selectedIds = selectedState;
+  const setSelectedIds = (next) => { setSelectedState(next); setSelectedIdsProp && setSelectedIdsProp(next); };
+  const onToggleSelect = (item) => {
+    const id = item && item.id; if (!id) return;
+    setSelectedIds(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
+  };
+
+  const set = (k, v) => setFilters({ ...filters, [k]: v });
   const view = filters.view || "list";
 
   // Normalise backend candidates → card shape so filtering/sorting/render all
@@ -531,6 +557,7 @@ const EntityReviewQueue = ({
                 key={g.members[0].id}
                 item={g.members[0]}
                 selected={selectedIds.includes(g.members[0].id)}
+                onToggleSelect={onToggleSelect}
                 onAcceptQueueItem={onAcceptQueueItem}
                 onEditQueueItem={onEditQueueItem}
                 onMergeQueueItem={onMergeQueueItem}
