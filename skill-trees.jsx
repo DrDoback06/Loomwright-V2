@@ -946,7 +946,17 @@ const SkillTreeEditor = ({ ctx, views, initialTreeId, onExit }) => {
       <div className="ste-tb">
         <div className="ste-tb__brand">
           <span style={{ fontSize: 18 }}>{tree.glyph}</span>
-          <span>Skill Tree Editor — {tree.name}</span>
+          <span>Skill Tree Editor —</span>
+          <input
+            key={tree.id}
+            defaultValue={tree.name}
+            title="Rename this skill tree"
+            data-testid="ste-tree-name"
+            aria-label="Skill tree name"
+            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== tree.name) B()?.SkillTreeService?.updateTree(tree.id, { name: v }); }}
+            style={{ background: "transparent", border: "none", borderBottom: "1px dashed var(--line-3)", color: "inherit", font: "inherit", fontWeight: 600, padding: "1px 4px", minWidth: 140 }}
+          />
         </div>
         <div className="ste-tb__group">
           <TB icon="pin-tack" label="Select"     value="select"/>
