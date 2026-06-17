@@ -368,10 +368,140 @@ const StatusChip = ({ status }) => {
 };
 
 // ---------------------------------------------------------------------
+// Live-data adapters
+//
+// Live quest/event entities keep identity fields top-level (name/title,
+// status, summary…) and ALL custom fields under entity.data.* using the
+// editor's field ids. QuestDetail/EventDetail were written against flat
+// demo objects, so a real quest/event rendered nearly empty. These map
+// data.* into the flat shape, resolve related-entity refs, normalise
+// step/branch/change rows, and derive mentions from the occurrence index.
+// Mirrors liveBestiaryToDetail etc.
+// ---------------------------------------------------------------------
+const _qeB = () => (typeof window !== "undefined") && window.LoomwrightBackend;
+function _qeResolveRef(r, ty) {
+  if (!r) return null;
+  if (typeof r === "object") return { id: r.id, name: r.name || r.label || r.id, label: r.name || r.label || r.id, type: r.type || ty || "" };
+  let nm = r, t = ty || "";
+  try { const B = _qeB(); const ent = B && B.EntityService && B.EntityService.getSync(r); if (ent) { nm = ent.name || ent.title || r; t = ent.type || ty || ""; } } catch (_e) {}
+  return { id: r, name: nm, label: nm, type: t };
+}
+function _qeRefList(arr, ty) { return (Array.isArray(arr) ? arr : []).map((r) => _qeResolveRef(r, ty)).filter(Boolean); }
+function _qeRuleStrings(arr) {
+  return (Array.isArray(arr) ? arr : []).map((r) => {
+    if (r == null) return ""; if (typeof r === "string") return r;
+    if (typeof r === "object") {
+      const a = r.target || r.stat || r.name || r.label || r.left || "";
+      const d = (r.delta != null ? r.delta : (r.value != null ? r.value : r.amount));
+      const n = r.note || r.detail || r.text || r.change || "";
+      const ds = (d != null && d !== "") ? (typeof d === "number" ? (d > 0 ? "+" + d : String(d)) : String(d)) : "";
+      return [a, ds, n].filter(Boolean).join(" ").trim();
+    }
+    return String(r);
+  }).filter(Boolean);
+}
+function _qeMentions(id) {
+  const B = _qeB(); let occ = [], chapters = [];
+  try { occ = (B && B.OccurrenceService && (B.OccurrenceService.listByEntitySync ? B.OccurrenceService.listByEntitySync(id) : (B.OccurrenceService.listAllSync() || []).filter((o) => o.entityId === id))) || []; } catch (_e) {}
+  try { chapters = ((B && B.ManuscriptChapterService && B.ManuscriptChapterService.loadSync().chapters) || []).filter((c) => c && !c.reserved); } catch (_e) {}
+  const numById = new Map(); chapters.forEach((c, i) => numById.set(c.id, c.num || i + 1));
+  const maxNum = chapters.reduce((m, c) => Math.max(m, numById.get(c.id) || 0), 0);
+  const mentionsByChapter = maxNum ? new Array(maxNum).fill(0) : [];
+  const sourceMentions = [];
+  for (const o of occ) {
+    if (!o || o.isPronounResolution) continue;
+    const n = numById.get(o.chapterId);
+    if (n != null && mentionsByChapter[n - 1] != null) mentionsByChapter[n - 1] += 1;
+    if (sourceMentions.length < 8 && o.exactText) sourceMentions.push({ id: o.occurrenceId || ("occ-" + sourceMentions.length), cite: n != null ? "Ch. " + n : "—", excerpt: o.exactText, chapterId: o.chapterId });
+  }
+  return { mentionsByChapter, sourceMentions };
+}
+function liveQuestToDetail(entity) {
+  if (!entity) return entity;
+  const top = entity, d = entity.data || {};
+  const steps = (Array.isArray(d.steps) ? d.steps : []).map((s, i) => ({
+    id: s.id || ("step-" + i),
+    title: s.title || s.label || s.text || ("Step " + (i + 1)),
+    status: s.status || "todo",
+    chapter: s.chapter || "", location: s.location || "",
+    participants: Array.isArray(s.participants) ? s.participants : [],
+    cite: s.cite || "",
+  }));
+  const branches = (Array.isArray(d.branches) ? d.branches : []).map((b, i) => ({ id: b.id || ("br-" + i), label: b.label || b.title || ("Branch " + (i + 1)), chapter: b.chapter || "", outcome: b.outcome || b.note || "" }));
+  const m = _qeMentions(entity.id);
+  const cr = [d.startChapter, d.completionChapter].filter(Boolean).join("–");
+  return {
+    ...entity,
+    name: top.name || top.title || "Untitled",
+    questType: d.questType || "",
+    chapterRange: cr || d.timelinePosition || "",
+    optional: /side|optional/i.test(d.questType || ""),
+    queue: top.reviewQueueCount || top.queue || 0,
+    summary: top.summary || d.summary || "",
+    goal: d.goal || "",
+    steps, branches,
+    conditions: _qeRuleStrings(d.conditions),
+    participants: [..._qeRefList(d.owner ? [d.owner] : [], "cast"), ..._qeRefList(d.participants, "cast")],
+    locations: _qeRefList(d.locations, "locations"),
+    items: _qeRefList(d.items, "items"),
+    factions: _qeRefList(d.factions, "factions"),
+    relatedEvents: _qeRefList(d.relatedEvents, "events"),
+    consequenceChain: [],
+    contradictions: [],
+    mentionsByChapter: m.mentionsByChapter,
+    sourceMentions: m.sourceMentions,
+  };
+}
+function liveEventToDetail(entity) {
+  if (!entity) return entity;
+  const top = entity, d = entity.data || {};
+  const loc = _qeResolveRef(d.location, "locations");
+  const m = _qeMentions(entity.id);
+  const relChanges = (Array.isArray(d.relationshipChanges) ? d.relationshipChanges : []).map((r) => {
+    if (r && typeof r === "object" && (r.left || r.right)) return { left: r.left || "", right: r.right || "", change: r.change || r.note || "", chapter: r.chapter || "" };
+    const s = _qeRuleStrings([r])[0] || ""; const parts = s.split(/↔|<->|\//).map((x) => x.trim());
+    return { left: parts[0] || s, right: parts[1] || "", change: parts[2] || "", chapter: "" };
+  });
+  const charChanges = (Array.isArray(d.characterStateChanges) ? d.characterStateChanges : (Array.isArray(d.characterChanges) ? d.characterChanges : [])).map((c) => {
+    if (c && typeof c === "object" && (c.who || c.change)) return { who: c.who || c.target || "", change: c.change || c.note || "", cite: c.cite || "" };
+    return { who: (c && (c.target || c.name)) || "", change: (c && (c.note || c.detail)) || _qeRuleStrings([c])[0] || "", cite: "" };
+  });
+  const locChanges = (Array.isArray(d.locationChanges) ? d.locationChanges : []).map((l) => {
+    if (l && typeof l === "object" && (l.where || l.change)) return { where: l.where || l.target || "", change: l.change || l.note || "" };
+    return { where: (l && (l.target || l.name)) || "", change: (l && (l.note || l.detail)) || _qeRuleStrings([l])[0] || "" };
+  });
+  return {
+    ...entity,
+    name: top.name || top.title || "Untitled",
+    eventType: d.eventType || "",
+    chapter: d.chapter || "",
+    date: d.timelinePosition || d.date || "",
+    location: loc ? { ...loc, label: loc.name } : null,
+    summary: top.summary || d.summary || "",
+    cause: d.cause || "", immediateOutcome: d.immediateOutcome || "", longTermConsequence: d.longTermConsequence || "",
+    participants: _qeRefList(d.participants, "cast"),
+    factions: _qeRefList(d.factions, "factions"),
+    quests: _qeRefList(d.relatedQuests, "quests"),
+    items: _qeRefList(d.relatedItems, "items"),
+    relationshipChanges: relChanges,
+    characterChanges: charChanges,
+    locationChanges: locChanges,
+    mentionsByChapter: m.mentionsByChapter,
+    sourceMentions: m.sourceMentions,
+  };
+}
+
+// ---------------------------------------------------------------------
 // QuestDetail
 // ---------------------------------------------------------------------
 const QuestDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelatedTab, onOpenFullScreen }) => {
-  const e = entity || {};
+  const raw = entity || {};
+  const e = liveQuestToDetail(raw);
+  const rawSteps = Array.isArray(raw.data?.steps) ? raw.data.steps : [];
+  // Persist step status toggles to entity.data.steps (was an inert no-op).
+  const persistSteps = (steps) => { try { const B = window.LoomwrightBackend; if (B?.EntityService && raw.id) { B.EntityService.update("quests", raw.id, { data: { ...(raw.data || {}), steps } }); window.dispatchEvent(new CustomEvent("lw:entity-store-updated")); } } catch (_e) {} };
+  const setStepByIdx = (idx, status) => persistSteps(rawSteps.map((s, i) => i === idx ? { ...s, status } : s));
+  const openQuestEditor = () => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "quests", initial: { id: raw.id }, mode: "full" } }));
   const stepsDone = (e.steps || []).filter((s) => s.status === "done").length;
 
   return (
@@ -403,7 +533,7 @@ const QuestDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelate
             {e.steps.map((s, i) => (
               <QuestStepRow
                 key={s.id} step={s} idx={i} total={e.steps.length}
-                onComplete={() => {}} onFail={() => {}} onEdit={() => {}}
+                onComplete={() => setStepByIdx(i, "done")} onFail={() => setStepByIdx(i, "failed")} onEdit={openQuestEditor}
                 onOpenSource={onOpenSourceMention}
               />
             ))}
@@ -516,7 +646,7 @@ const QuestDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelate
 // EventDetail
 // ---------------------------------------------------------------------
 const EventDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelatedTab, onOpenFullScreen }) => {
-  const e = entity || {};
+  const e = liveEventToDetail(entity || {});
   return (
     <div className="rpg-detail qe-detail" data-ui="EventDetail">
       <div className="qe-meta">
@@ -809,7 +939,7 @@ const EventsFullScreen = ({ onClose }) => {
 // QuestsPanelBody — side panel for Quests
 // ---------------------------------------------------------------------
 const QuestsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
-  const [selectedId, setSelectedId] = _qe_us(panel?.selected?.id || "q1");
+  const [selectedId, setSelectedId] = _qe_us(panel?.selected?.id || "");
   const [search, setSearch] = _qe_us("");
   const [statusFilter, setStatusFilter] = _qe_us("all");
   const [fullScreen, setFullScreen] = _qe_us(false);
@@ -820,12 +950,14 @@ const QuestsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
 
   const _qsrc = (window.LoomwrightBackend?.EntityService?.listSync("quests")) || [];
   const filtered = _qsrc.filter((q) => {
-    if (search && !(q.name || "").toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !(q.name || q.title || "").toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== "all" && q.status !== statusFilter) return false;
     if (ff && typeof _fwReferencesEntity !== "undefined" && !_fwReferencesEntity(q, ff.id)) return false;
     return true;
   });
-  const selected = filtered.find((q) => q.id === selectedId) || null;
+  const selected = _qsrc.find((q) => q.id === selectedId) || filtered[0] || null;
+  const selChapterRange = selected ? [selected.data?.startChapter, selected.data?.completionChapter].filter(Boolean).join("–") : "";
+  const openSource = (m) => { const cid = m && (m.chapterId || m.chapter); if (cid) { window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: cid } })); window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } })); } };
 
   return (
     <div className="loc-body" data-ui="QuestsPanelBody">
@@ -864,8 +996,8 @@ const QuestsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                 <span className="loc-tree__glyph" style={{ color: "var(--ec, #8a3a4f)" }}>
                   {q.status === "completed" ? "✓" : q.status === "failed" ? "✗" : q.status === "hidden" ? "?" : "▸"}
                 </span>
-                <span className="loc-tree__name">{q.name}</span>
-                {(q.queue || 0) > 0 && <span className="loc-tree__queue">{q.queue}</span>}
+                <span className="loc-tree__name">{q.name || q.title}</span>
+                {((q.reviewQueueCount || q.queue) || 0) > 0 && <span className="loc-tree__queue">{q.reviewQueueCount || q.queue}</span>}
               </div>
             ))}
           </div>
@@ -876,15 +1008,15 @@ const QuestsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
             <>
               <div className="loc-body__detail-head">
                 <div>
-                  <div className="loc-body__detail-eyebrow">Quest · {selected.chapterRange || "—"}</div>
-                  <div className="loc-body__detail-title">{selected.name}</div>
+                  <div className="loc-body__detail-eyebrow">Quest · {selChapterRange || "—"}</div>
+                  <div className="loc-body__detail-title">{selected.name || selected.title}</div>
                 </div>
               </div>
               <div style={{ overflowY: "auto", flex: 1, padding: 12 }}>
                 <QuestDetail
                   entity={selected}
                   onSelectEntity={onSelectEntity}
-                  onOpenSourceMention={() => {}}
+                  onOpenSourceMention={openSource}
                   onOpenRelatedTab={onSelectEntity}
                   onOpenFullScreen={() => setFullScreen(true)}
                 />
@@ -914,12 +1046,13 @@ const EventsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
 
   const _esrc = (window.LoomwrightBackend?.EntityService?.listSync("events")) || [];
   const filtered = _esrc.filter((e) => {
-    if (search && !(e.name || "").toLowerCase().includes(search.toLowerCase())) return false;
-    if (typeFilter !== "all" && e.eventType !== typeFilter) return false;
+    if (search && !(e.name || e.title || "").toLowerCase().includes(search.toLowerCase())) return false;
+    if (typeFilter !== "all" && (e.data?.eventType || e.eventType) !== typeFilter) return false;
     if (ff && typeof _fwReferencesEntity !== "undefined" && !_fwReferencesEntity(e, ff.id)) return false;
     return true;
   });
-  const selected = filtered.find((e) => e.id === selectedId) || null;
+  const selected = _esrc.find((e) => e.id === selectedId) || filtered[0] || null;
+  const openSource = (m) => { const cid = m && (m.chapterId || m.chapter); if (cid) { window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: cid } })); window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } })); } };
 
   return (
     <div className="loc-body" data-ui="EventsPanelBody">
@@ -949,10 +1082,10 @@ const EventsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
             {filtered.map((ev) => (
               <div key={ev.id}
                    className={"loc-tree__row" + (ev.id === selectedId ? " is-selected" : "")}
-                   onClick={() => { setSelectedId(ev.id); onSelectEntity && onSelectEntity({ id: ev.id, type: "events", label: ev.name }); }}>
+                   onClick={() => { setSelectedId(ev.id); onSelectEntity && onSelectEntity({ id: ev.id, type: "events", label: ev.name || ev.title }); }}>
                 <span className="loc-tree__glyph" style={{ color: "var(--ec, #c79545)" }}>◈</span>
-                <span className="loc-tree__name">{ev.name}</span>
-                <span className="loc-tree__children">{ev.chapter}</span>
+                <span className="loc-tree__name">{ev.name || ev.title}</span>
+                <span className="loc-tree__children">{ev.data?.chapter || ""}</span>
               </div>
             ))}
           </div>
@@ -963,15 +1096,15 @@ const EventsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
             <>
               <div className="loc-body__detail-head">
                 <div>
-                  <div className="loc-body__detail-eyebrow">Event · {selected.chapter || "—"}</div>
-                  <div className="loc-body__detail-title">{selected.name}</div>
+                  <div className="loc-body__detail-eyebrow">Event · {selected.data?.chapter || selected.data?.eventType || "—"}</div>
+                  <div className="loc-body__detail-title">{selected.name || selected.title}</div>
                 </div>
               </div>
               <div style={{ overflowY: "auto", flex: 1, padding: 12 }}>
                 <EventDetail
                   entity={selected}
                   onSelectEntity={onSelectEntity}
-                  onOpenSourceMention={() => {}}
+                  onOpenSourceMention={openSource}
                   onOpenRelatedTab={onSelectEntity}
                   onOpenFullScreen={() => setFullScreen(true)}
                 />
