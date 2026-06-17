@@ -1141,6 +1141,53 @@
   // entity type; AtlasService never owns them — it just patches their
   // .data fields (placed/coords/atlasMap/routes).
   // -------------------------------------------------------------------
+  // Drawable region geometry (rect/circle/polygon/freehand), all in
+  // percent (0–100) of the map plate. The centroid is the label/pin
+  // anchor (stored back into data.coords) so a shaped place still has a
+  // single point for routes/labels.
+  function _atlasShapeCentroid(shape) {
+    if (!shape || typeof shape !== "object") return null;
+    if (shape.type === "rect") {
+      const x = Number(shape.x), y = Number(shape.y), w = Number(shape.w), h = Number(shape.h);
+      if (![x, y, w, h].every(isFinite)) return null;
+      return { x: x + w / 2, y: y + h / 2 };
+    }
+    if (shape.type === "circle") {
+      const cx = Number(shape.cx), cy = Number(shape.cy);
+      if (![cx, cy].every(isFinite)) return null;
+      return { x: cx, y: cy };
+    }
+    if ((shape.type === "polygon" || shape.type === "freehand") && Array.isArray(shape.points) && shape.points.length) {
+      let sx = 0, sy = 0, n = 0;
+      for (const p of shape.points) { const px = Number(p[0]), py = Number(p[1]); if (isFinite(px) && isFinite(py)) { sx += px; sy += py; n++; } }
+      return n ? { x: sx / n, y: sy / n } : null;
+    }
+    return null;
+  }
+  function _atlasNormalizeShape(shape) {
+    if (!shape || typeof shape !== "object" || !shape.type) return null;
+    const num = (v) => Number(v) || 0;
+    const clamp = (v) => Math.max(0, Math.min(100, num(v)));
+    if (shape.type === "rect") {
+      const r = { type: "rect", x: clamp(shape.x), y: clamp(shape.y), w: Math.max(0.5, num(shape.w)), h: Math.max(0.5, num(shape.h)) };
+      if (shape.style) r.style = String(shape.style);
+      return r;
+    }
+    if (shape.type === "circle") {
+      const c = { type: "circle", cx: clamp(shape.cx), cy: clamp(shape.cy), r: Math.max(0.5, num(shape.r)) };
+      if (shape.style) c.style = String(shape.style);
+      return c;
+    }
+    if (shape.type === "polygon" || shape.type === "freehand") {
+      const points = (Array.isArray(shape.points) ? shape.points : [])
+        .map((p) => [clamp(p[0]), clamp(p[1])]).filter((p) => isFinite(p[0]) && isFinite(p[1]));
+      if (points.length < 2) return null;
+      const s = { type: shape.type, points };
+      if (shape.style) s.style = String(shape.style);
+      return s;
+    }
+    return null;
+  }
   const AtlasService = {
     listPlacedSync() {
       const locs = EntityService.listSync("locations");
@@ -1243,9 +1290,10 @@
       const locations = locEntities.map((e) => {
         const d = e.data || {};
         const type = typeOf(d);
-        const coords = d.coords || {};
+        const shape = _atlasNormalizeShape(d.shape);
+        const coords = (d.coords && isFinite(Number(d.coords.x)) ? d.coords : null) || (shape ? _atlasShapeCentroid(shape) : null) || {};
         const x = Number(coords.x), y = Number(coords.y);
-        const placed = d.placed === true && isFinite(x) && isFinite(y);
+        const placed = (d.placed === true || !!shape) && isFinite(x) && isFinite(y);
         const parentId = rid(d.parentId != null ? d.parentId : d.parent);
         const chs = chaptersOf(e.id);
         const q = queueFor(e);
@@ -1267,6 +1315,8 @@
           x: placed ? x : undefined,
           y: placed ? y : undefined,
           placed,
+          shape: shape || undefined,
+          atlasMap: d.atlasMap || "world",
           polygon: typeof d.polygon === "string" ? d.polygon : undefined,
           chapters: chs,
           characters: castAtLoc.get(e.id) || [],
@@ -1486,6 +1536,32 @@
       if (patch.coords) data.coords = { x: Number(patch.coords.x) || 0, y: Number(patch.coords.y) || 0 };
       if (patch.atlasMap) data.atlasMap = patch.atlasMap;
       if (Array.isArray(patch.routes)) data.routes = patch.routes.slice();
+      if ("shape" in patch) {
+        const shape = _atlasNormalizeShape(patch.shape);
+        if (shape) {
+          data.shape = shape;
+          data.placed = true;
+          const c = _atlasShapeCentroid(shape);
+          if (c) data.coords = { x: c.x, y: c.y };
+        } else {
+          delete data.shape; // null shape clears the region (back to a point)
+        }
+      }
+      return EntityService.update("locations", id, { data });
+    },
+    // Draw/replace a location's region shape (rect/circle/polygon/freehand),
+    // marking it placed and anchoring its label at the centroid.
+    async setLocationShape(id, shape, opts = {}) {
+      const existing = EntityService.getSync(id, "locations");
+      if (!existing) return null;
+      const norm = _atlasNormalizeShape(shape);
+      const data = { ...(existing.data || {}) };
+      if (!norm) { delete data.shape; return EntityService.update("locations", id, { data }); }
+      data.shape = norm;
+      data.placed = true;
+      const c = _atlasShapeCentroid(norm);
+      if (c) data.coords = { x: c.x, y: c.y };
+      if (opts.atlasMap) data.atlasMap = opts.atlasMap;
       return EntityService.update("locations", id, { data });
     },
     async setRoute(fromId, toId, kind = "road") {

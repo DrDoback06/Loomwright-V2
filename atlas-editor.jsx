@@ -179,8 +179,32 @@ const AtlasEdLeftRail = ({
               <Icon name="plus" size={11}/>
             </button>
           </div>
+          {(() => {
+            const unplaced = locations.filter((l) => !l.placed && (!query || l.name.toLowerCase().includes(query.toLowerCase())));
+            if (!unplaced.length) return null;
+            return (
+              <div className="ae-reg__unplaced" data-ui="AtlasUnplacedTray">
+                <div className="ae-reg__sectionhead" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
+                  <span>Unplaced · {unplaced.length}</span>
+                  <span style={{ fontSize: "var(--fs-2xs)", color: "var(--ink-4)", fontStyle: "italic" }}>pick one, then draw it</span>
+                </div>
+                {unplaced.map((loc) => (
+                  <div key={loc.id}
+                       className={"ae-reg__row ae-reg__row--unplaced" + (selectedId === loc.id ? " is-sel" : "")}
+                       data-atlas-unplaced={loc.id} title="Select, then use a draw tool (or Add Location) to place it"
+                       style={{ paddingLeft: 8 }}
+                       onClick={() => onSelectLoc(loc)}>
+                    <span className="ae-reg__caret"/>
+                    <span className={"ae-reg__type ae-reg__type--" + loc.type}/>
+                    <span className="ae-reg__name">{loc.name}</span>
+                    <span className="ae-reg__kind">{loc.type}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
           <div className="ae-reg__sectionhead">
-            <span>{locations.length} locations · 6 levels</span>
+            <span>{locations.length} locations</span>
           </div>
           <div className="ae-reg__tree">
             {renderNode("world", 0)}

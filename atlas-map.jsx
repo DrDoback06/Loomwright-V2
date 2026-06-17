@@ -29,6 +29,44 @@ const PIN_BY_TYPE = {
   road:        { r: 0,   icon: "",   weight: 500 },
 };
 
+// Drawn-region fills by type (parchment palette). `loc.shape.style` can
+// override the type key (e.g. force "waterway" tint on a polygon).
+const SHAPE_STYLE_BY_TYPE = {
+  world:       { fill: "rgba(160,140,90,0.10)", stroke: "rgba(74,56,28,0.50)" },
+  continent:   { fill: "rgba(160,140,90,0.12)", stroke: "rgba(74,56,28,0.52)" },
+  country:     { fill: "rgba(160,140,90,0.14)", stroke: "rgba(74,56,28,0.55)" },
+  region:      { fill: "rgba(120,150,90,0.15)", stroke: "rgba(70,90,40,0.52)" },
+  city:        { fill: "rgba(190,140,90,0.20)", stroke: "rgba(120,80,40,0.62)" },
+  town:        { fill: "rgba(190,150,100,0.17)", stroke: "rgba(120,90,50,0.56)" },
+  village:     { fill: "rgba(190,160,110,0.15)", stroke: "rgba(120,95,55,0.5)" },
+  district:    { fill: "rgba(175,150,110,0.17)", stroke: "rgba(110,90,55,0.56)" },
+  building:    { fill: "rgba(150,140,130,0.24)", stroke: "rgba(90,80,70,0.72)" },
+  room:        { fill: "rgba(155,145,135,0.20)", stroke: "rgba(95,85,75,0.62)" },
+  forest:      { fill: "rgba(90,140,80,0.20)",  stroke: "rgba(50,90,45,0.56)" },
+  waterway:    { fill: "rgba(90,130,170,0.22)", stroke: "rgba(50,90,140,0.56)" },
+  river:       { fill: "rgba(90,130,170,0.22)", stroke: "rgba(50,90,140,0.56)" },
+  mountain:    { fill: "rgba(140,120,100,0.20)", stroke: "rgba(90,70,50,0.58)" },
+  ruin:        { fill: "rgba(150,120,90,0.18)",  stroke: "rgba(90,70,45,0.62)" },
+  battlefield: { fill: "rgba(170,90,80,0.17)",   stroke: "rgba(120,50,40,0.6)" },
+  hidden:      { fill: "rgba(120,100,150,0.17)", stroke: "rgba(80,60,110,0.56)" },
+  _default:    { fill: "rgba(175,150,110,0.16)", stroke: "rgba(100,80,50,0.55)" },
+};
+
+// Build the SVG geometry element spec for a drawn shape. Shape coords are
+// percent (0–100); x maps to the 1200-wide plate, y to the 700-tall plate.
+// Circle radius is percent-of-width so it renders as a true circle.
+function _amShapeGeom(shape) {
+  if (!shape || typeof shape !== "object") return null;
+  const PX = (v) => (Number(v) / 100) * 1200, PY = (v) => (Number(v) / 100) * 700;
+  if (shape.type === "rect")   return { tag: "rect",   props: { x: PX(shape.x), y: PY(shape.y), width: PX(shape.w), height: PY(shape.h), rx: 5 } };
+  if (shape.type === "circle") return { tag: "circle", props: { cx: PX(shape.cx), cy: PY(shape.cy), r: (Number(shape.r) / 100) * 1200 } };
+  if ((shape.type === "polygon" || shape.type === "freehand") && Array.isArray(shape.points) && shape.points.length >= 2) {
+    const pts = shape.points.map((p) => PX(p[0]).toFixed(1) + "," + PY(p[1]).toFixed(1));
+    return { tag: "path", props: { d: "M " + pts.join(" L ") + " Z" } };
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------
 // Background plate — sea / coast / contours / compass / scale
 // ---------------------------------------------------------------------
@@ -113,6 +151,44 @@ const AtlasRegions = ({ locations, layers, highlight }) => {
     </g>
   );
 };
+
+// ---------------------------------------------------------------------
+// Drawn regions — user-authored shapes (rect/circle/polygon/freehand)
+// for rooms / areas / lands. Filled + labelled at the centroid; clickable.
+// ---------------------------------------------------------------------
+const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, showLabels = true, clean = false }) => (
+  <g className="atm-shapes">
+    {locations.map((loc) => {
+      if (!loc.shape) return null;
+      if (!_pinIsVisible(loc, layers)) return null;
+      const geom = _amShapeGeom(loc.shape);
+      if (!geom) return null;
+      const st = (loc.shape.style && SHAPE_STYLE_BY_TYPE[loc.shape.style]) || SHAPE_STYLE_BY_TYPE[loc.type] || SHAPE_STYLE_BY_TYPE._default;
+      const focused = loc.id === focusId;
+      const dim = (ctxLocs && !ctxLocs.has(loc.id)) || (dimFn && dimFn(loc));
+      const c = _amPx(loc); // centroid (buildAtlasDataSync set coords to it)
+      const Tag = geom.tag;
+      return (
+        <g key={loc.id} data-atm-shape={loc.id} className={"atm-shape" + (focused ? " is-focused" : "")}
+           opacity={dim ? 0.3 : 1} style={{ cursor: "pointer" }}
+           onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc); }}>
+          <Tag {...geom.props}
+               fill={clean ? st.fill.replace(/0\.\d+\)/, "0.28)") : st.fill}
+               stroke={focused ? "#c98a2c" : st.stroke}
+               strokeWidth={focused ? 2 : (loc.shape.type === "freehand" ? 1.6 : 1.2)}
+               strokeLinejoin="round" strokeLinecap="round"
+               strokeDasharray={loc.shape.type === "freehand" ? "0" : (loc.type === "region" ? "7 4" : "0")}/>
+          {showLabels && (
+            <text x={c.x} y={c.y} textAnchor="middle" dominantBaseline="central"
+                  fontFamily="var(--font-display)" fontSize="12.5" fontWeight="600"
+                  fill="#3a2c12" pointerEvents="none"
+                  style={{ paintOrder: "stroke", stroke: "rgba(250,242,221,0.85)", strokeWidth: 2.5 }}>{loc.name}</text>
+          )}
+        </g>
+      );
+    })}
+  </g>
+);
 
 // ---------------------------------------------------------------------
 // Pin — a single location marker. Renders glyph + label.
@@ -341,7 +417,7 @@ const AtlasMap = ({
   layers = {}, selectedId, onSelect, onPan,
   context = null, scrubChapter = null,
   showLabels = true, showIso = true, showGrid = false, showTexture = true,
-  variant = "side", className = "",
+  variant = "side", className = "", cleanStyle = false,
   // Live editing (editor variant): active tool + placement callbacks.
   tool = "select", onMapPoint = null, onMovePin = null,
 }) => {
@@ -450,6 +526,11 @@ const AtlasMap = ({
       {/* Region polygons under everything */}
       <g opacity={opOf("regions")}><AtlasRegions locations={locations} layers={layers} highlight={regionHighlight}/></g>
 
+      {/* Drawn regions (user shapes) — above static polygons, below pins */}
+      <AtlasShapes locations={locations} layers={layers} onSelect={onSelect} focusId={focusId}
+                   ctxLocs={ctxLocs} dimFn={scrubFn} clean={cleanStyle}
+                   showLabels={showLabels && variant === "editor"}/>
+
       {/* Road / connection lines between placed locations */}
       {layers.routes !== false && roads.length > 0 && (
         <g className="atm-roads" opacity={opOf("routes")}>
@@ -492,6 +573,7 @@ const AtlasMap = ({
       <g>
         {locations.map((loc) => {
           if (loc.placed === false) return null;
+          if (loc.shape) return null; // drawn regions render in AtlasShapes (with their own label)
           if (!_pinIsVisible(loc, layers)) return null;
           const dim = (ctxLocs && !ctxLocs.has(loc.id)) || scrubFn(loc);
           const focused = loc.id === focusId;
