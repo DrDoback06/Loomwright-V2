@@ -900,6 +900,13 @@ const AtlasEditor = ({
     onSelect && onSelect({ id: ent.id, type: "locations", name: ent.name, placed: true });
     _aeNotice("Drew a new area — rename it in the inspector.");
   };
+  // A region was moved / resized / had a vertex dragged — persist the shape.
+  const onReshape = async (locId, shape) => {
+    const B = window.LoomwrightBackend;
+    if (!B || !shape) return;
+    await B.AtlasService.updatePlacement(locId, { shape });
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+  };
   const handleSelect = (loc) => {
     // Two-tap road drawing when the Add Route tool is armed.
     if ((tool === "addRoute" || tool === "path-road" || tool === "path-route" || tool === "path-river") && loc) {
@@ -959,7 +966,7 @@ const AtlasEditor = ({
             context={context} scrubChapter={scrubChapter}
             showLabels={showLabels} showIso={showIso} showGrid={showGrid} showTexture={showTexture}
             variant="editor" onSelect={handleSelect}
-            tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin} onDrawShape={onDrawShape}/>
+            tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin} onDrawShape={onDrawShape} onReshape={onReshape}/>
           {miniMapVisible && <AtlasMiniMap locations={locations} routes={routes} selectedId={selected?.id} context={context}/>}
           {context && context.source && (
             <div className="atlas-editor__ctxbanner">

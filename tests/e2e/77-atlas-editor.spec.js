@@ -76,4 +76,35 @@ test.describe("T77. Atlas editor — shapes + unplaced tray", () => {
     await expect(page.locator(`[data-atlas-unplaced='${loc.id}']`)).toHaveCount(0);
     if (process.env.SHOT) await page.screenshot({ path: "/tmp/atlas-draw.png" });
   });
+
+  test("moving a selected region persists the new position", async ({ page }) => {
+    await openFreshApp(page);
+    const loc = await saveEntity(page, "locations", {
+      name: "Vault", data: { kind: "building", shape: { type: "rect", x: 30, y: 35, w: 18, h: 18 } },
+    }, { status: "active" });
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    const rect = editor.locator(`[data-atm-shape='${loc.id}'] rect`);
+    await expect(rect).toHaveCount(1);
+    await rect.click();                 // select the region (handles appear)
+    await page.waitForTimeout(150);
+
+    // drag the body down-right to move it
+    const box = await rect.boundingBox();
+    const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx + 60, cy + 45);
+    await page.mouse.move(cx + 95, cy + 65);
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+
+    const shape = await page.evaluate((id) => window.LoomwrightBackend.EntityService.getSync(id, "locations")?.data?.shape, loc.id);
+    expect(shape.type).toBe("rect");
+    expect(shape.x).toBeGreaterThan(31); // moved right
+    expect(shape.y).toBeGreaterThan(36); // moved down
+    expect(Math.round(shape.w)).toBe(18); // size preserved by a move
+  });
 });

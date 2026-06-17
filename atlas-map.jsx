@@ -92,6 +92,32 @@ function _amDecimate(points, minDist = 1.1) {
   return out;
 }
 
+// Reshape an existing shape: move the whole thing (dx,dy in %), drag a rect
+// corner (opposite corner fixed), grow a circle's radius, or move a polygon
+// vertex — all returning a fresh shape.
+function _amReshape(orig, mode, index, dx, dy, p) {
+  if (!orig) return orig;
+  const clamp = (v) => Math.max(0, Math.min(100, v));
+  if (mode === "move") {
+    if (orig.type === "rect")   return { ...orig, x: clamp(orig.x + dx), y: clamp(orig.y + dy) };
+    if (orig.type === "circle") return { ...orig, cx: clamp(orig.cx + dx), cy: clamp(orig.cy + dy) };
+    return { ...orig, points: orig.points.map(([x, y]) => [clamp(x + dx), clamp(y + dy)]) };
+  }
+  if (mode === "rect-corner" && orig.type === "rect") {
+    const corners = [[orig.x, orig.y], [orig.x + orig.w, orig.y], [orig.x + orig.w, orig.y + orig.h], [orig.x, orig.y + orig.h]];
+    const opp = corners[(index + 2) % 4];
+    return { ...orig, x: clamp(Math.min(opp[0], p.x)), y: clamp(Math.min(opp[1], p.y)), w: Math.max(0.5, Math.abs(opp[0] - p.x)), h: Math.max(0.5, Math.abs(opp[1] - p.y)) };
+  }
+  if (mode === "circle-radius" && orig.type === "circle") {
+    const rpx = Math.hypot(((p.x - orig.cx) / 100) * 1200, ((p.y - orig.cy) / 100) * 700);
+    return { ...orig, r: Math.max(0.5, (rpx / 1200) * 100) };
+  }
+  if (mode === "vertex" && (orig.type === "polygon" || orig.type === "freehand")) {
+    return { ...orig, points: orig.points.map((pt, i) => (i === index ? [clamp(p.x), clamp(p.y)] : pt)) };
+  }
+  return orig;
+}
+
 // ---------------------------------------------------------------------
 // Background plate — sea / coast / contours / compass / scale
 // ---------------------------------------------------------------------
@@ -181,28 +207,30 @@ const AtlasRegions = ({ locations, layers, highlight }) => {
 // Drawn regions — user-authored shapes (rect/circle/polygon/freehand)
 // for rooms / areas / lands. Filled + labelled at the centroid; clickable.
 // ---------------------------------------------------------------------
-const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, showLabels = true, clean = false }) => (
+const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, showLabels = true, clean = false, shapeOf, onShapePointerDown }) => (
   <g className="atm-shapes">
     {locations.map((loc) => {
-      if (!loc.shape) return null;
+      const shape = shapeOf ? shapeOf(loc) : loc.shape;
+      if (!shape) return null;
       if (!_pinIsVisible(loc, layers)) return null;
-      const geom = _amShapeGeom(loc.shape);
+      const geom = _amShapeGeom(shape);
       if (!geom) return null;
-      const st = (loc.shape.style && SHAPE_STYLE_BY_TYPE[loc.shape.style]) || SHAPE_STYLE_BY_TYPE[loc.type] || SHAPE_STYLE_BY_TYPE._default;
+      const st = (shape.style && SHAPE_STYLE_BY_TYPE[shape.style]) || SHAPE_STYLE_BY_TYPE[loc.type] || SHAPE_STYLE_BY_TYPE._default;
       const focused = loc.id === focusId;
       const dim = (ctxLocs && !ctxLocs.has(loc.id)) || (dimFn && dimFn(loc));
       const c = _amPx(loc); // centroid (buildAtlasDataSync set coords to it)
       const Tag = geom.tag;
       return (
         <g key={loc.id} data-atm-shape={loc.id} className={"atm-shape" + (focused ? " is-focused" : "")}
-           opacity={dim ? 0.3 : 1} style={{ cursor: "pointer" }}
+           opacity={dim ? 0.3 : 1} style={{ cursor: focused ? "move" : "pointer" }}
+           onPointerDown={(e) => onShapePointerDown && onShapePointerDown(e, loc)}
            onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc); }}>
           <Tag {...geom.props}
                fill={clean ? st.fill.replace(/0\.\d+\)/, "0.28)") : st.fill}
                stroke={focused ? "#c98a2c" : st.stroke}
-               strokeWidth={focused ? 2 : (loc.shape.type === "freehand" ? 1.6 : 1.2)}
+               strokeWidth={focused ? 2 : (shape.type === "freehand" ? 1.6 : 1.2)}
                strokeLinejoin="round" strokeLinecap="round"
-               strokeDasharray={loc.shape.type === "freehand" ? "0" : (loc.type === "region" ? "7 4" : "0")}/>
+               strokeDasharray={shape.type === "freehand" ? "0" : (loc.type === "region" ? "7 4" : "0")}/>
           {showLabels && (
             <text x={c.x} y={c.y} textAnchor="middle" dominantBaseline="central"
                   fontFamily="var(--font-display)" fontSize="12.5" fontWeight="600"
@@ -214,6 +242,29 @@ const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, sho
     })}
   </g>
 );
+
+// Resize/vertex handles for the selected drawn region (editor, select tool).
+const AtlasShapeHandles = ({ loc, shape, onHandleDown }) => {
+  if (!shape) return null;
+  const PX = (v) => (Number(v) / 100) * 1200, PY = (v) => (Number(v) / 100) * 700;
+  const H = (cx, cy, key, mode, index) => (
+    <circle key={key} cx={cx} cy={cy} r={5.5} fill="#fffaf0" stroke="#c98a2c" strokeWidth="1.6"
+            style={{ cursor: "grab" }} data-atm-handle={mode}
+            onPointerDown={(e) => onHandleDown(e, loc, mode, index)}/>
+  );
+  if (shape.type === "rect") {
+    const x = PX(shape.x), y = PY(shape.y), w = PX(shape.w), h = PY(shape.h);
+    return <g>{[[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map((c, i) => H(c[0], c[1], "c" + i, "rect-corner", i))}</g>;
+  }
+  if (shape.type === "circle") {
+    const cx = PX(shape.cx), cy = PY(shape.cy), r = (Number(shape.r) / 100) * 1200;
+    return <g>{H(cx + r, cy, "r", "circle-radius", 0)}</g>;
+  }
+  if (shape.type === "polygon" || shape.type === "freehand") {
+    return <g>{shape.points.map((p, i) => H(PX(p[0]), PY(p[1]), "v" + i, "vertex", i))}</g>;
+  }
+  return null;
+};
 
 // ---------------------------------------------------------------------
 // Pin — a single location marker. Renders glyph + label.
@@ -444,7 +495,7 @@ const AtlasMap = ({
   showLabels = true, showIso = true, showGrid = false, showTexture = true,
   variant = "side", className = "", cleanStyle = false,
   // Live editing (editor variant): active tool + placement callbacks.
-  tool = "select", onMapPoint = null, onMovePin = null, onDrawShape = null,
+  tool = "select", onMapPoint = null, onMovePin = null, onDrawShape = null, onReshape = null,
 }) => {
   const locById = _um_am(() => Object.fromEntries(locations.map((l) => [l.id, l])), [locations]);
   const ctxShow = context && context.show;
@@ -482,6 +533,11 @@ const AtlasMap = ({
   const [draft, setDraft] = React.useState(null);  // live preview shape
   const [polyPts, setPolyPts] = React.useState([]); // polygon vertices (%)
   const isDrawTool = _AM_DRAW_TOOLS.has(tool);
+  // ---- Reshape interactions (move / resize / vertex-drag a drawn region) --
+  const reshapeRef = React.useRef(null);  // { locId, mode, index, orig, startPct }
+  const editShapeRef = React.useRef(null);
+  const [editShape, setEditShape] = React.useState(null); // { locId, shape } live override
+  const shapeOf = (loc) => (editShape && editShape.locId === loc.id) ? editShape.shape : loc.shape;
   // Reset any in-progress draft when the tool changes.
   _ue_am(() => { setDraft(null); setPolyPts([]); drawRef.current = null; draftRef.current = null; }, [tool]);
   // Escape cancels an in-progress polygon/draft.
@@ -530,7 +586,30 @@ const AtlasMap = ({
     dragRef.current = { id: loc.id, moved: false };
     svgRef.current.setPointerCapture?.(e.pointerId);
   };
+  // Drag the body of the SELECTED region to move it (select tool only).
+  const onShapePointerDown = (e, loc) => {
+    if (variant !== "editor" || tool !== "select" || !onReshape) return;
+    if (loc.id !== focusId) return; // first click selects; once selected, drag moves
+    e.stopPropagation();
+    try { svgRef.current.setPointerCapture?.(e.pointerId); } catch (_e) {}
+    reshapeRef.current = { locId: loc.id, mode: "move", orig: loc.shape, startPct: toPct(e) };
+  };
+  // Drag a resize/vertex handle.
+  const onHandlePointerDown = (e, loc, mode, index) => {
+    if (variant !== "editor" || !onReshape) return;
+    e.stopPropagation();
+    try { svgRef.current.setPointerCapture?.(e.pointerId); } catch (_e) {}
+    reshapeRef.current = { locId: loc.id, mode, index, orig: loc.shape, startPct: toPct(e) };
+  };
   const onSvgPointerMove = (e) => {
+    const rs = reshapeRef.current;
+    if (rs) {
+      const p = toPct(e);
+      const next = _amReshape(rs.orig, rs.mode, rs.index, p.x - rs.startPct.x, p.y - rs.startPct.y, p);
+      editShapeRef.current = { locId: rs.locId, shape: next };
+      setEditShape(editShapeRef.current);
+      return;
+    }
     const d = dragRef.current;
     if (d) { d.moved = true; setDragPos({ id: d.id, ...toPct(e) }); return; }
     const dr = drawRef.current;
@@ -551,6 +630,14 @@ const AtlasMap = ({
     if (shape && onDrawShape) onDrawShape(shape);
   };
   const onSvgPointerUp = () => {
+    const rs = reshapeRef.current;
+    if (rs) {
+      reshapeRef.current = null;
+      const es = editShapeRef.current; editShapeRef.current = null;
+      setEditShape(null);
+      if (es && es.locId === rs.locId && onReshape) onReshape(rs.locId, es.shape);
+      return;
+    }
     const d = dragRef.current;
     if (d) {
       dragRef.current = null;
@@ -617,7 +704,15 @@ const AtlasMap = ({
       {/* Drawn regions (user shapes) — above static polygons, below pins */}
       <AtlasShapes locations={locations} layers={layers} onSelect={onSelect} focusId={focusId}
                    ctxLocs={ctxLocs} dimFn={scrubFn} clean={cleanStyle}
-                   showLabels={showLabels && variant === "editor"}/>
+                   showLabels={showLabels && variant === "editor"}
+                   shapeOf={shapeOf} onShapePointerDown={onReshape ? onShapePointerDown : null}/>
+
+      {/* Resize/vertex handles for the selected region */}
+      {variant === "editor" && onReshape && tool === "select" && (() => {
+        const loc = locations.find((l) => l.id === focusId && l.shape);
+        if (!loc) return null;
+        return <AtlasShapeHandles loc={loc} shape={shapeOf(loc)} onHandleDown={onHandlePointerDown}/>;
+      })()}
 
       {/* Road / connection lines between placed locations */}
       {layers.routes !== false && roads.length > 0 && (
