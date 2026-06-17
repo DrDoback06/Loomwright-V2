@@ -69,7 +69,10 @@ const liveEventToTL = (e, ctx) => {
     : era === "after" ? "future"
     : /\?|approx|about|around|~|\bor\b/i.test(dateRaw) ? "approx"
     : "exact");
+  // sourceMentions is an IDENTITY_KEY → stored top-level (e.sourceMentions),
+  // not under data; read it there so authored source quotes actually show.
   const srcText = (typeof d.sourceQuote === "string" && d.sourceQuote.trim())
+    || (typeof e.sourceMentions === "string" && e.sourceMentions.trim())
     || (typeof d.sourceMentions === "string" && d.sourceMentions.trim())
     || "";
   const source = srcText

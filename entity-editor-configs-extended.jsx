@@ -384,6 +384,7 @@ const EE_TIMELINE = {
       { id: "chapter",     label: "Chapter",   kind: "text" },
       { id: "track",       label: "Timeline track", kind: "text", placeholder: "Main · Court · Auger" },
       { id: "isMilestone", label: "Milestone", kind: "toggle" },
+      { id: "sourceMentions", label: "Source mentions", kind: "textarea", hint: "Quote / passage where this beat appears.", span: 2 },
     ]},
     { id: "status", title: "Status", fields: [
       { id: "status",       label: "Status",         kind: "pills", options: ["active","needs-review","dormant","draft"] },
