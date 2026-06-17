@@ -505,7 +505,7 @@ const QuestDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelate
   const stepsDone = (e.steps || []).filter((s) => s.status === "done").length;
 
   return (
-    <div className="rpg-detail qe-detail" data-ui="QuestDetail">
+    <div className="rpg-detail qe-detail" data-ui="QuestDetail" data-entity-id={raw.id} data-entity-type="quests">
       <div className="qe-meta">
         <StatusChip status={e.status || "active"}/>
         {e.chapterRange && <span className="qe-meta__chip">{e.chapterRange}</span>}
@@ -648,7 +648,7 @@ const QuestDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelate
 const EventDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelatedTab, onOpenFullScreen }) => {
   const e = liveEventToDetail(entity || {});
   return (
-    <div className="rpg-detail qe-detail" data-ui="EventDetail">
+    <div className="rpg-detail qe-detail" data-ui="EventDetail" data-entity-id={e.id} data-entity-type="events">
       <div className="qe-meta">
         <span className="qe-meta__chip">{e.eventType || "custom"}</span>
         {e.chapter && <span className="qe-meta__chip">{e.chapter}</span>}
