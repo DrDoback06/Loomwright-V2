@@ -95,6 +95,8 @@ const buildLoreContext = () => {
       confidence: _lrConfidenceOf(band),
       source: chapterChip(d),
       linkedEntities: _lrIds(d.relatedEntities).map((id) => ({ id, name: ctx.entityNames.get(id) || id })),
+      appliesTo: [].concat(Array.isArray(d.subjects) ? d.subjects : [], Array.isArray(d.appliesTo) ? d.appliesTo : [])
+        .map((x) => (x && typeof x === "object" ? (x.name || x.label || "") : x)).filter(Boolean),
       contradictions: contradicted ? 1 : 0,
       included: d.includedInAI === true,
       lastUpdated: _lrAgo(e.updatedAt),
@@ -226,6 +228,11 @@ const LorePanelBody = ({ panel }) => {
                 {f.note && <p className="lore-fact__note">{f.note}</p>}
                 <div className="lore-fact__foot">
                   <span className="lore-fact__source">{f.source}</span>
+                  {f.appliesTo.length > 0 && (
+                    <span className="lore-fact__chips" title="Applies to">
+                      {f.appliesTo.map((s, i) => <span key={"a" + i} className="lore-fact__chip lore-fact__chip--applies">{s}</span>)}
+                    </span>
+                  )}
                   {f.linkedEntities.length > 0 && (
                     <span className="lore-fact__chips">
                       {f.linkedEntities.map((e) => (
