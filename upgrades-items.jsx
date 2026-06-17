@@ -36,6 +36,110 @@ const ITEM_STATUS_LABEL = {
 };
 
 // ---------------------------------------------------------------------
+// Live-data adapters
+//
+// Live item entities keep identity fields top-level (name, summary,
+// status, glyphChar…) and ALL other custom fields under entity.data.*
+// using the editor's field ids. The bespoke roster/dossier + the shared
+// ItemDetail were written against flat demo objects, so without these a
+// real item renders empty. Mirrors liveCastToDossier / liveBestiaryToDetail
+// / liveLocationToDetail.
+// ---------------------------------------------------------------------
+const _itB = () => (typeof window !== "undefined") && window.LoomwrightBackend;
+function _itResolveRef(r) {
+  if (!r) return null;
+  if (typeof r === "object") return { id: r.id, name: r.name || r.label || r.id, label: r.name || r.label || r.id, type: r.type || "" };
+  let nm = r, ty = "";
+  try { const B = _itB(); const ent = B && B.EntityService && B.EntityService.getSync(r); if (ent) { nm = ent.name || r; ty = ent.type || ""; } } catch (_e) {}
+  return { id: r, name: nm, label: nm, type: ty };
+}
+function _itRefList(arr, ty) {
+  return (Array.isArray(arr) ? arr : []).map((r) => { const x = _itResolveRef(r); if (x && ty && !x.type) x.type = ty; return x; }).filter(Boolean);
+}
+
+// Cheap projection for the roster + status/rarity filters (no occurrence scan).
+function liveItemToRow(entity) {
+  if (!entity) return entity;
+  const d = entity.data || {};
+  const owner = _itResolveRef(d.currentOwner);
+  return {
+    ...entity,
+    itemType: d.itemType || d.customType || "",
+    rarity: d.rarity || "",
+    slot: d.slot || "",
+    weight: d.weight || "",
+    glyphChar: entity.glyphChar || d.icon || "",
+    currentOwner: owner,
+    queue: entity.reviewQueueCount || entity.queue || 0,
+  };
+}
+
+// Full projection for the selected dossier — maps every field the dossier
+// widgets + the shared ItemDetail render, builds `sites` from the editor's
+// found/used/lost location fields, and derives mentions + per-chapter spark
+// from the occurrence index.
+function liveItemToDetail(entity) {
+  if (!entity) return entity;
+  const top = entity, d = entity.data || {};
+  const B = _itB();
+  const norm = (s) => (s == null ? "" : String(s));
+  const modifiers = (Array.isArray(d.modifiers) ? d.modifiers : []).map((m) => ({
+    target: m.target || m.stat || m.label || m.name || "",
+    delta: (m.delta != null ? m.delta : (m.value != null ? m.value : m.amount)),
+    note: m.note || m.detail || "",
+  })).filter((m) => m.target);
+  const affixes = (Array.isArray(d.affixes) ? d.affixes : []).map((a) => ({
+    name: a.name || a.label || a.affix || a.target || "",
+    note: a.note || a.detail || "",
+  })).filter((a) => a.name);
+  const found = _itResolveRef(d.foundLocation);
+  const lost  = _itResolveRef(d.lostLocation || d.destroyedLocation);
+  const used  = _itRefList(d.usedLocations, "locations");
+  const sites = (found || lost || used.length) ? { found, used, lost } : {};
+  let occ = [], chapters = [];
+  try { occ = (B && B.OccurrenceService && (B.OccurrenceService.listByEntitySync ? B.OccurrenceService.listByEntitySync(entity.id) : (B.OccurrenceService.listAllSync() || []).filter((o) => o.entityId === entity.id))) || []; } catch (_e) {}
+  try { chapters = ((B && B.ManuscriptChapterService && B.ManuscriptChapterService.loadSync().chapters) || []).filter((c) => c && !c.reserved); } catch (_e) {}
+  const numById = new Map(); chapters.forEach((c, i) => numById.set(c.id, c.num || i + 1));
+  const maxNum = chapters.reduce((m, c) => Math.max(m, numById.get(c.id) || 0), 0);
+  const mentionsByChapter = maxNum ? new Array(maxNum).fill(0) : [];
+  const mentions = [];
+  for (const o of occ) {
+    if (!o || o.isPronounResolution) continue;
+    const n = numById.get(o.chapterId);
+    if (n != null && mentionsByChapter[n - 1] != null) mentionsByChapter[n - 1] += 1;
+    if (mentions.length < 12 && o.exactText) mentions.push({ id: o.occurrenceId || ("occ-" + mentions.length), cite: n != null ? "Ch. " + n : "—", excerpt: o.exactText, chapterId: o.chapterId });
+  }
+  return {
+    ...entity,
+    itemType: d.itemType || d.customType || "",
+    rarity: d.rarity || "",
+    status: top.status || "active",
+    summary: top.summary || d.summary || "",
+    description: d.description || "",
+    glyphChar: top.glyphChar || d.icon || "",
+    slot: d.slot || "",
+    weight: d.weight || "",
+    value: d.value || "",
+    condition: d.condition || "",
+    first: d.firstChapter || "",
+    last: d.lastChapter || "",
+    currentOwner: _itResolveRef(d.currentOwner),
+    ownershipText: norm(d.ownershipHistory),
+    restrictions: norm(d.restrictions),
+    modifiers,
+    affixes,
+    effects: Array.isArray(d.triggered) ? d.triggered : [],
+    ownership: [], equipped: [], trades: [], upgrades: [],
+    quests: _itRefList(d.quests, "quests"),
+    events: _itRefList(d.events, "events"),
+    factions: _itRefList(d.factions, "factions"),
+    sites,
+    mentions,
+    mentionsByChapter,
+  };
+}
+
+// ---------------------------------------------------------------------
 // EquipmentSlotCard — small composed widget for the selected item
 // ---------------------------------------------------------------------
 const ItemEquipmentSlotCard = ({ item }) => {
@@ -204,9 +308,12 @@ const ItemReviewCard = ({ item }) => {
 // ItemsPanelBody — bespoke panel body
 // ---------------------------------------------------------------------
 const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
-  // Live items only — never the demo RPG_ITEM_DATA.
-  const data = (window.LoomwrightBackend?.EntityService?.listSync("items")) || [];
-  const [selectedId, setSelectedId] = _it_us(panel?.selected?.id || (data[0] && data[0].id) || null);
+  // Live items only — never the demo RPG_ITEM_DATA. Project rows through
+  // liveItemToRow so rarity/slot/owner read off entity.data.*; the selected
+  // dossier gets the full liveItemToDetail adapter.
+  const rawData = (window.LoomwrightBackend?.EntityService?.listSync("items")) || [];
+  const data = rawData.map(liveItemToRow);
+  const [selectedId, setSelectedId] = _it_us(panel?.selected?.id || (rawData[0] && rawData[0].id) || null);
   const [search, setSearch]         = _it_us("");
   const [statusFilter, setStatus]   = _it_us("all");
   const [rarityFilter, setRarity]   = _it_us("all");
@@ -228,7 +335,11 @@ const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
     });
   }, [data, search, statusFilter, rarityFilter, ff && ff.id]);
 
-  const selected = data.find((d) => d.id === selectedId) || filtered[0] || data[0];
+  // Resolve selection against live data; fall back to the first visible row.
+  const _selRaw = rawData.find((d) => d.id === selectedId)
+    || rawData.find((d) => d.id === (filtered[0] || {}).id)
+    || rawData[0] || null;
+  const selected = _selRaw ? liveItemToDetail(_selRaw) : null;
 
   const onPickRow = _it_uc((it) => {
     setSelectedId(it.id);
@@ -237,6 +348,14 @@ const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
 
   const onCreate = _it_uc(() => {
     window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "items" } }));
+  }, []);
+
+  // Open a manuscript mention in the Writer's Room at its cited chapter.
+  const openSource = _it_uc((m) => {
+    if (m && m.chapterId) {
+      window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: m.chapterId } }));
+      window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } }));
+    }
   }, []);
 
   // Drag — make rows draggable so user can drop into Writer's Room / Composition Overlay
@@ -263,8 +382,10 @@ const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
             <option value="active">Active</option>
             <option value="carried">Carried</option>
             <option value="equipped">Equipped</option>
+            <option value="stored">Stored</option>
             <option value="lost">Lost</option>
             <option value="destroyed">Destroyed</option>
+            <option value="retired">Retired</option>
             <option value="dormant">Dormant</option>
           </select>
           <select className="loc-body__filter" value={rarityFilter} onChange={(e) => setRarity(e.target.value)}>
@@ -403,7 +524,7 @@ const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                           entity={selected}
                           onSelectEntity={onSelectEntity}
                           onOpenRelatedTab={onSelectEntity}
-                          onOpenSourceMention={() => {}}
+                          onOpenSourceMention={openSource}
                         />
                       )}
                     </div>
@@ -412,7 +533,8 @@ const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
 
                 {tab === "history" && (
                   <div style={{ padding: 12 }}>
-                    <ItemOwnershipTimeline item={selected} onOpenSourceMention={() => {}}/>
+                    {selected.ownershipText && <p className="rpg-prose" style={{ marginBottom: 10 }}>{selected.ownershipText}</p>}
+                    <ItemOwnershipTimeline item={selected} onOpenSourceMention={openSource}/>
                   </div>
                 )}
 
@@ -433,7 +555,7 @@ const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                         {selected.mentions.map((m) => (
                           <li key={m.id} className="item-mentions__row">
                             <blockquote>"{m.excerpt}"</blockquote>
-                            <span className="item-mentions__cite">{m.cite}</span>
+                            <button className="item-mentions__cite" data-callback="onOpenSourceMention" onClick={() => openSource(m)}>{m.cite}</button>
                           </li>
                         ))}
                       </ul>
