@@ -325,6 +325,17 @@ const AbilitiesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   }));
   const effects = Array.isArray(d.effects) ? d.effects : [];
   const reqs = Array.isArray(d.requirements) ? d.requirements : (d.requirements ? [d.requirements] : []);
+  // Surface editor fields the detail used to drop (cost/cooldown/limit +
+  // linked entities), so authored data isn't invisible.
+  const meta = [["Type", selected ? typeOf(selected) : ""], ["Cost", d.cost], ["Cooldown", d.cooldown], ["Limit", d.limit]].filter(([, v]) => v != null && v !== "");
+  const upgradePath = _crRuleStrings(d.upgradePath);
+  const linkGroups = [
+    ["Linked stats",        _crRefList(d.linkedStats, "stats")],
+    ["Linked classes",      _crRefList(d.linkedClasses, "classes")],
+    ["Linked races",        _crRefList(d.linkedRaces, "races")],
+    ["Linked items",        _crRefList(d.linkedItems, "items")],
+    ["Assigned characters", _crRefList(d.assignedCast, "cast")],
+  ].filter(([, arr]) => arr.length > 0);
 
   return (
     <div className="upg loc-body" data-ui="AbilitiesPanelBody">
@@ -396,6 +407,13 @@ const AbilitiesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                 </div>
               </div>
               <div style={{ overflowY: "auto", flex: 1, padding: 12 }}>
+                {meta.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                    {meta.map(([k, v]) => (
+                      <span key={k} className="fws-chip" style={{ fontSize: 11 }}><b style={{ textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink-4)" }}>{k}</b> {v}</span>
+                    ))}
+                  </div>
+                )}
                 <p style={{ margin: "0 0 12px", fontFamily: "var(--font-serif)", fontSize: 13.5, lineHeight: 1.6, color: d.description || selected.summary ? "var(--ink-1)" : "var(--ink-3)" }}>
                   {d.description || selected.summary || "No description yet — open the editor to add one."}
                 </p>
@@ -415,6 +433,20 @@ const AbilitiesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                     {reqs.map((r, i) => <span key={i} className="fws-chip" style={{ marginRight: 4, marginBottom: 4 }}>{typeof r === "object" ? (r.label || r.name || JSON.stringify(r)) : String(r)}</span>)}
                   </>
                 )}
+                {upgradePath.length > 0 && (
+                  <>
+                    <div className="loc-body__detail-eyebrow" style={{ margin: "10px 0 6px" }}>Upgrade path</div>
+                    <ul className="rpg-bullets">{upgradePath.map((u, i) => <li key={i}>{u}</li>)}</ul>
+                  </>
+                )}
+                {linkGroups.map(([label, items]) => (
+                  <React.Fragment key={label}>
+                    <div className="loc-body__detail-eyebrow" style={{ margin: "10px 0 6px" }}>{label}</div>
+                    {typeof RpgChipRow !== "undefined"
+                      ? <RpgChipRow items={items} onSelect={onSelectEntity}/>
+                      : items.map((it) => <span key={it.id} className="fws-chip" style={{ marginRight: 4, marginBottom: 4 }} onClick={() => onSelectEntity && onSelectEntity(it)}>{it.name}</span>)}
+                  </React.Fragment>
+                ))}
               </div>
             </>
           ) : <EmptyState icon="spark" title="No ability selected" body="Pick an ability to inspect its effects and requirements."/>}
