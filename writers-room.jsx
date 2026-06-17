@@ -2115,10 +2115,10 @@ const WritersRoomScreen = ({
         const node = r.startContainer;
         if (node && node.nodeType === 3) node.nodeValue = node.nodeValue.slice(0, r.startOffset) + findReplace + node.nodeValue.slice(r.endOffset);
       } catch (_e) {}
-      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      onManuscriptChange(); // mark unsaved + schedule autosave (was unsaved-only)
     }
     runFind(findQuery, { caseSensitive: findCase });
-  }, [findCount, findReplace, findQuery, findCase, canvasState, onSetSyncState, runFind]);
+  }, [findCount, findReplace, findQuery, findCase, onManuscriptChange, runFind]);
   const replaceAllFind = _wrUC(() => {
     const body = bodyRef.current;
     if (!body || !findQuery) return;
@@ -2127,9 +2127,9 @@ const WritersRoomScreen = ({
     for (const node of _wrFindTextNodes(body)) {
       if (re.test(node.nodeValue)) { re.lastIndex = 0; node.nodeValue = node.nodeValue.replace(re, () => { count++; return findReplace; }); }
     }
-    if (count && canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+    if (count) onManuscriptChange(); // mark unsaved + schedule autosave
     runFind(findQuery, { caseSensitive: findCase });
-  }, [findQuery, findReplace, findCase, canvasState, onSetSyncState, runFind]);
+  }, [findQuery, findReplace, findCase, onManuscriptChange, runFind]);
   const closeFind = _wrUC(() => {
     setFindOpen(false);
     _wrSetHL("wr-find", []); _wrSetHL("wr-find-current", []);
@@ -2216,7 +2216,7 @@ const WritersRoomScreen = ({
     if (action === "highlight") {
       const body = bodyRef.current;
       if (body) { try { body.focus(); _wrToggleHighlight(body); } catch (_e) {} }
-      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      onManuscriptChange(); // mark unsaved + schedule autosave (was unsaved-only)
       return;
     }
     if (action === "reference") {
@@ -2230,7 +2230,7 @@ const WritersRoomScreen = ({
         if (hit && hit.entity) extra = { "data-ref-id": hit.entity.id, "data-ref-type": hit.entity.type, "title": (hit.entity.name || txt) + " — double-click to open" };
       } catch (_e) {}
       try { body.focus(); _wrInsertMark(body, "reference", extra); } catch (_e) {}
-      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      onManuscriptChange(); // mark unsaved + schedule autosave
       return;
     }
     if (action === "footnote") {
@@ -2241,7 +2241,7 @@ const WritersRoomScreen = ({
       body.focus();
       const ok = _wrInsertMark(body, "footnote", { "data-mark-id": id, "data-note": "" });
       if (!ok) return;
-      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+      onManuscriptChange(); // mark unsaved + schedule autosave
       let top = 140, left = 140;
       try { const span = body.querySelector('[data-mark-id="' + id + '"]'); if (span) { const r = span.getBoundingClientRect(); top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 172)); left = Math.max(8, Math.min(r.left, window.innerWidth - 280)); } } catch (_e) {}
       setFootnoteEdit({ id, note: "", top, left });
@@ -2268,7 +2268,7 @@ const WritersRoomScreen = ({
       setThesaurus({ word, synonyms: WR_THESAURUS[word.toLowerCase()] || [], top, left });
       return;
     }
-  }, [onCreateEntityFromSelection, onLinkEntity, onAddNote, canvasState, onSetSyncState]);
+  }, [onCreateEntityFromSelection, onLinkEntity, onAddNote, canvasState, onSetSyncState, onManuscriptChange]);
 
   const onToggleFocusMode  = _wrUC(() => setL((p) => ({ ...p, writingLayoutMode: p.writingLayoutMode === "clean" ? "full" : "clean" })), [setL]);
   const onSelectAuthor     = _wrUC((id) => {
