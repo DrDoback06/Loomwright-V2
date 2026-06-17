@@ -211,17 +211,14 @@ const StatRuleRow = ({ rule, statName, onEdit, onToggleActive, onDelete }) => {
       <div className="stat-rule-row__match">{rule.matchType}</div>
       <div className="stat-rule-row__actions">
         <button className="stat-rule-row__icon"
-                data-callback="onToggleStatExtractionRuleActive"
                 title={rule.active ? "Disable rule" : "Enable rule"}
-                onClick={() => onToggleActive && onToggleActive(rule)}>{rule.active ? "●" : "○"}</button>
+                onClick={(ev) => { ev.stopPropagation(); onToggleActive && onToggleActive(rule); }}>{rule.active ? "●" : "○"}</button>
         <button className="stat-rule-row__icon"
-                data-callback="onEditStatExtractionRule"
                 title="Edit rule"
-                onClick={() => onEdit && onEdit(rule)}>✎</button>
+                onClick={(ev) => { ev.stopPropagation(); onEdit && onEdit(rule); }}>✎</button>
         <button className="stat-rule-row__icon"
-                data-callback="onDeleteStatExtractionRule"
                 title="Delete rule"
-                onClick={() => onDelete && onDelete(rule)}>✕</button>
+                onClick={(ev) => { ev.stopPropagation(); onDelete && onDelete(rule); }}>✕</button>
       </div>
     </div>
   );
@@ -251,8 +248,7 @@ const StatRuleEditor = ({ stat, onAddRule, onToggleActive, onEdit, onDelete }) =
       )}
       <div className="stat-rule-add">
         <button className="rpg-btn rpg-btn--primary rpg-btn--small"
-                data-callback="onAddStatExtractionRule"
-                onClick={onAddRule}>+ Add rule</button>
+                onClick={(ev) => { ev.stopPropagation(); onAddRule && onAddRule(); }}>+ Add rule</button>
         <span style={{ fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: "var(--fs-xs)", color: "var(--ink-4)" }}>
           Click a phrase to edit. Toggle ● to disable.
         </span>
@@ -324,13 +320,104 @@ const StatTestPhrase = ({ stat }) => {
 };
 
 // ---------------------------------------------------------------------
+// Live-data adapter
+//
+// Live stat entities keep identity fields top-level (name, summary,
+// status…) and ALL custom fields under entity.data.* using the editor's
+// field ids. StatDetailUpgraded was written against flat demo objects, so
+// a real stat rendered with default facets, no rules, and empty linkage.
+// This maps data.* into the flat shape, resolves linked refs, derives the
+// usage cross-links live, and builds mentions from the occurrence index.
+// Mirrors liveBestiaryToDetail etc.
+// ---------------------------------------------------------------------
+const _stB = () => (typeof window !== "undefined") && window.LoomwrightBackend;
+function _stResolveRef(r, ty) {
+  if (!r) return null;
+  if (typeof r === "object") return { id: r.id, name: r.name || r.label || r.id, label: r.name || r.label || r.id, type: r.type || ty || "" };
+  let nm = r, t = ty || "";
+  try { const B = _stB(); const ent = B && B.EntityService && B.EntityService.getSync(r); if (ent) { nm = ent.name || r; t = ent.type || ty || ""; } } catch (_e) {}
+  return { id: r, name: nm, label: nm, type: t };
+}
+function _stRefList(arr, ty) { return (Array.isArray(arr) ? arr : []).map((r) => _stResolveRef(r, ty)).filter(Boolean); }
+function _stUniqById(arr) { const seen = new Set(); const out = []; for (const x of arr) { if (!x || seen.has(x.id)) continue; seen.add(x.id); out.push(x); } return out; }
+function _stRefsThisStat(field, id, name) {
+  // does a data.* value reference this stat by id or name?
+  if (!field) return false;
+  const hit = (x) => { const v = (x && (x.id || x.statId || x.name)) != null ? (x.id || x.statId || x.name) : x; return v === id || v === name; };
+  if (Array.isArray(field)) return field.some(hit);
+  if (typeof field === "object") return (id in field) || (name in field);
+  return false;
+}
+function liveStatToDetail(entity) {
+  if (!entity) return entity;
+  const top = entity, d = entity.data || {};
+  const B = _stB();
+  const ls = (t) => { try { return (B && B.EntityService && B.EntityService.listSync(t)) || []; } catch (_e) { return []; } };
+  // who currently has this stat: the stat's own assignedEntities + any cast
+  // whose data.stats references it.
+  const usedByCharacters = _stUniqById([
+    ..._stRefList(d.assignedEntities, "cast"),
+    ...ls("cast").filter((c) => { const cd = c.data || {}; return _stRefsThisStat(cd.stats || cd.statValues || cd.attributes, entity.id, entity.name); })
+      .map((c) => ({ id: c.id, name: c.name, label: c.name, type: "cast" })),
+  ]);
+  // items whose modifiers target this stat (by name) + explicit relatedItems.
+  const itemsAffecting = _stUniqById([
+    ..._stRefList(d.relatedItems, "items"),
+    ...ls("items").filter((it) => { const mods = (it.data && it.data.modifiers) || []; return Array.isArray(mods) && mods.some((m) => { const t = (m && (m.target || m.stat || m.name)) || ""; return t && (t === entity.name || t === entity.id); }); })
+      .map((it) => ({ id: it.id, name: it.name, label: it.name, type: "items" })),
+  ]);
+  // skills/abilities that link this stat + explicit relatedSkills.
+  const linkedAbilities = _stUniqById([
+    ..._stRefList(d.relatedSkills, "abilities"),
+    ...[...ls("skills"), ...ls("abilities")].filter((a) => { const adata = a.data || {}; return _stRefsThisStat(adata.linkedStats || adata.relatedStats, entity.id, entity.name); })
+      .map((a) => ({ id: a.id, name: a.name, label: a.name, type: "abilities" })),
+  ]);
+  // change history (structured array, or a JSON-array string).
+  let history = [];
+  if (Array.isArray(d.changeHistory)) history = d.changeHistory;
+  else if (typeof d.changeHistory === "string" && d.changeHistory.trim().startsWith("[")) { try { history = JSON.parse(d.changeHistory); } catch (_e) {} }
+  // manuscript mentions from the occurrence index.
+  let occ = [], chapters = [];
+  try { occ = (B && B.OccurrenceService && (B.OccurrenceService.listByEntitySync ? B.OccurrenceService.listByEntitySync(entity.id) : (B.OccurrenceService.listAllSync() || []).filter((o) => o.entityId === entity.id))) || []; } catch (_e) {}
+  try { chapters = ((B && B.ManuscriptChapterService && B.ManuscriptChapterService.loadSync().chapters) || []).filter((c) => c && !c.reserved); } catch (_e) {}
+  const numById = new Map(); chapters.forEach((c, i) => numById.set(c.id, c.num || i + 1));
+  const maxNum = chapters.reduce((m, c) => Math.max(m, numById.get(c.id) || 0), 0);
+  const mentionsByChapter = maxNum ? new Array(maxNum).fill(0) : [];
+  for (const o of occ) { if (!o || o.isPronounResolution) continue; const n = numById.get(o.chapterId); if (n != null && mentionsByChapter[n - 1] != null) mentionsByChapter[n - 1] += 1; }
+  return {
+    ...entity,
+    valueType: d.valueType || "number",
+    defaultValue: d.defaultValue,
+    min: d.min,
+    max: d.max,
+    appliesTo: Array.isArray(d.appliesTo) ? d.appliesTo : (d.appliesTo ? [d.appliesTo] : []),
+    extractionRules: Array.isArray(d.extractionRules) ? d.extractionRules : [],
+    summary: top.summary || d.summary || "",
+    usedByCharacters, itemsAffecting, linkedAbilities, history, mentionsByChapter,
+  };
+}
+
+// ---------------------------------------------------------------------
 // StatDetail — the upgraded dossier
 // ---------------------------------------------------------------------
 const StatDetailUpgraded = ({ entity, onSelectEntity, onOpenSourceMention }) => {
-  const e = entity || {};
+  const raw = entity || {};
+  const e = liveStatToDetail(raw);
   const [rules, setRules] = _sx_us(e.extractionRules || []);
   // Keep rules synced if the entity changes
-  React.useEffect(() => setRules(e.extractionRules || []), [e.id]);
+  React.useEffect(() => setRules(liveStatToDetail(raw).extractionRules || []), [raw.id]);
+
+  // Persist rule edits to entity.data so they survive reload (was local-only).
+  const updateRules = (next) => {
+    setRules(next);
+    try {
+      const B = window.LoomwrightBackend;
+      if (B && B.EntityService && raw.id) {
+        B.EntityService.update("stats", raw.id, { data: { ...(raw.data || {}), extractionRules: next } });
+        window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      }
+    } catch (_e) {}
+  };
 
   const stat = { ...e, extractionRules: rules };
 
@@ -355,8 +442,8 @@ const StatDetailUpgraded = ({ entity, onSelectEntity, onOpenSourceMention }) => 
                   action={{ label: "Reset to defaults", callback: "onResetStatRules" }}>
         <StatRuleEditor
           stat={stat}
-          onAddRule={() => setRules((curr) => [...curr, {
-            id: "sr-new-" + (curr.length + 1),
+          onAddRule={() => updateRules([...rules, {
+            id: "sr-new-" + Date.now(),
             phrase: "new phrase…",
             matchType: "exact phrase",
             effect: "review",
@@ -365,9 +452,9 @@ const StatDetailUpgraded = ({ entity, onSelectEntity, onOpenSourceMention }) => 
             active: true,
             example: "",
           }])}
-          onToggleActive={(r) => setRules((curr) => curr.map((x) => x.id === r.id ? { ...x, active: !x.active } : x))}
+          onToggleActive={(r) => updateRules(rules.map((x) => x.id === r.id ? { ...x, active: !x.active } : x))}
           onEdit={() => {}}
-          onDelete={(r) => setRules((curr) => curr.filter((x) => x.id !== r.id))}
+          onDelete={(r) => updateRules(rules.filter((x) => x.id !== r.id))}
         />
       </RpgSection>
 
@@ -438,13 +525,23 @@ const StatDetailUpgraded = ({ entity, onSelectEntity, onOpenSourceMention }) => 
 // StatsPanelBody — bespoke side panel
 // ---------------------------------------------------------------------
 const StatsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
-  const [selectedId, setSelectedId] = _sx_us(panel?.selected?.id || "s1");
+  const [selectedId, setSelectedId] = _sx_us(panel?.selected?.id || "");
   // Follow host-driven selection (locked entities, lw:focus-entity).
   React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [search, setSearch] = _sx_us("");
   const _src = (window.LoomwrightBackend?.EntityService?.listSync("stats")) || [];
   const filtered = _src.filter((s) => !search || (s.name || "").toLowerCase().includes(search.toLowerCase()));
-  const selected = filtered.find((s) => s.id === selectedId) || null;
+  // Resolve against live data; fall back to the first visible row.
+  const selected = _src.find((s) => s.id === selectedId) || filtered[0] || null;
+
+  // Open a manuscript mention in the Writer's Room at its cited chapter.
+  const openSource = (m) => {
+    const chapterId = m && (m.chapterId || m.chapter);
+    if (chapterId) {
+      window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId } }));
+      window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } }));
+    }
+  };
 
   return (
     <div className="loc-body" data-ui="StatsPanelBody">
@@ -472,8 +569,8 @@ const StatsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                    onClick={() => { setSelectedId(s.id); onSelectEntity && onSelectEntity({ id: s.id, type: "stats", label: s.name }); }}>
                 <span className="loc-tree__glyph" style={{ color: "var(--ec, #5a8a4a)" }}>◐</span>
                 <span className="loc-tree__name">{s.name}</span>
-                <span className="loc-tree__children">{(s.extractionRules || []).length}r</span>
-                {(s.queue || 0) > 0 && <span className="loc-tree__queue">{s.queue}</span>}
+                <span className="loc-tree__children">{((s.data && s.data.extractionRules) || []).length}r</span>
+                {((s.reviewQueueCount || s.queue) || 0) > 0 && <span className="loc-tree__queue">{s.reviewQueueCount || s.queue}</span>}
               </div>
             ))}
           </div>
@@ -487,7 +584,7 @@ const StatsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
             <>
               <div className="loc-body__detail-head">
                 <div>
-                  <div className="loc-body__detail-eyebrow">Stat · {selected.valueType}</div>
+                  <div className="loc-body__detail-eyebrow">Stat · {selected.data?.valueType || "number"}</div>
                   <div className="loc-body__detail-title">{selected.name}</div>
                 </div>
               </div>
@@ -495,7 +592,7 @@ const StatsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                 <StatDetailUpgraded
                   entity={selected}
                   onSelectEntity={onSelectEntity}
-                  onOpenSourceMention={() => {}}
+                  onOpenSourceMention={openSource}
                 />
               </div>
             </>
