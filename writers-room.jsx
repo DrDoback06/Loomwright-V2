@@ -427,7 +427,7 @@ const ManuscriptToolbar = ({
         <TB label="Insert footnote"     disabled icon="paper"/>
       </div>
       <div className="wr-toolbar__group">
-        <TB label="Find / replace"      disabled icon="search"/>
+        <TB label="Find / replace"      testid="wr-tb-find" icon="search" onClick={() => onAction("find")}/>
         <TB label="Spellcheck"   active={spellcheck} className="wr-toolbar__btn--small" onClick={onToggleSpellcheck}>SP</TB>
         <TB label="Grammar (preference)"      active={grammar}    className="wr-toolbar__btn--small" onClick={onToggleGrammar}>GR</TB>
         <TB label="Style (preference)"        active={style}      className="wr-toolbar__btn--small" onClick={onToggleStyle}>ST</TB>
@@ -1041,6 +1041,82 @@ function _wrInsertSceneBreak(body) {
   } catch (_e) {}
 }
 
+// Find & Replace — uses the CSS Custom Highlight API so matches are painted
+// WITHOUT mutating the contentEditable DOM (the snapshot stays clean). Replace
+// edits text-node data directly. Skips atomic spans (contenteditable=false).
+function _wrEscapeRegExp(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+function _wrFindTextNodes(root) {
+  const nodes = [];
+  if (!root) return nodes;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+      let p = node.parentNode;
+      while (p && p !== root) {
+        if (p.getAttribute && p.getAttribute("contenteditable") === "false") return NodeFilter.FILTER_REJECT;
+        p = p.parentNode;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  let n; while ((n = walker.nextNode())) nodes.push(n);
+  return nodes;
+}
+function _wrCollectFindRanges(root, query, caseSensitive) {
+  const ranges = [];
+  if (!root || !query) return ranges;
+  const q = caseSensitive ? query : query.toLowerCase();
+  for (const node of _wrFindTextNodes(root)) {
+    const hay = caseSensitive ? node.nodeValue : node.nodeValue.toLowerCase();
+    let idx = 0;
+    while ((idx = hay.indexOf(q, idx)) !== -1) {
+      try { const r = document.createRange(); r.setStart(node, idx); r.setEnd(node, idx + query.length); ranges.push(r); } catch (_e) {}
+      idx += query.length;
+    }
+  }
+  return ranges;
+}
+function _wrSetHL(name, ranges) {
+  try {
+    if (typeof Highlight === "undefined" || typeof CSS === "undefined" || !CSS.highlights) return;
+    if (!ranges || !ranges.length) { CSS.highlights.delete(name); return; }
+    CSS.highlights.set(name, new Highlight(...ranges));
+  } catch (_e) {}
+}
+function _wrScrollRangeIntoView(range) {
+  try {
+    let el = range && range.startContainer;
+    if (el && el.nodeType === 3) el = el.parentNode;
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  } catch (_e) {}
+}
+
+const FindReplaceBar = ({ query, replace, count, caseSensitive, onQuery, onReplace, onToggleCase, onNext, onPrev, onReplaceOne, onReplaceAll, onClose }) => {
+  const inputRef = _wrUR(null);
+  _wrUE(() => { try { inputRef.current && inputRef.current.focus(); inputRef.current && inputRef.current.select(); } catch (_e) {} }, []);
+  return (
+    <div className="wr-find" data-ui="FindReplaceBar" role="search" aria-label="Find and replace">
+      <div className="wr-find__row">
+        <input ref={inputRef} className="wr-find__input" data-testid="wr-find-input" placeholder="Find in chapter…" value={query}
+          onChange={(e) => onQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.shiftKey ? onPrev() : onNext(); } if (e.key === "Escape") { e.preventDefault(); onClose(); } }}/>
+        <span className="wr-find__count" data-testid="wr-find-count">{count.total ? `${count.index}/${count.total}` : "0/0"}</span>
+        <button type="button" className="wr-find__btn" data-testid="wr-find-prev" title="Previous (Shift+Enter)" onClick={onPrev} disabled={!count.total}><Icon name="chevron-up" size={12}/></button>
+        <button type="button" className="wr-find__btn" data-testid="wr-find-next" title="Next (Enter)" onClick={onNext} disabled={!count.total}><Icon name="chevron-d" size={12}/></button>
+        <button type="button" className={"wr-find__btn wr-find__btn--toggle" + (caseSensitive ? " is-active" : "")} title="Match case" aria-pressed={caseSensitive} onClick={onToggleCase}>Aa</button>
+        <button type="button" className="wr-find__btn" data-testid="wr-find-close" title="Close (Esc)" onClick={onClose}><Icon name="close" size={12}/></button>
+      </div>
+      <div className="wr-find__row">
+        <input className="wr-find__input" data-testid="wr-find-replace" placeholder="Replace with…" value={replace}
+          onChange={(e) => onReplace(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onReplaceOne(); } if (e.key === "Escape") { e.preventDefault(); onClose(); } }}/>
+        <button type="button" className="wr-find__btn wr-find__btn--text" data-testid="wr-find-replace-one" onClick={onReplaceOne} disabled={!count.total}>Replace</button>
+        <button type="button" className="wr-find__btn wr-find__btn--text" data-testid="wr-find-replace-all" onClick={onReplaceAll} disabled={!count.total}>All</button>
+      </div>
+    </div>
+  );
+};
+
 const EditableManuscriptBody = ({ bodyRef, chapterId, bodyEpoch, html, spellCheck, onInput, onDoubleClick, onMouseOver, onMouseOut }) => {
   const localRef = _wrUR(null);
   const htmlRef = _wrUR(html);
@@ -1322,6 +1398,13 @@ const WritersRoomScreen = ({
   const [styleS, setStyleS] = _wrUS(false);
   const [revision, setRevision] = _wrUS(false);
   const [attribution, setAttribution] = _wrUS(true);
+  // Find & Replace
+  const [findOpen, setFindOpen] = _wrUS(false);
+  const [findQuery, setFindQuery] = _wrUS("");
+  const [findReplace, setFindReplace] = _wrUS("");
+  const [findCount, setFindCount] = _wrUS({ total: 0, index: 0 });
+  const [findCase, setFindCase] = _wrUS(false);
+  const findRangesRef = _wrUR([]);
   // Derive focus/margins from layout mode
   const focusMode = L.writingLayoutMode === "clean";
   const marginsHidden = L.writingLayoutMode === "clean" || L.writingLayoutMode === "manuscript-focus";
@@ -1742,9 +1825,80 @@ const WritersRoomScreen = ({
     }
   }, []);
 
+  // ---- Find & Replace handlers (CSS Highlight API; find never mutates DOM) ----
+  const runFind = _wrUC((query, opts = {}) => {
+    const body = bodyRef.current;
+    const q = query != null ? query : "";
+    const cs = opts.caseSensitive != null ? opts.caseSensitive : findCase;
+    if (!body || !q) {
+      findRangesRef.current = [];
+      _wrSetHL("wr-find", []); _wrSetHL("wr-find-current", []);
+      setFindCount({ total: 0, index: 0 });
+      return;
+    }
+    const ranges = _wrCollectFindRanges(body, q, cs);
+    findRangesRef.current = ranges;
+    _wrSetHL("wr-find", ranges);
+    if (ranges.length) { _wrSetHL("wr-find-current", [ranges[0]]); _wrScrollRangeIntoView(ranges[0]); setFindCount({ total: ranges.length, index: 1 }); }
+    else { _wrSetHL("wr-find-current", []); setFindCount({ total: 0, index: 0 }); }
+  }, [findCase]);
+  const gotoMatch = _wrUC((dir) => {
+    const ranges = findRangesRef.current || [];
+    if (!ranges.length) return;
+    setFindCount((c) => {
+      let i = (c.index || 1) + dir;
+      if (i < 1) i = ranges.length;
+      if (i > ranges.length) i = 1;
+      _wrSetHL("wr-find-current", [ranges[i - 1]]);
+      _wrScrollRangeIntoView(ranges[i - 1]);
+      return { total: ranges.length, index: i };
+    });
+  }, []);
+  const replaceOne = _wrUC(() => {
+    const ranges = findRangesRef.current || [];
+    const r = ranges[(findCount.index || 1) - 1];
+    if (r) {
+      try {
+        const node = r.startContainer;
+        if (node && node.nodeType === 3) node.nodeValue = node.nodeValue.slice(0, r.startOffset) + findReplace + node.nodeValue.slice(r.endOffset);
+      } catch (_e) {}
+      if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+    }
+    runFind(findQuery, { caseSensitive: findCase });
+  }, [findCount, findReplace, findQuery, findCase, canvasState, onSetSyncState, runFind]);
+  const replaceAllFind = _wrUC(() => {
+    const body = bodyRef.current;
+    if (!body || !findQuery) return;
+    const re = new RegExp(_wrEscapeRegExp(findQuery), findCase ? "g" : "gi");
+    let count = 0;
+    for (const node of _wrFindTextNodes(body)) {
+      if (re.test(node.nodeValue)) { re.lastIndex = 0; node.nodeValue = node.nodeValue.replace(re, () => { count++; return findReplace; }); }
+    }
+    if (count && canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
+    runFind(findQuery, { caseSensitive: findCase });
+  }, [findQuery, findReplace, findCase, canvasState, onSetSyncState, runFind]);
+  const closeFind = _wrUC(() => {
+    setFindOpen(false);
+    _wrSetHL("wr-find", []); _wrSetHL("wr-find-current", []);
+    findRangesRef.current = [];
+    setFindCount({ total: 0, index: 0 });
+  }, []);
+  // Cmd/Ctrl+F opens Find when the focus is inside the Writer's Room.
+  _wrUE(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F")) {
+        const inWR = e.target && e.target.closest && e.target.closest(".wr");
+        if (inWR) { e.preventDefault(); setFindOpen(true); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const onToolbarAction = _wrUC((action) => {
     if (action === "create-entity") { onCreateEntityFromSelection(); return; }
     if (action === "link-entity") { onLinkEntity(); return; }
+    if (action === "find") { setFindOpen(true); return; }
     if (action === "inline-note" || action === "comment") { onAddNote(); return; }
     if (action === "bold" || action === "italic" || action === "underline" || action === "strike") {
       const cmd = action === "strike" ? "strikeThrough" : action;
@@ -2053,6 +2207,18 @@ const WritersRoomScreen = ({
             onToggleAttribution={() => setAttribution((v) => !v)}
             onToggleFocusMode={onToggleFocusMode}
           />
+
+          {findOpen && (
+            <FindReplaceBar
+              query={findQuery} replace={findReplace} count={findCount} caseSensitive={findCase}
+              onQuery={(v) => { setFindQuery(v); runFind(v, { caseSensitive: findCase }); }}
+              onReplace={setFindReplace}
+              onToggleCase={() => { const nc = !findCase; setFindCase(nc); runFind(findQuery, { caseSensitive: nc }); }}
+              onNext={() => gotoMatch(1)} onPrev={() => gotoMatch(-1)}
+              onReplaceOne={replaceOne} onReplaceAll={replaceAllFind}
+              onClose={closeFind}
+            />
+          )}
 
           <div className="wr-canvasbar">
             <div className="wr-canvasbar__crumb">

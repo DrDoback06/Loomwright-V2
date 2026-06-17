@@ -493,6 +493,37 @@
   font-style: italic;
 }
 
+/* Find & Replace bar + match highlights (CSS Custom Highlight API). */
+::highlight(wr-find) { background-color: rgba(214, 179, 69, 0.32); }
+::highlight(wr-find-current) { background-color: rgba(212, 124, 45, 0.55); color: var(--ink-1); }
+.wr-find {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-paper-2);
+  border-bottom: 1px solid var(--line-2);
+}
+.wr-find__row { display: flex; align-items: center; gap: 6px; }
+.wr-find__input {
+  flex: 1; min-width: 0;
+  padding: 4px 8px;
+  font-family: var(--font-sans); font-size: var(--fs-sm);
+  border: 1px solid var(--line-2); border-radius: var(--r-2, 6px);
+  background: var(--bg-paper-1, #fff); color: var(--ink-1);
+}
+.wr-find__input:focus { outline: none; border-color: var(--accent); }
+.wr-find__count { font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--ink-4); min-width: 40px; text-align: center; }
+.wr-find__btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 26px; padding: 0 6px;
+  border: 1px solid var(--line-2); border-radius: var(--r-2, 6px);
+  background: transparent; color: var(--ink-2); cursor: pointer;
+  font-family: var(--font-sans); font-size: var(--fs-2xs);
+}
+.wr-find__btn:hover:not(:disabled) { background: rgba(0,0,0,0.04); }
+.wr-find__btn:disabled { opacity: 0.4; cursor: default; }
+.wr-find__btn--toggle.is-active { background: var(--accent); color: var(--accent-on); border-color: var(--accent-deep, var(--accent)); }
+.wr-find__btn--text { min-width: auto; }
+
 /* Empty / loading / error chapter states */
 .wr-canvas--empty,
 .wr-canvas--loading,
