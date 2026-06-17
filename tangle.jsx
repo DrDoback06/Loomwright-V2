@@ -125,9 +125,20 @@ const TanglePanelBody = ({ panel }) => {
         <div style={{ fontFamily: "var(--font-sans)", fontSize: "var(--fs-2xs)", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--ink-4)" }}>
           Current board
         </div>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-xl)", color: "var(--ink-1)", margin: "2px 0 4px" }}>
-          {live.board?.name || "—"}
-        </div>
+        {live.board ? (
+          <input
+            key={live.board.id}
+            defaultValue={live.board.name}
+            data-testid="tan-board-name"
+            aria-label="Board name"
+            title="Rename this board"
+            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== live.board.name) B()?.TangleService?.renameBoard(live.board.id, v); }}
+            style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-xl)", color: "var(--ink-1)", margin: "2px 0 4px", background: "transparent", border: "none", borderBottom: "1px dashed var(--line-3)", padding: "1px 2px", width: "100%" }}
+          />
+        ) : (
+          <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-xl)", color: "var(--ink-1)", margin: "2px 0 4px" }}>—</div>
+        )}
         <div style={{ fontFamily: "var(--font-sans)", fontSize: "var(--fs-2xs)", color: "var(--ink-4)" }}>
           {live.nodes.length} nodes · {live.edges.length} threads
         </div>
@@ -145,13 +156,19 @@ const TanglePanelBody = ({ panel }) => {
       <div className="tan-side__list">
         <div className="tan-side__list-head">Boards</div>
         {live.boards.map((b) => (
-          <button key={b.id} className={"tan-side__item tan-side__item--board" + (b.id === live.activeBoardId ? " is-on" : "")}
-                  onClick={() => B()?.TangleService?.setActiveBoard(b.id)}>
+          <div key={b.id} className={"tan-side__item tan-side__item--board" + (b.id === live.activeBoardId ? " is-on" : "")}
+               style={{ cursor: "pointer" }}
+               onClick={() => B()?.TangleService?.setActiveBoard(b.id)}>
             <span className="tan-side__item-glyph">{b.pinned ? "◉" : "○"}</span>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ color: "var(--ink-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</div>
             </div>
-          </button>
+            {live.boards.length > 1 && (
+              <button className="tan-side__item-del" title="Delete board"
+                      onClick={(ev) => { ev.stopPropagation(); if (typeof window.confirm !== "function" || window.confirm("Delete board “" + b.name + "” and its notes?")) B()?.TangleService?.removeBoard(b.id); }}
+                      style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--ink-4)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}>✕</button>
+            )}
+          </div>
         ))}
         <button className="tan-side__item tan-side__item--add" data-testid="tan-add-board"
                 onClick={async () => {
