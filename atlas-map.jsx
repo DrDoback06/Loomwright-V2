@@ -67,6 +67,31 @@ function _amShapeGeom(shape) {
   return null;
 }
 
+// Build a shape from a drag (start → current), in percent coords. Circle
+// radius is measured in plate pixels then expressed as percent-of-width so
+// it renders true-round.
+const _AM_DRAW_TOOLS = new Set(["draw-rect", "draw-circle", "draw-freehand"]);
+function _amDraftShape(tool, sx, sy, x, y) {
+  if (tool === "draw-rect") return { type: "rect", x: Math.min(sx, x), y: Math.min(sy, y), w: Math.abs(x - sx), h: Math.abs(y - sy) };
+  if (tool === "draw-circle") {
+    const rpx = Math.hypot(((x - sx) / 100) * 1200, ((y - sy) / 100) * 700);
+    return { type: "circle", cx: sx, cy: sy, r: (rpx / 1200) * 100 };
+  }
+  return null;
+}
+// Distance-thin a freehand point stream so we don't persist hundreds of points.
+function _amDecimate(points, minDist = 1.1) {
+  if (!Array.isArray(points) || points.length <= 2) return points || [];
+  const out = [points[0]]; let last = points[0];
+  for (let i = 1; i < points.length; i++) {
+    const p = points[i];
+    if (Math.hypot(p[0] - last[0], p[1] - last[1]) >= minDist) { out.push(p); last = p; }
+  }
+  const tail = points[points.length - 1];
+  if (out[out.length - 1] !== tail) out.push(tail);
+  return out;
+}
+
 // ---------------------------------------------------------------------
 // Background plate — sea / coast / contours / compass / scale
 // ---------------------------------------------------------------------
@@ -419,7 +444,7 @@ const AtlasMap = ({
   showLabels = true, showIso = true, showGrid = false, showTexture = true,
   variant = "side", className = "", cleanStyle = false,
   // Live editing (editor variant): active tool + placement callbacks.
-  tool = "select", onMapPoint = null, onMovePin = null,
+  tool = "select", onMapPoint = null, onMovePin = null, onDrawShape = null,
 }) => {
   const locById = _um_am(() => Object.fromEntries(locations.map((l) => [l.id, l])), [locations]);
   const ctxShow = context && context.show;
@@ -451,10 +476,53 @@ const AtlasMap = ({
       y: Math.max(0, Math.min(100, ((evt.clientY - rect.top - oy) / scale / 700) * 100)),
     };
   };
+  // ---- Drawing interactions (rect/circle/freehand drag, polygon clicks) --
+  const drawRef = React.useRef(null);              // { tool, sx, sy } | { tool:"draw-freehand", points }
+  const draftRef = React.useRef(null);             // the committed-on-release shape (decoupled from render)
+  const [draft, setDraft] = React.useState(null);  // live preview shape
+  const [polyPts, setPolyPts] = React.useState([]); // polygon vertices (%)
+  const isDrawTool = _AM_DRAW_TOOLS.has(tool);
+  // Reset any in-progress draft when the tool changes.
+  _ue_am(() => { setDraft(null); setPolyPts([]); drawRef.current = null; draftRef.current = null; }, [tool]);
+  // Escape cancels an in-progress polygon/draft.
+  _ue_am(() => {
+    if (variant !== "editor") return;
+    const onKey = (e) => { if (e.key === "Escape") { setDraft(null); setPolyPts([]); drawRef.current = null; } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [variant]);
+
   const onSvgClick = (e) => {
-    if (!onMapPoint) return;
     if (e.target.closest && e.target.closest("[data-atm-pin]")) return;
+    // Polygon: click to drop vertices; click near the first to close.
+    if (tool === "draw-polygon" && onDrawShape && variant === "editor") {
+      const p = toPct(e);
+      setPolyPts((pts) => {
+        if (pts.length >= 3) {
+          const f = pts[0];
+          const d = Math.hypot(((p.x - f[0]) / 100) * 1200, ((p.y - f[1]) / 100) * 700);
+          if (d < 18) { onDrawShape({ type: "polygon", points: pts }); return []; }
+        }
+        return [...pts, [p.x, p.y]];
+      });
+      return;
+    }
+    if (!onMapPoint) return;
     onMapPoint(toPct(e), tool);
+  };
+  const onSvgDoubleClick = (e) => {
+    if (tool !== "draw-polygon" || !onDrawShape) return;
+    e.preventDefault();
+    setPolyPts((pts) => { if (pts.length >= 3) onDrawShape({ type: "polygon", points: pts }); return []; });
+  };
+  const onSvgPointerDown = (e) => {
+    if (!onDrawShape || variant !== "editor" || !isDrawTool) return;
+    if (e.target.closest && e.target.closest("[data-atm-pin]")) return;
+    e.stopPropagation();
+    const p = toPct(e);
+    try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch (_e) {}
+    if (tool === "draw-freehand") { drawRef.current = { tool, points: [[p.x, p.y]] }; draftRef.current = { type: "freehand", points: [[p.x, p.y]] }; setDraft(draftRef.current); }
+    else { drawRef.current = { tool, sx: p.x, sy: p.y }; draftRef.current = _amDraftShape(tool, p.x, p.y, p.x, p.y); setDraft(draftRef.current); }
   };
   const onPinPointerDown = (e, loc) => {
     if (!onMovePin || variant !== "editor" || tool !== "select" || loc.placed === false) return;
@@ -464,15 +532,33 @@ const AtlasMap = ({
   };
   const onSvgPointerMove = (e) => {
     const d = dragRef.current;
-    if (!d) return;
-    d.moved = true;
-    setDragPos({ id: d.id, ...toPct(e) });
+    if (d) { d.moved = true; setDragPos({ id: d.id, ...toPct(e) }); return; }
+    const dr = drawRef.current;
+    if (!dr) return;
+    const p = toPct(e);
+    if (dr.tool === "draw-freehand") { dr.points.push([p.x, p.y]); draftRef.current = { type: "freehand", points: dr.points.slice() }; setDraft(draftRef.current); }
+    else { draftRef.current = _amDraftShape(dr.tool, dr.sx, dr.sy, p.x, p.y); setDraft(draftRef.current); }
+  };
+  const finishDraw = () => {
+    const dr = drawRef.current;
+    if (!dr) return;
+    drawRef.current = null;
+    const d = draftRef.current; draftRef.current = null;
+    setDraft(null);
+    let shape = null;
+    if (dr.tool === "draw-freehand") { if (d && d.points && d.points.length >= 3) shape = { type: "freehand", points: _amDecimate(d.points) }; }
+    else if (d && ((d.type === "rect" && d.w > 0.8 && d.h > 0.8) || (d.type === "circle" && d.r > 0.4))) shape = d;
+    if (shape && onDrawShape) onDrawShape(shape);
   };
   const onSvgPointerUp = () => {
     const d = dragRef.current;
-    dragRef.current = null;
-    if (d && d.moved && dragPos && dragPos.id === d.id) onMovePin(d.id, { x: dragPos.x, y: dragPos.y });
-    setDragPos(null);
+    if (d) {
+      dragRef.current = null;
+      if (d.moved && dragPos && dragPos.id === d.id) onMovePin(d.id, { x: dragPos.x, y: dragPos.y });
+      setDragPos(null);
+      return;
+    }
+    finishDraw();
   };
   const pinLoc = (loc) => (dragPos && dragPos.id === loc.id) ? { ...loc, x: dragPos.x, y: dragPos.y } : loc;
 
@@ -519,8 +605,10 @@ const AtlasMap = ({
 
   return (
     <svg ref={svgRef} className={"atm__svg " + className} viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet" data-variant={variant}
-         data-tool={tool}
-         onClick={onSvgClick} onPointerMove={onSvgPointerMove} onPointerUp={onSvgPointerUp}>
+         data-tool={tool} style={{ cursor: (isDrawTool || tool === "draw-polygon") ? "crosshair" : undefined }}
+         onClick={onSvgClick} onDoubleClick={onSvgDoubleClick}
+         onPointerDown={onSvgPointerDown} onPointerMove={onSvgPointerMove}
+         onPointerUp={onSvgPointerUp} onPointerCancel={onSvgPointerUp} onLostPointerCapture={onSvgPointerUp}>
       <AtlasPlate showIso={showIso} showGrid={showGrid} showTexture={showTexture}/>
 
       {/* Region polygons under everything */}
@@ -589,6 +677,29 @@ const AtlasMap = ({
           );
         })}
       </g>
+
+      {/* Live drawing preview (rect/circle/freehand draft + polygon vertices) */}
+      {draft && (() => {
+        const g = _amShapeGeom(draft.type === "freehand" && draft.points.length < 2 ? null : draft);
+        if (!g) return null;
+        const T = g.tag;
+        return <T {...g.props} fill="rgba(201,138,44,0.16)" stroke="#c98a2c" strokeWidth="1.8"
+                  strokeDasharray="6 3" strokeLinejoin="round" pointerEvents="none"/>;
+      })()}
+      {polyPts.length > 0 && (
+        <g pointerEvents="none">
+          <polyline points={polyPts.map((p) => ((p[0] / 100) * 1200).toFixed(1) + "," + ((p[1] / 100) * 700).toFixed(1)).join(" ")}
+                    fill="rgba(201,138,44,0.12)" stroke="#c98a2c" strokeWidth="1.8" strokeDasharray="6 3"/>
+          {polyPts.map((p, i) => (
+            <circle key={i} cx={(p[0] / 100) * 1200} cy={(p[1] / 100) * 700} r={i === 0 ? 5.5 : 3.5}
+                    fill={i === 0 ? "#c98a2c" : "#fffaf0"} stroke="#c98a2c" strokeWidth="1.3"/>
+          ))}
+          <text x={(polyPts[0][0] / 100) * 1200} y={(polyPts[0][1] / 100) * 700 - 10} textAnchor="middle"
+                fontFamily="var(--font-sans)" fontSize="10" fill="#8a5a1c">
+            {polyPts.length >= 3 ? "click the first dot to finish" : "click to add corners"}
+          </text>
+        </g>
+      )}
 
       {/* Empty plate prompt — no placed locations yet */}
       {locations.every((l) => l.placed === false) && (

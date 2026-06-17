@@ -42,4 +42,38 @@ test.describe("T77. Atlas editor — shapes + unplaced tray", () => {
     await expect(page.locator(`[data-atlas-unplaced='${region.id}']`)).toHaveCount(0);
     if (process.env.SHOT) await page.screenshot({ path: "/tmp/atlas-editor.png" });
   });
+
+  test("drawing a rectangle assigns a persisted shape to the selected place", async ({ page }) => {
+    await openFreshApp(page);
+    const loc = await saveEntity(page, "locations", { name: "Glass Court", data: { kind: "city" } }, { status: "active" });
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    // pick the unplaced place from the tray, then choose the Rect tool
+    await page.locator(`[data-atlas-unplaced='${loc.id}']`).click();
+    await page.locator("[data-testid='ae-tool-draw-rect']").click();
+
+    // drag a rectangle on the editor canvas
+    const svg = editor.locator(".atm__svg");
+    const box = await svg.boundingBox();
+    const x1 = box.x + box.width * 0.30, y1 = box.y + box.height * 0.30;
+    const x2 = box.x + box.width * 0.62, y2 = box.y + box.height * 0.60;
+    await page.mouse.move(x1, y1);
+    await page.mouse.down();
+    await page.mouse.move((x1 + x2) / 2, (y1 + y2) / 2);
+    await page.mouse.move(x2, y2);
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+
+    // the drawn rectangle is persisted onto that location
+    const shape = await page.evaluate((id) => window.LoomwrightBackend.EntityService.getSync(id, "locations")?.data?.shape, loc.id);
+    expect(shape && shape.type).toBe("rect");
+    expect(shape.w).toBeGreaterThan(1);
+    expect(shape.h).toBeGreaterThan(1);
+    // and it now renders as a region (no longer in the unplaced tray)
+    await expect(editor.locator(`[data-atm-shape='${loc.id}'] rect`)).toHaveCount(1);
+    await expect(page.locator(`[data-atlas-unplaced='${loc.id}']`)).toHaveCount(0);
+    if (process.env.SHOT) await page.screenshot({ path: "/tmp/atlas-draw.png" });
+  });
 });

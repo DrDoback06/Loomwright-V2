@@ -35,6 +35,22 @@ const AtlasEdToolbar = ({
       ))}
     </div>
 
+    <div className="ae-tb__group ae-tb__group--draw">
+      {[
+        { id: "draw-rect",     icon: "stack",   label: "Rect" },
+        { id: "draw-circle",   icon: "compass", label: "Circle" },
+        { id: "draw-polygon",  icon: "branch",  label: "Area" },
+        { id: "draw-freehand", icon: "feather", label: "Freehand" },
+      ].map((t) => (
+        <button key={t.id} className={"ae-tb__btn" + (tool === t.id ? " is-active" : "")}
+                onClick={() => onPickTool(t.id)} data-callback="onPickAtlasTool" data-tool={t.id}
+                data-testid={"ae-tool-" + t.id} title={"Draw " + t.label.toLowerCase() + " — pick a place first, then draw"}>
+          <Icon name={t.icon} size={13}/>
+          <span className="ae-tb__lbl">{t.label}</span>
+        </button>
+      ))}
+    </div>
+
     <div className="ae-tb__group ae-tb__group--flyouts">
       {flyoutGroups.map((g) => (
         <div key={g.id} className="ae-tb__flyout">
@@ -867,6 +883,23 @@ const AtlasEditor = ({
     if (!B) return;
     await B.AtlasService.updatePlacement(locId, { coords: pct });
   };
+  // A region was drawn (rect/circle/polygon/freehand). Draw it onto the
+  // selected place, or spin up a new "New area" to draw and rename.
+  const onDrawShape = async (shape) => {
+    const B = window.LoomwrightBackend;
+    if (!B || !shape) return;
+    if (selected && selected.id) {
+      await B.AtlasService.setLocationShape(selected.id, shape);
+      window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      _aeNotice("Drew " + (selected.name || "the place") + ".");
+      return;
+    }
+    const ent = await B.EntityService.save("locations", { name: "New area", data: { kind: "region" } }, { status: "active" });
+    await B.AtlasService.setLocationShape(ent.id, shape);
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+    onSelect && onSelect({ id: ent.id, type: "locations", name: ent.name, placed: true });
+    _aeNotice("Drew a new area — rename it in the inspector.");
+  };
   const handleSelect = (loc) => {
     // Two-tap road drawing when the Add Route tool is armed.
     if ((tool === "addRoute" || tool === "path-road" || tool === "path-route" || tool === "path-river") && loc) {
@@ -926,7 +959,7 @@ const AtlasEditor = ({
             context={context} scrubChapter={scrubChapter}
             showLabels={showLabels} showIso={showIso} showGrid={showGrid} showTexture={showTexture}
             variant="editor" onSelect={handleSelect}
-            tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin}/>
+            tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin} onDrawShape={onDrawShape}/>
           {miniMapVisible && <AtlasMiniMap locations={locations} routes={routes} selectedId={selected?.id} context={context}/>}
           {context && context.source && (
             <div className="atlas-editor__ctxbanner">
