@@ -1939,7 +1939,6 @@ const WritersRoomScreen = ({
     } catch (_e) {}
     if (canvasState === "writing") onSetSyncState && onSetSyncState("unsaved");
   }, [canvasState, onSetSyncState]);
-  const onSelectText = _wrUC(() => {}, []);
   // Current selection inside the editable body (collapsed → "").
   const _wrSelectionText = _wrUC(() => {
     try {
@@ -1974,7 +1973,23 @@ const WritersRoomScreen = ({
     window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "selection", chapterId: activeId } }));
   }, [activeId, _wrSelectionText]);
   const onOpenEntity = _wrUC(() => onOpenPanel && onOpenPanel("cast"), [onOpenPanel]);
-  const onShowMentions = _wrUC(() => {}, []);
+  const mentionCycleRef = _wrUR({});
+  const onShowMentions = _wrUC((entity) => {
+    const body = bodyRef.current;
+    const id = entity && entity.id;
+    if (!body || !id) return;
+    let spans = [];
+    try { spans = Array.from(body.querySelectorAll('[data-entity-id="' + (typeof CSS !== "undefined" && CSS.escape ? CSS.escape(id) : id) + '"]')); } catch (_e) {}
+    if (!spans.length) {
+      try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "No highlighted mentions of " + (entity.text || entity.label || "this entity") + " in this chapter yet — run Save & Extract to surface them." } })); } catch (_e) {}
+      return;
+    }
+    const i = (mentionCycleRef.current[id] || 0) % spans.length;
+    mentionCycleRef.current[id] = i + 1;
+    const el = spans[i];
+    try { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("wr-p--flash"); setTimeout(() => { try { el.classList.remove("wr-p--flash"); } catch (_e) {} }, 1200); } catch (_e) {}
+    setHoverEntity(null);
+  }, []);
   const onAcceptQueueItem = _wrUC(async (idOrItem) => {
     const id = typeof idOrItem === "string" ? idOrItem : idOrItem?.id;
     if (window.LoomwrightDispatchCallback) await window.LoomwrightDispatchCallback("onAcceptQueueItem", { detail: { id } });
