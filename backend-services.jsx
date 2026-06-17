@@ -1291,9 +1291,10 @@
         const d = e.data || {};
         const type = typeOf(d);
         const shape = _atlasNormalizeShape(d.shape);
+        const symbol = (typeof d.symbol === "string" && d.symbol.trim()) ? d.symbol.trim() : undefined;
         const coords = (d.coords && isFinite(Number(d.coords.x)) ? d.coords : null) || (shape ? _atlasShapeCentroid(shape) : null) || {};
         const x = Number(coords.x), y = Number(coords.y);
-        const placed = (d.placed === true || !!shape) && isFinite(x) && isFinite(y);
+        const placed = (d.placed === true || !!shape || !!symbol) && isFinite(x) && isFinite(y);
         const parentId = rid(d.parentId != null ? d.parentId : d.parent);
         const chs = chaptersOf(e.id);
         const q = queueFor(e);
@@ -1316,6 +1317,8 @@
           y: placed ? y : undefined,
           placed,
           shape: shape || undefined,
+          symbol,
+          symbolSize: symbol ? (Number(d.symbolSize) > 0 ? Number(d.symbolSize) : 1) : undefined,
           atlasMap: d.atlasMap || "world",
           polygon: typeof d.polygon === "string" ? d.polygon : undefined,
           chapters: chs,
@@ -1528,6 +1531,23 @@
         data: { ...(existing.data || {}), placed: false },
       });
     },
+    // Stamp a pre-made map object (HoMM3-style: castle, mountain, forest,
+    // fountain, dungeon, …) at a point. Stored as data.symbol (+ symbolSize
+    // scale) on the location, anchored at data.coords.
+    async placeSymbol(id, symbol, coords, opts = {}) {
+      const existing = EntityService.getSync(id, "locations");
+      if (!existing || !symbol) return null;
+      const size = Number(opts.symbolSize);
+      const data = {
+        ...(existing.data || {}),
+        placed: true,
+        symbol: String(symbol),
+        coords: { x: Number(coords?.x) || 0, y: Number(coords?.y) || 0 },
+        symbolSize: isFinite(size) && size > 0 ? Math.max(0.4, Math.min(5, size)) : (Number(existing.data?.symbolSize) || 1),
+        ...(opts.atlasMap ? { atlasMap: opts.atlasMap } : {}),
+      };
+      return EntityService.update("locations", id, { data });
+    },
     async updatePlacement(id, patch = {}) {
       const existing = EntityService.getSync(id, "locations");
       if (!existing) return null;
@@ -1536,6 +1556,15 @@
       if (patch.coords) data.coords = { x: Number(patch.coords.x) || 0, y: Number(patch.coords.y) || 0 };
       if (patch.atlasMap) data.atlasMap = patch.atlasMap;
       if (Array.isArray(patch.routes)) data.routes = patch.routes.slice();
+      if ("symbol" in patch) {
+        if (patch.symbol) { data.symbol = String(patch.symbol); data.placed = true; }
+        else delete data.symbol;
+      }
+      if ("symbolSize" in patch) {
+        const s = Number(patch.symbolSize);
+        if (isFinite(s) && s > 0) data.symbolSize = Math.max(0.4, Math.min(5, s));
+        else delete data.symbolSize;
+      }
       if ("shape" in patch) {
         const shape = _atlasNormalizeShape(patch.shape);
         if (shape) {

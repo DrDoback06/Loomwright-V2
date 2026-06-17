@@ -196,4 +196,71 @@ test.describe("T77. Atlas editor — shapes + unplaced tray", () => {
     // an open line — no fill
     await expect(editor.locator(`[data-atm-shape='${loc.id}'] path`).first()).toHaveAttribute("fill", "none");
   });
+
+  test("stamping an object from the palette drops a map symbol that persists", async ({ page }) => {
+    await openFreshApp(page);
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    // open the Stamps palette and arm the Castle stamp
+    await editor.locator(".ae-rail__tab", { hasText: "Stamps" }).click();
+    await expect(editor.locator("[data-ui='AtlasStampPalette']")).toBeVisible({ timeout: 3000 });
+    await editor.locator("[data-testid='ae-stamp-castle']").click();
+
+    // a stamp-mode hint confirms the tool is armed; drop it on empty parchment
+    await expect(editor.locator("[data-ui='AtlasStampHint']")).toBeVisible({ timeout: 3000 });
+    const svg = editor.locator(".atm__svg");
+    const box = await svg.boundingBox();
+    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.45);
+    await page.waitForTimeout(400);
+
+    // a placed location now carries data.symbol === "castle"
+    const placed = await page.evaluate(() => {
+      const list = window.LoomwrightBackend.EntityService.listSync("locations");
+      return list.filter((l) => l.data && l.data.symbol === "castle")
+                 .map((l) => ({ id: l.id, placed: l.data.placed === true, x: l.data.coords && l.data.coords.x }));
+    });
+    expect(placed.length).toBe(1);
+    expect(placed[0].placed).toBe(true);
+    expect(Number.isFinite(placed[0].x)).toBe(true);
+
+    // it renders as an object stamp (its motif), not a plain point pin
+    await expect(editor.locator(`[data-atm-symbol='${placed[0].id}']`)).toBeVisible({ timeout: 5000 });
+    await expect(editor.locator(`[data-atm-pin='${placed[0].id}']`)).toHaveCount(0);
+    if (process.env.SHOT) await page.screenshot({ path: "/tmp/atlas-stamp.png" });
+  });
+
+  test("a placed object stamp resizes from its corner handle", async ({ page }) => {
+    await openFreshApp(page);
+    const loc = await saveEntity(page, "locations", {
+      name: "Lone Tower",
+      data: { placed: true, symbol: "tower", symbolSize: 1, coords: { x: 50, y: 45 }, kind: "building" },
+    }, { status: "active" });
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    const sym = editor.locator(`[data-atm-symbol='${loc.id}']`);
+    await expect(sym).toBeVisible({ timeout: 5000 });
+
+    // select it (default Select tool) so the resize handle appears
+    await sym.click();
+    await page.waitForTimeout(150);
+    const handle = editor.locator("[data-atm-handle='symbol-size']");
+    await expect(handle).toBeVisible({ timeout: 3000 });
+
+    // drag the corner handle outward to grow the stamp
+    const hb = await handle.boundingBox();
+    const hx = hb.x + hb.width / 2, hy = hb.y + hb.height / 2;
+    await page.mouse.move(hx, hy);
+    await page.mouse.down();
+    await page.mouse.move(hx + 50, hy - 30);
+    await page.mouse.move(hx + 95, hy - 60);
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+
+    const size = await page.evaluate((id) => window.LoomwrightBackend.EntityService.getSync(id, "locations")?.data?.symbolSize, loc.id);
+    expect(size).toBeGreaterThan(1.2);
+  });
 });

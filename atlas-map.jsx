@@ -56,7 +56,7 @@ const SHAPE_STYLE_BY_TYPE = {
 // "organic" (hand-inked, get the rough filter) vs crisp architectural.
 const SHAPE_LINEW = { world: 2.4, continent: 2.2, country: 2, region: 1.8, city: 1.5, town: 1.3, village: 1.1, district: 1.3, building: 1.7, room: 1.3, road: 0 };
 const SHAPE_ORGANIC = new Set(["world", "continent", "country", "region", "forest", "waterway", "river", "mountain", "ruin", "battlefield", "hidden"]);
-const SHAPE_TEXTURE = { forest: "atm-stipple", waterway: "atm-water", river: "atm-water" };
+const SHAPE_TEXTURE = { forest: "atm-stipple", waterway: "atm-water", river: "atm-water", mountain: "atm-chevron" };
 const SHAPE_BIGLABEL = new Set(["world", "continent", "country", "region", "waterway"]);
 
 // Build the SVG geometry element spec for a drawn shape. Shape coords are
@@ -129,6 +129,353 @@ function _amReshape(orig, mode, index, dx, dy, p) {
   return orig;
 }
 
+// =====================================================================
+// Pre-made map-object stamps — a Heroes-of-Might-&-Magic-flavoured
+// catalogue of inked objects (castles, towns, mountains, forests, mines,
+// fountains, dungeons, …) the user can drop onto the map and resize,
+// instead of drawing every shape by hand. Each motif is authored centred
+// on (0,0) inside a SYMBOL_BOX-unit box; the renderer scales it by
+// data.symbolSize and anchors it at data.coords.
+// =====================================================================
+const SYMBOL_BOX = 60;     // authoring box (units == plate px at symbolSize 1)
+const _SYK = "#3a2c12";    // ink outline shared by every motif
+const _SY = {
+  wallL: "#e7dcc1", wall: "#cdbd9c", wallD: "#a89072",
+  roof: "#a9573b", roofD: "#7f3e28",
+  wood: "#9a7a4f", woodD: "#664a2c",
+  grnL: "#84aa5d", grn: "#5d8343", grnD: "#3d5d2e",
+  watL: "#a9cce1", wat: "#79a8c8", watD: "#4f7f9d",
+  rockL: "#bdaf94", rock: "#9a8c71", rockD: "#6d6150",
+  snow: "#f4efe3", gold: "#d8b24a",
+  flame: "#e07c2f", flameD: "#bf5019", smoke: "#bdb4a6",
+  flag: "#b23b3b", dark: "#241d28", door: "#5a4329", glow: "#6a4a8c",
+};
+// Every motif renders inside one inked group (shared stroke style).
+const _symG = (children) => (
+  <g stroke={_SYK} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round">{children}</g>
+);
+// Battlemented block (3 merlons across the top) — castles / forts / towers.
+const _symBattle = (x, y, w, h, fill) => {
+  const m = w / 5;
+  return (
+    <g>
+      <rect x={x} y={y} width={w} height={h} fill={fill}/>
+      <rect x={x} y={y - 4.5} width={m} height="5" fill={fill}/>
+      <rect x={x + 2 * m} y={y - 4.5} width={m} height="5" fill={fill}/>
+      <rect x={x + 4 * m} y={y - 4.5} width={m} height="5" fill={fill}/>
+    </g>
+  );
+};
+const _symRoofHouse = (cx, baseY, w, h, wallFill, roofFill) => {
+  const x = cx - w / 2, ry = baseY - h;
+  return (
+    <g>
+      <rect x={x} y={ry} width={w} height={h} fill={wallFill}/>
+      <path d={`M ${x - 2.5} ${ry} L ${cx} ${ry - w * 0.62} L ${x + w + 2.5} ${ry} Z`} fill={roofFill}/>
+    </g>
+  );
+};
+const _symPine = (cx, baseY, sc) => {
+  const w = 13 * sc, h = 27 * sc;
+  return (
+    <g>
+      <rect x={cx - 1.7} y={baseY - 6} width="3.4" height="7" fill={_SY.woodD}/>
+      <path d={`M ${cx} ${baseY - h} L ${cx - w * 0.5} ${baseY - h * 0.46} L ${cx - w * 0.3} ${baseY - h * 0.46}
+                L ${cx - w * 0.64} ${baseY - 4} L ${cx + w * 0.64} ${baseY - 4}
+                L ${cx + w * 0.3} ${baseY - h * 0.46} L ${cx + w * 0.5} ${baseY - h * 0.46} Z`} fill={_SY.grn}/>
+    </g>
+  );
+};
+const _symTree = (cx, baseY, sc) => {
+  const r = 12 * sc;
+  return (
+    <g>
+      <rect x={cx - 2} y={baseY - 9} width="4" height="11" fill={_SY.woodD}/>
+      <circle cx={cx} cy={baseY - 9 - r * 0.7} r={r} fill={_SY.grn}/>
+      <circle cx={cx - r * 0.5} cy={baseY - 8 - r * 0.4} r={r * 0.6} fill={_SY.grnL}/>
+    </g>
+  );
+};
+
+function _amSymbolMotif(id) {
+  const C = _SY;
+  switch (id) {
+    case "castle": return _symG(<g>
+      {_symBattle(-27, 0, 14, 24, C.wall)}
+      {_symBattle(13, 0, 14, 24, C.wall)}
+      {_symBattle(-10, -8, 20, 32, C.wallL)}
+      <rect x="-5" y="10" width="10" height="14" rx="5" fill={C.door}/>
+      <rect x="-2.4" y="-4" width="4.8" height="6" fill={C.dark} stroke="none"/>
+      <line x1="3" y1="-8" x2="3" y2="-22"/>
+      <path d="M3 -22 L 16 -19 L 3 -15 Z" fill={C.flag} stroke="none"/>
+    </g>);
+    case "town": return _symG(<g>
+      {_symRoofHouse(-12, 24, 16, 12, C.wall, C.roof)}
+      {_symRoofHouse(12, 24, 15, 11, C.wallL, C.roofD)}
+      {_symRoofHouse(0, 19, 18, 14, C.wall, C.roof)}
+      <rect x="-3" y="15" width="6" height="4" fill={C.door}/>
+    </g>);
+    case "village": return _symG(<g>
+      {_symRoofHouse(-8, 22, 15, 11, C.wall, C.roof)}
+      {_symRoofHouse(10, 24, 13, 9, C.wallL, C.roofD)}
+    </g>);
+    case "fort": return _symG(<g>
+      {_symBattle(-24, 4, 12, 20, C.wallD)}
+      {_symBattle(12, 4, 12, 20, C.wallD)}
+      {_symBattle(-16, -4, 32, 28, C.wall)}
+      <rect x="-5" y="12" width="10" height="12" rx="1" fill={C.dark}/>
+    </g>);
+    case "tower": return _symG(<g>
+      <rect x="-9" y="-10" width="18" height="34" fill={C.wall}/>
+      <path d="M-12 -10 L0 -28 L12 -10 Z" fill={C.roof}/>
+      <rect x="-3.5" y="6" width="7" height="9" fill={C.dark}/>
+      <circle cx="0" cy="-4" r="2.6" fill={C.dark}/>
+    </g>);
+    case "lighthouse": return _symG(<g>
+      <path d="M-8 24 L-5 -10 L5 -10 L8 24 Z" fill={C.wallL}/>
+      <line x1="-6.2" y1="8" x2="6.2" y2="8"/><line x1="-7" y1="17" x2="7" y2="17"/>
+      <rect x="-6" y="-18" width="12" height="9" fill={C.wall}/>
+      <path d="M-7 -18 L0 -25 L7 -18 Z" fill={C.roof}/>
+      <rect x="-4" y="-17" width="8" height="7" fill={C.gold}/>
+      <g stroke={C.gold} strokeWidth="1.6"><line x1="7" y1="-13" x2="17" y2="-16"/><line x1="7" y1="-13" x2="17" y2="-10"/></g>
+    </g>);
+    case "dungeon": return _symG(<g>
+      <path d="M-26 24 Q-22 2 -8 0 Q0 -6 8 0 Q22 2 26 24 Z" fill={C.rockD}/>
+      <path d="M-9 24 L-9 8 Q0 0 9 8 L9 24 Z" fill={C.dark}/>
+      <rect x="-13" y="19" width="6" height="6" fill={C.rock}/>
+      <rect x="7" y="19" width="6" height="6" fill={C.rock}/>
+    </g>);
+    case "cave": return _symG(<g>
+      <path d="M-24 24 Q-20 4 0 2 Q20 4 24 24 Z" fill={C.rock}/>
+      <path d="M-8 24 Q-8 10 0 8 Q8 10 8 24 Z" fill={C.dark}/>
+    </g>);
+    case "mine": return _symG(<g>
+      <path d="M-24 24 L-3 -4 Q0 -7 3 -4 L24 24 Z" fill={C.rockD}/>
+      <rect x="-9" y="9" width="18" height="15" fill={C.dark}/>
+      <rect x="-12" y="7" width="4" height="17" fill={C.wood}/>
+      <rect x="8" y="7" width="4" height="17" fill={C.wood}/>
+      <rect x="-13" y="4.5" width="26" height="4" fill={C.wood}/>
+      <path d="M0 -20 L6 -13 L0 -6 L-6 -13 Z" fill={C.watL}/>
+    </g>);
+    case "windmill": return _symG(<g>
+      <path d="M-9 24 L-6 -6 L6 -6 L9 24 Z" fill={C.wallL}/>
+      <path d="M-7 -6 L0 -14 L7 -6 Z" fill={C.roofD}/>
+      <rect x="-4" y="12" width="8" height="12" fill={C.door}/>
+      <g stroke={C.woodD} strokeWidth="2.2">
+        <line x1="0" y1="-9" x2="-16" y2="-25"/><line x1="0" y1="-9" x2="16" y2="-25"/>
+        <line x1="0" y1="-9" x2="-16" y2="7"/><line x1="0" y1="-9" x2="16" y2="7"/>
+      </g>
+      <circle cx="0" cy="-9" r="2.6" fill={C.wood}/>
+    </g>);
+    case "watermill": return _symG(<g>
+      {_symRoofHouse(-4, 22, 22, 16, C.wall, C.roof)}
+      <circle cx="14" cy="14" r="10" fill={C.wallL}/>
+      <circle cx="14" cy="14" r="3" fill={C.woodD}/>
+      <g stroke={_SYK} strokeWidth="1.5"><line x1="14" y1="4" x2="14" y2="24"/><line x1="4" y1="14" x2="24" y2="14"/><line x1="7" y1="7" x2="21" y2="21"/><line x1="21" y1="7" x2="7" y2="21"/></g>
+      <path d="M3 24 Q12 28 26 25" stroke={C.watD} fill="none"/>
+    </g>);
+    case "tavern": return _symG(<g>
+      {_symRoofHouse(-2, 24, 24, 16, C.wall, C.roofD)}
+      <rect x="-10" y="12" width="9" height="12" fill={C.door}/>
+      <line x1="12" y1="2" x2="12" y2="12"/><line x1="12" y1="6" x2="20.5" y2="6"/>
+      <rect x="16" y="6" width="9" height="8" rx="1" fill={C.wallL}/>
+      <path d="M18 8 h3.4 v4 h-3.4 Z" fill={C.gold} stroke="none"/>
+    </g>);
+    case "temple": return _symG(<g>
+      <path d="M-22 2 L0 -16 L22 2 Z" fill={C.wallL}/>
+      <rect x="-20" y="2" width="40" height="4" fill={C.wall}/>
+      <rect x="-18" y="6" width="5" height="18" fill={C.wallL}/>
+      <rect x="-8" y="6" width="5" height="18" fill={C.wallL}/>
+      <rect x="3" y="6" width="5" height="18" fill={C.wallL}/>
+      <rect x="13" y="6" width="5" height="18" fill={C.wallL}/>
+      <rect x="-20" y="24" width="40" height="3" fill={C.wall}/>
+    </g>);
+    case "shrine": return _symG(<g>
+      <path d="M-12 24 L-12 2 Q0 -10 12 2 L12 24 Z" fill={C.wall}/>
+      <path d="M-6 24 L-6 8 Q0 0 6 8 L6 24 Z" fill={C.dark}/>
+      <line x1="0" y1="-6" x2="0" y2="-14"/>
+      <circle cx="0" cy="-16" r="3" fill={C.gold}/>
+    </g>);
+    case "obelisk": return _symG(<g>
+      <path d="M-4 22 L-2.6 -22 L0 -26 L2.6 -22 L4 22 Z" fill={C.rockL}/>
+      <rect x="-8" y="22" width="16" height="5" fill={C.rock}/>
+      <line x1="-2" y1="-10" x2="2" y2="-10"/><line x1="-2.4" y1="2" x2="2.4" y2="2"/>
+    </g>);
+    case "well": return _symG(<g>
+      <path d="M-12 24 L-10 8 L10 8 L12 24 Z" fill={C.wall}/>
+      <ellipse cx="0" cy="8" rx="10" ry="3.4" fill={C.dark}/>
+      <rect x="-11" y="-2" width="3" height="10" fill={C.wood}/>
+      <rect x="8" y="-2" width="3" height="10" fill={C.wood}/>
+      <path d="M-13 -2 L0 -12 L13 -2 Z" fill={C.roofD}/>
+    </g>);
+    case "fountain": return _symG(<g>
+      <path d="M-20 24 Q0 30 20 24 L17 16 L-17 16 Z" fill={C.wat}/>
+      <ellipse cx="0" cy="16" rx="17" ry="4" fill={C.watL}/>
+      <rect x="-3" y="2" width="6" height="14" fill={C.wall}/>
+      <ellipse cx="0" cy="2" rx="9" ry="3" fill={C.watL}/>
+      <rect x="-1.6" y="-8" width="3.2" height="10" fill={C.wall}/>
+      <g stroke={C.watD} fill="none" strokeWidth="1.6">
+        <path d="M0 -8 Q-7 -14 -10 -4"/><path d="M0 -8 Q7 -14 10 -4"/><path d="M0 -10 V-16"/>
+      </g>
+      <circle cx="0" cy="-17" r="2" fill={C.watL}/>
+    </g>);
+    case "bridge": return _symG(<g>
+      <g stroke={C.watD} strokeWidth="1.6" fill="none" opacity="0.85"><path d="M-26 24 q8 -3 16 0 t16 0 t16 0"/><path d="M-26 20 q8 -3 16 0 t16 0 t16 0"/></g>
+      <path d="M-22 6 L22 6 L22 11 L-22 11 Z" fill={C.wall}/>
+      <path d="M-14 11 Q0 -2 14 11 Z" fill={C.dark}/>
+      <line x1="-22" y1="6" x2="-22" y2="16"/><line x1="22" y1="6" x2="22" y2="16"/>
+      <rect x="-22" y="3" width="44" height="3" fill={C.wallL}/>
+    </g>);
+    case "signpost": return _symG(<g>
+      <rect x="-2" y="-14" width="4" height="38" fill={C.woodD}/>
+      <path d="M-2 -12 L-20 -12 L-24 -7 L-20 -2 L-2 -2 Z" fill={C.wood}/>
+      <path d="M2 2 L20 2 L24 7 L20 12 L2 12 Z" fill={C.wall}/>
+    </g>);
+    case "camp": return _symG(<g>
+      <path d="M-18 24 L0 -8 L18 24 Z" fill={C.wallL}/>
+      <line x1="0" y1="-8" x2="0" y2="24"/>
+      <path d="M-6 24 L0 10 L6 24 Z" fill={C.dark}/>
+      <line x1="0" y1="-8" x2="0" y2="-22"/>
+      <path d="M0 -22 L12 -19 L0 -15 Z" fill={C.flag} stroke="none"/>
+    </g>);
+    case "ruins": return _symG(<g>
+      <rect x="-20" y="22" width="40" height="3" fill={C.rock}/>
+      <rect x="-18" y="2" width="6" height="20" fill={C.rockL}/>
+      <rect x="-6" y="-4" width="6" height="26" fill={C.rockL}/>
+      <path d="M-18 2 L-6 -4" stroke={_SYK} fill="none"/>
+      <rect x="6" y="8" width="6" height="14" fill={C.rockL}/>
+      <rect x="14" y="14" width="6" height="8" fill={C.rock}/>
+    </g>);
+    case "portal": return _symG(<g>
+      <path d="M-15 24 L-15 2 Q-15 -10 0 -10 Q15 -10 15 2 L15 24 L7 24 L7 4 Q7 -3 0 -3 Q-7 -3 -7 4 L-7 24 Z" fill={C.rockD}/>
+      <path d="M-7 24 L-7 4 Q-7 -3 0 -3 Q7 -3 7 4 L7 24 Z" fill={C.glow}/>
+      <g stroke={C.watL} fill="none" strokeWidth="1.3" opacity="0.85"><path d="M0 4 Q4 12 0 20"/><path d="M0 2 Q-4 12 0 22"/></g>
+    </g>);
+    case "mountain": return _symG(<g>
+      <path d="M-26 24 L-4 -18 Q0 -23 4 -18 L26 24 Z" fill={C.rock}/>
+      <path d="M2 -16 L26 24 L7 24 Z" fill={C.rockD} opacity="0.5" stroke="none"/>
+      <path d="M-9 -2 L-2 -13 Q0 -16 2 -13 L9 -2 Q4 -6 0 -3 Q-4 -6 -9 -2 Z" fill={C.snow}/>
+    </g>);
+    case "mountains": return _symG(<g>
+      <path d="M-28 24 L-12 -6 L2 24 Z" fill={C.rockD}/>
+      <path d="M10 24 L24 -2 L30 24 Z" fill={C.rockD}/>
+      <path d="M-14 24 L4 -16 L22 24 Z" fill={C.rock}/>
+      <path d="M-2 -6 L4 -16 L10 -6 Q4 -9 -2 -6 Z" fill={C.snow}/>
+    </g>);
+    case "hill": return _symG(<g>
+      <path d="M-26 24 Q-14 4 -2 24 Z" fill={C.grnD}/>
+      <path d="M-2 24 Q14 -2 28 24 Z" fill={C.grn}/>
+      <path d="M6 18 Q14 8 22 18" stroke={C.grnD} fill="none" strokeWidth="1.3"/>
+    </g>);
+    case "volcano": return _symG(<g>
+      <path d="M-26 24 L-10 -8 L10 -8 L26 24 Z" fill={C.rockD}/>
+      <path d="M-7 -3 Q0 -6 7 -3 L12 24 L-12 24 Z" fill={C.flameD} opacity="0.5" stroke="none"/>
+      <path d="M-10 -8 L10 -8 L7 -3 Q0 -6 -7 -3 Z" fill={C.flame}/>
+      <g stroke={C.flameD} strokeWidth="2.4" strokeLinecap="round"><path d="M-3 -8 L-5 -16"/><path d="M3 -8 L6 -15"/></g>
+      <path d="M0 -14 Q-6 -20 0 -26 Q6 -30 0 -36" stroke={C.smoke} fill="none" opacity="0.8"/>
+    </g>);
+    case "forest": return _symG(<g>
+      {_symTree(-12, 24, 1)}{_symTree(12, 24, 0.9)}{_symTree(0, 20, 1.15)}
+    </g>);
+    case "pineforest": return _symG(<g>
+      {_symPine(-12, 24, 0.9)}{_symPine(12, 24, 0.85)}{_symPine(0, 21, 1.1)}
+    </g>);
+    case "tree": return _symG(<g>{_symTree(0, 24, 1.5)}</g>);
+    case "rocks": return _symG(<g>
+      <path d="M-22 24 Q-26 8 -12 6 Q-2 4 2 14 Q4 24 2 24 Z" fill={C.rock}/>
+      <path d="M-2 24 Q-2 10 12 8 Q24 8 24 24 Z" fill={C.rockL}/>
+      <path d="M2 16 Q8 12 16 14" stroke={C.rockD} fill="none" strokeWidth="1.3"/>
+    </g>);
+    case "swamp": return _symG(<g>
+      <path d="M-24 14 Q-12 8 0 14 Q12 20 24 14 L24 24 L-24 24 Z" fill={C.watD}/>
+      <g stroke={C.grnD} strokeWidth="1.6" fill="none"><path d="M8 24 Q8 10 6 6"/><path d="M14 24 Q14 12 16 6"/><path d="M11 24 Q11 14 11 8"/></g>
+      <ellipse cx="11" cy="6" rx="2.4" ry="1.4" fill={C.grn} stroke="none"/>
+      <g stroke={C.watL} strokeWidth="1.2" fill="none" opacity="0.8"><path d="M-20 19 q4 -2 8 0"/><path d="M-18 23 q4 -2 8 0"/></g>
+    </g>);
+    case "lake": return _symG(<g>
+      <path d="M-24 6 Q-10 -4 6 2 Q26 -2 24 14 Q26 26 4 24 Q-14 28 -22 18 Q-30 10 -24 6 Z" fill={C.wat}/>
+      <g stroke={C.watL} strokeWidth="1.4" fill="none" opacity="0.85"><path d="M-12 8 q5 -3 10 0"/><path d="M2 14 q5 -3 10 0"/><path d="M-8 18 q5 -3 10 0"/></g>
+    </g>);
+    case "pond": return _symG(<g>
+      <ellipse cx="0" cy="14" rx="20" ry="11" fill={C.wat}/>
+      <ellipse cx="-4" cy="12" rx="11" ry="5" fill={C.watL} stroke="none" opacity="0.7"/>
+      <g stroke={C.grnD} strokeWidth="1.6" fill="none"><path d="M14 22 Q14 8 12 4"/><path d="M18 22 Q18 10 20 5"/></g>
+      <ellipse cx="12" cy="4" rx="2" ry="1.2" fill={C.grn} stroke="none"/>
+    </g>);
+    case "waterfall": return _symG(<g>
+      <path d="M-22 24 L-22 -4 L-6 -4 L-6 24 Z" fill={C.rock}/>
+      <path d="M6 24 L6 -4 L22 -4 L22 24 Z" fill={C.rock}/>
+      <rect x="-6" y="-4" width="12" height="6" fill={C.watL}/>
+      <g fill={C.wat} stroke="none"><rect x="-5" y="2" width="3.5" height="22"/><rect x="1.5" y="2" width="3.5" height="22"/></g>
+      <path d="M-7 24 Q0 30 7 24" fill={C.watL} stroke="none"/>
+    </g>);
+    case "whirlpool": return _symG(<g>
+      <ellipse cx="0" cy="13" rx="24" ry="13" fill={C.wat}/>
+      <path d="M0 13 Q8 13 8 7 Q8 0 0 0 Q-12 0 -12 11 Q-12 24 4 24 Q22 24 22 9" fill="none" stroke={C.watL} strokeWidth="2"/>
+      <path d="M0 13 Q4 13 4 9" fill="none" stroke={C.watD} strokeWidth="1.6"/>
+    </g>);
+    default: return _symG(<g>
+      <path d="M0 -16 L14 0 L0 22 L-14 0 Z" fill={C.wallL}/>
+      <circle cx="0" cy="2" r="4" fill={C.roof}/>
+    </g>);
+  }
+}
+
+// Catalogue (ordered, grouped) + lookup helpers, exposed for the editor's
+// stamp palette and the place flow.
+const _AM_SYMBOLS = [
+  { id: "castle",     label: "Castle",     cat: "settlement", kind: "building" },
+  { id: "town",       label: "Town",       cat: "settlement", kind: "town" },
+  { id: "village",    label: "Village",    cat: "settlement", kind: "village" },
+  { id: "fort",       label: "Fort",       cat: "settlement", kind: "building" },
+  { id: "tower",      label: "Tower",      cat: "settlement", kind: "building" },
+  { id: "lighthouse", label: "Lighthouse", cat: "settlement", kind: "building" },
+  { id: "dungeon",    label: "Dungeon",    cat: "structure",  kind: "ruin" },
+  { id: "cave",       label: "Cave",       cat: "structure",  kind: "ruin" },
+  { id: "mine",       label: "Mine",       cat: "structure",  kind: "ruin" },
+  { id: "windmill",   label: "Windmill",   cat: "structure",  kind: "building" },
+  { id: "watermill",  label: "Watermill",  cat: "structure",  kind: "building" },
+  { id: "tavern",     label: "Tavern",     cat: "structure",  kind: "building" },
+  { id: "temple",     label: "Temple",     cat: "structure",  kind: "building" },
+  { id: "shrine",     label: "Shrine",     cat: "structure",  kind: "building" },
+  { id: "obelisk",    label: "Obelisk",    cat: "structure",  kind: "ruin" },
+  { id: "well",       label: "Well",       cat: "structure",  kind: "building" },
+  { id: "fountain",   label: "Fountain",   cat: "structure",  kind: "building" },
+  { id: "bridge",     label: "Bridge",     cat: "structure",  kind: "building" },
+  { id: "signpost",   label: "Signpost",   cat: "structure",  kind: "building" },
+  { id: "camp",       label: "Camp",       cat: "structure",  kind: "building" },
+  { id: "ruins",      label: "Ruins",      cat: "structure",  kind: "ruin" },
+  { id: "portal",     label: "Portal",     cat: "structure",  kind: "hidden" },
+  { id: "mountain",   label: "Mountain",   cat: "terrain",    kind: "mountain" },
+  { id: "mountains",  label: "Mountains",  cat: "terrain",    kind: "mountain" },
+  { id: "hill",       label: "Hills",      cat: "terrain",    kind: "mountain" },
+  { id: "volcano",    label: "Volcano",    cat: "terrain",    kind: "mountain" },
+  { id: "forest",     label: "Forest",     cat: "terrain",    kind: "forest" },
+  { id: "pineforest", label: "Pinewood",   cat: "terrain",    kind: "forest" },
+  { id: "tree",       label: "Tree",       cat: "terrain",    kind: "forest" },
+  { id: "rocks",      label: "Rocks",      cat: "terrain",    kind: "mountain" },
+  { id: "swamp",      label: "Swamp",      cat: "water",      kind: "waterway" },
+  { id: "lake",       label: "Lake",       cat: "water",      kind: "waterway" },
+  { id: "pond",       label: "Pond",       cat: "water",      kind: "waterway" },
+  { id: "waterfall",  label: "Waterfall",  cat: "water",      kind: "waterway" },
+  { id: "whirlpool",  label: "Whirlpool",  cat: "water",      kind: "waterway" },
+];
+const _AM_SYMBOL_CATS = [
+  { id: "settlement", label: "Settlements" },
+  { id: "structure",  label: "Structures" },
+  { id: "terrain",    label: "Terrain" },
+  { id: "water",      label: "Water" },
+];
+const _AM_SYMBOL_BY_ID = Object.fromEntries(_AM_SYMBOLS.map((s) => [s.id, s]));
+const AtlasSymbolLib = {
+  list: _AM_SYMBOLS,
+  cats: _AM_SYMBOL_CATS,
+  has: (id) => Object.prototype.hasOwnProperty.call(_AM_SYMBOL_BY_ID, id),
+  label: (id) => (_AM_SYMBOL_BY_ID[id] && _AM_SYMBOL_BY_ID[id].label) || "Object",
+  kind: (id) => (_AM_SYMBOL_BY_ID[id] && _AM_SYMBOL_BY_ID[id].kind) || "building",
+  motif: _amSymbolMotif,
+};
+
 // ---------------------------------------------------------------------
 // Shared SVG defs — patterns + filters that give the map its premium,
 // antique-cartography × architectural-drafting feel. Rendered once.
@@ -151,6 +498,9 @@ const AtlasDefs = () => (
     <pattern id="atm-floor" patternUnits="userSpaceOnUse" width="44" height="44">
       <path d="M44 0H0V44" fill="none" stroke="rgba(74,56,28,0.15)" strokeWidth="0.7"/>
       <path d="M22 0V44 M0 22H44" fill="none" stroke="rgba(74,56,28,0.07)" strokeWidth="0.5"/>
+    </pattern>
+    <pattern id="atm-chevron" patternUnits="userSpaceOnUse" width="17" height="13" patternTransform="rotate(-2)">
+      <path d="M2 10 L8.5 3 L15 10" fill="none" stroke="rgba(94,72,48,0.42)" strokeWidth="0.85" strokeLinejoin="round" strokeLinecap="round"/>
     </pattern>
     <radialGradient id="atm-land" cx="50%" cy="47%" r="62%">
       <stop offset="0%" stopColor="#fcf4da" stopOpacity="0.95"/>
@@ -178,11 +528,32 @@ const _ATM_LAND_D = "M 30 130 C 60 90, 280 70, 360 200 S 400 380, 320 420 S 100 
   "M 380 290 C 460 260, 620 230, 690 360 S 540 480, 380 420 Z " +
   "M 740 200 C 820 170, 1100 170, 1140 320 S 980 510, 880 480 S 720 360, 740 200 Z";
 
+// Engraved title nameplate (cartouche) — names the current map sheet,
+// like the title block on an antique chart.
+const AtlasCartouche = ({ title }) => {
+  if (!title) return null;
+  const label = String(title).toUpperCase();
+  const W = Math.max(150, 42 + label.length * 11.5);
+  return (
+    <g transform="translate(36, 620)" pointerEvents="none">
+      <rect x="0" y="-21" width={W} height="42" rx="5" fill="rgba(250,242,221,0.9)" stroke="rgba(74,56,28,0.58)" strokeWidth="1.6"/>
+      <rect x="5" y="-16" width={W - 10} height="32" rx="2.5" fill="none" stroke="rgba(74,56,28,0.4)" strokeWidth="0.7"/>
+      <g stroke="rgba(74,56,28,0.5)" strokeWidth="1" fill="none">
+        <path d="M10 -21 q-7 0 -7 7"/><path d={`M${W - 10} -21 q7 0 7 7`}/>
+        <path d="M10 21 q-7 0 -7 -7"/><path d={`M${W - 10} 21 q7 0 7 -7`}/>
+      </g>
+      <text x={W / 2} y="-1.5" textAnchor="middle" dominantBaseline="middle"
+            fontFamily="var(--font-display)" fontSize="16" fontWeight="700" letterSpacing="0.14em" fill="#3a2c12">{label}</text>
+      <line x1={W / 2 - W * 0.3} y1="11" x2={W / 2 + W * 0.3} y2="11" stroke="rgba(74,56,28,0.32)" strokeWidth="0.7"/>
+    </g>
+  );
+};
+
 // ---------------------------------------------------------------------
 // Background plate — antique sea/coast (world) or a drafting floor grid
 // (interior), framed like an engraved map sheet.
 // ---------------------------------------------------------------------
-const AtlasPlate = ({ showIso, showGrid, showTexture, interior = false }) => (
+const AtlasPlate = ({ showIso, showGrid, showTexture, interior = false, title = null }) => (
   <g aria-hidden>
     <AtlasDefs/>
     {interior ? (
@@ -241,6 +612,8 @@ const AtlasPlate = ({ showIso, showGrid, showTexture, interior = false }) => (
         <path key={i} d={`M ${x} ${y + sy * 26} L ${x} ${y} L ${x + sx * 26} ${y}`} strokeWidth="2.2"/>
       ))}
     </g>
+    {/* Engraved title nameplate */}
+    <AtlasCartouche title={title}/>
   </g>
 );
 
@@ -291,9 +664,11 @@ const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, sho
       const isPath = !!geom.open;
       const organic = !isPath && SHAPE_ORGANIC.has(loc.type);
       const baseW = SHAPE_LINEW[loc.type] != null ? SHAPE_LINEW[loc.type] : 1.4;
-      const sw = focused ? baseW + 1.1 : (isPath ? 2.6 : baseW);
+      const sw = focused ? baseW + 1.2 : (isPath ? 3.2 : baseW);
       const texId = !isPath && SHAPE_TEXTURE[loc.type];
       const big = SHAPE_BIGLABEL.has(loc.type);
+      const isRoad = loc.type === "road";
+      const casing = isPath ? (isRoad ? "rgba(150,120,70,0.5)" : "rgba(80,120,160,0.4)") : null; // river/road underlay
       return (
         <g key={loc.id} data-atm-shape={loc.id} className={"atm-shape" + (focused ? " is-focused" : "")}
            opacity={dim ? 0.32 : 1} style={{ cursor: focused ? "move" : "pointer" }}
@@ -301,11 +676,12 @@ const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, sho
            onDoubleClick={(e) => { if (onDoubleClick) { e.stopPropagation(); onDoubleClick(loc); } }}
            onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc); }}>
           <g filter="url(#atm-shadow)">
+            {casing && <Tag {...geom.props} fill="none" stroke={casing} strokeWidth={sw + 4} strokeLinejoin="round" strokeLinecap="round"/>}
             <Tag {...geom.props}
                  fill={isPath ? "none" : (clean ? st.fill.replace(/0?\.\d+\)/, "0.30)") : st.fill)}
                  stroke={focused ? "#c98a2c" : st.stroke}
                  strokeWidth={sw} strokeLinejoin="round" strokeLinecap="round"
-                 strokeDasharray={isPath ? (loc.type === "road" ? "9 5" : "0") : (loc.type === "region" ? "8 5" : "0")}
+                 strokeDasharray={isPath ? (isRoad ? "10 6" : "0") : (loc.type === "region" ? "8 5" : "0")}
                  filter={organic && !clean ? "url(#atm-rough)" : undefined}/>
             {texId && <Tag {...geom.props} fill={`url(#${texId})`} stroke="none" opacity={0.7} pointerEvents="none"/>}
           </g>
@@ -345,6 +721,53 @@ const AtlasShapeHandles = ({ loc, shape, onHandleDown }) => {
   }
   return null;
 };
+
+// ---------------------------------------------------------------------
+// Object stamps — pre-made map symbols (data.symbol) placed at a point,
+// scaled by data.symbolSize. Drop-shadowed + labelled + clickable; in
+// the editor they drag to move, drill on double-click, and show a corner
+// handle to resize.
+// ---------------------------------------------------------------------
+const AtlasSymbols = ({
+  locations, layers, focusId, onSelect, onSymbolDown, onDoubleClick,
+  onSizeDown, sizeOf, posOf, showLabels = true, ctxLocs, dimFn, editorSelect = false,
+}) => (
+  <g className="atm-symbols">
+    {locations.map((loc) => {
+      if (!loc.symbol) return null;
+      if (!_pinIsVisible(loc, layers)) return null;
+      const motif = _amSymbolMotif(loc.symbol);
+      if (!motif) return null;
+      const p = _amPx(posOf ? posOf(loc) : loc);
+      const size = Math.max(0.4, sizeOf ? sizeOf(loc) : (loc.symbolSize || 1));
+      const focused = loc.id === focusId;
+      const dim = (ctxLocs && !ctxLocs.has(loc.id)) || (dimFn && dimFn(loc));
+      const half = (SYMBOL_BOX / 2) * size;
+      return (
+        <g key={loc.id} data-atm-symbol={loc.id} className={"atm-symbol" + (focused ? " is-focused" : "")}
+           opacity={dim ? 0.34 : 1} transform={`translate(${p.x}, ${p.y})`}
+           style={{ cursor: editorSelect ? (focused ? "move" : "pointer") : "pointer" }}
+           onPointerDown={(e) => onSymbolDown && onSymbolDown(e, loc)}
+           onDoubleClick={(e) => { if (onDoubleClick) { e.stopPropagation(); onDoubleClick(loc); } }}
+           onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc); }}>
+          {focused && <circle r={half + 7} fill="rgba(255,200,80,0.16)" stroke="#c98a2c" strokeWidth="1.4" strokeDasharray="5 4"/>}
+          <g transform={`scale(${size})`} filter="url(#atm-shadow)">{motif}</g>
+          {showLabels && loc.name && (
+            <text x="0" y={half + 13} textAnchor="middle" fontFamily="var(--font-display)" fontSize="11.5" fontWeight="600"
+                  fill="#2a2218" pointerEvents="none"
+                  style={{ paintOrder: "stroke", stroke: "rgba(250,242,221,0.92)", strokeWidth: 3, strokeLinejoin: "round" }}>
+              {loc.name}
+            </text>
+          )}
+          {focused && editorSelect && onSizeDown && (
+            <circle data-atm-handle="symbol-size" cx={half} cy={-half} r={5.5} fill="#fffaf0" stroke="#c98a2c" strokeWidth="1.6"
+                    style={{ cursor: "nwse-resize" }} onPointerDown={(e) => onSizeDown(e, loc)}/>
+          )}
+        </g>
+      );
+    })}
+  </g>
+);
 
 // ---------------------------------------------------------------------
 // Pin — a single location marker. Renders glyph + label.
@@ -573,9 +996,10 @@ const AtlasMap = ({
   layers = {}, selectedId, onSelect, onPan,
   context = null, scrubChapter = null,
   showLabels = true, showIso = true, showGrid = false, showTexture = true,
-  variant = "side", className = "", cleanStyle = false, interior = false,
+  variant = "side", className = "", cleanStyle = false, interior = false, title = null,
   // Live editing (editor variant): active tool + placement callbacks.
   tool = "select", onMapPoint = null, onMovePin = null, onDrawShape = null, onReshape = null,
+  onResizeSymbol = null,
   view = null, onViewChange = null, onDrillDown = null,
 }) => {
   const vt = view || { z: 1, x: 0, y: 0 };
@@ -634,6 +1058,12 @@ const AtlasMap = ({
   const editShapeRef = React.useRef(null);
   const [editShape, setEditShape] = React.useState(null); // { locId, shape } live override
   const shapeOf = (loc) => (editShape && editShape.locId === loc.id) ? editShape.shape : loc.shape;
+  // ---- Object-stamp interactions (move a symbol's anchor / resize it) ----
+  const symMoveRef = React.useRef(null);   // { locId, startPct, orig:{x,y}, pointerId, pending }
+  const symSizeRef = React.useRef(null);   // { locId, center:{x,y}px }
+  const editSymRef = React.useRef(null);
+  const [editSym, setEditSym] = React.useState(null); // { locId, size } live override
+  const symbolSizeOf = (loc) => (editSym && editSym.locId === loc.id) ? editSym.size : (loc.symbolSize || 1);
   // Reset any in-progress draft when the tool changes.
   _ue_am(() => { setDraft(null); setPolyPts([]); drawRef.current = null; draftRef.current = null; }, [tool]);
   // Escape cancels an in-progress polygon/draft.
@@ -704,6 +1134,19 @@ const AtlasMap = ({
     try { svgRef.current.setPointerCapture?.(e.pointerId); } catch (_e) {}
     reshapeRef.current = { locId: loc.id, mode, index, orig: loc.shape, startPct: toPct(e) };
   };
+  // Drag a placed stamp to move its anchor (pending until it travels >4px,
+  // so a click still selects and a double-click still drills in).
+  const onSymbolPointerDown = (e, loc) => {
+    if (variant !== "editor" || tool !== "select" || !onMovePin) return;
+    symMoveRef.current = { locId: loc.id, startPct: toPct(e), orig: { x: loc.x, y: loc.y }, pointerId: e.pointerId, pending: true };
+  };
+  // Drag the corner handle to resize a selected stamp.
+  const onSymbolSizeDown = (e, loc) => {
+    if (variant !== "editor" || !onResizeSymbol) return;
+    e.stopPropagation();
+    try { svgRef.current.setPointerCapture?.(e.pointerId); } catch (_e) {}
+    symSizeRef.current = { locId: loc.id, center: _amPx(loc) };
+  };
   const onSvgPointerMove = (e) => {
     const pan = panRef.current;
     if (pan) {
@@ -724,6 +1167,29 @@ const AtlasMap = ({
       const next = _amReshape(rs.orig, rs.mode, rs.index, p.x - rs.startPct.x, p.y - rs.startPct.y, p);
       editShapeRef.current = { locId: rs.locId, shape: next };
       setEditShape(editShapeRef.current);
+      return;
+    }
+    const ssz = symSizeRef.current;
+    if (ssz) {
+      const p = toPct(e);
+      const px = (p.x / 100) * 1200, py = (p.y / 100) * 700;
+      const reach = Math.max(Math.abs(px - ssz.center.x), Math.abs(py - ssz.center.y));
+      editSymRef.current = { locId: ssz.locId, size: Math.max(0.5, Math.min(4, reach / (SYMBOL_BOX / 2))) };
+      setEditSym(editSymRef.current);
+      return;
+    }
+    const smv = symMoveRef.current;
+    if (smv) {
+      const p = toPct(e);
+      if (smv.pending) {
+        const moved = Math.hypot(((p.x - smv.startPct.x) / 100) * 1200, ((p.y - smv.startPct.y) / 100) * 700);
+        if (moved < 4) return; // still a click/double-click, not a drag
+        smv.pending = false;
+        try { svgRef.current.setPointerCapture?.(smv.pointerId); } catch (_e) {}
+      }
+      const nx = Math.max(0, Math.min(100, smv.orig.x + (p.x - smv.startPct.x)));
+      const ny = Math.max(0, Math.min(100, smv.orig.y + (p.y - smv.startPct.y)));
+      setDragPos({ id: smv.locId, x: nx, y: ny });
       return;
     }
     const d = dragRef.current;
@@ -756,6 +1222,22 @@ const AtlasMap = ({
       setEditShape(null);
       // Only commit a real drag; a "pending" (no-movement) press was just a click.
       if (!rs.pending && es && es.locId === rs.locId && onReshape) onReshape(rs.locId, es.shape);
+      return;
+    }
+    const ssz = symSizeRef.current;
+    if (ssz) {
+      symSizeRef.current = null;
+      const es = editSymRef.current; editSymRef.current = null;
+      setEditSym(null);
+      if (es && es.locId === ssz.locId && onResizeSymbol) onResizeSymbol(ssz.locId, es.size);
+      return;
+    }
+    const smv = symMoveRef.current;
+    if (smv) {
+      symMoveRef.current = null;
+      const dp = dragPos;
+      setDragPos(null);
+      if (!smv.pending && dp && dp.id === smv.locId && onMovePin) onMovePin(smv.locId, { x: dp.x, y: dp.y });
       return;
     }
     const d = dragRef.current;
@@ -813,12 +1295,12 @@ const AtlasMap = ({
   return (
     <svg ref={svgRef} className={"atm__svg " + className} viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet" data-variant={variant}
          data-tool={tool}
-         style={{ cursor: (isDrawTool || tool === "draw-polygon") ? "crosshair" : (tool === "pan" ? "grab" : undefined) }}
+         style={{ cursor: (isDrawTool || tool === "draw-polygon" || tool === "stamp") ? "crosshair" : (tool === "pan" ? "grab" : undefined) }}
          onClick={onSvgClick} onDoubleClick={onSvgDoubleClick} onWheel={onViewChange ? onWheel : undefined}
          onPointerDown={onSvgPointerDown} onPointerMove={onSvgPointerMove}
          onPointerUp={onSvgPointerUp} onPointerCancel={onSvgPointerUp} onLostPointerCapture={onSvgPointerUp}>
       <g transform={`translate(${vt.x},${vt.y}) scale(${vt.z})`}>
-      <AtlasPlate showIso={showIso} showGrid={showGrid} showTexture={showTexture} interior={interior}/>
+      <AtlasPlate showIso={showIso} showGrid={showGrid} showTexture={showTexture} interior={interior} title={title}/>
 
       {/* Region polygons under everything */}
       <g opacity={opOf("regions")}><AtlasRegions locations={locations} layers={layers} highlight={regionHighlight}/></g>
@@ -836,6 +1318,15 @@ const AtlasMap = ({
         if (!loc) return null;
         return <AtlasShapeHandles loc={loc} shape={shapeOf(loc)} onHandleDown={onHandlePointerDown}/>;
       })()}
+
+      {/* Object stamps (pre-made map symbols) — above regions, below pins */}
+      <AtlasSymbols locations={locations} layers={layers} focusId={focusId}
+                    onSelect={onSelect} onSymbolDown={onSymbolPointerDown}
+                    onDoubleClick={onDrillDown} onSizeDown={onResizeSymbol ? onSymbolSizeDown : null}
+                    sizeOf={symbolSizeOf} posOf={pinLoc}
+                    showLabels={showLabels && variant === "editor"}
+                    ctxLocs={ctxLocs} dimFn={scrubFn}
+                    editorSelect={variant === "editor" && tool === "select"}/>
 
       {/* Road / connection lines between placed locations */}
       {layers.routes !== false && roads.length > 0 && (
@@ -880,6 +1371,7 @@ const AtlasMap = ({
         {locations.map((loc) => {
           if (loc.placed === false) return null;
           if (loc.shape) return null; // drawn regions render in AtlasShapes (with their own label)
+          if (loc.symbol) return null; // object stamps render in AtlasSymbols
           if (!_pinIsVisible(loc, layers)) return null;
           const dim = (ctxLocs && !ctxLocs.has(loc.id)) || scrubFn(loc);
           const focused = loc.id === focusId;
@@ -949,4 +1441,4 @@ const _pinIsVisible = (loc, layers) => {
   return true;
 };
 
-Object.assign(window, { AtlasMap, AtlasPin, AtlasPlate, AtlasRoute, _amPx });
+Object.assign(window, { AtlasMap, AtlasPin, AtlasPlate, AtlasRoute, AtlasSymbols, AtlasSymbolLib, _amPx });

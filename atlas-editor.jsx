@@ -107,7 +107,7 @@ const AtlasEdToolbar = ({
 const AtlasEdLeftRail = ({
   collapsed, onToggle, tab, onSetTab,
   locations, layers, layerState, cast, onSelectLoc, onSelectEntity, onToggleLayer,
-  selectedId, query, onSetQuery,
+  selectedId, query, onSetQuery, onPickStamp, stampSymbol,
 }) => {
   // Build hierarchy tree
   const tree = _um_ae(() => {
@@ -171,6 +171,10 @@ const AtlasEdLeftRail = ({
                 onClick={() => { onToggle(); onSetTab("layers"); }} title="Layers">
           <Icon name="stack" size={14}/>
         </button>
+        <button className={"ae-rail__icn" + (tab === "stamps" ? " is-on" : "")}
+                onClick={() => { onToggle(); onSetTab("stamps"); }} title="Stamps">
+          <Icon name="sparkle" size={14}/>
+        </button>
       </aside>
     );
   }
@@ -186,6 +190,9 @@ const AtlasEdLeftRail = ({
         </button>
         <button className={"ae-rail__tab" + (tab === "layers" ? " is-on" : "")} onClick={() => onSetTab("layers")} data-callback="onSetAtlasRailTab">
           <Icon name="stack" size={11}/><span>Layers</span>
+        </button>
+        <button className={"ae-rail__tab" + (tab === "stamps" ? " is-on" : "")} onClick={() => onSetTab("stamps")} data-callback="onSetAtlasRailTab">
+          <Icon name="sparkle" size={11}/><span>Stamps</span>
         </button>
         <button className="ae-rail__collapse" onClick={onToggle} title="Collapse">
           <Icon name="panel-left" size={11}/>
@@ -347,6 +354,41 @@ const AtlasEdLeftRail = ({
           ))}
         </div>
       )}
+
+      {tab === "stamps" && (() => {
+        const lib = (typeof window !== "undefined") && window.AtlasSymbolLib;
+        if (!lib) return <div className="ae-stamps ae-stamps--empty"><p className="muted">Stamp library unavailable.</p></div>;
+        const q = (query || "").toLowerCase();
+        return (
+          <div className="ae-stamps" data-ui="AtlasStampPalette">
+            <div className="ae-stamps__search">
+              <Icon name="search" size={11}/>
+              <input value={query} onChange={(e) => onSetQuery(e.target.value)} placeholder="Filter stamps…"/>
+            </div>
+            <div className="ae-stamps__hint">Pick a stamp, then click the map to drop it. Drag to move · corner handle to resize.</div>
+            {lib.cats.map((cat) => {
+              const items = lib.list.filter((s) => s.cat === cat.id && (!q || s.label.toLowerCase().includes(q)));
+              if (!items.length) return null;
+              return (
+                <div key={cat.id} className="ae-stamps__sec">
+                  <div className="ae-stamps__head">{cat.label} · {items.length}</div>
+                  <div className="ae-stamps__grid">
+                    {items.map((s) => (
+                      <button key={s.id} type="button"
+                              className={"ae-stamps__item" + (stampSymbol === s.id ? " is-on" : "")}
+                              data-stamp={s.id} data-testid={"ae-stamp-" + s.id} title={"Place " + s.label}
+                              onClick={() => onPickStamp && onPickStamp(s.id)}>
+                        <svg viewBox="-34 -38 68 70" className="ae-stamps__svg" aria-hidden="true">{lib.motif(s.id)}</svg>
+                        <span className="ae-stamps__lbl">{s.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
     </aside>
   );
 };
@@ -862,6 +904,16 @@ const AtlasEditor = ({
   const [routeFrom, setRouteFrom] = _us_ae(null);
   const [view, setView]           = _us_ae({ z: 1, x: 0, y: 0 });
   const [cleanStyle, setCleanStyle] = _us_ae(false);
+  const [stampSymbol, setStampSymbol] = _us_ae(null);
+  // Arm the stamp tool with a chosen object; clicking the map drops it.
+  const onPickStamp = (id) => { setStampSymbol(id); setTool("stamp"); };
+  // Escape cancels stamping.
+  _ue_ae(() => {
+    if (tool !== "stamp") return;
+    const onKey = (e) => { if (e.key === "Escape") { setTool("select"); setStampSymbol(null); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tool]);
   const _aeZoom = (factor) => setView((v) => {
     const nz = Math.max(1, Math.min(8, v.z * factor));
     // zoom toward the plate centre (600, 350 in user units)
@@ -897,6 +949,29 @@ const AtlasEditor = ({
   const onMapPoint = async (pct, activeTool) => {
     const B = window.LoomwrightBackend;
     if (!B) return;
+    if (activeTool === "stamp") {
+      const sym = stampSymbol;
+      if (!sym) return;
+      const lib = window.AtlasSymbolLib;
+      // If an unplaced place is selected, stamp IT here; else drop a fresh object.
+      if (selected && selected.placed === false) {
+        await B.AtlasService.placeSymbol(selected.id, sym, pct, { atlasMap: activeMap });
+        await _aeAssignToMap(selected.id);
+        window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+        _aeNotice(selected.name + " placed as a " + (lib ? lib.label(sym) : "object") + ".");
+        return;
+      }
+      const ent = await B.EntityService.save("locations", {
+        name: lib ? lib.label(sym) : "New object",
+        data: { placed: true, coords: { x: pct.x, y: pct.y }, symbol: sym, symbolSize: 1,
+                kind: lib ? lib.kind(sym) : "building", atlasMap: activeMap,
+                parentId: activeMap !== "world" ? activeMap : undefined },
+      }, { status: "active" });
+      window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      onSelect && onSelect({ id: ent.id, type: "locations", name: ent.name, placed: true });
+      _aeNotice("Placed " + ent.name + " — drag to move, corner handle to resize.");
+      return;
+    }
     if (activeTool === "addLoc" || activeTool === "label-mark") {
       // If an unplaced location is selected, pin IT here; otherwise
       // create a fresh location at the tapped point and open its editor.
@@ -944,6 +1019,13 @@ const AtlasEditor = ({
     const B = window.LoomwrightBackend;
     if (!B || !shape) return;
     await B.AtlasService.updatePlacement(locId, { shape });
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+  };
+  // A placed stamp was resized via its corner handle — persist the scale.
+  const onResizeSymbol = async (locId, size) => {
+    const B = window.LoomwrightBackend;
+    if (!B || !(size > 0)) return;
+    await B.AtlasService.updatePlacement(locId, { symbolSize: size });
     window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
   };
   const handleSelect = (loc) => {
@@ -997,7 +1079,8 @@ const AtlasEditor = ({
           cast={cast} selectedId={selected?.id}
           query={query} onSetQuery={setQuery}
           onSelectLoc={onSelect} onSelectEntity={onSelectEntity}
-          onToggleLayer={onToggleLayer}/>
+          onToggleLayer={onToggleLayer}
+          onPickStamp={onPickStamp} stampSymbol={stampSymbol}/>
 
         <main className="atlas-editor__canvas">
           {mapStack.length > 1 && (
@@ -1023,8 +1106,25 @@ const AtlasEditor = ({
             context={context} scrubChapter={scrubChapter}
             showLabels={showLabels} showIso={showIso} showGrid={showGrid} showTexture={showTexture}
             variant="editor" onSelect={handleSelect} cleanStyle={cleanStyle} interior={activeMap !== "world"}
+            title={activeMap === "world" ? "The Known World" : mapStack[mapStack.length - 1].name}
             tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin} onDrawShape={onDrawShape} onReshape={onReshape}
+            onResizeSymbol={onResizeSymbol}
             view={view} onViewChange={setView} onDrillDown={onDrillDown}/>
+          {tool === "stamp" && (
+            <div className="atlas-editor__stamphint" data-ui="AtlasStampHint"
+                 style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 6,
+                          display: "flex", alignItems: "center", gap: 6,
+                          background: "rgba(250,242,221,0.96)", border: "1px solid var(--line-2, rgba(74,56,28,0.3))",
+                          borderRadius: "var(--r-pill, 999px)", padding: "4px 6px 4px 12px", fontSize: "var(--fs-xs)",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.18)" }}>
+              <Icon name="pin" size={11}/>
+              <span>Click to place: <b>{window.AtlasSymbolLib ? window.AtlasSymbolLib.label(stampSymbol) : "object"}</b></span>
+              <button onClick={() => { setTool("select"); setStampSymbol(null); }} title="Stop stamping (Esc)"
+                      style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 3, color: "var(--ink-3, #6a5a3a)" }}>
+                <Icon name="close" size={9}/>
+              </button>
+            </div>
+          )}
           {miniMapVisible && <AtlasMiniMap locations={mapLocations} routes={routes} selectedId={selected?.id} context={context}/>}
           {context && context.source && (
             <div className="atlas-editor__ctxbanner">
