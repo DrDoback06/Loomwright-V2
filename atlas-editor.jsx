@@ -17,6 +17,7 @@ const { useState: _us_ae, useMemo: _um_ae, useCallback: _uc_ae, useEffect: _ue_a
 const AtlasEdToolbar = ({
   tool, onPickTool, onZoomIn, onZoomOut, onFitView, onExitFs,
   flyoutOpen, onToggleFlyout, onPickFlyoutTool, coreTools, flyoutGroups,
+  cleanStyle, onToggleStyle,
 }) => (
   <div className="ae-tb" data-ui="AtlasEdToolbar">
     <div className="ae-tb__brand">
@@ -85,6 +86,10 @@ const AtlasEdToolbar = ({
       </button>
       <button className="ae-tb__btn" onClick={onFitView} data-callback="onAtlasFitView" title="Fit view">
         <Icon name="expand" size={11}/><span className="ae-tb__lbl">Fit</span>
+      </button>
+      <button className={"ae-tb__btn" + (cleanStyle ? " is-active" : "")} onClick={onToggleStyle}
+              data-testid="ae-style-toggle" title={cleanStyle ? "Switch to hand-drawn style" : "Switch to clean style"}>
+        <Icon name="paper" size={11}/><span className="ae-tb__lbl">{cleanStyle ? "Clean" : "Inked"}</span>
       </button>
     </div>
 
@@ -854,6 +859,13 @@ const AtlasEditor = ({
   const [flyoutOpen, setFlyout]   = _us_ae(null);
   const [query, setQuery]         = _us_ae("");
   const [routeFrom, setRouteFrom] = _us_ae(null);
+  const [view, setView]           = _us_ae({ z: 1, x: 0, y: 0 });
+  const [cleanStyle, setCleanStyle] = _us_ae(false);
+  const _aeZoom = (factor) => setView((v) => {
+    const nz = Math.max(1, Math.min(8, v.z * factor));
+    // zoom toward the plate centre (600, 350 in user units)
+    return { z: nz, x: 600 - ((600 - v.x) / v.z) * nz, y: 350 - ((350 - v.y) / v.z) * nz };
+  });
   const locById = _um_ae(() => Object.fromEntries(locations.map((l) => [l.id, l])), [locations]);
 
   // ---- Live tool actions (persist through AtlasService) -------------
@@ -946,7 +958,8 @@ const AtlasEditor = ({
         onPickFlyoutTool={(g, t) => { setTool(t); setFlyout(null); }}
         coreTools={window.ATLAS_CORE_TOOLS || []}
         flyoutGroups={window.ATLAS_FLYOUT_GROUPS || []}
-        onZoomIn={() => {}} onZoomOut={() => {}} onFitView={() => {}}
+        onZoomIn={() => _aeZoom(1.25)} onZoomOut={() => _aeZoom(0.8)} onFitView={() => setView({ z: 1, x: 0, y: 0 })}
+        cleanStyle={cleanStyle} onToggleStyle={() => setCleanStyle((v) => !v)}
         onExitFs={onExitFs}/>
 
       <div className="atlas-editor__desk">
@@ -965,8 +978,9 @@ const AtlasEditor = ({
             layers={layerState} selectedId={selected?.id}
             context={context} scrubChapter={scrubChapter}
             showLabels={showLabels} showIso={showIso} showGrid={showGrid} showTexture={showTexture}
-            variant="editor" onSelect={handleSelect}
-            tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin} onDrawShape={onDrawShape} onReshape={onReshape}/>
+            variant="editor" onSelect={handleSelect} cleanStyle={cleanStyle}
+            tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin} onDrawShape={onDrawShape} onReshape={onReshape}
+            view={view} onViewChange={setView}/>
           {miniMapVisible && <AtlasMiniMap locations={locations} routes={routes} selectedId={selected?.id} context={context}/>}
           {context && context.source && (
             <div className="atlas-editor__ctxbanner">

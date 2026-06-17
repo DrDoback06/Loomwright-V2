@@ -107,4 +107,32 @@ test.describe("T77. Atlas editor — shapes + unplaced tray", () => {
     expect(shape.y).toBeGreaterThan(36); // moved down
     expect(Math.round(shape.w)).toBe(18); // size preserved by a move
   });
+
+  test("wheel zoom transforms the canvas; style toggle flips", async ({ page }) => {
+    await openFreshApp(page);
+    await saveEntity(page, "locations", { name: "Anyplace", data: { kind: "city", shape: { type: "rect", x: 40, y: 40, w: 12, h: 12 } } }, { status: "active" });
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    const contentG = editor.locator(".atm__svg > g").first();
+    await expect(contentG).toHaveAttribute("transform", /scale\(1\)/);
+
+    // wheel up over the canvas zooms in (real interaction, toolbar-independent)
+    const svg = editor.locator(".atm__svg");
+    const box = await svg.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, -360);
+    await page.waitForTimeout(150);
+    const zoomed = await contentG.getAttribute("transform");
+    expect(zoomed).not.toContain("scale(1)"); // zoomed past 1x
+
+    // the parchment/clean style toggle flips state
+    const styleBtn = editor.locator("[data-testid='ae-style-toggle']");
+    const wasActive = await styleBtn.evaluate((el) => el.classList.contains("is-active"));
+    await styleBtn.evaluate((el) => el.click());
+    await page.waitForTimeout(100);
+    const nowActive = await styleBtn.evaluate((el) => el.classList.contains("is-active"));
+    expect(nowActive).toBe(!wasActive);
+  });
 });

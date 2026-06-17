@@ -496,7 +496,9 @@ const AtlasMap = ({
   variant = "side", className = "", cleanStyle = false,
   // Live editing (editor variant): active tool + placement callbacks.
   tool = "select", onMapPoint = null, onMovePin = null, onDrawShape = null, onReshape = null,
+  view = null, onViewChange = null,
 }) => {
+  const vt = view || { z: 1, x: 0, y: 0 };
   const locById = _um_am(() => Object.fromEntries(locations.map((l) => [l.id, l])), [locations]);
   const ctxShow = context && context.show;
   const roads = window.ATLAS_ROADS || [];
@@ -517,15 +519,29 @@ const AtlasMap = ({
   const svgRef = React.useRef(null);
   const dragRef = React.useRef(null);            // { id, moved }
   const [dragPos, setDragPos] = React.useState(null); // { id, x, y } pct override
-  const toPct = (evt) => {
+  // Screen → svg user units (accounting for preserveAspectRatio letterbox).
+  const toUser = (evt) => {
     const rect = svgRef.current.getBoundingClientRect();
     const scale = Math.min(rect.width / 1200, rect.height / 700) || 1;
     const ox = (rect.width - 1200 * scale) / 2;
     const oy = (rect.height - 700 * scale) / 2;
+    return { ux: (evt.clientX - rect.left - ox) / scale, uy: (evt.clientY - rect.top - oy) / scale };
+  };
+  // Screen → percent, inverting the zoom/pan transform too.
+  const toPct = (evt) => {
+    const { ux, uy } = toUser(evt);
     return {
-      x: Math.max(0, Math.min(100, ((evt.clientX - rect.left - ox) / scale / 1200) * 100)),
-      y: Math.max(0, Math.min(100, ((evt.clientY - rect.top - oy) / scale / 700) * 100)),
+      x: Math.max(0, Math.min(100, (((ux - vt.x) / vt.z) / 1200) * 100)),
+      y: Math.max(0, Math.min(100, (((uy - vt.y) / vt.z) / 700) * 100)),
     };
+  };
+  const panRef = React.useRef(null);
+  const onWheel = (e) => {
+    if (!onViewChange) return;
+    e.preventDefault();
+    const { ux, uy } = toUser(e);
+    const nz = Math.max(1, Math.min(8, vt.z * (e.deltaY < 0 ? 1.12 : 0.892)));
+    onViewChange({ z: nz, x: ux - ((ux - vt.x) / vt.z) * nz, y: uy - ((uy - vt.y) / vt.z) * nz });
   };
   // ---- Drawing interactions (rect/circle/freehand drag, polygon clicks) --
   const drawRef = React.useRef(null);              // { tool, sx, sy } | { tool:"draw-freehand", points }
@@ -572,6 +588,13 @@ const AtlasMap = ({
     setPolyPts((pts) => { if (pts.length >= 3) onDrawShape({ type: "polygon", points: pts }); return []; });
   };
   const onSvgPointerDown = (e) => {
+    // Pan tool: drag the canvas.
+    if (tool === "pan" && onViewChange && variant === "editor") {
+      e.stopPropagation();
+      try { svgRef.current.setPointerCapture?.(e.pointerId); } catch (_e) {}
+      panRef.current = { sx: e.clientX, sy: e.clientY, ox: vt.x, oy: vt.y };
+      return;
+    }
     if (!onDrawShape || variant !== "editor" || !isDrawTool) return;
     if (e.target.closest && e.target.closest("[data-atm-pin]")) return;
     e.stopPropagation();
@@ -602,6 +625,13 @@ const AtlasMap = ({
     reshapeRef.current = { locId: loc.id, mode, index, orig: loc.shape, startPct: toPct(e) };
   };
   const onSvgPointerMove = (e) => {
+    const pan = panRef.current;
+    if (pan) {
+      const rect = svgRef.current.getBoundingClientRect();
+      const scale = Math.min(rect.width / 1200, rect.height / 700) || 1;
+      onViewChange({ z: vt.z, x: pan.ox + (e.clientX - pan.sx) / scale, y: pan.oy + (e.clientY - pan.sy) / scale });
+      return;
+    }
     const rs = reshapeRef.current;
     if (rs) {
       const p = toPct(e);
@@ -630,6 +660,7 @@ const AtlasMap = ({
     if (shape && onDrawShape) onDrawShape(shape);
   };
   const onSvgPointerUp = () => {
+    if (panRef.current) { panRef.current = null; return; }
     const rs = reshapeRef.current;
     if (rs) {
       reshapeRef.current = null;
@@ -692,10 +723,12 @@ const AtlasMap = ({
 
   return (
     <svg ref={svgRef} className={"atm__svg " + className} viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet" data-variant={variant}
-         data-tool={tool} style={{ cursor: (isDrawTool || tool === "draw-polygon") ? "crosshair" : undefined }}
-         onClick={onSvgClick} onDoubleClick={onSvgDoubleClick}
+         data-tool={tool}
+         style={{ cursor: (isDrawTool || tool === "draw-polygon") ? "crosshair" : (tool === "pan" ? "grab" : undefined) }}
+         onClick={onSvgClick} onDoubleClick={onSvgDoubleClick} onWheel={onViewChange ? onWheel : undefined}
          onPointerDown={onSvgPointerDown} onPointerMove={onSvgPointerMove}
          onPointerUp={onSvgPointerUp} onPointerCancel={onSvgPointerUp} onLostPointerCapture={onSvgPointerUp}>
+      <g transform={`translate(${vt.x},${vt.y}) scale(${vt.z})`}>
       <AtlasPlate showIso={showIso} showGrid={showGrid} showTexture={showTexture}/>
 
       {/* Region polygons under everything */}
@@ -810,6 +843,7 @@ const AtlasMap = ({
           </text>
         </g>
       )}
+      </g>
     </svg>
   );
 };
