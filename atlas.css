@@ -346,6 +346,21 @@
 }
 .ae-tb__exit:hover { filter: brightness(1.08); }
 
+/* Responsive toolbar: never clip the zoom / style / exit controls. The row
+   scrolls horizontally and condenses to icons on narrow editors. */
+.ae-tb { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; scrollbar-color: rgba(250,242,221,0.3) transparent; }
+.ae-tb::-webkit-scrollbar { height: 5px; }
+.ae-tb::-webkit-scrollbar-thumb { background: rgba(250,242,221,0.28); border-radius: 3px; }
+.ae-tb__brand, .ae-tb__group, .ae-tb__exit, .ae-tb__flyout { flex-shrink: 0; }
+@media (max-width: 1200px) {
+  .ae-tb__group--core .ae-tb__lbl,
+  .ae-tb__group--draw .ae-tb__lbl { display: none; }   /* icon-only tools */
+  .ae-tb__brand span { display: none; }                 /* keep the compass glyph */
+}
+@media (max-width: 900px) {
+  .ae-tb__lbl { display: none; }                         /* icon-only everywhere */
+}
+
 /* Desk area (left rail | canvas | right rail) */
 .atlas-editor__desk {
   display: grid;

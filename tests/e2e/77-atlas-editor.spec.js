@@ -166,4 +166,32 @@ test.describe("T77. Atlas editor — shapes + unplaced tray", () => {
     await expect(editor.locator(`[data-atm-shape='${hall.id}']`)).toHaveCount(0);
     if (process.env.SHOT) await page.screenshot({ path: "/tmp/atlas-drill.png" });
   });
+
+  test("the Path tool draws an open (unfilled) river/road stroke", async ({ page }) => {
+    await openFreshApp(page);
+    const loc = await saveEntity(page, "locations", { name: "Salt River", data: { kind: "river" } }, { status: "active" });
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    await page.locator(`[data-atlas-unplaced='${loc.id}']`).click();   // select the place
+    await editor.locator("[data-testid='ae-tool-draw-path']").click(); // Path tool
+
+    const svg = editor.locator(".atm__svg");
+    const box = await svg.boundingBox();
+    const x0 = box.x + box.width * 0.25, y0 = box.y + box.height * 0.45;
+    await page.mouse.move(x0, y0);
+    await page.mouse.down();
+    await page.mouse.move(x0 + 60, y0 - 25);
+    await page.mouse.move(x0 + 120, y0 + 30);
+    await page.mouse.move(x0 + 180, y0 - 12);
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+
+    const shape = await page.evaluate((id) => window.LoomwrightBackend.EntityService.getSync(id, "locations")?.data?.shape, loc.id);
+    expect(shape.type).toBe("path");
+    expect(shape.points.length).toBeGreaterThanOrEqual(2);
+    // an open line — no fill
+    await expect(editor.locator(`[data-atm-shape='${loc.id}'] path`).first()).toHaveAttribute("fill", "none");
+  });
 });

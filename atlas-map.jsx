@@ -64,13 +64,17 @@ function _amShapeGeom(shape) {
     const pts = shape.points.map((p) => PX(p[0]).toFixed(1) + "," + PY(p[1]).toFixed(1));
     return { tag: "path", props: { d: "M " + pts.join(" L ") + " Z" } };
   }
+  if (shape.type === "path" && Array.isArray(shape.points) && shape.points.length >= 2) {
+    const pts = shape.points.map((p) => PX(p[0]).toFixed(1) + "," + PY(p[1]).toFixed(1));
+    return { tag: "path", props: { d: "M " + pts.join(" L ") }, open: true }; // open stroke (river/road)
+  }
   return null;
 }
 
 // Build a shape from a drag (start → current), in percent coords. Circle
 // radius is measured in plate pixels then expressed as percent-of-width so
 // it renders true-round.
-const _AM_DRAW_TOOLS = new Set(["draw-rect", "draw-circle", "draw-freehand"]);
+const _AM_DRAW_TOOLS = new Set(["draw-rect", "draw-circle", "draw-freehand", "draw-path"]);
 function _amDraftShape(tool, sx, sy, x, y) {
   if (tool === "draw-rect") return { type: "rect", x: Math.min(sx, x), y: Math.min(sy, y), w: Math.abs(x - sx), h: Math.abs(y - sy) };
   if (tool === "draw-circle") {
@@ -112,7 +116,7 @@ function _amReshape(orig, mode, index, dx, dy, p) {
     const rpx = Math.hypot(((p.x - orig.cx) / 100) * 1200, ((p.y - orig.cy) / 100) * 700);
     return { ...orig, r: Math.max(0.5, (rpx / 1200) * 100) };
   }
-  if (mode === "vertex" && (orig.type === "polygon" || orig.type === "freehand")) {
+  if (mode === "vertex" && (orig.type === "polygon" || orig.type === "freehand" || orig.type === "path")) {
     return { ...orig, points: orig.points.map((pt, i) => (i === index ? [clamp(p.x), clamp(p.y)] : pt)) };
   }
   return orig;
@@ -227,11 +231,11 @@ const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, sho
            onDoubleClick={(e) => { if (onDoubleClick) { e.stopPropagation(); onDoubleClick(loc); } }}
            onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc); }}>
           <Tag {...geom.props}
-               fill={clean ? st.fill.replace(/0\.\d+\)/, "0.28)") : st.fill}
+               fill={geom.open ? "none" : (clean ? st.fill.replace(/0\.\d+\)/, "0.28)") : st.fill)}
                stroke={focused ? "#c98a2c" : st.stroke}
-               strokeWidth={focused ? 2 : (shape.type === "freehand" ? 1.6 : 1.2)}
+               strokeWidth={focused ? 2.4 : (geom.open ? 2.6 : (shape.type === "freehand" ? 1.6 : 1.2))}
                strokeLinejoin="round" strokeLinecap="round"
-               strokeDasharray={shape.type === "freehand" ? "0" : (loc.type === "region" ? "7 4" : "0")}/>
+               strokeDasharray={geom.open ? (loc.type === "road" ? "9 5" : "0") : (shape.type === "freehand" ? "0" : (loc.type === "region" ? "7 4" : "0"))}/>
           {showLabels && (
             <text x={c.x} y={c.y} textAnchor="middle" dominantBaseline="central"
                   fontFamily="var(--font-display)" fontSize="12.5" fontWeight="600"
@@ -261,7 +265,7 @@ const AtlasShapeHandles = ({ loc, shape, onHandleDown }) => {
     const cx = PX(shape.cx), cy = PY(shape.cy), r = (Number(shape.r) / 100) * 1200;
     return <g>{H(cx + r, cy, "r", "circle-radius", 0)}</g>;
   }
-  if (shape.type === "polygon" || shape.type === "freehand") {
+  if (shape.type === "polygon" || shape.type === "freehand" || shape.type === "path") {
     return <g>{shape.points.map((p, i) => H(PX(p[0]), PY(p[1]), "v" + i, "vertex", i))}</g>;
   }
   return null;
@@ -601,7 +605,7 @@ const AtlasMap = ({
     e.stopPropagation();
     const p = toPct(e);
     try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch (_e) {}
-    if (tool === "draw-freehand") { drawRef.current = { tool, points: [[p.x, p.y]] }; draftRef.current = { type: "freehand", points: [[p.x, p.y]] }; setDraft(draftRef.current); }
+    if (tool === "draw-freehand" || tool === "draw-path") { const t = tool === "draw-path" ? "path" : "freehand"; drawRef.current = { tool, points: [[p.x, p.y]] }; draftRef.current = { type: t, points: [[p.x, p.y]] }; setDraft(draftRef.current); }
     else { drawRef.current = { tool, sx: p.x, sy: p.y }; draftRef.current = _amDraftShape(tool, p.x, p.y, p.x, p.y); setDraft(draftRef.current); }
   };
   const onPinPointerDown = (e, loc) => {
@@ -652,7 +656,7 @@ const AtlasMap = ({
     const dr = drawRef.current;
     if (!dr) return;
     const p = toPct(e);
-    if (dr.tool === "draw-freehand") { dr.points.push([p.x, p.y]); draftRef.current = { type: "freehand", points: dr.points.slice() }; setDraft(draftRef.current); }
+    if (dr.tool === "draw-freehand" || dr.tool === "draw-path") { dr.points.push([p.x, p.y]); draftRef.current = { type: dr.tool === "draw-path" ? "path" : "freehand", points: dr.points.slice() }; setDraft(draftRef.current); }
     else { draftRef.current = _amDraftShape(dr.tool, dr.sx, dr.sy, p.x, p.y); setDraft(draftRef.current); }
   };
   const finishDraw = () => {
@@ -662,8 +666,10 @@ const AtlasMap = ({
     const d = draftRef.current; draftRef.current = null;
     setDraft(null);
     let shape = null;
-    if (dr.tool === "draw-freehand") { if (d && d.points && d.points.length >= 3) shape = { type: "freehand", points: _amDecimate(d.points) }; }
-    else if (d && ((d.type === "rect" && d.w > 0.8 && d.h > 0.8) || (d.type === "circle" && d.r > 0.4))) shape = d;
+    if (dr.tool === "draw-freehand" || dr.tool === "draw-path") {
+      const min = dr.tool === "draw-path" ? 2 : 3;
+      if (d && d.points && d.points.length >= min) shape = { type: dr.tool === "draw-path" ? "path" : "freehand", points: _amDecimate(d.points) };
+    } else if (d && ((d.type === "rect" && d.w > 0.8 && d.h > 0.8) || (d.type === "circle" && d.r > 0.4))) shape = d;
     if (shape && onDrawShape) onDrawShape(shape);
   };
   const onSvgPointerUp = () => {
@@ -818,11 +824,11 @@ const AtlasMap = ({
 
       {/* Live drawing preview (rect/circle/freehand draft + polygon vertices) */}
       {draft && (() => {
-        const g = _amShapeGeom(draft.type === "freehand" && draft.points.length < 2 ? null : draft);
+        const g = _amShapeGeom(draft);
         if (!g) return null;
         const T = g.tag;
-        return <T {...g.props} fill="rgba(201,138,44,0.16)" stroke="#c98a2c" strokeWidth="1.8"
-                  strokeDasharray="6 3" strokeLinejoin="round" pointerEvents="none"/>;
+        return <T {...g.props} fill={g.open ? "none" : "rgba(201,138,44,0.16)"} stroke="#c98a2c" strokeWidth="1.8"
+                  strokeDasharray="6 3" strokeLinejoin="round" strokeLinecap="round" pointerEvents="none"/>;
       })()}
       {polyPts.length > 0 && (
         <g pointerEvents="none">

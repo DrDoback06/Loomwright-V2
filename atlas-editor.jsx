@@ -42,6 +42,7 @@ const AtlasEdToolbar = ({
         { id: "draw-circle",   icon: "compass", label: "Circle" },
         { id: "draw-polygon",  icon: "branch",  label: "Area" },
         { id: "draw-freehand", icon: "feather", label: "Freehand" },
+        { id: "draw-path",     icon: "link",    label: "Path" },
       ].map((t) => (
         <button key={t.id} className={"ae-tb__btn" + (tool === t.id ? " is-active" : "")}
                 onClick={() => onPickTool(t.id)} data-callback="onPickAtlasTool" data-tool={t.id}

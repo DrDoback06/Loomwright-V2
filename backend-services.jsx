@@ -1157,7 +1157,7 @@
       if (![cx, cy].every(isFinite)) return null;
       return { x: cx, y: cy };
     }
-    if ((shape.type === "polygon" || shape.type === "freehand") && Array.isArray(shape.points) && shape.points.length) {
+    if ((shape.type === "polygon" || shape.type === "freehand" || shape.type === "path") && Array.isArray(shape.points) && shape.points.length) {
       let sx = 0, sy = 0, n = 0;
       for (const p of shape.points) { const px = Number(p[0]), py = Number(p[1]); if (isFinite(px) && isFinite(py)) { sx += px; sy += py; n++; } }
       return n ? { x: sx / n, y: sy / n } : null;
@@ -1178,7 +1178,7 @@
       if (shape.style) c.style = String(shape.style);
       return c;
     }
-    if (shape.type === "polygon" || shape.type === "freehand") {
+    if (shape.type === "polygon" || shape.type === "freehand" || shape.type === "path") {
       const points = (Array.isArray(shape.points) ? shape.points : [])
         .map((p) => [clamp(p[0]), clamp(p[1])]).filter((p) => isFinite(p[0]) && isFinite(p[1]));
       if (points.length < 2) return null;
