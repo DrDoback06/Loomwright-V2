@@ -943,6 +943,13 @@ function _wrEscapeHtml(s) {
 function _wrGenId(prefix) {
   return (prefix || "p") + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
 }
+function _wrReadPref(key, def) {
+  try {
+    const svc = window.LoomwrightBackend && window.LoomwrightBackend.SettingsService;
+    const p = ((svc && svc.getSectionSync("writersRoom", {})) || {}).prefs || {};
+    return p[key] !== undefined ? p[key] : def;
+  } catch (_e) { return def; }
+}
 function _wrCountWords(t) {
   const m = String(t || "").match(/\S+/g);
   return m ? m.length : 0;
@@ -1595,12 +1602,12 @@ const WritersRoomScreen = ({
   }, []);
 
   // Toolbar toggles
-  const [spellcheck, setSpellcheck] = _wrUS(true);
-  const [grammar, setGrammar] = _wrUS(true);
-  const [voice, setVoice] = _wrUS(false);
-  const [styleS, setStyleS] = _wrUS(false);
-  const [revision, setRevision] = _wrUS(false);
-  const [attribution, setAttribution] = _wrUS(true);
+  const [spellcheck, setSpellcheck] = _wrUS(() => _wrReadPref("spellcheck", true));
+  const [grammar, setGrammar] = _wrUS(() => _wrReadPref("grammar", true));
+  const [voice, setVoice] = _wrUS(() => _wrReadPref("voice", false));
+  const [styleS, setStyleS] = _wrUS(() => _wrReadPref("style", false));
+  const [revision, setRevision] = _wrUS(() => _wrReadPref("revision", false));
+  const [attribution, setAttribution] = _wrUS(() => _wrReadPref("attribution", true));
   // Find & Replace
   const [findOpen, setFindOpen] = _wrUS(false);
   const [findQuery, setFindQuery] = _wrUS("");
@@ -1619,6 +1626,13 @@ const WritersRoomScreen = ({
   const [typewriter, setTypewriter] = _wrUS(false);
   const [autosaveOn, setAutosaveOn] = _wrUS(true);
   const autosaveTimerRef = _wrUR(null);
+  // Persist the toolbar preference toggles so they survive reload.
+  _wrUE(() => {
+    try {
+      const svc = window.LoomwrightBackend && window.LoomwrightBackend.SettingsService;
+      if (svc) { const cur = svc.getSectionSync("writersRoom", {}) || {}; svc.saveSection("writersRoom", { ...cur, prefs: { spellcheck, grammar, voice, style: styleS, revision, attribution } }); }
+    } catch (_e) {}
+  }, [spellcheck, grammar, voice, styleS, revision, attribution]);
 
   // Mobile / compact layout — side margins become bottom-sheet drawers and the
   // toolbar wraps. Driven by viewport width OR the onboarding `workspace.mobileCompact` pref.
@@ -1672,7 +1686,7 @@ const WritersRoomScreen = ({
     });
   };
   const [extractions, setExtractions] = _wrUS(() => loadReviewExtractions());
-  const [selectedExtId, setSelectedExtId] = _wrUS("x5");
+  const [selectedExtId, setSelectedExtId] = _wrUS(null);
 
   // Paragraph notes (UAT #19) — source of truth is ManuscriptNoteService,
   // scoped to the active chapter and refreshed on store updates.
@@ -1791,7 +1805,7 @@ const WritersRoomScreen = ({
     setChapters(nextChapters);
     persistChapters(nextChapters, manuscriptsByChapter, activeId);
   }, [chapters, manuscriptsByChapter, activeId, persistChapters]);
-  const onRenameChapter = _wrUC(() => {}, []);
+  const onRenameChapter = _wrUC(() => { try { if (titleRef.current) { titleRef.current.focus(); document.execCommand && document.execCommand("selectAll", false, null); } } catch (_e) {} }, []);
   const onDeleteChapterRequest = _wrUC(() => {
     setDeletingChapter(activeChapter);
   }, [activeChapter]);
