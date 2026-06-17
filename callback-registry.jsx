@@ -438,7 +438,7 @@
       window.dispatchEvent(new CustomEvent("lw:settings-section", { detail: { actionId: "intel" } }));
       return;
     }
-    if (name === "onOpenReviewQueue" || name === "onOpenEntityReviewQueue") {
+    if (/^onOpen\w*ReviewQueue$/.test(name)) {
       openPanel("review");
       return;
     }

@@ -117,6 +117,63 @@ const ThreatBar = ({ level }) => {
   );
 };
 
+const _BES_THREAT = { mundane: 1, minor: 2, moderate: 3, major: 4, apex: 5, mythic: 5, unique: 5, unknown: 1 };
+function _besThreatToNum(v) {
+  if (v == null || v === "") return 1;
+  if (typeof v === "number") return Math.max(1, Math.min(5, Math.round(v)));
+  const n = parseInt(v, 10);
+  if (Number.isFinite(n)) return Math.max(1, Math.min(5, n));
+  return _BES_THREAT[String(v).toLowerCase()] || 2;
+}
+// Adapt a LIVE bestiary entity (fields under entity.data.* with editor ids)
+// into the flat shape BestiaryDetail renders, and derive mentions + source
+// quotes from the occurrence index. Mirrors liveCastToDossier.
+function liveBestiaryToDetail(entity) {
+  if (!entity) return entity;
+  const d = entity.data || {};
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  const refItems = (arr) => (Array.isArray(arr) ? arr : []).filter(Boolean).map((r) => {
+    if (r && typeof r === "object") return { id: r.id, name: r.name || r.label || r.id, type: r.type || "" };
+    let nm = r, ty = "";
+    try { const ent = B && B.EntityService && B.EntityService.getSync(r); if (ent) { nm = ent.name || r; ty = ent.type || ""; } } catch (_e) {}
+    return { id: r, name: nm, type: ty };
+  });
+  const strList = (arr) => (Array.isArray(arr) ? arr : []).map((x) => (x && typeof x === "object" ? (x.name || x.label || "") : x)).filter(Boolean);
+  let occ = [];
+  try { occ = (B && B.OccurrenceService && (B.OccurrenceService.listByEntitySync ? B.OccurrenceService.listByEntitySync(entity.id) : (B.OccurrenceService.listAllSync() || []).filter((o) => o.entityId === entity.id))) || []; } catch (_e) {}
+  let chapters = [];
+  try { chapters = ((B && B.ManuscriptChapterService && B.ManuscriptChapterService.loadSync().chapters) || []).filter((c) => c && !c.reserved); } catch (_e) {}
+  const numById = new Map(); chapters.forEach((c, i) => numById.set(c.id, c.num || i + 1));
+  const maxNum = chapters.reduce((m, c) => Math.max(m, numById.get(c.id) || 0), 0);
+  const mentionsByChapter = maxNum ? new Array(maxNum).fill(0) : [];
+  const sourceMentions = [];
+  for (const o of occ) {
+    if (!o || o.isPronounResolution) continue;
+    const n = numById.get(o.chapterId);
+    if (n != null && mentionsByChapter[n - 1] != null) mentionsByChapter[n - 1] += 1;
+    if (sourceMentions.length < 6 && o.exactText) sourceMentions.push({ id: o.occurrenceId || ("occ-" + sourceMentions.length), cite: n != null ? "Ch. " + n : "—", excerpt: o.exactText, chapterId: o.chapterId });
+  }
+  return {
+    ...entity,
+    species: d.speciesType || d.species || "",
+    habitat: d.habitat || "",
+    behaviour: d.behaviour || "",
+    diet: d.diet || "",
+    threat: _besThreatToNum(d.threatLevel != null ? d.threatLevel : d.threat),
+    summary: entity.summary || d.summary || d.description || "",
+    abilities: strList(d.abilities),
+    weaknesses: strList(d.weaknesses),
+    locations: refItems([...(Array.isArray(d.relatedLocations) ? d.relatedLocations : []), ...(Array.isArray(d.encounterLocations) ? d.encounterLocations : [])]),
+    factions: refItems(d.relatedFactions),
+    quests: refItems(d.relatedQuests),
+    events: refItems(d.relatedEvents),
+    lore: strList(d.lore),
+    encounters: Array.isArray(d.encounters) ? d.encounters : [],
+    mentionsByChapter,
+    sourceMentions,
+  };
+}
+
 const BestiaryDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelatedTab }) => {
   const e = entity || {};
   return (
@@ -214,9 +271,7 @@ const BestiaryDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRel
 
       <div className="rpg-actions">
         <button className="rpg-btn rpg-btn--primary" data-callback="onCreateBestiaryEntry">+ Add creature</button>
-        <button className="rpg-btn" data-callback="onAssignBestiaryHabitat">Assign habitat</button>
-        <button className="rpg-btn" data-callback="onLinkBestiaryLocation">+ Location</button>
-        <button className="rpg-btn" data-callback="onLinkRaceBestiary">Link race</button>
+        {e.id && <button className="rpg-btn" data-testid="bes-fill" onClick={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onFillEntityFromManuscript", detail: { entityId: e.id, entityType: "bestiary" } } }))} title="Suggest fields from this creature's manuscript mentions (lands in Review)">Fill from manuscript</button>}
         <span style={{ flex: 1 }}/>
         <button className="rpg-btn rpg-btn--ghost" data-callback="onOpenBestiaryOnAtlas">Show on Atlas</button>
         <button className="rpg-btn rpg-btn--ghost" data-callback="onEditBestiaryEntry">Edit</button>
@@ -236,7 +291,8 @@ const BestiaryPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   // Live bestiary entries only — never the demo BESTIARY_DATA.
   const _src = (window.LoomwrightBackend?.EntityService?.listSync("bestiary")) || [];
   const filtered = _src.filter((b) => !search || (b.name || "").toLowerCase().includes(search.toLowerCase()));
-  const selected = filtered.find((b) => b.id === selectedId) || null;
+  const _selectedRaw = filtered.find((b) => b.id === selectedId) || null;
+  const selected = _selectedRaw ? liveBestiaryToDetail(_selectedRaw) : null;
 
   return (
     <div className="loc-body" data-ui="BestiaryPanelBody">
@@ -283,7 +339,7 @@ const BestiaryPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                 <BestiaryDetail
                   entity={selected}
                   onSelectEntity={onSelectEntity}
-                  onOpenSourceMention={() => {}}
+                  onOpenSourceMention={(m) => { if (m && m.chapterId) { window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: m.chapterId } })); window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } })); } }}
                   onOpenRelatedTab={onSelectEntity}
                 />
               </div>
