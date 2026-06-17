@@ -1022,7 +1022,7 @@ const AtlasEditor = ({
             layers={layerState} selectedId={selected?.id}
             context={context} scrubChapter={scrubChapter}
             showLabels={showLabels} showIso={showIso} showGrid={showGrid} showTexture={showTexture}
-            variant="editor" onSelect={handleSelect} cleanStyle={cleanStyle}
+            variant="editor" onSelect={handleSelect} cleanStyle={cleanStyle} interior={activeMap !== "world"}
             tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin} onDrawShape={onDrawShape} onReshape={onReshape}
             view={view} onViewChange={setView} onDrillDown={onDrillDown}/>
           {miniMapVisible && <AtlasMiniMap locations={mapLocations} routes={routes} selectedId={selected?.id} context={context}/>}

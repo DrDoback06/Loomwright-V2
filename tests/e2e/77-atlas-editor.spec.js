@@ -149,16 +149,18 @@ test.describe("T77. Atlas editor — shapes + unplaced tray", () => {
     const editor = page.locator("[data-ui='AtlasEditor']");
     await expect(editor).toBeVisible({ timeout: 5000 });
 
-    // World map: the building shows; its interior room does NOT
+    // World map: the building shows; its interior room does NOT; no floor grid
     await expect(editor.locator(`[data-atm-shape='${court.id}']`)).toBeVisible({ timeout: 5000 });
     await expect(editor.locator(`[data-atm-shape='${hall.id}']`)).toHaveCount(0);
+    await expect(editor.locator('.atm__svg [fill="url(#atm-floor)"]')).toHaveCount(0);
 
     // drill into the building
     await editor.locator(`[data-atm-shape='${court.id}']`).dblclick();
     await expect(editor.locator(`[data-atlas-crumb='${court.id}']`)).toBeVisible({ timeout: 5000 });
-    // now the room shows; the building (parent map) does not
+    // now the room shows; the building (parent map) does not; floor-plan backdrop appears
     await expect(editor.locator(`[data-atm-shape='${hall.id}']`)).toBeVisible({ timeout: 5000 });
     await expect(editor.locator(`[data-atm-shape='${court.id}']`)).toHaveCount(0);
+    await expect(editor.locator('.atm__svg [fill="url(#atm-floor)"]').first()).toBeVisible({ timeout: 3000 });
 
     // breadcrumb back to the world
     await editor.locator("[data-atlas-crumb='world']").click();

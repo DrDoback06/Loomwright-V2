@@ -52,6 +52,13 @@ const SHAPE_STYLE_BY_TYPE = {
   _default:    { fill: "rgba(175,150,110,0.16)", stroke: "rgba(100,80,50,0.55)" },
 };
 
+// Stroke weight by scale (architectural line hierarchy) + which types read as
+// "organic" (hand-inked, get the rough filter) vs crisp architectural.
+const SHAPE_LINEW = { world: 2.4, continent: 2.2, country: 2, region: 1.8, city: 1.5, town: 1.3, village: 1.1, district: 1.3, building: 1.7, room: 1.3, road: 0 };
+const SHAPE_ORGANIC = new Set(["world", "continent", "country", "region", "forest", "waterway", "river", "mountain", "ruin", "battlefield", "hidden"]);
+const SHAPE_TEXTURE = { forest: "atm-stipple", waterway: "atm-water", river: "atm-water" };
+const SHAPE_BIGLABEL = new Set(["world", "continent", "country", "region", "waterway"]);
+
 // Build the SVG geometry element spec for a drawn shape. Shape coords are
 // percent (0–100); x maps to the 1200-wide plate, y to the 700-tall plate.
 // Circle radius is percent-of-width so it renders as a true circle.
@@ -123,59 +130,116 @@ function _amReshape(orig, mode, index, dx, dy, p) {
 }
 
 // ---------------------------------------------------------------------
-// Background plate — sea / coast / contours / compass / scale
+// Shared SVG defs — patterns + filters that give the map its premium,
+// antique-cartography × architectural-drafting feel. Rendered once.
 // ---------------------------------------------------------------------
-const AtlasPlate = ({ showIso, showGrid, showTexture }) => (
+const AtlasDefs = () => (
+  <defs>
+    <pattern id="atm-water" patternUnits="userSpaceOnUse" width="13" height="13" patternTransform="rotate(38)">
+      <line x1="0" y1="0" x2="0" y2="13" stroke="rgba(70,98,124,0.16)" strokeWidth="0.6"/>
+    </pattern>
+    <pattern id="atm-grain" patternUnits="userSpaceOnUse" width="3" height="3">
+      <circle cx="1.5" cy="1.5" r="0.4" fill="rgba(120,96,60,0.10)"/>
+    </pattern>
+    <pattern id="atm-stipple" patternUnits="userSpaceOnUse" width="9" height="9">
+      <circle cx="2" cy="2.4" r="0.7" fill="rgba(58,92,46,0.5)"/>
+      <circle cx="6.4" cy="6.2" r="0.6" fill="rgba(58,92,46,0.42)"/>
+    </pattern>
+    <pattern id="atm-hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(74,56,28,0.16)" strokeWidth="0.55"/>
+    </pattern>
+    <pattern id="atm-floor" patternUnits="userSpaceOnUse" width="44" height="44">
+      <path d="M44 0H0V44" fill="none" stroke="rgba(74,56,28,0.15)" strokeWidth="0.7"/>
+      <path d="M22 0V44 M0 22H44" fill="none" stroke="rgba(74,56,28,0.07)" strokeWidth="0.5"/>
+    </pattern>
+    <radialGradient id="atm-land" cx="50%" cy="47%" r="62%">
+      <stop offset="0%" stopColor="#fcf4da" stopOpacity="0.95"/>
+      <stop offset="100%" stopColor="#e9d8af" stopOpacity="0"/>
+    </radialGradient>
+    <radialGradient id="atm-vign" cx="50%" cy="45%" r="74%">
+      <stop offset="56%" stopColor="rgba(46,32,14,0)"/>
+      <stop offset="100%" stopColor="rgba(46,32,14,0.22)"/>
+    </radialGradient>
+    <linearGradient id="atm-floor-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stopColor="#f7f0da"/>
+      <stop offset="100%" stopColor="#eee3c6"/>
+    </linearGradient>
+    <filter id="atm-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="rgba(46,32,14,0.32)"/>
+    </filter>
+    <filter id="atm-rough">
+      <feTurbulence type="fractalNoise" baseFrequency="0.016" numOctaves="2" seed="7" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="2.1"/>
+    </filter>
+  </defs>
+);
+
+const _ATM_LAND_D = "M 30 130 C 60 90, 280 70, 360 200 S 400 380, 320 420 S 100 460, 60 320 Z " +
+  "M 380 290 C 460 260, 620 230, 690 360 S 540 480, 380 420 Z " +
+  "M 740 200 C 820 170, 1100 170, 1140 320 S 980 510, 880 480 S 720 360, 740 200 Z";
+
+// ---------------------------------------------------------------------
+// Background plate — antique sea/coast (world) or a drafting floor grid
+// (interior), framed like an engraved map sheet.
+// ---------------------------------------------------------------------
+const AtlasPlate = ({ showIso, showGrid, showTexture, interior = false }) => (
   <g aria-hidden>
-    <defs>
-      <pattern id="atm-water" patternUnits="userSpaceOnUse" width="14" height="14" patternTransform="rotate(38)">
-        <line x1="0" y1="0" x2="0" y2="14" stroke="rgba(80,100,120,0.18)" strokeWidth="0.6"/>
-      </pattern>
-      <pattern id="atm-grain" patternUnits="userSpaceOnUse" width="3" height="3">
-        <circle cx="1.5" cy="1.5" r="0.4" fill="rgba(120, 96, 60, 0.10)"/>
-      </pattern>
-      <radialGradient id="atm-land" cx="50%" cy="50%" r="65%">
-        <stop offset="0%"  stopColor="#fbf2d6" stopOpacity="0.92"/>
-        <stop offset="100%" stopColor="#ebdcb4" stopOpacity="0.0"/>
-      </radialGradient>
-    </defs>
-    <rect x="0" y="0" width="1200" height="700" fill="url(#atm-water)" opacity="0.55"/>
-    <path d="M 30 130 C 60 90, 280 70, 360 200 S 400 380, 320 420 S 100 460, 60 320 Z
-             M 380 290 C 460 260, 620 230, 690 360 S 540 480, 380 420 Z
-             M 740 200 C 820 170, 1100 170, 1140 320 S 980 510, 880 480 S 720 360, 740 200 Z"
-      fill="url(#atm-land)" stroke="rgba(74,56,28,0.55)" strokeWidth="1.5"/>
-    {showTexture && <rect x="0" y="0" width="1200" height="700" fill="url(#atm-grain)" opacity="0.4"/>}
-    {showIso && (
-      <g stroke="rgba(120,96,60,0.30)" strokeWidth="0.6" fill="none">
-        <ellipse cx="180" cy="260" rx="120" ry="80"/>
-        <ellipse cx="180" cy="260" rx="80"  ry="55"/>
-        <ellipse cx="180" cy="260" rx="40"  ry="28"/>
-        <ellipse cx="540" cy="360" rx="140" ry="80" transform="rotate(-12 540 360)"/>
-        <ellipse cx="540" cy="360" rx="90"  ry="50" transform="rotate(-12 540 360)"/>
-        <ellipse cx="940" cy="320" rx="160" ry="120"/>
-        <ellipse cx="940" cy="320" rx="110" ry="80"/>
-        <ellipse cx="940" cy="320" rx="60"  ry="40"/>
+    <AtlasDefs/>
+    {interior ? (
+      <g>
+        <rect x="0" y="0" width="1200" height="700" fill="url(#atm-floor-bg)"/>
+        <rect x="0" y="0" width="1200" height="700" fill="url(#atm-floor)"/>
+        {showTexture && <rect x="0" y="0" width="1200" height="700" fill="url(#atm-grain)" opacity="0.3"/>}
+      </g>
+    ) : (
+      <g>
+        <rect x="0" y="0" width="1200" height="700" fill="#eaddbb"/>
+        <rect x="0" y="0" width="1200" height="700" fill="url(#atm-water)" opacity="0.6"/>
+        {/* land: a soft coastline band beneath a crisp inked, hand-wobbled edge */}
+        <path d={_ATM_LAND_D} fill="url(#atm-land)" stroke="rgba(74,56,28,0.16)" strokeWidth="7" filter="url(#atm-rough)"/>
+        <path d={_ATM_LAND_D} fill="none" stroke="rgba(74,56,28,0.62)" strokeWidth="1.5" filter="url(#atm-rough)"/>
+        {showTexture && <rect x="0" y="0" width="1200" height="700" fill="url(#atm-grain)" opacity="0.4"/>}
+        {showIso && (
+          <g stroke="rgba(120,96,60,0.26)" strokeWidth="0.6" fill="none">
+            <ellipse cx="180" cy="260" rx="120" ry="80"/><ellipse cx="180" cy="260" rx="80" ry="55"/><ellipse cx="180" cy="260" rx="40" ry="28"/>
+            <ellipse cx="540" cy="360" rx="140" ry="80" transform="rotate(-12 540 360)"/><ellipse cx="540" cy="360" rx="90" ry="50" transform="rotate(-12 540 360)"/>
+            <ellipse cx="940" cy="320" rx="160" ry="120"/><ellipse cx="940" cy="320" rx="110" ry="80"/><ellipse cx="940" cy="320" rx="60" ry="40"/>
+          </g>
+        )}
       </g>
     )}
-    {showGrid && (
-      <g stroke="rgba(120,96,60,0.18)" strokeWidth="0.5">
-        {Array.from({ length: 12 }).map((_, i) => <line key={"v"+i} x1={(i+1)*100} y1="0" x2={(i+1)*100} y2="700"/>)}
-        {Array.from({ length: 7  }).map((_, i) => <line key={"h"+i} x1="0" y1={(i+1)*100} x2="1200" y2={(i+1)*100}/>)}
+    {showGrid && !interior && (
+      <g stroke="rgba(120,96,60,0.16)" strokeWidth="0.5">
+        {Array.from({ length: 11 }).map((_, i) => <line key={"v" + i} x1={(i + 1) * 100} y1="0" x2={(i + 1) * 100} y2="700"/>)}
+        {Array.from({ length: 6 }).map((_, i) => <line key={"h" + i} x1="0" y1={(i + 1) * 100} x2="1200" y2={(i + 1) * 100}/>)}
       </g>
     )}
-    <g transform="translate(1090, 90)" opacity="0.55">
-      <circle r="32" fill="none" stroke="#4a381c" strokeWidth="0.7"/>
+    {/* Compass rose */}
+    <g transform="translate(1092, 92)" opacity="0.6">
+      <circle r="33" fill="rgba(250,242,221,0.35)" stroke="#4a381c" strokeWidth="0.8"/>
       <circle r="22" fill="none" stroke="#4a381c" strokeWidth="0.4" strokeDasharray="2 4"/>
-      <path d="M 0 -30 L 4 0 L 0 30 L -4 0 Z" fill="rgba(74,56,28,0.55)"/>
-      <path d="M -30 0 L 0 4 L 30 0 L 0 -4 Z" fill="rgba(74,56,28,0.30)"/>
-      <text x="0" y="-36" textAnchor="middle" fontFamily="var(--font-display)" fontSize="11" fill="rgba(74,56,28,0.75)">N</text>
+      <path d="M 0 -31 L 5 0 L 0 31 L -5 0 Z" fill="rgba(74,56,28,0.62)"/>
+      <path d="M -31 0 L 0 5 L 31 0 L 0 -5 Z" fill="rgba(74,56,28,0.30)"/>
+      <text x="0" y="-37" textAnchor="middle" fontFamily="var(--font-display)" fontSize="11" fill="rgba(74,56,28,0.8)">N</text>
     </g>
-    <g transform="translate(1010, 660)" opacity="0.6">
-      <line x1="0" y1="0" x2="120" y2="0" stroke="rgba(74,56,28,0.7)" strokeWidth="0.8"/>
-      <line x1="0" y1="-3" x2="0" y2="3" stroke="rgba(74,56,28,0.7)" strokeWidth="0.8"/>
-      <line x1="60" y1="-2" x2="60" y2="2" stroke="rgba(74,56,28,0.5)" strokeWidth="0.6"/>
-      <line x1="120" y1="-3" x2="120" y2="3" stroke="rgba(74,56,28,0.7)" strokeWidth="0.8"/>
-      <text x="60" y="-6" textAnchor="middle" fontFamily="var(--font-sans)" fontSize="8.5" fill="rgba(74,56,28,0.8)" letterSpacing="0.15em">100 LEAGUES</text>
+    {/* Scale bar (world) */}
+    {!interior && (
+      <g transform="translate(1006, 662)" opacity="0.62">
+        <line x1="0" y1="0" x2="120" y2="0" stroke="rgba(74,56,28,0.72)" strokeWidth="0.9"/>
+        <line x1="0" y1="-3" x2="0" y2="3" stroke="rgba(74,56,28,0.72)" strokeWidth="0.9"/>
+        <line x1="60" y1="-2" x2="60" y2="2" stroke="rgba(74,56,28,0.5)" strokeWidth="0.6"/>
+        <line x1="120" y1="-3" x2="120" y2="3" stroke="rgba(74,56,28,0.72)" strokeWidth="0.9"/>
+        <text x="60" y="-6" textAnchor="middle" fontFamily="var(--font-sans)" fontSize="8.5" fill="rgba(74,56,28,0.82)" letterSpacing="0.15em">100 LEAGUES</text>
+      </g>
+    )}
+    {/* Aged vignette + engraved double-frame with corner ticks */}
+    <rect x="0" y="0" width="1200" height="700" fill="url(#atm-vign)" pointerEvents="none"/>
+    <g fill="none" stroke="rgba(74,56,28,0.5)" pointerEvents="none">
+      <rect x="13" y="13" width="1174" height="674" rx="3" strokeWidth="1.6"/>
+      <rect x="19.5" y="19.5" width="1161" height="661" rx="2" strokeWidth="0.7" opacity="0.55"/>
+      {[[13, 13, 1, 1], [1187, 13, -1, 1], [13, 687, 1, -1], [1187, 687, -1, -1]].map(([x, y, sx, sy], i) => (
+        <path key={i} d={`M ${x} ${y + sy * 26} L ${x} ${y} L ${x + sx * 26} ${y}`} strokeWidth="2.2"/>
+      ))}
     </g>
   </g>
 );
@@ -224,23 +288,34 @@ const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, sho
       const dim = (ctxLocs && !ctxLocs.has(loc.id)) || (dimFn && dimFn(loc));
       const c = _amPx(loc); // centroid (buildAtlasDataSync set coords to it)
       const Tag = geom.tag;
+      const isPath = !!geom.open;
+      const organic = !isPath && SHAPE_ORGANIC.has(loc.type);
+      const baseW = SHAPE_LINEW[loc.type] != null ? SHAPE_LINEW[loc.type] : 1.4;
+      const sw = focused ? baseW + 1.1 : (isPath ? 2.6 : baseW);
+      const texId = !isPath && SHAPE_TEXTURE[loc.type];
+      const big = SHAPE_BIGLABEL.has(loc.type);
       return (
         <g key={loc.id} data-atm-shape={loc.id} className={"atm-shape" + (focused ? " is-focused" : "")}
-           opacity={dim ? 0.3 : 1} style={{ cursor: focused ? "move" : "pointer" }}
+           opacity={dim ? 0.32 : 1} style={{ cursor: focused ? "move" : "pointer" }}
            onPointerDown={(e) => onShapePointerDown && onShapePointerDown(e, loc)}
            onDoubleClick={(e) => { if (onDoubleClick) { e.stopPropagation(); onDoubleClick(loc); } }}
            onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc); }}>
-          <Tag {...geom.props}
-               fill={geom.open ? "none" : (clean ? st.fill.replace(/0\.\d+\)/, "0.28)") : st.fill)}
-               stroke={focused ? "#c98a2c" : st.stroke}
-               strokeWidth={focused ? 2.4 : (geom.open ? 2.6 : (shape.type === "freehand" ? 1.6 : 1.2))}
-               strokeLinejoin="round" strokeLinecap="round"
-               strokeDasharray={geom.open ? (loc.type === "road" ? "9 5" : "0") : (shape.type === "freehand" ? "0" : (loc.type === "region" ? "7 4" : "0"))}/>
+          <g filter="url(#atm-shadow)">
+            <Tag {...geom.props}
+                 fill={isPath ? "none" : (clean ? st.fill.replace(/0?\.\d+\)/, "0.30)") : st.fill)}
+                 stroke={focused ? "#c98a2c" : st.stroke}
+                 strokeWidth={sw} strokeLinejoin="round" strokeLinecap="round"
+                 strokeDasharray={isPath ? (loc.type === "road" ? "9 5" : "0") : (loc.type === "region" ? "8 5" : "0")}
+                 filter={organic && !clean ? "url(#atm-rough)" : undefined}/>
+            {texId && <Tag {...geom.props} fill={`url(#${texId})`} stroke="none" opacity={0.7} pointerEvents="none"/>}
+          </g>
           {showLabels && (
             <text x={c.x} y={c.y} textAnchor="middle" dominantBaseline="central"
-                  fontFamily="var(--font-display)" fontSize="12.5" fontWeight="600"
-                  fill="#3a2c12" pointerEvents="none"
-                  style={{ paintOrder: "stroke", stroke: "rgba(250,242,221,0.85)", strokeWidth: 2.5 }}>{loc.name}</text>
+                  fontFamily="var(--font-display)" fontSize={big ? 13 : 12} fontWeight="600"
+                  letterSpacing={big ? "0.2em" : "0.01em"} fill="#3a2c12" pointerEvents="none"
+                  style={{ paintOrder: "stroke", stroke: "rgba(250,242,221,0.9)", strokeWidth: 3, strokeLinejoin: "round" }}>
+              {big ? (loc.name || "").toUpperCase() : loc.name}
+            </text>
           )}
         </g>
       );
@@ -498,7 +573,7 @@ const AtlasMap = ({
   layers = {}, selectedId, onSelect, onPan,
   context = null, scrubChapter = null,
   showLabels = true, showIso = true, showGrid = false, showTexture = true,
-  variant = "side", className = "", cleanStyle = false,
+  variant = "side", className = "", cleanStyle = false, interior = false,
   // Live editing (editor variant): active tool + placement callbacks.
   tool = "select", onMapPoint = null, onMovePin = null, onDrawShape = null, onReshape = null,
   view = null, onViewChange = null, onDrillDown = null,
@@ -743,7 +818,7 @@ const AtlasMap = ({
          onPointerDown={onSvgPointerDown} onPointerMove={onSvgPointerMove}
          onPointerUp={onSvgPointerUp} onPointerCancel={onSvgPointerUp} onLostPointerCapture={onSvgPointerUp}>
       <g transform={`translate(${vt.x},${vt.y}) scale(${vt.z})`}>
-      <AtlasPlate showIso={showIso} showGrid={showGrid} showTexture={showTexture}/>
+      <AtlasPlate showIso={showIso} showGrid={showGrid} showTexture={showTexture} interior={interior}/>
 
       {/* Region polygons under everything */}
       <g opacity={opOf("regions")}><AtlasRegions locations={locations} layers={layers} highlight={regionHighlight}/></g>
