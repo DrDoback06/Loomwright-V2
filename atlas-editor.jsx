@@ -393,16 +393,20 @@ const AtlasEdInspectorTab = ({ selected, locById, routes, beasts, items, faction
   }
   const parent = selected.parent && locById[selected.parent];
   const children = Object.values(locById).filter((l) => l.parent === selected.id);
+  const _aeB = (typeof window !== "undefined") && window.LoomwrightBackend;
+  const _aeUpd = (patch) => { try { if (_aeB && _aeB.EntityService && selected.id) { _aeB.EntityService.update("locations", selected.id, patch); window.dispatchEvent(new CustomEvent("lw:entity-store-updated")); } } catch (_e) {} };
+  const _aeData = () => { try { return (_aeB && _aeB.EntityService && (_aeB.EntityService.getSync(selected.id, "locations") || {}).data) || {}; } catch (_e) { return {}; } };
+  const _aeOpenEditor = () => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations", initial: { id: selected.id }, mode: "full" } }));
   return (
     <div className="ae-insp">
       <div className="ae-insp__head">
         <span className={"ae-insp__type-dot ae-reg__type--" + selected.type}/>
-        <input className="ae-insp__name" defaultValue={selected.name}/>
-        <button className="ae-insp__more"><Icon name="more" size={12}/></button>
+        <input className="ae-insp__name" defaultValue={selected.name} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== selected.name) _aeUpd({ name: v }); }}/>
+        <button className="ae-insp__more" title="Open full editor" onClick={_aeOpenEditor}><Icon name="more" size={12}/></button>
       </div>
       <div className="ae-insp__row">
         <label>Type</label>
-        <select defaultValue={selected.type}>
+        <select defaultValue={selected.type} onChange={(e) => _aeUpd({ data: { ..._aeData(), kind: e.target.value } })}>
           {["country","region","city","town","village","district","building","room","ruin","battlefield","hidden","road"].map((t) => <option key={t}>{t}</option>)}
         </select>
       </div>
@@ -420,7 +424,7 @@ const AtlasEdInspectorTab = ({ selected, locById, routes, beasts, items, faction
       ))}
       <div className="ae-insp__row ae-insp__row--block">
         <label>Summary</label>
-        <textarea defaultValue={selected.summary} rows={3}/>
+        <textarea defaultValue={selected.summary} rows={3} onBlur={(e) => { const v = e.target.value; if (v !== (selected.summary || "")) _aeUpd({ summary: v, data: { ..._aeData(), summary: v } }); }}/>
       </div>
       {children.length > 0 && (
         <div className="ae-insp__sec">
@@ -436,9 +440,8 @@ const AtlasEdInspectorTab = ({ selected, locById, routes, beasts, items, faction
         </div>
       )}
       <div className="ae-insp__sec ae-insp__sec--actions">
-        <button className="ae-insp__btn">Move on map</button>
-        <button className="ae-insp__btn">Reparent…</button>
-        <button className="ae-insp__btn ae-insp__btn--danger">Delete</button>
+        <button className="ae-insp__btn" onClick={_aeOpenEditor}>Reparent…</button>
+        <button className="ae-insp__btn ae-insp__btn--danger" onClick={() => { if (_aeB && _aeB.EntityService && selected.id && (typeof window.confirm !== "function" || window.confirm("Move " + selected.name + " to the trash?"))) { _aeB.EntityService.delete("locations", selected.id); window.dispatchEvent(new CustomEvent("lw:entity-store-updated")); onSelectLoc && onSelectLoc(null); } }}>Delete</button>
       </div>
     </div>
   );
@@ -654,21 +657,28 @@ const AtlasEdRelatedTab = ({ selected, locById, routes, beasts, items, factions,
 // Source tab — manuscript mentions
 // ---------------------------------------------------------------------
 const AtlasEdSourceTab = ({ selected }) => {
-  const mentions = !selected ? [] : [
-    { cite: "Ch. 1, p. 12", text: "...the " + selected.name + " was already lit before dawn..." },
-    { cite: "Ch. 3, p. 76", text: "...she would not see " + selected.name + " again before the snow..." },
-    { cite: "Ch. 7, p. 211", text: "...inside " + selected.name + ", the doors were already open..." },
-  ];
   if (!selected) return <div className="ae-source ae-source--empty"><p className="muted">Pick a location to see manuscript mentions.</p></div>;
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  let occ = [], chapters = [];
+  try { occ = (B && B.OccurrenceService && (B.OccurrenceService.listByEntitySync ? B.OccurrenceService.listByEntitySync(selected.id) : (B.OccurrenceService.listAllSync() || []).filter((o) => o.entityId === selected.id))) || []; } catch (_e) {}
+  try { chapters = ((B && B.ManuscriptChapterService && B.ManuscriptChapterService.loadSync().chapters) || []).filter((c) => c && !c.reserved); } catch (_e) {}
+  const numById = new Map(); chapters.forEach((c, i) => numById.set(c.id, c.num || i + 1));
+  const mentions = occ.filter((o) => o && !o.isPronounResolution && o.exactText).slice(0, 30).map((o, i) => ({
+    id: o.occurrenceId || ("occ-" + i),
+    cite: numById.has(o.chapterId) ? ("Ch. " + numById.get(o.chapterId)) : "—",
+    text: o.exactText,
+    chapterId: o.chapterId,
+  }));
+  if (!mentions.length) return <div className="ae-source ae-source--empty"><p className="muted">No manuscript mentions of {selected.name} yet — run Save &amp; Extract in the Writer's Room.</p></div>;
   return (
     <div className="ae-source">
-      <div className="ae-source__head">{mentions.length} mentions in manuscript</div>
-      {mentions.map((m, i) => (
-        <div key={i} className="ae-source__card">
+      <div className="ae-source__head">{mentions.length} mention{mentions.length === 1 ? "" : "s"} in manuscript</div>
+      {mentions.map((m) => (
+        <div key={m.id} className="ae-source__card">
           <div className="ae-source__cite">{m.cite}</div>
-          <p>{m.text}</p>
+          <p>"{m.text}"</p>
           <div className="ae-source__actions">
-            <button>Open in Writer's Room →</button>
+            <button onClick={() => { if (m.chapterId) { window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: m.chapterId } })); window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } })); } }}>Open in Writer's Room →</button>
           </div>
         </div>
       ))}
