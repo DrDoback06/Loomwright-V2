@@ -183,6 +183,9 @@
   flex-direction: column;
   pointer-events: none; /* zones re-enable */
 }
+/* The desktop docked-zone wrapper has no role on mobile (one full-screen
+   sheet, column .pstk) — dissolve its box so zones stay direct flex children. */
+.app-shell[data-mobile="true"] .pstk__docked-wrap { display: contents; }
 .app-shell[data-mobile="true"] .pstk__zone {
   flex: 1;
   min-height: 0;

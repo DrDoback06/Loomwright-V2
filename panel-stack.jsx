@@ -237,6 +237,7 @@ const DockedPanel = ({
   onBringPanelToFront, onReorderPanels,
   onOpenReviewQueue, onSelectEntity, onClearPanelFilter,
   onToggleFloatPanel, onMoveFloatPanel, onResizeFloatPanel, onMergeFloatPanels,
+  onDockPanel, onUndockPanel, onDockHint,
   panelActions,
   zoneClass = "",
 }) => {
@@ -244,20 +245,43 @@ const DockedPanel = ({
   // Floating mode: the panel positions itself as a fixed, movable/resizable
   // window over the workspace (opt-in; the docked stack is unchanged).
   const floating = !!panel.floating;
+  // Edge-docked mode: the panel fills its edge region (positioned by the
+  // EdgeDock wrapper in PanelStack); the route content reflows around it.
+  const docked = !!panel.dock;
   const f = panel.float || { x: 140, y: 96, w: 400, h: 480 };
   const floatStyle = floating
     ? { position: "fixed", left: f.x, top: f.y, width: f.w, height: f.h, zIndex: 230 + (panel.order || 0), display: "flex", flexDirection: "column", margin: 0 }
+    : docked
+    ? { position: "relative", width: "100%", height: "100%", display: "flex", flexDirection: "column", margin: 0, minHeight: 0, minWidth: 0 }
     : undefined;
+  // While dragging a floating panel's header, snap-zone near a workspace edge.
+  const _edgeAt = (cx, cy) => {
+    const work = (typeof document !== "undefined") && document.querySelector(".app-work");
+    if (!work) return null;
+    const r = work.getBoundingClientRect(); const T = 48;
+    if (cx - r.left < T) return "left";
+    if (r.right - cx < T) return "right";
+    if (cy - r.top < T) return "top";
+    if (r.bottom - cy < T) return "bottom";
+    return null;
+  };
   const startFloatMove = (e) => {
     if (!floating || !e.target.closest) return;
     if (!e.target.closest(".pstk__head") || e.target.closest("button, input, select, textarea")) return;
     e.preventDefault();
     onBringPanelToFront && onBringPanelToFront(panel.id);
     const sx = e.clientX, sy = e.clientY, ox = f.x, oy = f.y;
-    const mv = (ev) => onMoveFloatPanel && onMoveFloatPanel(panel.id, Math.max(0, Math.round(ox + ev.clientX - sx)), Math.max(0, Math.round(oy + ev.clientY - sy)));
+    const mv = (ev) => {
+      onMoveFloatPanel && onMoveFloatPanel(panel.id, Math.max(0, Math.round(ox + ev.clientX - sx)), Math.max(0, Math.round(oy + ev.clientY - sy)));
+      onDockHint && onDockHint(_edgeAt(ev.clientX, ev.clientY));
+    };
     const up = (ev) => {
       document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up);
-      // Drop onto another floating panel → nest into its tab group.
+      onDockHint && onDockHint(null);
+      // Near a workspace edge → dock into that edge as a split region.
+      const edge = ev && _edgeAt(ev.clientX, ev.clientY);
+      if (edge && onDockPanel) { onDockPanel(panel.id, edge); return; }
+      // Otherwise: drop onto another floating panel → nest into its tab group.
       if (onMergeFloatPanels && ev && document.elementsFromPoint) {
         const stack = document.elementsFromPoint(ev.clientX, ev.clientY) || [];
         for (const el of stack) {
@@ -295,6 +319,7 @@ const DockedPanel = ({
     isFront && "is-front",
     panel.pinned && "is-pinned",
     floating && "is-floating",
+    docked && "is-edge-docked",
   ].filter(Boolean).join(" ");
 
   return (
@@ -308,7 +333,7 @@ const DockedPanel = ({
       data-pinned={panel.pinned ? "true" : "false"}
       role="dialog"
       aria-label={panel.title}
-      draggable={!floating}
+      draggable={!floating && !docked}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
@@ -483,12 +508,15 @@ const DockedPanel = ({
 //   onClearPanelFilter(panelId) — clears the focus filter for that panel.
 // ---------------------------------------------------------------------
 const PanelStack = ({
-  panels, focusedByType,
+  panels, focusedByType, dockInsets,
   onClosePanel, onPinPanel, onExpandPanel,
   onToggleFloatPanel, onMoveFloatPanel, onResizeFloatPanel, onMergeFloatPanels, onSplitFloatPanel,
+  onDockPanel, onUndockPanel, onResizeDockPanel,
   onBringPanelToFront, onReorderPanels, onRestorePanel,
   onOpenReviewQueue, onSelectEntity, onClearPanelFilter,
 }) => {
+  // Transient highlight shown while a floating panel is dragged near an edge.
+  const [dockHint, setDockHint] = React.useState(null);
   const panelActions = {
     ...(window.LoomwrightCallbacks || {}),
     onSelectEntity,
@@ -512,10 +540,11 @@ const PanelStack = ({
   // Sort by 'order' for deterministic render
   const sorted = [...panels].sort((a, b) => (a.order || 0) - (b.order || 0));
 
-  // Floating (popped-out) panels live in their own fixed layer — keep them out
-  // of the docked zone maths entirely.
-  const floatingPanels = isMobile ? [] : sorted.filter((p) => p.floating && !p.collapsed);
-  const docked = isMobile ? sorted : sorted.filter((p) => !p.floating);
+  // Edge-docked panels occupy resizable edge regions; floating panels live in
+  // a fixed layer. Both are kept out of the stacked-zone maths entirely.
+  const edgeDocked   = isMobile ? [] : sorted.filter((p) => p.dock && !p.collapsed);
+  const floatingPanels = isMobile ? [] : sorted.filter((p) => p.floating && !p.dock && !p.collapsed);
+  const docked = isMobile ? sorted : sorted.filter((p) => !p.floating && !p.dock);
 
   const pinned       = isMobile ? [] : docked.filter((p) => p.pinned && !p.collapsed);
   const unpinnedAll  = isMobile ? docked.filter((p) => !p.collapsed) : docked.filter((p) => !p.pinned && !p.collapsed);
@@ -561,40 +590,56 @@ const PanelStack = ({
       onMoveFloatPanel={onMoveFloatPanel}
       onResizeFloatPanel={onResizeFloatPanel}
       onMergeFloatPanels={onMergeFloatPanels}
+      onDockPanel={onDockPanel}
+      onUndockPanel={onUndockPanel}
+      onDockHint={setDockHint}
       panelActions={panelActions}
       zoneClass={zoneClass}
     />
   );
 
+  const rightDockW = (dockInsets && dockInsets.right) || 0;
   return (
-    <div className="pstk pstk--concept-a" data-ui="PanelStack" data-count={panels.length}>
-      {/* Pinned anchor zone — closest to Writer's Room */}
-      {pinned.length > 0 && (
-        <div className="pstk__zone pstk__zone--pinned" data-ui="PanelStackPinned" aria-label="Pinned panels">
-          {pinned.map((p) => renderPanel(p, "pstk__panel--pinned"))}
-        </div>
-      )}
+    <div className="pstk pstk--concept-a" data-ui="PanelStack" data-count={panels.length} data-has-dock={edgeDocked.length ? "true" : "false"}>
+      {/* In-flow stacked zones, shifted inboard of any right-edge dock. */}
+      <div className="pstk__docked-wrap" style={{ marginRight: rightDockW }}>
+        {/* Pinned anchor zone — closest to Writer's Room */}
+        {pinned.length > 0 && (
+          <div className="pstk__zone pstk__zone--pinned" data-ui="PanelStackPinned" aria-label="Pinned panels">
+            {pinned.map((p) => renderPanel(p, "pstk__panel--pinned"))}
+          </div>
+        )}
 
-      {/* Unpinned visible stack */}
-      {visible.length > 0 && (
-        <div className="pstk__zone pstk__zone--stack" data-ui="PanelStackStack" aria-label="Open panels">
-          {visible.map((p) => renderPanel(p, "pstk__panel--stack"))}
-        </div>
-      )}
+        {/* Unpinned visible stack */}
+        {visible.length > 0 && (
+          <div className="pstk__zone pstk__zone--stack" data-ui="PanelStackStack" aria-label="Open panels">
+            {visible.map((p) => renderPanel(p, "pstk__panel--stack"))}
+          </div>
+        )}
 
-      {/* Collapsed / overflow rail (vertical tabs) */}
-      {railTabs.length > 0 && (
-        <div className="pstk__rail" data-ui="PanelStackRail" aria-label="Collapsed panels">
-          {railTabs.map((p) => (
-            <CollapsedPanelTab
-              key={p.id}
-              panel={p}
-              onRestorePanel={onRestorePanel || onBringPanelToFront}
-              onClosePanel={onClosePanel}
-            />
-          ))}
-        </div>
-      )}
+        {/* Collapsed / overflow rail (vertical tabs) */}
+        {railTabs.length > 0 && (
+          <div className="pstk__rail" data-ui="PanelStackRail" aria-label="Collapsed panels">
+            {railTabs.map((p) => (
+              <CollapsedPanelTab
+                key={p.id}
+                panel={p}
+                onRestorePanel={onRestorePanel || onBringPanelToFront}
+                onClosePanel={onClosePanel}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Edge-docked split regions — resizable strips on each edge. */}
+      {edgeDocked.map((p) => (
+        <EdgeDockRegion key={"ed-" + p.id} panel={p} insets={dockInsets}
+          onResizeDockPanel={onResizeDockPanel} renderPanel={renderPanel}/>
+      ))}
+
+      {/* Drop hint while dragging a float toward an edge. */}
+      {dockHint && <DockDropHint edge={dockHint} insets={dockInsets}/>}
 
       {/* Floating (popped-out) panels — fixed windows. Panels sharing a
           groupId nest into one frame with a tab strip (Adobe-style). */}
@@ -614,6 +659,61 @@ const PanelStack = ({
         return out;
       })()}
     </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// EdgeDockRegion — a resizable split region on one workspace edge.
+// Left/right span full height; top/bottom sit between the side docks.
+// A splitter on the inner edge resizes against the .app-work rect.
+// ---------------------------------------------------------------------
+const EdgeDockRegion = ({ panel, insets, onResizeDockPanel, renderPanel }) => {
+  const edge = panel.dock;
+  const size = panel.dockSize || ((edge === "top" || edge === "bottom") ? 240 : 360);
+  const L = (insets && insets.left) || 0, R = (insets && insets.right) || 0;
+  const pos = edge === "left"   ? { left: 0, top: 0, bottom: 0, width: size }
+            : edge === "right"  ? { right: 0, top: 0, bottom: 0, width: size }
+            : edge === "top"    ? { left: L, right: R, top: 0, height: size }
+            :                     { left: L, right: R, bottom: 0, height: size };
+  const horiz = edge === "left" || edge === "right";
+  const startResize = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const work = (typeof document !== "undefined") && document.querySelector(".app-work");
+    const mv = (ev) => {
+      if (!work || !onResizeDockPanel) return;
+      const r = work.getBoundingClientRect();
+      const next = edge === "left"  ? ev.clientX - r.left
+                 : edge === "right" ? r.right - ev.clientX
+                 : edge === "top"   ? ev.clientY - r.top
+                 :                    r.bottom - ev.clientY;
+      onResizeDockPanel(panel.id, next);
+    };
+    const up = () => { document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up); };
+    document.addEventListener("pointermove", mv); document.addEventListener("pointerup", up);
+  };
+  const resizerStyle = horiz
+    ? { position: "absolute", top: 0, bottom: 0, width: 7, cursor: "ew-resize", [edge === "left" ? "right" : "left"]: -3, zIndex: 5 }
+    : { position: "absolute", left: 0, right: 0, height: 7, cursor: "ns-resize", [edge === "top" ? "bottom" : "top"]: -3, zIndex: 5 };
+  return (
+    <div className={"pstk-edge-dock pstk-edge-dock--" + edge} data-ui="EdgeDock" data-edge={edge}
+         style={{ position: "absolute", ...pos, pointerEvents: "auto", display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0 }}>
+      {renderPanel(panel, "pstk__panel--docked")}
+      <span className="pstk-edge-dock__resizer" data-testid={"dock-resize-" + edge} onPointerDown={startResize} title="Resize" style={resizerStyle}/>
+    </div>
+  );
+};
+
+// Translucent edge highlight shown while a float is dragged toward an edge.
+const DockDropHint = ({ edge, insets }) => {
+  const L = (insets && insets.left) || 0, R = (insets && insets.right) || 0;
+  const pos = edge === "left"   ? { left: 0, top: 0, bottom: 0, width: 360 }
+            : edge === "right"  ? { right: 0, top: 0, bottom: 0, width: 360 }
+            : edge === "top"    ? { left: L, right: R, top: 0, height: 240 }
+            :                     { left: L, right: R, bottom: 0, height: 240 };
+  return (
+    <div className="pstk-dock-hint" data-ui="DockDropHint" data-edge={edge}
+         style={{ position: "absolute", ...pos, pointerEvents: "none", zIndex: 6500,
+                  background: "rgba(201,138,44,0.18)", border: "2px dashed var(--gold, #c98a2c)", borderRadius: 8, transition: "all 90ms" }}/>
   );
 };
 

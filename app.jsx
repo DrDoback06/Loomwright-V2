@@ -924,6 +924,7 @@ const AppShell = () => {
     const floatN = curr.filter((p) => p.floating).length;
     return curr.map((p) => {
       if (p.id !== id) return p;
+      if (p.dock) return { ...p, dock: null, floating: true, order: max + 1 }; // undock → float
       if (p.floating) return { ...p, floating: false, order: max + 1 };
       const off = (floatN % 6) * 30;
       return { ...p, floating: true, collapsed: false, pinned: false, order: max + 1, float: p.float || { x: 140 + off, y: 96 + off, w: 400, h: 480 } };
@@ -952,6 +953,30 @@ const AppShell = () => {
     const max = curr.reduce((a, p) => Math.max(a, p.order || 0), 0);
     return curr.map((p) => p.id === id ? { ...p, groupId: undefined, order: max + 1, float: { ...(p.float || {}), x: ((p.float && p.float.x) || 140) + 30, y: ((p.float && p.float.y) || 96) + 30 } } : p);
   }), []);
+  // ---- Split-pane edge-docking (opt-in) -------------------------------
+  // Drag a floating panel to a workspace edge → it docks as a resizable
+  // region on that edge and the route content reflows to fit (a real
+  // split, not an overlay). One panel per edge; docking onto an occupied
+  // edge pops the previous occupant back out to a floating window.
+  const onDockPanel = _uc_a((id, edge) => setPanels((curr) => {
+    if (!["left", "right", "top", "bottom"].includes(edge)) return curr;
+    const def = (edge === "top" || edge === "bottom") ? 240 : 360;
+    const max = curr.reduce((a, p) => Math.max(a, p.order || 0), 0);
+    return curr.map((p) => {
+      if (p.id === id) return { ...p, dock: edge, floating: false, collapsed: false, pinned: false, groupId: undefined, dockSize: p.dockSize || def, order: max + 1 };
+      if (p.dock === edge) return { ...p, dock: null, floating: true, float: p.float || { x: 160, y: 110, w: 400, h: 480 } }; // evicted
+      return p;
+    });
+  }), []);
+  const onUndockPanel = _uc_a((id) => setPanels((curr) => {
+    const max = curr.reduce((a, p) => Math.max(a, p.order || 0), 0);
+    return curr.map((p) => p.id === id ? { ...p, dock: null, floating: true, order: max + 1, float: p.float || { x: 160, y: 110, w: 400, h: 480 } } : p);
+  }), []);
+  const onResizeDockPanel = _uc_a((id, size) => setPanels((curr) => curr.map((p) => {
+    if (p.id !== id) return p;
+    const min = (p.dock === "top" || p.dock === "bottom") ? 140 : 220;
+    return { ...p, dockSize: Math.max(min, Math.round(size)) };
+  })), []);
   // Restore a collapsed/overflow panel — bring to front, uncollapse.
   const onRestorePanel = _uc_a((id) => setPanels((curr) => {
     const max = curr.reduce((a, p) => Math.max(a, p.order || 0), 0);
@@ -1370,6 +1395,19 @@ const AppShell = () => {
 
   const livePanels = panels.map((p) => decoratePanelWithLiveData(p));
 
+  // Edge-dock insets: route content reflows inside the docked regions so a
+  // docked panel is a real split, not an overlay. Zero when nothing is docked
+  // (default layout unchanged) and disabled on mobile (single-sheet model).
+  const _dockBy = {};
+  if (!isMobile) livePanels.forEach((p) => { if (p.dock && !p.collapsed) _dockBy[p.dock] = p; });
+  const dockInsets = {
+    left:   _dockBy.left   ? (_dockBy.left.dockSize   || 360) : 0,
+    right:  _dockBy.right  ? (_dockBy.right.dockSize  || 360) : 0,
+    top:    _dockBy.top    ? (_dockBy.top.dockSize    || 240) : 0,
+    bottom: _dockBy.bottom ? (_dockBy.bottom.dockSize || 240) : 0,
+  };
+  const hasDock = dockInsets.left || dockInsets.right || dockInsets.top || dockInsets.bottom;
+
   // Selected entity for top bar (first selected row in any panel)
   const selectedEntity = (() => {
     for (const p of livePanels) {
@@ -1450,9 +1488,19 @@ const AppShell = () => {
 
         <div className="app-work"
           onDragOver={(e) => { try { if (e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, "text/loomwright-nav-kind") !== -1) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } } catch (_e) {} }}
-          onDrop={(e) => { try { const kind = e.dataTransfer.getData("text/loomwright-nav-kind"); if (kind) { e.preventDefault(); onOpenPanelFloating(kind, e.clientX, e.clientY); } } catch (_e) {} }}
+          onDrop={(e) => { try {
+            const kind = e.dataTransfer.getData("text/loomwright-nav-kind");
+            if (!kind) return;
+            e.preventDefault();
+            // Drop near an edge → dock there; otherwise open as a floating window.
+            const r = e.currentTarget.getBoundingClientRect();
+            const T = 48, edge = !isMobile && ((e.clientX - r.left < T) ? "left" : (r.right - e.clientX < T) ? "right" : (e.clientY - r.top < T) ? "top" : (r.bottom - e.clientY < T) ? "bottom" : null);
+            onOpenPanelFloating(kind, e.clientX, e.clientY);
+            if (edge) { const pid = (PANEL_PRESETS[kind] || {}).id; if (pid) onDockPanel(pid, edge); }
+          } catch (_e) {} }}
         >
           {view === "shell" && !isMobile && typeof LockTray !== "undefined" && <LockTray/>}
+          <div className="app-work__content" style={{ position: "absolute", top: dockInsets.top, left: dockInsets.left, right: dockInsets.right, bottom: dockInsets.bottom, overflow: "hidden" }}>
           {view === "shell" ? (
             routeId === "writers-room" ? (
               <WritersRoomScreen
@@ -1498,12 +1546,14 @@ const AppShell = () => {
           ) : (
             <div style={{ height: "100%", overflow: "auto" }}><Specimen/></div>
           )}
+          </div>
 
           {/* Stacked panels — Concept A: pinned anchor + unpinned stack + collapsed rail */}
           {view === "shell" && panels.length > 0 && (
             <PanelStack
               panels={livePanels}
               focusedByType={focusedByType}
+              dockInsets={dockInsets}
               onClosePanel={onClosePanel}
               onPinPanel={onPinPanel}
               onExpandPanel={onExpandPanel}
@@ -1512,6 +1562,9 @@ const AppShell = () => {
               onResizeFloatPanel={onResizeFloatPanel}
               onMergeFloatPanels={onMergeFloatPanels}
               onSplitFloatPanel={onSplitFloatPanel}
+              onDockPanel={onDockPanel}
+              onUndockPanel={onUndockPanel}
+              onResizeDockPanel={onResizeDockPanel}
               onBringPanelToFront={onBringPanelToFront}
               onReorderPanels={onReorderPanels}
               onRestorePanel={onRestorePanel}

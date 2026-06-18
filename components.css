@@ -573,11 +573,15 @@
    The whole strip docks to the right edge of the work area.
    ===================================================================== */
 .pstk {
-  position: absolute; top: 0; right: 0; bottom: 0;
-  display: flex; flex-direction: row;
+  /* Full-bleed overlay so edge-dock regions map to the whole workspace.
+     pointer-events:none lets clicks fall through to the route content;
+     the in-flow stack zones sit at the right via justify-content:flex-end. */
+  position: absolute; inset: 0;
+  display: flex; flex-direction: row; justify-content: flex-end;
   pointer-events: none;
   z-index: var(--z-panel);
 }
+.pstk__docked-wrap { display: flex; flex-direction: row; height: 100%; }
 .pstk__zone {
   pointer-events: auto;
   display: flex; flex-direction: row;
@@ -655,6 +659,25 @@
 .pstk__panel.is-front { box-shadow: -10px 0 30px -8px rgba(70,50,20,0.24); }
 .pstk__panel--stack + .pstk__panel--stack { margin-left: -16px; border-radius: var(--r-5) 0 0 var(--r-5); }
 .pstk__panel--stack + .pstk__panel--stack + .pstk__panel--stack { margin-left: -28px; }
+
+/* ---------- Edge-dock split regions (opt-in) ---------- */
+/* A floating panel dragged to an edge becomes a resizable region; the route
+   content reflows around it (see .app-work__content insets in app.jsx). */
+.pstk-edge-dock {
+  background: var(--bg-paper-2);
+  box-shadow: 0 6px 24px -14px rgba(40,30,12,0.4);
+}
+.pstk-edge-dock--left   { border-right: 1px solid var(--line-2); }
+.pstk-edge-dock--right  { border-left: 1px solid var(--line-2); }
+.pstk-edge-dock--top    { border-bottom: 1px solid var(--line-2); }
+.pstk-edge-dock--bottom { border-top: 1px solid var(--line-2); }
+.pstk-edge-dock__resizer { background: transparent; transition: background 120ms; }
+.pstk-edge-dock__resizer:hover { background: var(--gold, #c98a2c); opacity: 0.5; }
+.pstk__panel.is-edge-docked {
+  width: 100%; height: 100%;
+  border: none; box-shadow: none; border-radius: 0; animation: none;
+}
+.pstk__panel.is-edge-docked .pstk__head { cursor: default; }
 
 .pstk__head {
   display: flex; align-items: center; gap: var(--sp-4);
