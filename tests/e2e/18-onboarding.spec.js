@@ -113,12 +113,13 @@ test.describe("T18. Onboarding wizard", () => {
     await page.evaluate(async () => {
       await window.LoomwrightBackend.OnboardingService.applyCompletion({
         welcome: { title: "The Salt Reach", genre: "Grimdark" },
-        foundation: { premise: "A reluctant heir hunts a stolen relic.", toneWords: ["bleak"] },
+        foundation: { premise: "A reluctant heir hunts a stolen relic.", toneWords: ["bleak"], povCharacter: "Saren of Hess" },
         world: { factions: "House Vey · House Hess\nThe Mendicants", locations: "Pale Reach, The Auger's Hold" },
         cast: { seeds: [
           { id: "s1", name: "Aelinor Vey", role: "Protagonist", klass: "Diviner, Knight-errant", race: "Diviner-born", faction: "House Vey" },
           { id: "s2", name: "Mara of Hess", role: "Antagonist", klass: "Knight-errant", race: "Hessian", faction: "House Hess" },
         ] },
+        rpg: { toggles: { abilities: true }, customAbilityNames: "Auger-sight, Saltbinding" },
         ai: { mode: "local" }, workspace: { startTab: "cast" },
       });
     });
@@ -127,12 +128,15 @@ test.describe("T18. Onboarding wizard", () => {
       const f = window.LoomwrightBackend.EntityService.listSync("factions").find((e) => e.name === "House Vey");
       const a = window.LoomwrightBackend.EntityService.listSync("cast").find((e) => e.name === "Aelinor Vey");
       return { factions: L("factions"), locations: L("locations"), classes: L("classes"), races: L("races"),
+               abilities: L("abilities"), cast: L("cast"),
                veyMembers: (f && f.data && f.data.members) || [], aId: a && a.id };
     });
     expect(out.factions).toEqual(expect.arrayContaining(["House Vey", "House Hess", "The Mendicants"]));
     expect(out.locations).toEqual(expect.arrayContaining(["Pale Reach", "The Auger's Hold"]));
     expect(out.classes).toEqual(expect.arrayContaining(["Diviner", "Knight-errant"]));   // multi-class string split
     expect(out.races).toEqual(expect.arrayContaining(["Diviner-born", "Hessian"]));
+    expect(out.abilities).toEqual(expect.arrayContaining(["Auger-sight", "Saltbinding"]));  // RPG custom abilities
+    expect(out.cast).toContain("Saren of Hess");   // POV character seeded as a lead
     expect(out.veyMembers).toContain(out.aId);   // faction members linked by name
   });
 });

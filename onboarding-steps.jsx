@@ -127,6 +127,9 @@ const Step_Foundation = ({ data, set, callbacks }) => {
           <Field label="Tense"><PillRow value={f.tense} options={TENSE_OPTIONS} onChange={(v) => upd("tense", v)}/></Field>
           <Field label="Reader experience"><PillRow value={f.readerExperience} options={READER_EXPERIENCE} onChange={(v) => upd("readerExperience", v)}/></Field>
         </div>
+        <Field label="POV character" optional hint="Whose eyes do we see through? Seeded as a Character (your lead) when you finish.">
+          <input className="ob-input" placeholder="e.g. Aelinor Vey" value={f.povCharacter || ""} onChange={(e) => upd("povCharacter", e.target.value)}/>
+        </Field>
       </div>
       <div className="ob-divider"/>
       <HelperCard title="Need help filling this in?" pill="optional" body="Open the JSON tools drawer (right edge) to copy a tailored prompt or paste a JSON reply. Loomwright previews every change before writing.">
@@ -543,11 +546,26 @@ const Step_RPG = ({ data, set }) => {
         </Field>
         <ToggleRow label="Keep genre-neutral but suggest examples" sub="Loomwright will offer genre-flavoured suggestions in review without enforcing them." value={r.suggestExamples} onChange={(v) => upd("suggestExamples", v)}/>
       </div>
-      {(T.stats || T.inventory || T.skillTrees) && (
+      {(T.stats || T.inventory || T.skillTrees || T.classes || T.races || T.abilities) && (
         <>
           <div className="ob-divider"/>
           <div className="ob-block">
             <div className="ob-block__title">Custom rules</div>
+            {T.classes && (
+              <Field label="Name your classes" optional hint="Comma-separated — each becomes a Class entity you can flesh out later.">
+                <input className="ob-input" placeholder="Diviner, Knight-errant, Hedge-witch" value={r.customClassNames || ""} onChange={(e) => upd("customClassNames", e.target.value)}/>
+              </Field>
+            )}
+            {T.races && (
+              <Field label="Name your races / folk" optional hint="Comma-separated — each becomes a Race entity.">
+                <input className="ob-input" placeholder="Tidefolk, Hessian, Auger-born" value={r.customRaceNames || ""} onChange={(e) => upd("customRaceNames", e.target.value)}/>
+              </Field>
+            )}
+            {T.abilities && (
+              <Field label="Signature abilities" optional hint="Comma-separated — each becomes an Ability entity.">
+                <input className="ob-input" placeholder="Auger-sight, Saltbinding, Tideturn" value={r.customAbilityNames || ""} onChange={(e) => upd("customAbilityNames", e.target.value)}/>
+              </Field>
+            )}
             {T.stats && (
               <Field label="Custom stat set" hint="Name, min, max, default — added to the Stats bank when you finish.">
                 <div className="ob-list">

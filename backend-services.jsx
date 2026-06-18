@@ -846,10 +846,22 @@
         } catch (_) {}
       }
 
-      // The extensive setup also names factions/locations (World step) and a
-      // class/race per character — seed those as real entities so the rich
-      // answers actually populate the Factions / Locations / Classes / Races
-      // tabs (deduped; faction members linked by name; locations left unplaced
+      // POV character (Foundation) → a lead cast member, if not already seeded.
+      const povName = ((data.foundation && data.foundation.povCharacter) || "").trim();
+      if (povName && !existingCastNames.has(povName.toLowerCase())) {
+        try {
+          const savedPov = await EntityService.save("cast", { name: povName, summary: "Point-of-view character.", data: { role: "POV / Protagonist", source: "onboarding" } }, { status: "active" });
+          if (savedPov && savedPov.id) castIdByName.set(povName.toLowerCase(), savedPov.id);
+          existingCastNames.add(povName.toLowerCase());
+          seeded.cast++;
+        } catch (_) {}
+      }
+
+      // The extensive setup also names factions/locations (World step), a
+      // class/race per character, and custom classes/races/abilities (RPG
+      // step) — seed those as real entities so the rich answers actually
+      // populate the Factions / Locations / Classes / Races / Abilities tabs
+      // (deduped; faction members linked by name; locations left unplaced
       // for the author to drop on the Atlas).
       const _obSplit = (v) => (typeof v === "string" ? v.split(/[\n·,;|]+/) : (Array.isArray(v) ? v : []))
         .map((x) => String(x && x.name ? x.name : x).trim()).filter(Boolean);
@@ -864,10 +876,15 @@
           } catch (_) {}
         }
       };
-      const classNames = new Set(), raceNames = new Set();
+      const rpgCfg = data.rpg || {};
+      const classNames = new Set(), raceNames = new Set(), abilityNames = new Set();
       for (const s of castSeeds) { _obSplit(s.klass).forEach((n) => classNames.add(n)); _obSplit(s.race).forEach((n) => raceNames.add(n)); }
+      _obSplit(rpgCfg.customClassNames).forEach((n) => classNames.add(n));
+      _obSplit(rpgCfg.customRaceNames).forEach((n) => raceNames.add(n));
+      _obSplit(rpgCfg.customAbilityNames).forEach((n) => abilityNames.add(n));
       await seedNamed("classes", classNames);
       await seedNamed("races", raceNames);
+      await seedNamed("abilities", abilityNames);
       const facNames = new Set(_obSplit(data.world && data.world.factions));
       castSeeds.forEach((s) => _obSplit(s.faction).forEach((n) => facNames.add(n)));
       await seedNamed("factions", facNames, (name) => {
