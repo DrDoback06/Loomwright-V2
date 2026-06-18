@@ -275,6 +275,18 @@
 .app-shell[data-mobile="true"] .loc-body__top { flex-wrap: wrap; }
 
 /* ---------------------------------------------------------------------
+   Review queue — touch-friendly triage on the phone. Bigger filter
+   controls and card-action targets; Accept grows so the common "yes"
+   is the easy thumb tap. Cards already collapse to one column.
+   --------------------------------------------------------------------- */
+.app-shell[data-mobile="true"] .qfb__search,
+.app-shell[data-mobile="true"] .qfb__seg,
+.app-shell[data-mobile="true"] .qfb__select { height: 34px; }
+.app-shell[data-mobile="true"] .rqc__actions { gap: 8px; }
+.app-shell[data-mobile="true"] .rqc__actions button { min-height: 36px; }
+.app-shell[data-mobile="true"] .rqc__actions .rqc__primary { flex: 1 0 auto; }
+
+/* ---------------------------------------------------------------------
    5. Full-screen workspaces (fws-*) collapse to a single column.
    --------------------------------------------------------------------- */
 @media (max-width: 700px) {
