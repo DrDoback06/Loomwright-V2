@@ -281,6 +281,9 @@ const _tnEntityBadge = (ent, entityType, t) => {
   const d = ent.data || {};
   if (entityType === "skills" || entityType === "abilities") {
     if (d.iconUrl) return disc(d.iconUrl, null, null, true);
+    if (d.icon && typeof ST_ICON_SVG !== "undefined" && ST_ICON_SVG[d.icon] && typeof StSkillIconEl !== "undefined") {
+      return <span style={{ display: "inline-flex", width: 18, height: 18, borderRadius: "50%", background: t.color + "22", color: t.color, alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><StSkillIconEl id={d.icon} size={12} color={t.color}/></span>;
+    }
     const ch = (typeof _stIconChar === "function" && d.icon) ? _stIconChar(d.icon) : "";
     return disc(ch || t.glyph, t.color + "22", t.color);
   }

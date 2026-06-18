@@ -64,6 +64,51 @@ const ST_SKILL_ICONS = [
 const ST_ICON_BY_ID = Object.fromEntries(ST_SKILL_ICONS.map((i) => [i.id, i]));
 // Resolve a stored icon value (id, or a raw glyph for forward-compat) to a char.
 const _stIconChar = (icon) => icon ? ((ST_ICON_BY_ID[icon] && ST_ICON_BY_ID[icon].char) || icon) : "";
+
+// Cohesive hand-inked line-art for the star icons (24×24, currentColor
+// strokes) — matches the cartography/ink aesthetic and tints to the tree
+// colour. Any id without art falls back to its emoji char.
+const ST_ICON_SVG = {
+  sword:   (<><line x1="12" y1="3.5" x2="12" y2="13"/><polyline points="9.8,5.6 12,3.4 14.2,5.6"/><line x1="8.5" y1="13" x2="15.5" y2="13"/><line x1="12" y1="13" x2="12" y2="18.5"/><line x1="10.4" y1="20" x2="13.6" y2="20"/></>),
+  dagger:  (<><line x1="12" y1="4" x2="12" y2="12.5"/><polyline points="10.4,5.6 12,4 13.6,5.6"/><line x1="9.2" y1="12.5" x2="14.8" y2="12.5"/><line x1="12" y1="12.5" x2="12" y2="18"/></>),
+  axe:     (<><line x1="7" y1="20.5" x2="15.5" y2="6.5"/><path d="M13 3.5c3.4 0 5.6 2.3 5.6 5.4l-7.2-1.4z"/></>),
+  hammer:  (<><path d="M13 3.6l7 7-2.4 2.4-7-7z"/><line x1="11.4" y1="9.2" x2="4.5" y2="20.5"/></>),
+  spear:   (<><line x1="5.5" y1="20.5" x2="17" y2="6"/><polyline points="14.5,4.5 18.5,4.5 18.5,8.5"/><line x1="4" y1="20" x2="7" y2="17"/></>),
+  bow:     (<><path d="M7 3.5a13 13 0 0 1 0 17"/><line x1="7" y1="3.5" x2="7" y2="20.5"/><line x1="5.5" y1="12" x2="20" y2="12"/><polyline points="17,9 20.5,12 17,15"/></>),
+  bomb:    (<><circle cx="11" cy="15.5" r="6"/><path d="M15 9.5l2.2-2.6 3 1.1"/><line x1="14.2" y1="10.2" x2="15.6" y2="11.6"/></>),
+  fist:    (<><path d="M6.5 12V9.2a1.8 1.8 0 0 1 3.6 0M10.1 9.2V7a1.8 1.8 0 0 1 3.6 0v2.2M13.7 9.6a1.8 1.8 0 0 1 3.6 0v4.6a6 6 0 0 1-6 6h-1.4a6 6 0 0 1-5.4-3.4l-1-2a1.6 1.6 0 0 1 2.7-1.6l.8 1.2"/></>),
+  shield:  (<><path d="M12 3.2l7 2.6v5.3c0 4.6-3 8-7 9.7-4-1.7-7-5.1-7-9.7V5.8z"/><polyline points="9,11.5 11.2,13.8 15,9.8"/></>),
+  helm:    (<><path d="M5 13a7 7 0 0 1 14 0v3l-2.2 1.2H7.2L5 16z"/><line x1="12" y1="6.2" x2="12" y2="17.5"/><line x1="9" y1="17.5" x2="9" y2="20"/><line x1="15" y1="17.5" x2="15" y2="20"/></>),
+  armor:   (<><path d="M6 4.5l6 1.8 6-1.8v4.2c0 6-3 9.8-6 11.8-3-2-6-5.8-6-11.8z"/><line x1="12" y1="6.3" x2="12" y2="20"/></>),
+  boots:   (<><path d="M8.5 3v8.5M8.5 11.5l-2.2 2A3 3 0 0 0 5 16v3.5h11.5v-2.2c0-.8-.5-1.5-1.3-1.8l-3-1.1a2 2 0 0 1-1.3-1.9V3"/></>),
+  gloves:  (<><path d="M8 21v-5l-1.6-1.4a1.6 1.6 0 0 1 2.2-2.3l.9.8V5.4a1.5 1.5 0 0 1 3 0v4.2M12.5 9.6V4.6a1.5 1.5 0 0 1 3 0v6.2c0 .5.3 1 .8 1.3 1.2.7 1.7 2 1.2 3.4L17 21"/></>),
+  fire:    (<><path d="M12 21c-3.3 0-6-2.3-6-5.4 0-2.3 1.3-4 2.7-5.6C10 8.6 11 7 11 5.4c2.3 1 3.4 3 3.4 4.9 1-.5 1.6-1.5 1.7-2.7 1.5 1.4 2.9 3.6 2.9 6 0 3.1-2.7 5.4-6 5.4z"/></>),
+  water:   (<><path d="M12 3.4c3.6 4.6 6 7.8 6 11.1a6 6 0 0 1-12 0c0-3.3 2.4-6.5 6-11.1z"/></>),
+  ice:     (<><line x1="12" y1="3" x2="12" y2="21"/><line x1="4.2" y1="7.5" x2="19.8" y2="16.5"/><line x1="4.2" y1="16.5" x2="19.8" y2="7.5"/><polyline points="9.6,4.4 12,3 14.4,4.4"/><polyline points="9.6,19.6 12,21 14.4,19.6"/></>),
+  lightning: (<><polygon points="13,2.5 4.5,13.5 11,13.5 9,21.5 19.5,9.5 13,9.5"/></>),
+  earth:   (<><polyline points="3,19.5 9,9 13,15 16,10 21,19.5"/><line x1="3" y1="19.5" x2="21" y2="19.5"/></>),
+  wind:    (<><path d="M3 9h10a3 3 0 1 0-3-3.2"/><path d="M3 14h13.5a3 3 0 1 1-3 3.2"/></>),
+  poison:  (<><path d="M9.5 3h5M10.5 3v5.5l-3.6 8.2a2 2 0 0 0 1.8 2.8h6.6a2 2 0 0 0 1.8-2.8L13.5 8.5V3"/><line x1="9" y1="15" x2="15" y2="15"/></>),
+  nature:  (<><path d="M5 19.5c0-8 6-14.5 14.5-14.5 0 8.5-6.5 14.5-14.5 14.5z"/><line x1="5" y1="19.5" x2="14" y2="10.5"/></>),
+  light:   (<><circle cx="12" cy="12" r="3.6"/><line x1="12" y1="2.5" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="21.5"/><line x1="2.5" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="21.5" y2="12"/><line x1="5.4" y1="5.4" x2="7.2" y2="7.2"/><line x1="16.8" y1="16.8" x2="18.6" y2="18.6"/><line x1="5.4" y1="18.6" x2="7.2" y2="16.8"/><line x1="16.8" y1="7.2" x2="18.6" y2="5.4"/></>),
+  dark:    (<><path d="M20 14.2A8 8 0 1 1 10.5 4.2a6.2 6.2 0 0 0 9.5 10z"/></>),
+  arcane:  (<><path d="M12 2.5l1.9 6.6 6.6 1.9-6.6 1.9L12 19.5l-1.9-6.6L3.5 11l6.6-1.9z"/></>),
+  heart:   (<><path d="M12 20.3S4.5 15 4.5 9.3C4.5 6.6 6.5 4.6 9 4.6c1.6 0 2.9.9 3 2 .1-1.1 1.4-2 3-2 2.5 0 4.5 2 4.5 4.7 0 5.7-7.5 11-7.5 11z"/></>),
+  skull:   (<><path d="M12 3.2A7.8 7.8 0 0 0 4.2 11c0 2.8 1.4 4.8 3 6v2.8h9.6V17c1.6-1.2 3-3.2 3-6A7.8 7.8 0 0 0 12 3.2z"/><circle cx="9" cy="11" r="1.6"/><circle cx="15" cy="11" r="1.6"/><line x1="12" y1="14.5" x2="12" y2="17"/></>),
+  eye:     (<><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.6"/></>),
+  book:    (<><path d="M12 5.5C9.5 4.2 6.5 4 4.5 4.8v13.5c2-.8 5-.6 7.5.7"/><path d="M12 5.5c2.5-1.3 5.5-1.5 7.5-.7v13.5c-2-.8-5-.6-7.5.7z"/></>),
+  star:    (<><polygon points="12,3 14.5,9.1 21,9.6 16,13.7 17.6,20 12,16.4 6.4,20 8,13.7 3,9.6 9.5,9.1"/></>),
+  crown:   (<><path d="M4 18.5h16M4.5 18.5l-1.2-9 5 3.8L12 5.5l3.7 7.8 5-3.8-1.2 9z"/></>),
+};
+const StSkillIconEl = ({ id, size = 18, color }) => {
+  const svg = ST_ICON_SVG[id];
+  if (svg) return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke={color || "currentColor"}
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ display: "block" }}>{svg}</svg>
+  );
+  const ch = _stIconChar(id);
+  return ch ? <span style={{ fontSize: Math.round(size * 0.82), lineHeight: 1 }}>{ch}</span> : null;
+};
 const _stInitials = (name) => {
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] || "") + (parts[1]?.[0] || parts[0]?.[1] || "")).toUpperCase() || "?";
@@ -775,6 +820,9 @@ const SkillTreeCanvas = ({
                     <image href={n.iconUrl} x={-r} y={-r} width={r * 2} height={r * 2}
                            clipPath={`url(#stc-clip-${n.id})`} preserveAspectRatio="xMidYMid slice"/>
                   </>
+                ) : n.icon && ST_ICON_SVG[n.icon] ? (
+                  <svg x={-r * 0.95} y={-r * 0.95} width={r * 1.9} height={r * 1.9} viewBox="0 0 24 24"
+                       fill="none" stroke={tree.color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{ST_ICON_SVG[n.icon]}</svg>
                 ) : n.icon ? (
                   <text textAnchor="middle" dominantBaseline="central" fontSize={r * 1.5}>{_stIconChar(n.icon)}</text>
                 ) : (
@@ -921,7 +969,10 @@ const StIconPicker = ({ node, ctx }) => {
         <button title="No icon (use type glyph)" onClick={() => save({ icon: "", iconUrl: "" })} style={cell(!cur)}>∅</button>
         {ST_SKILL_ICONS.map((ic) => (
           <button key={ic.id} title={ic.label} data-testid={"ste-icon-" + ic.id}
-                  onClick={() => save({ icon: ic.id, iconUrl: "" })} style={cell(cur === ic.id)}>{ic.char}</button>
+                  onClick={() => save({ icon: ic.id, iconUrl: "" })}
+                  style={{ ...cell(cur === ic.id), display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--ink-2, #4a381c)" }}>
+            <StSkillIconEl id={ic.id} size={16}/>
+          </button>
         ))}
       </div>
       <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
