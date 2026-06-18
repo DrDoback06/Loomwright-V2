@@ -21,8 +21,19 @@ const ONBOARDING_STEPS = [
   { id: "ai",          n: 11, num: "11", title: "AI & Privacy",            short: "AI & privacy",        lede: "Choose what (if anything) leaves the device. Keys are stored locally.", optional: false, group: "trust" },
   { id: "review",      n: 12, num: "12", title: "Review Rules",            short: "Review rules",        lede: "How aggressive should extraction be, and what counts as a finding?", optional: false, group: "trust" },
   { id: "workspace",   n: 13, num: "13", title: "Workspace Preferences",   short: "Workspace",           lede: "How the desk should be laid out before you sit down.", optional: false, group: "trust" },
-  { id: "summary",     n: 14, num: "14", title: "Final Summary",           short: "Summary",             lede: "What Loomwright now knows. Last chance to adjust before the door opens.", optional: false, group: "begin" },
+  { id: "summary",     n: 14, num: "14", title: "Final Summary",           short: "Summary",             lede: "What Loomwright now knows. Last chance to adjust before the door opens.", optional: false, group: "finish" },
 ];
+
+// Phase labels for the step rail — group the (unchanged) steps into named
+// phases with their own progress, so the extensive flow reads at a glance.
+const ONBOARDING_PHASES = {
+  begin:   "Begin",
+  shape:   "Story DNA",
+  world:   "Build the world",
+  library: "Bring your text",
+  trust:   "Setup & trust",
+  finish:  "Finish",
+};
 
 const FORMAT_OPTIONS    = ["Novel", "Serial", "Short Story", "Script", "RPG Campaign", "Other"];
 const GENRE_OPTIONS     = ["Fantasy", "Science Fiction", "Mystery", "Thriller", "Romance", "Literary", "Horror", "Historical", "YA", "Adventure"];
@@ -120,7 +131,7 @@ Keep canon rules concrete and load-bearing. Forbidden = things AI must never inv
 };
 
 Object.assign(window, {
-  ONBOARDING_STEPS, FORMAT_OPTIONS, GENRE_OPTIONS, SUBGENRE_OPTIONS,
+  ONBOARDING_STEPS, ONBOARDING_PHASES, FORMAT_OPTIONS, GENRE_OPTIONS, SUBGENRE_OPTIONS,
   AUDIENCE_OPTIONS, LENGTH_OPTIONS, STAGE_OPTIONS,
   POV_OPTIONS, TENSE_OPTIONS, READER_EXPERIENCE,
   TONE_WORD_PRESETS, STYLE_DIALS, PROVIDERS, PRIVACY_CHOICES,

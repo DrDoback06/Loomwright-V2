@@ -231,24 +231,41 @@ const OnboardingStepRail = ({ steps, currentId, completedIds, onOnboardingStepCh
         </div>
       </div>
       <div className="ob__rail__list">
-        {steps.map((s) => {
-          const active = s.id === currentId;
-          const done = completedIds.includes(s.id);
-          return (
-            <button
-              key={s.id}
-              type="button"
-              className={"ob__step " + (active ? "is-active " : "") + (done ? "is-complete" : "")}
-              onClick={() => onOnboardingStepChange && onOnboardingStepChange(s.id)}
-              data-callback="onOnboardingStepChange"
-              data-step={s.id}
-            >
-              <span className="ob__step__num">{done ? <Icon name="check" size={12}/> : s.num}</span>
-              <span className="ob__step__lbl">{s.title}<small>{s.short}</small></span>
-              {s.optional && <span className="ob__step__opt">opt</span>}
-            </button>
-          );
-        })}
+        {(() => {
+          const PHASES = (typeof ONBOARDING_PHASES !== "undefined") ? ONBOARDING_PHASES : {};
+          const rows = []; let lastGroup = null;
+          steps.forEach((s) => {
+            if (s.group && s.group !== lastGroup) {
+              lastGroup = s.group;
+              const inPhase = steps.filter((x) => x.group === s.group);
+              const doneN = inPhase.filter((x) => completedIds.includes(x.id)).length;
+              rows.push(
+                <div key={"ph-" + s.group} className="ob__rail__phase" data-phase={s.group}
+                     style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "12px 6px 4px", fontFamily: "var(--font-sans)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ink-4)" }}>
+                  <span>{PHASES[s.group] || s.group}</span>
+                  <span style={{ opacity: 0.65 }}>{doneN}/{inPhase.length}</span>
+                </div>
+              );
+            }
+            const active = s.id === currentId;
+            const done = completedIds.includes(s.id);
+            rows.push(
+              <button
+                key={s.id}
+                type="button"
+                className={"ob__step " + (active ? "is-active " : "") + (done ? "is-complete" : "")}
+                onClick={() => onOnboardingStepChange && onOnboardingStepChange(s.id)}
+                data-callback="onOnboardingStepChange"
+                data-step={s.id}
+              >
+                <span className="ob__step__num">{done ? <Icon name="check" size={12}/> : s.num}</span>
+                <span className="ob__step__lbl">{s.title}<small>{s.short}</small></span>
+                {s.optional && <span className="ob__step__opt">opt</span>}
+              </button>
+            );
+          });
+          return rows;
+        })()}
       </div>
       <div className="ob__rail__foot">
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
