@@ -271,6 +271,33 @@ const ItemDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSourceMent
   );
 };
 
+// Inline "assign to a character" picker — links a class/race to a cast
+// member both ways (cast.data[castField] += entity, entity.data[reverse]
+// += cast), so the reverse "Example characters" lookup resolves it.
+const RpgAssignPicker = ({ entity, entityType, castField, reverseField, label = "Assign to character" }) => {
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  if (!entity || !entity.id || !B || !B.EntityService) return null;
+  const cast = (B.EntityService.listSync("cast") || [])
+    .filter((c) => c.status !== "deleted")
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  return (
+    <div className="rpg-assign" style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0 2px", fontSize: "var(--fs-xs)" }}>
+      <label style={{ color: "var(--ink-3, #76684c)", fontWeight: 600 }}>{label}</label>
+      <select data-testid="rpg-assign" value="" style={{ flex: 1, maxWidth: 280 }}
+              onChange={async (ev) => {
+                const castId = ev.target.value;
+                if (!castId || !B.LinkService || !B.LinkService.linkField) return;
+                await B.LinkService.linkField(castId, "cast", castField, entity.id, entityType);
+                await B.LinkService.linkField(entity.id, entityType, reverseField, castId, "cast");
+                window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+              }}>
+        <option value="">＋ Add a character…</option>
+        {cast.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+    </div>
+  );
+};
+
 // =====================================================================
 // CLASSES — bespoke detail body
 // =====================================================================
@@ -336,8 +363,8 @@ const ClassDetail = ({ entity, onSelectEntity }) => {
         </RpgSection>
       )}
 
+      <RpgAssignPicker entity={e} entityType="classes" castField="classes" reverseField="assignedCharacters"/>
       <div className="rpg-actions">
-        <button className="rpg-btn rpg-btn--primary" data-callback="onAssignClass">Assign to character</button>
         <button className="rpg-btn" data-callback="onEditClass">Edit</button>
         <button className="rpg-btn" data-callback="onDuplicateClass">Duplicate</button>
         <span style={{ flex: 1 }}/>
@@ -420,8 +447,8 @@ const RaceDetail = ({ entity, onSelectEntity }) => {
         </RpgSection>
       )}
 
+      <RpgAssignPicker entity={e} entityType="races" castField="race" reverseField="linkedCast"/>
       <div className="rpg-actions">
-        <button className="rpg-btn rpg-btn--primary" data-callback="onAssignRace">Assign to character</button>
         <button className="rpg-btn" data-callback="onEditRace">Edit</button>
         <button className="rpg-btn" data-callback="onDuplicateRace">Duplicate</button>
         <span style={{ flex: 1 }}/>
