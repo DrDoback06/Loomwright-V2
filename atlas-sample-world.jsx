@@ -137,5 +137,24 @@
     return { ok: true, count: rows.length };
   }
 
-  window.AtlasSampleWorld = { seed, slug, PREFIX };
+  // Remove the demo world (every loc-demo-* place, world + interiors).
+  async function clear() {
+    const B = window.LoomwrightBackend;
+    if (!B || !B.EntityService) return { ok: false, error: "backend unavailable" };
+    const ids = B.EntityService.listSync("locations").filter((l) => String(l.id).startsWith(PREFIX)).map((l) => l.id);
+    if (ids.length) {
+      if (B.EntityService.deleteMany) await B.EntityService.deleteMany("locations", ids, { hard: true });
+      else for (const id of ids) await B.EntityService.delete("locations", id, { hard: true });
+    }
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+    return { ok: true, count: ids.length };
+  }
+  // Is the demo world currently present?
+  function exists() {
+    const B = window.LoomwrightBackend;
+    if (!B || !B.EntityService) return false;
+    return B.EntityService.listSync("locations").some((l) => String(l.id).startsWith(PREFIX));
+  }
+
+  window.AtlasSampleWorld = { seed, clear, exists, slug, PREFIX };
 })();

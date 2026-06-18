@@ -529,7 +529,13 @@ const AtlasEdInspectorTab = ({ selected, locById, routes, beasts, items, faction
       )}
       <div className="ae-insp__sec ae-insp__sec--actions">
         <button className="ae-insp__btn" onClick={_aeOpenEditor}>Reparent…</button>
-        <button className="ae-insp__btn ae-insp__btn--danger" onClick={() => { if (_aeB && _aeB.EntityService && selected.id && (typeof window.confirm !== "function" || window.confirm("Move " + selected.name + " to the trash?"))) { _aeB.EntityService.delete("locations", selected.id); window.dispatchEvent(new CustomEvent("lw:entity-store-updated")); onSelectLoc && onSelectLoc(null); } }}>Delete</button>
+        <button className="ae-insp__btn ae-insp__btn--danger" data-testid="ae-insp-delete" onClick={async () => {
+          if (!(_aeB && _aeB.EntityService && selected.id)) return;
+          if (typeof window.confirm === "function" && !window.confirm("Move " + selected.name + " to the trash?")) return;
+          await _aeB.EntityService.delete("locations", selected.id);
+          window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+          onSelectLoc && onSelectLoc(null);
+        }}>Delete</button>
       </div>
     </div>
   );
@@ -925,13 +931,30 @@ const AtlasEditor = ({
   const activeMap = mapStack[mapStack.length - 1].id;
   const mapLocations = _um_ae(() => locations.filter((l) => (l.atlasMap || "world") === activeMap), [locations, activeMap]);
   const onDrillDown = (loc) => {
-    if (!loc || !loc.id || loc.id === activeMap) return;
+    if (!loc || !loc.id || loc.id === activeMap || loc.placed === false) return;
     setMapStack((s) => (s.some((m) => m.id === loc.id) ? s : [...s, { id: loc.id, name: loc.name || "Inside" }]));
     setView({ z: 1, x: 0, y: 0 });
     setTool("select");
     _aeNotice("Inside " + (loc.name || "the place") + " — draw what's within. Double-click a place to go deeper.");
   };
   const onCrumb = (i) => { setMapStack((s) => s.slice(0, Math.max(1, i + 1))); setView({ z: 1, x: 0, y: 0 }); };
+  // If a drilled-into place is deleted (or renamed) elsewhere, prune the
+  // breadcrumb back to the last map that still exists so we never strand
+  // the editor on a dead interior.
+  _ue_ae(() => {
+    setMapStack((s) => {
+      if (s.length <= 1) return s;
+      const ids = new Set(locations.map((l) => l.id));
+      let cut = s.length;
+      for (let i = 1; i < s.length; i++) { if (!ids.has(s[i].id)) { cut = i; break; } }
+      if (cut >= s.length) {
+        // keep names fresh
+        const renamed = s.map((m) => m.id === "world" ? m : { ...m, name: (locations.find((l) => l.id === m.id) || {}).name || m.name });
+        return renamed;
+      }
+      return s.slice(0, cut);
+    });
+  }, [locations]);
   // Stamp a location onto the current map (atlasMap + parent for interiors).
   const _aeAssignToMap = async (id) => {
     const B = window.LoomwrightBackend; const e = B?.EntityService?.getSync?.(id, "locations");
@@ -1037,6 +1060,53 @@ const AtlasEditor = ({
     window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
     if (res && res.ok) _aeNotice("Demo world ready — " + res.count + " places. Double-click Aldercrown to step inside.");
   };
+  // Remove the demo world.
+  const handleClearDemo = async () => {
+    const W = window.AtlasSampleWorld;
+    if (!W || !W.clear) return;
+    if (typeof window.confirm === "function" && !window.confirm("Remove the demo world? This deletes every demo place.")) return;
+    if (mapStack.length > 1) onCrumb(0);
+    const res = await W.clear();
+    onSelect && onSelect(null);
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+    if (res && res.ok) _aeNotice("Cleared the demo world (" + res.count + " places).");
+  };
+  // ---- Multi-select (marquee) actions: move / delete / duplicate many ----
+  const onMultiMove = async (ids, dx, dy) => {
+    const B = window.LoomwrightBackend;
+    if (!B || !ids || !ids.length) return;
+    if (B.AtlasService.nudgeMany) await B.AtlasService.nudgeMany(ids, dx, dy);
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+  };
+  const onMultiDelete = async (ids) => {
+    const B = window.LoomwrightBackend;
+    if (!B || !ids || !ids.length) return;
+    if (B.EntityService.deleteMany) await B.EntityService.deleteMany("locations", ids);
+    else for (const id of ids) await B.EntityService.delete("locations", id);
+    if (selected && ids.includes(selected.id)) onSelect && onSelect(null);
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+    _aeNotice(ids.length + " place" + (ids.length === 1 ? "" : "s") + " deleted.");
+  };
+  const onMultiDuplicate = async (ids, dx, dy) => {
+    const B = window.LoomwrightBackend;
+    if (!B || !ids || !ids.length) return [];
+    const clamp = (v) => Math.max(0, Math.min(100, v));
+    const rows = [];
+    for (const id of ids) {
+      const e = B.EntityService.getSync(id, "locations");
+      if (!e) continue;
+      const d = { ...(e.data || {}) };
+      if (d.shape) d.shape = B.AtlasService.offsetShape(d.shape, dx, dy) || d.shape;
+      if (d.coords) d.coords = { x: clamp((Number(d.coords.x) || 0) + dx), y: clamp((Number(d.coords.y) || 0) + dy) };
+      delete d.routes; // copies don't inherit connections
+      rows.push({ name: (e.name || "Place") + " copy", data: d });
+    }
+    if (!rows.length) return [];
+    const saved = B.EntityService.saveMany ? await B.EntityService.saveMany("locations", rows, { status: "active" }) : [];
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+    _aeNotice("Pasted " + saved.length + " place" + (saved.length === 1 ? "" : "s") + ".");
+    return saved.map((s) => s.id);
+  };
   const handleSelect = (loc) => {
     // Two-tap road drawing when the Add Route tool is armed.
     if ((tool === "addRoute" || tool === "path-road" || tool === "path-route" || tool === "path-river") && loc) {
@@ -1118,6 +1188,7 @@ const AtlasEditor = ({
             title={activeMap === "world" ? "The Known World" : mapStack[mapStack.length - 1].name}
             tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin} onDrawShape={onDrawShape} onReshape={onReshape}
             onResizeSymbol={onResizeSymbol}
+            onMultiMove={onMultiMove} onMultiDelete={onMultiDelete} onMultiDuplicate={onMultiDuplicate}
             view={view} onViewChange={setView} onDrillDown={onDrillDown}
             onSeedDemo={activeMap === "world" ? handleSeedDemo : null}/>
           {tool === "stamp" && (
@@ -1132,6 +1203,23 @@ const AtlasEditor = ({
               <button onClick={() => { setTool("select"); setStampSymbol(null); }} title="Stop stamping (Esc)"
                       style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 3, color: "var(--ink-3, #6a5a3a)" }}>
                 <Icon name="close" size={9}/>
+              </button>
+            </div>
+          )}
+          {activeMap === "world" && locations.some((l) => String(l.id).startsWith("loc-demo-")) && (
+            <div className="atlas-editor__demobar" data-ui="AtlasDemoBar"
+                 style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", zIndex: 6,
+                          display: "flex", alignItems: "center", gap: 8,
+                          background: "rgba(250,242,221,0.96)", border: "1px solid var(--line-2, rgba(74,56,28,0.3))",
+                          borderRadius: "var(--r-pill, 999px)", padding: "3px 4px 3px 13px",
+                          fontSize: "var(--fs-xs)", boxShadow: "0 2px 8px rgba(0,0,0,0.16)" }}>
+              <Icon name="sparkle" size={11}/>
+              <span style={{ fontFamily: "var(--font-display)", color: "var(--ink-2, #4a3a22)" }}>Demo world loaded</span>
+              <button data-callback="onClearAtlasDemo" data-testid="ae-clear-demo" onClick={handleClearDemo} title="Remove the demo world"
+                      style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer",
+                               background: "var(--accent-deep, #8a5a1c)", color: "#fff8ea", border: "none",
+                               borderRadius: "var(--r-pill, 999px)", padding: "3px 11px", fontSize: "var(--fs-xs)", fontWeight: 600 }}>
+                <Icon name="trash" size={10}/><span>Clear</span>
               </button>
             </div>
           )}

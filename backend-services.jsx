@@ -443,6 +443,42 @@
       return out;
     },
 
+    // Bulk delete — one read + one write. Soft-deletes to Trash by default
+    // (reversible); pass opts.hard for a true wipe (e.g. clearing a demo).
+    async deleteMany(type, ids, opts = {}) {
+      if (!Array.isArray(ids) || !ids.length) return 0;
+      const entityType = normaliseType(type);
+      const all = await StorageService.get(KEYS.entities, {});
+      const byType = all[entityType] || {};
+      const removed = [];
+      for (const id of ids) {
+        const ent = byType[id];
+        if (!ent) continue;
+        if (opts.hard) delete byType[id];
+        else byType[id] = { ...ent, status: "deleted", deletedAt: nowIso() };
+        removed.push(ent);
+      }
+      if (!removed.length) return 0;
+      all[entityType] = byType;
+      await StorageService.set(KEYS.entities, all);
+      applyEntityGlobals(all);
+      if (!opts.hard) {
+        for (const ent of removed) { try { await TrashService.add({ ...ent, deletedAt: nowIso() }); } catch (_) {} }
+        if (!opts.skipAudit) {
+          for (const ent of removed) {
+            try {
+              AuditService.log({
+                action: "entity.delete", label: "Deleted " + (ent.name || ent.id) + " (" + entityType + ")",
+                targetType: "entity", targetId: ent.id, targetName: ent.name, entityType,
+                before: ent, after: null, source: "EntityService", sourceSurface: opts.sourceSurface || null,
+              });
+            } catch (_) {}
+          }
+        }
+      }
+      return removed.length;
+    },
+
     async update(type, id, patch = {}, opts = {}) {
       const existing = this.getSync(id, type);
       return this.save(type, { ...(existing || {}), ...patch, id }, opts);
@@ -1221,6 +1257,16 @@
     }
     return null;
   }
+  // Translate a shape by (dx, dy) percent, clamped to the plate.
+  function _atlasMoveShape(shape, dx, dy) {
+    const s = _atlasNormalizeShape(shape);
+    if (!s) return null;
+    const c = (v) => Math.max(0, Math.min(100, v));
+    if (s.type === "rect") return { ...s, x: c(s.x + dx), y: c(s.y + dy) };
+    if (s.type === "circle") return { ...s, cx: c(s.cx + dx), cy: c(s.cy + dy) };
+    if (Array.isArray(s.points)) return { ...s, points: s.points.map(([x, y]) => [c(x + dx), c(y + dy)]) };
+    return s;
+  }
   const AtlasService = {
     listPlacedSync() {
       const locs = EntityService.listSync("locations");
@@ -1610,6 +1656,37 @@
         }
       }
       return EntityService.update("locations", id, { data });
+    },
+    // Pure helper: translate a shape by (dx, dy) percent. Used by the
+    // editor's multi-select duplicate.
+    offsetShape(shape, dx, dy) { return _atlasMoveShape(shape, dx, dy); },
+    // Move many placed locations by the same (dx, dy) percent delta in one
+    // store write — powers marquee group-drag. Shapes move (with their
+    // centroid); point/symbol anchors move their coords.
+    async nudgeMany(ids, dx, dy) {
+      if (!Array.isArray(ids) || !ids.length || (!dx && !dy)) return 0;
+      const all = await StorageService.get(KEYS.entities, {});
+      const byType = all.locations || {};
+      const clamp = (v) => Math.max(0, Math.min(100, v));
+      let n = 0;
+      for (const id of ids) {
+        const ex = byType[id];
+        if (!ex) continue;
+        const d = { ...(ex.data || {}) };
+        if (d.shape) {
+          const m = _atlasMoveShape(d.shape, dx, dy);
+          if (m) { d.shape = m; const c = _atlasShapeCentroid(m); if (c) d.coords = { x: c.x, y: c.y }; }
+        } else {
+          d.coords = { x: clamp((Number(d.coords?.x) || 0) + dx), y: clamp((Number(d.coords?.y) || 0) + dy) };
+        }
+        byType[id] = { ...ex, data: d, updatedAt: nowIso() };
+        n++;
+      }
+      if (!n) return 0;
+      all.locations = byType;
+      await StorageService.set(KEYS.entities, all);
+      applyEntityGlobals(all);
+      return n;
     },
     // Draw/replace a location's region shape (rect/circle/polygon/freehand),
     // marking it placed and anchoring its label at the centroid.

@@ -648,7 +648,7 @@ const AtlasRegions = ({ locations, layers, highlight }) => {
 // Drawn regions — user-authored shapes (rect/circle/polygon/freehand)
 // for rooms / areas / lands. Filled + labelled at the centroid; clickable.
 // ---------------------------------------------------------------------
-const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, showLabels = true, clean = false, shapeOf, onShapePointerDown, onDoubleClick }) => (
+const AtlasShapes = ({ locations, onSelect, focusId, selectedSet, ctxLocs, dimFn, layers, showLabels = true, clean = false, shapeOf, onShapePointerDown, onDoubleClick }) => (
   <g className="atm-shapes">
     {locations.map((loc) => {
       const shape = shapeOf ? shapeOf(loc) : loc.shape;
@@ -658,6 +658,7 @@ const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, sho
       if (!geom) return null;
       const st = (shape.style && SHAPE_STYLE_BY_TYPE[shape.style]) || SHAPE_STYLE_BY_TYPE[loc.type] || SHAPE_STYLE_BY_TYPE._default;
       const focused = loc.id === focusId;
+      const msel = selectedSet && selectedSet.has(loc.id);
       const dim = (ctxLocs && !ctxLocs.has(loc.id)) || (dimFn && dimFn(loc));
       const c = _amPx(loc); // centroid (buildAtlasDataSync set coords to it)
       const Tag = geom.tag;
@@ -674,7 +675,7 @@ const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, sho
            opacity={dim ? 0.32 : 1} style={{ cursor: focused ? "move" : "pointer" }}
            onPointerDown={(e) => onShapePointerDown && onShapePointerDown(e, loc)}
            onDoubleClick={(e) => { if (onDoubleClick) { e.stopPropagation(); onDoubleClick(loc); } }}
-           onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc); }}>
+           onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc, e); }}>
           <g filter="url(#atm-shadow)">
             {casing && <Tag {...geom.props} fill="none" stroke={casing} strokeWidth={sw + 4} strokeLinejoin="round" strokeLinecap="round"/>}
             <Tag {...geom.props}
@@ -685,6 +686,7 @@ const AtlasShapes = ({ locations, onSelect, focusId, ctxLocs, dimFn, layers, sho
                  filter={organic && !clean ? "url(#atm-rough)" : undefined}/>
             {texId && <Tag {...geom.props} fill={`url(#${texId})`} stroke="none" opacity={0.7} pointerEvents="none"/>}
           </g>
+          {msel && !focused && <Tag {...geom.props} fill="none" stroke="#c98a2c" strokeWidth={sw + 1.5} strokeDasharray="5 3" pointerEvents="none"/>}
           {showLabels && (
             <text x={c.x} y={c.y} textAnchor="middle" dominantBaseline="central"
                   fontFamily="var(--font-display)" fontSize={big ? 13 : 12} fontWeight="600"
@@ -729,7 +731,7 @@ const AtlasShapeHandles = ({ loc, shape, onHandleDown }) => {
 // handle to resize.
 // ---------------------------------------------------------------------
 const AtlasSymbols = ({
-  locations, layers, focusId, onSelect, onSymbolDown, onDoubleClick,
+  locations, layers, focusId, selectedSet, onSelect, onSymbolDown, onDoubleClick,
   onSizeDown, sizeOf, posOf, showLabels = true, ctxLocs, dimFn, editorSelect = false,
 }) => (
   <g className="atm-symbols">
@@ -741,6 +743,7 @@ const AtlasSymbols = ({
       const p = _amPx(posOf ? posOf(loc) : loc);
       const size = Math.max(0.4, sizeOf ? sizeOf(loc) : (loc.symbolSize || 1));
       const focused = loc.id === focusId;
+      const msel = selectedSet && selectedSet.has(loc.id);
       const dim = (ctxLocs && !ctxLocs.has(loc.id)) || (dimFn && dimFn(loc));
       const half = (SYMBOL_BOX / 2) * size;
       // Selective labels keep dense clusters legible: always label the
@@ -754,8 +757,8 @@ const AtlasSymbols = ({
            style={{ cursor: editorSelect ? (focused ? "move" : "pointer") : "pointer" }}
            onPointerDown={(e) => onSymbolDown && onSymbolDown(e, loc)}
            onDoubleClick={(e) => { if (onDoubleClick) { e.stopPropagation(); onDoubleClick(loc); } }}
-           onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc); }}>
-          {focused && <circle r={half + 7} fill="rgba(255,200,80,0.16)" stroke="#c98a2c" strokeWidth="1.4" strokeDasharray="5 4"/>}
+           onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc, e); }}>
+          {(focused || msel) && <circle r={half + 7} fill="rgba(255,200,80,0.16)" stroke="#c98a2c" strokeWidth="1.4" strokeDasharray="5 4"/>}
           <g transform={`scale(${size})`} filter="url(#atm-shadow)">{motif}</g>
           {labelThis && (
             <text x="0" y={half + 13} textAnchor="middle" fontFamily="var(--font-display)" fontSize="11.5" fontWeight="600"
@@ -788,7 +791,7 @@ const AtlasPin = ({ loc, focused, dim, onClick, scaleLabel = 1, showLabel = true
     && window.matchMedia("(pointer: coarse)").matches;
   return (
     <g className={"atm-pin" + (focused ? " is-focused" : "")} transform={`translate(${x}, ${y})`} opacity={opacity}
-       onClick={(e) => { e.stopPropagation(); onClick && onClick(loc); }} style={{ cursor: "pointer" }}>
+       onClick={(e) => { e.stopPropagation(); onClick && onClick(loc, e); }} style={{ cursor: "pointer" }}>
       {coarse && <circle r={Math.max(16, conf.r + 10)} fill="transparent"/>}
       {focused && (
         <g>
@@ -1006,6 +1009,7 @@ const AtlasMap = ({
   tool = "select", onMapPoint = null, onMovePin = null, onDrawShape = null, onReshape = null,
   onResizeSymbol = null,
   view = null, onViewChange = null, onDrillDown = null, onSeedDemo = null,
+  onMultiMove = null, onMultiDelete = null, onMultiDuplicate = null,
 }) => {
   const vt = view || { z: 1, x: 0, y: 0 };
   const locById = _um_am(() => Object.fromEntries(locations.map((l) => [l.id, l])), [locations]);
@@ -1028,6 +1032,16 @@ const AtlasMap = ({
   const svgRef = React.useRef(null);
   const dragRef = React.useRef(null);            // { id, moved }
   const [dragPos, setDragPos] = React.useState(null); // { id, x, y } pct override
+  // ---- Marquee multi-select (editor, select tool): rubber-band select a
+  // group, drag to move them together, copy / paste / delete many at once.
+  const [selIds, setSelIds] = React.useState(() => new Set()); // multi-selection
+  const [marquee, setMarquee] = React.useState(null); // live rubber-band { x0,y0,x1,y1 } pct
+  const [groupMove, setGroupMove] = React.useState(null); // live { ids:Set, dx, dy }
+  const marqueeRef = React.useRef(null); // { x0, y0, additive, pointerId, dragging }
+  const groupRef = React.useRef(null);   // { ids:Set, startPct, pointerId, pending }
+  const clipRef = React.useRef(null);    // copied source ids
+  const multiEnabled = variant === "editor" && tool === "select" && !!(onMultiMove || onMultiDelete || onMultiDuplicate);
+  const _clampPct = (v) => Math.max(0, Math.min(100, v));
   // Screen → svg user units (accounting for preserveAspectRatio letterbox).
   const toUser = (evt) => {
     const rect = svgRef.current.getBoundingClientRect();
@@ -1062,15 +1076,36 @@ const AtlasMap = ({
   const reshapeRef = React.useRef(null);  // { locId, mode, index, orig, startPct }
   const editShapeRef = React.useRef(null);
   const [editShape, setEditShape] = React.useState(null); // { locId, shape } live override
-  const shapeOf = (loc) => (editShape && editShape.locId === loc.id) ? editShape.shape : loc.shape;
+  const shapeOf = (loc) => {
+    let s = (editShape && editShape.locId === loc.id) ? editShape.shape : loc.shape;
+    if (s && groupMove && groupMove.ids.has(loc.id)) s = _amReshape(s, "move", 0, groupMove.dx, groupMove.dy);
+    return s;
+  };
   // ---- Object-stamp interactions (move a symbol's anchor / resize it) ----
   const symMoveRef = React.useRef(null);   // { locId, startPct, orig:{x,y}, pointerId, pending }
   const symSizeRef = React.useRef(null);   // { locId, center:{x,y}px }
   const editSymRef = React.useRef(null);
   const [editSym, setEditSym] = React.useState(null); // { locId, size } live override
   const symbolSizeOf = (loc) => (editSym && editSym.locId === loc.id) ? editSym.size : (loc.symbolSize || 1);
-  // Reset any in-progress draft when the tool changes.
-  _ue_am(() => { setDraft(null); setPolyPts([]); drawRef.current = null; draftRef.current = null; }, [tool]);
+  // Reset any in-progress draft / multi-selection when the tool changes.
+  _ue_am(() => { setDraft(null); setPolyPts([]); drawRef.current = null; draftRef.current = null; setSelIds(new Set()); setMarquee(null); }, [tool]);
+  // Element click: shift/ctrl/cmd toggles multi-selection; a plain click
+  // selects one and drops any marquee selection.
+  const onPickInternal = (loc, e) => {
+    if (loc && e && (e.shiftKey || e.metaKey || e.ctrlKey) && multiEnabled) {
+      setSelIds((prev) => { const n = new Set(prev); n.has(loc.id) ? n.delete(loc.id) : n.add(loc.id); return n; });
+      return;
+    }
+    if (selIds.size) setSelIds(new Set());
+    onSelect && onSelect(loc);
+  };
+  // If the pressed element belongs to a multi-selection, a drag moves the
+  // whole group rather than the single item.
+  const startGroupIfSelected = (e, loc) => {
+    if (!multiEnabled || !onMultiMove || !(selIds.size > 1 && selIds.has(loc.id))) return false;
+    groupRef.current = { ids: new Set(selIds), startPct: toPct(e), pointerId: e.pointerId, pending: true };
+    return true;
+  };
   // Escape cancels an in-progress polygon/draft.
   _ue_am(() => {
     if (variant !== "editor") return;
@@ -1110,6 +1145,51 @@ const AtlasMap = ({
       panRef.current = { sx: e.clientX, sy: e.clientY, ox: vt.x, oy: vt.y };
       return;
     }
+    // Marquee select: drag on empty parchment with the Select tool. Driven
+    // off window mouse events — a background drag inside the SVG otherwise
+    // gets pointercancel after the first move (the browser claims the
+    // gesture), which a captured SVG pointer can't reliably hold.
+    if (multiEnabled && tool === "select") {
+      const onEl = e.target.closest && e.target.closest("[data-atm-pin],[data-atm-shape],[data-atm-symbol],[data-atm-handle],[data-ui='AtlasSeedDemo']");
+      if (!onEl) {
+        e.stopPropagation();
+        const start = toPct(e);
+        const mq = { x0: start.x, y0: start.y, additive: e.shiftKey, dragging: false };
+        marqueeRef.current = mq;
+        const onWinMove = (ev) => {
+          const p = toPct(ev);
+          if (!mq.dragging) {
+            const moved = Math.hypot(((p.x - mq.x0) / 100) * 1200, ((p.y - mq.y0) / 100) * 700);
+            if (moved < 4) return;
+            mq.dragging = true;
+          }
+          mq.x1 = p.x; mq.y1 = p.y;
+          setMarquee({ x0: mq.x0, y0: mq.y0, x1: p.x, y1: p.y });
+        };
+        const onWinDrag = (ev) => ev.preventDefault(); // kill any native drag (ancestor draggable) so mouse events keep flowing
+        const onWinUp = () => {
+          window.removeEventListener("mousemove", onWinMove);
+          window.removeEventListener("mouseup", onWinUp);
+          window.removeEventListener("dragstart", onWinDrag, true);
+          marqueeRef.current = null;
+          setMarquee(null);
+          if (mq.dragging && mq.x1 != null) {
+            const xlo = Math.min(mq.x0, mq.x1), xhi = Math.max(mq.x0, mq.x1);
+            const ylo = Math.min(mq.y0, mq.y1), yhi = Math.max(mq.y0, mq.y1);
+            const hits = locations.filter((l) => l.placed !== false && isFinite(l.x) && isFinite(l.y)
+              && l.x >= xlo && l.x <= xhi && l.y >= ylo && l.y <= yhi).map((l) => l.id);
+            setSelIds((prev) => { const n = mq.additive ? new Set(prev) : new Set(); hits.forEach((id) => n.add(id)); return n; });
+            if (hits.length && onSelect) onSelect(null);
+          } else {
+            setSelIds(new Set());
+          }
+        };
+        window.addEventListener("mousemove", onWinMove);
+        window.addEventListener("mouseup", onWinUp);
+        window.addEventListener("dragstart", onWinDrag, true);
+        return;
+      }
+    }
     if (!onDrawShape || variant !== "editor" || !isDrawTool) return;
     if (e.target.closest && e.target.closest("[data-atm-pin]")) return;
     e.stopPropagation();
@@ -1119,7 +1199,9 @@ const AtlasMap = ({
     else { drawRef.current = { tool, sx: p.x, sy: p.y }; draftRef.current = _amDraftShape(tool, p.x, p.y, p.x, p.y); setDraft(draftRef.current); }
   };
   const onPinPointerDown = (e, loc) => {
-    if (!onMovePin || variant !== "editor" || tool !== "select" || loc.placed === false) return;
+    if (variant !== "editor" || tool !== "select") return;
+    if (startGroupIfSelected(e, loc)) { e.stopPropagation(); return; }
+    if (!onMovePin || loc.placed === false) return;
     e.stopPropagation();
     dragRef.current = { id: loc.id, moved: false };
     svgRef.current.setPointerCapture?.(e.pointerId);
@@ -1128,8 +1210,9 @@ const AtlasMap = ({
   // as "pending" — it only becomes a move once the pointer travels far enough,
   // so a plain click still selects and a double-click can drill down.
   const onShapePointerDown = (e, loc) => {
-    if (variant !== "editor" || tool !== "select" || !onReshape) return;
-    if (loc.id !== focusId) return; // first click selects; once selected, drag moves
+    if (variant !== "editor" || tool !== "select") return;
+    if (startGroupIfSelected(e, loc)) return;
+    if (!onReshape || loc.id !== focusId) return; // first click selects; once selected, drag moves
     reshapeRef.current = { locId: loc.id, mode: "move", orig: loc.shape, startPct: toPct(e), pointerId: e.pointerId, pending: true };
   };
   // Drag a resize/vertex handle.
@@ -1142,7 +1225,9 @@ const AtlasMap = ({
   // Drag a placed stamp to move its anchor (pending until it travels >4px,
   // so a click still selects and a double-click still drills in).
   const onSymbolPointerDown = (e, loc) => {
-    if (variant !== "editor" || tool !== "select" || !onMovePin) return;
+    if (variant !== "editor" || tool !== "select") return;
+    if (startGroupIfSelected(e, loc)) return;
+    if (!onMovePin) return;
     symMoveRef.current = { locId: loc.id, startPct: toPct(e), orig: { x: loc.x, y: loc.y }, pointerId: e.pointerId, pending: true };
   };
   // Drag the corner handle to resize a selected stamp.
@@ -1158,6 +1243,19 @@ const AtlasMap = ({
       const rect = svgRef.current.getBoundingClientRect();
       const scale = Math.min(rect.width / 1200, rect.height / 700) || 1;
       onViewChange({ z: vt.z, x: pan.ox + (e.clientX - pan.sx) / scale, y: pan.oy + (e.clientY - pan.sy) / scale });
+      return;
+    }
+    const gr = groupRef.current;
+    if (gr) {
+      const p = toPct(e);
+      if (gr.pending) {
+        const moved = Math.hypot(((p.x - gr.startPct.x) / 100) * 1200, ((p.y - gr.startPct.y) / 100) * 700);
+        if (moved < 4) return;
+        gr.pending = false;
+        try { svgRef.current.setPointerCapture?.(gr.pointerId); } catch (_e) {}
+      }
+      gr.dx = p.x - gr.startPct.x; gr.dy = p.y - gr.startPct.y;
+      setGroupMove({ ids: gr.ids, dx: gr.dx, dy: gr.dy });
       return;
     }
     const rs = reshapeRef.current;
@@ -1179,7 +1277,7 @@ const AtlasMap = ({
       const p = toPct(e);
       const px = (p.x / 100) * 1200, py = (p.y / 100) * 700;
       const reach = Math.max(Math.abs(px - ssz.center.x), Math.abs(py - ssz.center.y));
-      editSymRef.current = { locId: ssz.locId, size: Math.max(0.5, Math.min(4, reach / (SYMBOL_BOX / 2))) };
+      editSymRef.current = { locId: ssz.locId, size: Math.max(0.4, Math.min(5, reach / (SYMBOL_BOX / 2))) };
       setEditSym(editSymRef.current);
       return;
     }
@@ -1220,6 +1318,13 @@ const AtlasMap = ({
   };
   const onSvgPointerUp = () => {
     if (panRef.current) { panRef.current = null; return; }
+    const gr = groupRef.current;
+    if (gr) {
+      groupRef.current = null;
+      setGroupMove(null);
+      if (!gr.pending && (gr.dx || gr.dy) && onMultiMove) onMultiMove([...gr.ids], gr.dx, gr.dy);
+      return;
+    }
     const rs = reshapeRef.current;
     if (rs) {
       reshapeRef.current = null;
@@ -1254,7 +1359,11 @@ const AtlasMap = ({
     }
     finishDraw();
   };
-  const pinLoc = (loc) => (dragPos && dragPos.id === loc.id) ? { ...loc, x: dragPos.x, y: dragPos.y } : loc;
+  const pinLoc = (loc) => {
+    let l = (dragPos && dragPos.id === loc.id) ? { ...loc, x: dragPos.x, y: dragPos.y } : loc;
+    if (groupMove && groupMove.ids.has(loc.id)) l = { ...l, x: _clampPct(l.x + groupMove.dx), y: _clampPct(l.y + groupMove.dy) };
+    return l;
+  };
 
   // Determine which routes/items to emphasise
   const emphRouteIds = ctxShow && ctxShow.routeIds || [];
@@ -1265,6 +1374,31 @@ const AtlasMap = ({
   const emphFaction  = ctxShow && ctxShow.factionId ? factions.find((f) => f.id === ctxShow.factionId) : null;
   const emphChapter  = ctxShow && ctxShow.chapterDiff ? chapters.find((c) => c.id === ctxShow.chapterDiff) : null;
   const focusId      = (ctxShow && ctxShow.focusLocId) || selectedId;
+
+  // Keyboard: Delete removes the selection, Ctrl/Cmd+C / +V copy/paste it,
+  // Escape clears it. Ignored while typing in a field.
+  _ue_am(() => {
+    if (variant !== "editor") return;
+    const onKey = (e) => {
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+      const ids = selIds.size ? [...selIds] : (focusId ? [focusId] : []);
+      if ((e.key === "Delete" || e.key === "Backspace") && ids.length && onMultiDelete) {
+        e.preventDefault(); onMultiDelete(ids); setSelIds(new Set());
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === "c" || e.key === "C") && ids.length) {
+        clipRef.current = ids.slice();
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === "v" || e.key === "V") && clipRef.current && clipRef.current.length && onMultiDuplicate) {
+        e.preventDefault();
+        Promise.resolve(onMultiDuplicate(clipRef.current, 4, 4)).then((newIds) => {
+          if (Array.isArray(newIds) && newIds.length) { setSelIds(new Set(newIds)); clipRef.current = newIds.slice(); }
+        });
+      } else if (e.key === "Escape") {
+        setSelIds(new Set()); setMarquee(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [variant, selIds, focusId, onMultiDelete, onMultiDuplicate]);
 
   // Pin dimming when something is highlighted in context
   const isCtxActive = !!(emphRouteIds.length || emphBeast || emphItem || emphQuest || emphFaction || emphChapter);
@@ -1300,10 +1434,12 @@ const AtlasMap = ({
   return (
     <svg ref={svgRef} className={"atm__svg " + className} viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet" data-variant={variant}
          data-tool={tool}
-         style={{ cursor: (isDrawTool || tool === "draw-polygon" || tool === "stamp") ? "crosshair" : (tool === "pan" ? "grab" : undefined) }}
+         style={{ cursor: (isDrawTool || tool === "draw-polygon" || tool === "stamp") ? "crosshair" : (tool === "pan" ? "grab" : undefined),
+                  touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}
          onClick={onSvgClick} onDoubleClick={onSvgDoubleClick} onWheel={onViewChange ? onWheel : undefined}
+         onDragStart={(ev) => ev.preventDefault()} draggable={false}
          onPointerDown={onSvgPointerDown} onPointerMove={onSvgPointerMove}
-         onPointerUp={onSvgPointerUp} onPointerCancel={onSvgPointerUp} onLostPointerCapture={onSvgPointerUp}>
+         onPointerUp={onSvgPointerUp} onPointerCancel={onSvgPointerUp}>
       <g transform={`translate(${vt.x},${vt.y}) scale(${vt.z})`}>
       <AtlasPlate showIso={showIso} showGrid={showGrid} showTexture={showTexture} interior={interior} title={title}/>
 
@@ -1311,7 +1447,7 @@ const AtlasMap = ({
       <g opacity={opOf("regions")}><AtlasRegions locations={locations} layers={layers} highlight={regionHighlight}/></g>
 
       {/* Drawn regions (user shapes) — above static polygons, below pins */}
-      <AtlasShapes locations={locations} layers={layers} onSelect={onSelect} focusId={focusId}
+      <AtlasShapes locations={locations} layers={layers} onSelect={onPickInternal} focusId={focusId} selectedSet={selIds}
                    ctxLocs={ctxLocs} dimFn={scrubFn} clean={cleanStyle}
                    showLabels={showLabels && variant === "editor"}
                    shapeOf={shapeOf} onShapePointerDown={onReshape ? onShapePointerDown : null}
@@ -1325,8 +1461,8 @@ const AtlasMap = ({
       })()}
 
       {/* Object stamps (pre-made map symbols) — above regions, below pins */}
-      <AtlasSymbols locations={locations} layers={layers} focusId={focusId}
-                    onSelect={onSelect} onSymbolDown={onSymbolPointerDown}
+      <AtlasSymbols locations={locations} layers={layers} focusId={focusId} selectedSet={selIds}
+                    onSelect={onPickInternal} onSymbolDown={onSymbolPointerDown}
                     onDoubleClick={onDrillDown} onSizeDown={onResizeSymbol ? onSymbolSizeDown : null}
                     sizeOf={symbolSizeOf} posOf={pinLoc}
                     showLabels={showLabels && variant === "editor"}
@@ -1382,13 +1518,16 @@ const AtlasMap = ({
           const focused = loc.id === focusId;
           // Queue badge
           const badge = loc.queue ? { text: String(loc.queue), color: loc.queueLevel === "high" ? "#5d6d4e" : "#c98a2c" } : null;
+          const msel = selIds.has(loc.id);
+          const pp = _amPx(pinLoc(loc));
           return (
             <g key={loc.id} data-atm-pin={loc.id} opacity={opOf(pinLayerId(loc))} onPointerDown={(e) => onPinPointerDown(e, loc)}
                onDoubleClick={(e) => { if (onDrillDown) { e.stopPropagation(); onDrillDown(loc); } }}>
+              {msel && <circle cx={pp.x} cy={pp.y} r="13" fill="rgba(201,138,44,0.16)" stroke="#c98a2c" strokeWidth="1.4" strokeDasharray="4 3"/>}
               <AtlasPin loc={pinLoc(loc)} focused={focused} dim={dim} badge={badge}
                         scaleLabel={variant === "side" ? 1 : 0.95}
                         showLabel={showLabels && (variant === "editor" || ["country","city","town","region"].includes(loc.type))}
-                        onClick={onSelect}/>
+                        onClick={onPickInternal}/>
             </g>
           );
         })}
@@ -1401,6 +1540,13 @@ const AtlasMap = ({
         const T = g.tag;
         return <T {...g.props} fill={g.open ? "none" : "rgba(201,138,44,0.16)"} stroke="#c98a2c" strokeWidth="1.8"
                   strokeDasharray="6 3" strokeLinejoin="round" strokeLinecap="round" pointerEvents="none"/>;
+      })()}
+      {/* Marquee selection rectangle */}
+      {marquee && (() => {
+        const xlo = Math.min(marquee.x0, marquee.x1), xhi = Math.max(marquee.x0, marquee.x1);
+        const ylo = Math.min(marquee.y0, marquee.y1), yhi = Math.max(marquee.y0, marquee.y1);
+        return <rect x={(xlo / 100) * 1200} y={(ylo / 100) * 700} width={((xhi - xlo) / 100) * 1200} height={((yhi - ylo) / 100) * 700}
+                     fill="rgba(201,138,44,0.10)" stroke="#c98a2c" strokeWidth="1.2" strokeDasharray="5 3" pointerEvents="none"/>;
       })()}
       {polyPts.length > 0 && (
         <g pointerEvents="none">

@@ -307,4 +307,121 @@ test.describe("T77. Atlas editor — shapes + unplaced tray", () => {
     await expect(editor.locator('.atm__svg [fill="url(#atm-floor)"]').first()).toBeVisible({ timeout: 3000 });
     if (process.env.SHOT) await page.screenshot({ path: "/tmp/atlas-demo-world.png" });
   });
+
+  test("the demo world can be cleared from the canvas bar", async ({ page }) => {
+    await openFreshApp(page);
+    page.on("dialog", (d) => d.accept());
+    await page.evaluate(() => window.AtlasSampleWorld.seed());
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    await expect(editor.locator("[data-ui='AtlasDemoBar']")).toBeVisible({ timeout: 5000 });
+    await editor.locator("[data-testid='ae-clear-demo']").click();
+    await page.waitForTimeout(500);
+
+    const left = await page.evaluate(() => window.AtlasSampleWorld.exists());
+    expect(left).toBe(false);
+    await expect(editor.locator("[data-ui='AtlasDemoBar']")).toHaveCount(0);
+    // back to the empty-plate prompt
+    await expect(editor.locator("[data-ui='AtlasSeedDemo']")).toBeVisible({ timeout: 5000 });
+  });
+
+  // pct (0-100) → screen point, mirroring the SVG xMidYMid-meet letterbox
+  // (editor opens at view z=1,x=0,y=0 so no zoom/pan inversion needed).
+  function pctToScreen(svgBox, xPct, yPct) {
+    const scale = Math.min(svgBox.width / 1200, svgBox.height / 700);
+    const ox = (svgBox.width - 1200 * scale) / 2, oy = (svgBox.height - 700 * scale) / 2;
+    return { x: svgBox.x + ox + (xPct / 100) * 1200 * scale, y: svgBox.y + oy + (yPct / 100) * 700 * scale };
+  }
+
+  test("marquee selects multiple stamps; a group drag moves them together", async ({ page }) => {
+    await openFreshApp(page);
+    const A = await saveEntity(page, "locations", { name: "Aaa", data: { placed: true, symbol: "castle", symbolSize: 1.4, coords: { x: 30, y: 40 }, kind: "building" } }, { status: "active" });
+    const B = await saveEntity(page, "locations", { name: "Bbb", data: { placed: true, symbol: "castle", symbolSize: 1.4, coords: { x: 44, y: 46 }, kind: "building" } }, { status: "active" });
+    const C = await saveEntity(page, "locations", { name: "Ccc", data: { placed: true, symbol: "castle", symbolSize: 1.4, coords: { x: 82, y: 82 }, kind: "building" } }, { status: "active" });
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    const svgBox = await editor.locator(".atm__svg").boundingBox();
+
+    // marquee from empty (15,25) to (55,58) — encloses A & B anchors, not C
+    const s = pctToScreen(svgBox, 15, 25), e = pctToScreen(svgBox, 55, 58);
+    await page.mouse.move(s.x, s.y);
+    await page.mouse.down();
+    await page.mouse.move(e.x, e.y, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+
+    // grab A (at its anchor = motif centre) and drag the group down-right
+    const a0 = pctToScreen(svgBox, 30, 40);
+    await page.mouse.move(a0.x, a0.y);
+    await page.mouse.down();
+    await page.mouse.move(a0.x + 60, a0.y + 45);
+    await page.mouse.move(a0.x + 110, a0.y + 80);
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+
+    const co = await page.evaluate((ids) => {
+      const g = (id) => window.LoomwrightBackend.EntityService.getSync(id, "locations").data.coords;
+      return { a: g(ids.a), b: g(ids.b), c: g(ids.c) };
+    }, { a: A.id, b: B.id, c: C.id });
+    expect(co.a.x).toBeGreaterThan(31);  // A moved right
+    expect(co.b.x).toBeGreaterThan(45);  // B moved right with the group
+    expect(co.a.y).toBeGreaterThan(41);  // moved down
+    expect(Math.round(co.c.x)).toBe(82); // C untouched
+  });
+
+  test("Delete key removes a marquee selection; Ctrl+C / Ctrl+V duplicates", async ({ page }) => {
+    await openFreshApp(page);
+    const A = await saveEntity(page, "locations", { name: "Del A", data: { placed: true, symbol: "tower", symbolSize: 1.3, coords: { x: 32, y: 40 }, kind: "building" } }, { status: "active" });
+    const B = await saveEntity(page, "locations", { name: "Del B", data: { placed: true, symbol: "tower", symbolSize: 1.3, coords: { x: 46, y: 46 }, kind: "building" } }, { status: "active" });
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    const svgBox = await editor.locator(".atm__svg").boundingBox();
+    const activeCount = () => page.evaluate(() => window.LoomwrightBackend.EntityService.listSync("locations").filter((l) => l.status !== "deleted").length);
+
+    // copy/paste a single click-selected stamp first
+    const a0 = pctToScreen(svgBox, 32, 40);
+    await page.mouse.click(a0.x, a0.y);
+    await page.waitForTimeout(150);
+    await page.keyboard.press("Control+c");
+    await page.keyboard.press("Control+v");
+    await page.waitForTimeout(400);
+    expect(await activeCount()).toBe(3); // A, B, + one copy
+
+    // marquee both originals + the copy region, then Delete
+    const s = pctToScreen(svgBox, 18, 26), e = pctToScreen(svgBox, 60, 60);
+    await page.mouse.move(s.x, s.y);
+    await page.mouse.down();
+    await page.mouse.move(e.x, e.y, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    await page.keyboard.press("Delete");
+    await page.waitForTimeout(400);
+
+    // both originals are gone from the map
+    await expect(editor.locator(`[data-atm-symbol='${A.id}']`)).toHaveCount(0);
+    await expect(editor.locator(`[data-atm-symbol='${B.id}']`)).toHaveCount(0);
+  });
+
+  test("the inspector Delete button removes an individual place", async ({ page }) => {
+    await openFreshApp(page);
+    page.on("dialog", (d) => d.accept());
+    const loc = await saveEntity(page, "locations", { name: "Doomed Keep", data: { placed: true, symbol: "castle", symbolSize: 1.4, coords: { x: 50, y: 45 }, kind: "building" } }, { status: "active" });
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    await editor.locator(`[data-atm-symbol='${loc.id}']`).click();
+    await page.waitForTimeout(150);
+    await expect(editor.locator("[data-testid='ae-insp-delete']")).toBeVisible({ timeout: 3000 });
+    await editor.locator("[data-testid='ae-insp-delete']").click();
+    await page.waitForTimeout(400);
+
+    await expect(editor.locator(`[data-atm-symbol='${loc.id}']`)).toHaveCount(0);
+    const status = await page.evaluate((id) => window.LoomwrightBackend.EntityService.getSync(id, "locations")?.status, loc.id);
+    expect(status).toBe("deleted");
+  });
 });
