@@ -96,6 +96,13 @@ const OnboardingStepHeader = ({ step, idx, total }) => (
     </div>
     <h1 className="ob__step__h1">{step.title}</h1>
     <p className="ob__step__lede">{step.lede}</p>
+    {step.payoff && (
+      <div className="ob__step__payoff" data-ui="OnboardingPayoff"
+           style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 10, padding: "8px 12px", borderRadius: 8, background: "rgba(201,138,44,0.10)", border: "1px solid rgba(201,138,44,0.30)", fontSize: "var(--fs-sm)", color: "var(--ink-2)", lineHeight: 1.4 }}>
+        <Icon name="sparkle" size={13}/>
+        <span><b style={{ fontWeight: 600 }}>What you get — </b>{step.payoff}</span>
+      </div>
+    )}
   </div>
 );
 

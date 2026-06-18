@@ -229,6 +229,14 @@ const AppShell = () => {
       setOnboarding({ open: false, initial: null });
       const dest = e && e.detail && e.detail.dest;
       if (dest) setRouteId(dest === "atlas" || dest === "cast" ? dest : (["home", "today", "writers-room"].includes(dest) ? dest : "writers-room"));
+      // "What you got" — surface what the setup actually seeded into the project.
+      const s = (e && e.detail && e.detail.seeded) || {};
+      const NOUN = { cast: "character", factions: "faction", locations: "location", classes: "class", races: "race", stats: "stat", chapters: "chapter", references: "reference" };
+      const parts = Object.keys(NOUN).map((k) => {
+        const n = s[k] || 0; if (!n) return null;
+        const w = NOUN[k]; return n + " " + (n === 1 ? w : (w.endsWith("s") ? w + "es" : w + "s"));
+      }).filter(Boolean);
+      if (parts.length) setTimeout(() => window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Project ready — seeded " + parts.join(" · ") + ". Find them in their tabs." } })), 450);
     };
     window.addEventListener("lw:open-onboarding-wizard", onOpen);
     window.addEventListener("lw:onboarding-complete", onComplete);
