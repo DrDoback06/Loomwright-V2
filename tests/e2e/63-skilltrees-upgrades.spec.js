@@ -71,4 +71,35 @@ test.describe("T63. Skill Trees tab", () => {
     const icon = await page.evaluate((sid) => window.LoomwrightBackend.EntityService.getSync(sid, "skills").data.icon, skill.id);
     expect(icon).toBe("fire");
   });
+
+  test("a prerequisite renders as a directional link and can be removed from the inspector", async ({ page }) => {
+    await openFreshApp(page);
+    const a = await saveEntity(page, "skills", { name: "Stance", data: { skillType: "passive" } }, { status: "active" });
+    const b = await saveEntity(page, "skills", { name: "Lunge", data: { skillType: "active" } }, { status: "active" });
+    const treeId = await page.evaluate(async (ids) => {
+      const S = window.LoomwrightBackend.SkillTreeService;
+      const t = await S.addTree({ name: "Blade" });
+      await S.addNode(t.id, ids.a, { x: 40, y: 75 });
+      await S.addNode(t.id, ids.b, { x: 60, y: 45 });
+      await S.connectNodes(t.id, ids.a, ids.b, "prereq");   // seed a prereq edge
+      return t.id;
+    }, { a: a.id, b: b.id });
+    const edgesNow = () => page.evaluate((tid) => ((window.LoomwrightBackend.SkillTreeService.loadSync().trees.find((t) => t.id === tid) || {}).edges) || [], treeId);
+
+    await openSkillTreesPanel(page);
+    await expect(page.locator(".stp-host")).toBeVisible({ timeout: 5000 });
+    await page.evaluate((tid) => window.dispatchEvent(new CustomEvent("lw:open-existing-fullscreen", { detail: { workspaceId: "skill-tree-editor", entityId: tid } })), treeId);
+    const editor = page.locator("[data-ui='SkillTreeEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    // the edge renders as a directional connection line (arrowhead marker)
+    await expect(editor.locator("path[marker-end]")).toHaveCount(1, { timeout: 5000 });
+
+    // select Lunge, remove the prerequisite via the inspector ✕ (disconnectNodes)
+    await editor.locator(`[data-st-node="${b.id}"]`).click();
+    await page.waitForTimeout(200);
+    await page.locator(`[data-testid="ste-disconnect-${a.id}"]`).click();
+    await page.waitForTimeout(300);
+    expect((await edgesNow()).some((e) => e.from === a.id && e.to === b.id)).toBe(false);
+  });
 });

@@ -177,6 +177,7 @@ const liveTreeToView = (tree, ctx) => {
     assignedClasses: (tree.assignedClasses || []),
     review: 0, // filled by the caller via suggestTreeFor
     constellation: tree.constellation || tree.name || "—",
+    edges: (tree.edges || []).filter((e) => e && nodeIds.includes(e.from) && nodeIds.includes(e.to)).map((e) => ({ from: e.from, to: e.to, kind: e.kind || "leads-to" })),
     nodes,
     raw: tree,
   };
@@ -657,6 +658,13 @@ const SkillTreeCanvas = ({
         <pattern id="stc-grain" patternUnits="userSpaceOnUse" width="4" height="4">
           <circle cx="2" cy="2" r="0.4" fill="rgba(120,96,60,0.10)"/>
         </pattern>
+        {/* Directional arrowheads for connection lines (prereq -> dependent) */}
+        <marker id="stc-arrow-ink" viewBox="0 0 12 12" refX="9" refY="6" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto">
+          <path d="M0 1.5 L11 6 L0 10.5 z" fill="#3a2c12" opacity="0.6"/>
+        </marker>
+        <marker id="stc-arrow-gold" viewBox="0 0 12 12" refX="9" refY="6" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto">
+          <path d="M0 1.5 L11 6 L0 10.5 z" fill="#c98a2c"/>
+        </marker>
       </defs>
       <rect x="0" y="0" width={W} height={H} fill={"url(#stc-vault-" + tree.id + ")"}/>
       <rect x="0" y="0" width={W} height={H} fill="url(#stc-grain)" opacity="0.5"/>
@@ -694,27 +702,34 @@ const SkillTreeCanvas = ({
           })}
         </g>
 
-        {/* Connection lines */}
+        {/* Connection lines — drawn prerequisite -> dependent, styled by kind
+            (prereq = ink, upgrade = gilt, leads-to = faint dashed) with a
+            directional arrowhead so the order of the path reads at a glance. */}
         {show("connections") && (
           <g>
-            {visibleNodes.map((n) =>
-              n.requires.map((rid) => {
-                const r = visibleNodes.find((x) => x.id === rid);
-                if (!r) return null;
-                const pn = posOf(n), pr = posOf(r);
-                const x1 = (pr.x / 100) * W, y1 = (pr.y / 100) * H;
-                const x2 = (pn.x / 100) * W, y2 = (pn.y / 100) * H;
-                const mx = (x1 + x2) / 2;
-                const my = (y1 + y2) / 2 - 14;
-                return (
-                  <g key={n.id + rid}>
-                    <path d={`M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`}
-                          fill="none" stroke="#3a2c12" strokeOpacity={n.unlocked ? 0.55 : 0.30}
-                          strokeWidth={n.unlocked ? 1.2 : 0.8}
-                          strokeDasharray={n.unlocked ? "0" : "3 4"}/>
-                  </g>
-                );
-              }))}
+            {(tree.edges || []).map((e, i) => {
+              const from = visibleNodes.find((x) => x.id === e.from);
+              const to = visibleNodes.find((x) => x.id === e.to);
+              if (!from || !to) return null;
+              if (e.kind === "upgrade" && !show("upgrade")) return null;
+              const pf = posOf(from), pt = posOf(to);
+              const x1 = (pf.x / 100) * W, y1 = (pf.y / 100) * H;
+              const x2 = (pt.x / 100) * W, y2 = (pt.y / 100) * H;
+              const tr = to.tier === 1 ? 19 : to.tier === 2 ? 16 : to.tier === 3 ? 14 : 12;
+              const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+              const ex = x2 - (dx / len) * (tr + 7), ey = y2 - (dy / len) * (tr + 7);
+              const mx = (x1 + ex) / 2, my = (y1 + ey) / 2 - 14;
+              const upgrade = e.kind === "upgrade";
+              const lit = to.unlocked;
+              return (
+                <path key={"e" + i} d={`M ${x1} ${y1} Q ${mx} ${my} ${ex} ${ey}`}
+                      fill="none" stroke={upgrade ? "#c98a2c" : "#3a2c12"}
+                      strokeOpacity={lit ? (upgrade ? 0.85 : 0.6) : 0.3}
+                      strokeWidth={upgrade ? (lit ? 1.7 : 1.2) : (lit ? 1.3 : 0.8)}
+                      strokeDasharray={e.kind === "leads-to" ? "3 4" : upgrade ? "6 3" : "0"}
+                      markerEnd={upgrade ? "url(#stc-arrow-gold)" : "url(#stc-arrow-ink)"}/>
+              );
+            })}
           </g>
         )}
 
@@ -1275,10 +1290,27 @@ const SkillTreeEditor = ({ ctx, views, initialTreeId, onExit }) => {
                 {node.cost && <STRow k="Cost"    v={node.cost}/>}
                 <STRow k="Locked"  v={node.unlocked ? "Unlocked" : "Locked"}/>
                 <STRow k="Bearers" v={node.chars + " character(s)"}/>
-                {node.requires.length > 0 && (
-                  <STRow k="Requires" v={node.requires.map((r) => tree.nodes.find((x) => x.id === r)?.name).filter(Boolean).join(" · ")}/>
-                )}
                 {node.linkedStats.length > 0 && <STRow k="Stats" v={node.linkedStats.join(", ")}/>}
+
+                {node.requires.length > 0 && (
+                  <div className="ste-insp__sec">
+                    <div className="ste-insp__sech">Requires</div>
+                    {node.requires.map((rid) => {
+                      const r = tree.nodes.find((x) => x.id === rid);
+                      if (!r) return null;
+                      return (
+                        <span key={rid} className="ste-insp__chip" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <button onClick={() => setSelectedNodeId(rid)} style={{ all: "unset", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <span className={"ste-insp__chip-type ste-insp__chip-type--" + r.type}/><span>{r.name}</span>
+                          </button>
+                          <button title="Remove this prerequisite" data-testid={"ste-disconnect-" + rid}
+                                  onClick={async () => { await B()?.SkillTreeService?.disconnectNodes(tree.id, rid, node.id); }}
+                                  style={{ all: "unset", cursor: "pointer", color: "var(--atl-ink-3, #76684c)", fontSize: 11, lineHeight: 1, padding: "0 2px" }}>✕</button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
 
                 <div className="ste-insp__sec">
                   <div className="ste-insp__sech">Upgrades</div>
