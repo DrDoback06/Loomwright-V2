@@ -287,6 +287,22 @@
 .app-shell[data-mobile="true"] .rqc__actions .rqc__primary { flex: 1 0 auto; }
 
 /* ---------------------------------------------------------------------
+   Canvas-style panels (Relationships, Timeline, Skill trees, Atlas) —
+   stack their desktop multi-column grids so they fit the phone sheet.
+   The graph/constellation/map canvases themselves already scale (SVG) or
+   handle touch (skill-tree pinch/pan), so only the surrounding chrome and
+   side-by-side panes need to collapse.
+   --------------------------------------------------------------------- */
+/* Relationships: dual-column compare / hopes-fears panes stack. */
+.app-shell[data-mobile="true"] .rel-twocol,
+.app-shell[data-mobile="true"] .rel-compare__cols { grid-template-columns: 1fr; }
+/* Timeline: the split (canvas + inspector) view collapses to one column. */
+.app-shell[data-mobile="true"] .tl-grid[data-mode="split"] { grid-template-columns: 1fr; }
+/* Skill trees: the 200px roster stacks above the preview/canvas. */
+.app-shell[data-mobile="true"] .stp,
+.app-shell[data-mobile="true"] .stm { grid-template-columns: 1fr; }
+
+/* ---------------------------------------------------------------------
    5. Full-screen workspaces (fws-*) collapse to a single column.
    --------------------------------------------------------------------- */
 @media (max-width: 700px) {
