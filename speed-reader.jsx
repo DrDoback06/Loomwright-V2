@@ -491,6 +491,9 @@ function useSpeedReader(initialSourceId = "ch7") {
 // ---------------------------------------------------------------------
 const SpeedReaderPanelBody = ({ panel }) => {
   const sr = useSpeedReader("ch7");
+  // On the phone the panel is a full-screen sheet, so the word can use the
+  // reader's true font-size; the narrow desktop side-panel still caps at 44.
+  const srMobile = typeof useIsMobile !== "undefined" ? useIsMobile() : false;
   const split = srSplitWord(sr.beat ? sr.beat.word : "—");
   const srEntityMap = srUseEntityLookup();
   const entityHit = srEntityFor(srEntityMap, sr.beat ? sr.beat.word : "");
@@ -548,7 +551,7 @@ const SpeedReaderPanelBody = ({ panel }) => {
           data-ui="SpeedReaderWord" data-testid="sr-word"
           data-entity-type={entityHit ? entityHit.type : undefined}
           title={entityHit ? entityHit.name + " — known " + entityHit.type : undefined}
-          style={{ fontSize: Math.min(sr.fontSize, 44), "--ec": entityHit ? entityHit.color : undefined }}>
+          style={{ fontSize: srMobile ? sr.fontSize : Math.min(sr.fontSize, 44), "--ec": entityHit ? entityHit.color : undefined }}>
           <span className="sr-panel__word-side">{split.before}</span>
           <span className="sr-panel__word-pivot" data-testid="sr-pivot">{split.pivot}</span>
           <span className="sr-panel__word-side">{split.after}</span>

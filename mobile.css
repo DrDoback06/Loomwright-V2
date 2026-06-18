@@ -241,6 +241,19 @@
 .app-shell[data-mobile="true"] .panel__toolbar button { min-width: 36px; min-height: 36px; }
 
 /* ---------------------------------------------------------------------
+   Reading (Speed Reader) — purpose-built phone layout. The full-screen
+   sheet turns the compact side-panel into a real RSVP reading surface:
+   a big centred pivot word and thumb-sized transport controls.
+   --------------------------------------------------------------------- */
+.app-shell[data-mobile="true"] .sr-panel { gap: 14px; padding: 12px; }
+.app-shell[data-mobile="true"] .sr-panel__stage { min-height: 200px; padding: 32px 16px; justify-content: center; }
+/* word size is driven by the reader's font-size on mobile (see srMobile in
+   speed-reader.jsx); inline style would override CSS here anyway. */
+.app-shell[data-mobile="true"] .sr-panel__transport { gap: 10px; margin: 6px 0; }
+.app-shell[data-mobile="true"] .sr-panel__t-btn { width: 48px; height: 48px; font-size: 20px; }
+.app-shell[data-mobile="true"] .sr-panel__t-btn--play { width: 60px; height: 60px; font-size: 24px; }
+
+/* ---------------------------------------------------------------------
    5. Full-screen workspaces (fws-*) collapse to a single column.
    --------------------------------------------------------------------- */
 @media (max-width: 700px) {
