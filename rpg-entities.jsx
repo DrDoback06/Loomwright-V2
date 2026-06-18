@@ -182,11 +182,11 @@ const ItemDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSourceMent
       )}
 
       {effects.length > 0 && (
-        <RpgSection title="Triggered effects" action={{ label: "+ Add effect", callback: "onAddItemEffect" }}>
-          <div className="rpg-effects">
+        <RpgSection title="Effects" action={{ label: "+ Add effect", callback: "onAddItemEffect" }}>
+          <div className="rpg-effects" data-testid="item-effects">
             {effects.map((f, i) => (
-              <div key={i} className="rpg-effect">
-                <div className="rpg-effect__trig">{f.trigger}</div>
+              <div key={i} className="rpg-effect" data-effect-kind={f.kind || ""}>
+                <div className="rpg-effect__trig">{f.kind ? (f.trigger ? f.kind + " · " + f.trigger : f.kind) : (f.trigger || "—")}</div>
                 <div className="rpg-effect__arrow">→</div>
                 <div className="rpg-effect__body">{f.effect}</div>
                 {f.cost && <div className="rpg-effect__cost">{f.cost}</div>}

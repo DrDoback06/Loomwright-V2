@@ -128,7 +128,11 @@ function liveItemToDetail(entity) {
     restrictions: norm(d.restrictions),
     modifiers,
     affixes,
-    effects: Array.isArray(d.triggered) ? d.triggered : [],
+    effects: [
+      ...(Array.isArray(d.passive)   ? d.passive.map((f)   => ({ ...f, kind: "Passive" }))   : []),
+      ...(Array.isArray(d.active)    ? d.active.map((f)    => ({ ...f, kind: "Active" }))    : []),
+      ...(Array.isArray(d.triggered) ? d.triggered.map((f) => ({ ...f, kind: "Triggered" })) : []),
+    ],
     ownership: [], equipped: [], trades: [], upgrades: [],
     quests: _itRefList(d.quests, "quests"),
     events: _itRefList(d.events, "events"),

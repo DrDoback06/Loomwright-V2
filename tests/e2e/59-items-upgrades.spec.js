@@ -60,4 +60,29 @@ test.describe("T59. Items tab upgrades", () => {
     await expect(rows).toHaveCount(1);
     await expect(rows).toContainText("Bone Auger");
   });
+
+  test("dossier shows passive + active + triggered effects (not just triggered)", async ({ page }) => {
+    await openFreshApp(page);
+    await saveEntity(page, "items", {
+      name: "Frostbrand",
+      data: {
+        itemType: "Weapon", rarity: "Mythic",
+        passive:   [{ trigger: "", effect: "+2 warmth while carried" }],
+        active:    [{ trigger: "on command", effect: "sheathe in blue flame", cost: "1 charge" }],
+        triggered: [{ trigger: "on a critical hit", effect: "freeze the wound" }],
+      },
+    }, { status: "active" });
+    await openItemsPanel(page);
+    const panel = page.locator("[data-ui='ItemsPanelBody']");
+    await expect(panel).toBeVisible({ timeout: 5000 });
+
+    // all three effect kinds render — previously only "triggered" survived the adapter
+    const effects = panel.locator("[data-testid='item-effects'] .rpg-effect");
+    await expect(effects).toHaveCount(3, { timeout: 5000 });
+    await expect(panel.locator("[data-effect-kind='Passive']")).toHaveCount(1);
+    await expect(panel.locator("[data-effect-kind='Active']")).toHaveCount(1);
+    await expect(panel.locator("[data-effect-kind='Triggered']")).toHaveCount(1);
+    await expect(panel).toContainText("+2 warmth while carried");
+    await expect(panel).toContainText("sheathe in blue flame");
+  });
 });
