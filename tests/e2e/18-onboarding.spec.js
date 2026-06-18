@@ -120,9 +120,12 @@ test.describe("T18. Onboarding wizard", () => {
           { id: "s2", name: "Mara of Hess", role: "Antagonist", klass: "Knight-errant", race: "Hessian", faction: "House Hess" },
         ] },
         rpg: { toggles: { abilities: true }, customAbilityNames: "Auger-sight, Saltbinding" },
+        voice: { samples: [{ id: "v1", text: "The auger spoke, low and certain, across the hushed hall." }] },
         ai: { mode: "local" }, workspace: { startTab: "cast" },
       });
     });
+    const refTitles = await page.evaluate(async () => (await window.LoomwrightBackend.StorageService.get("references", [])).map((r) => r.title));
+    expect(refTitles).toContain("Voice sample 1");   // extra voice samples wired into references (no longer dead)
     const out = await page.evaluate(() => {
       const L = (t) => window.LoomwrightBackend.EntityService.listSync(t).map((e) => e.name);
       const f = window.LoomwrightBackend.EntityService.listSync("factions").find((e) => e.name === "House Vey");

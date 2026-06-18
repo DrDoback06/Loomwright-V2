@@ -928,6 +928,13 @@
         id: it.id || uuid("ref"), title: it.title || "Reference", content: it.content || "", kind: it.kind || "pasted",
         includedInAIContext: it.context !== false, tags: it.tags || [], createdAt: nowIso(),
       })).filter((r) => !existingRefKeys.has(refKey(r)));
+      // Extra voice samples (Voice step "Add another sample") were collected
+      // but never used — keep them as tagged style references so they count.
+      const vSamples = ((data.voice && data.voice.samples) || []).map((s) => (s && (s.text || s.sample)) || "").filter((t) => t && t.trim());
+      vSamples.forEach((t, i) => {
+        const ref = { id: uuid("ref"), title: "Voice sample " + (i + 1), content: t, kind: "style", includedInAIContext: true, style: true, tags: ["voice", "style"], createdAt: nowIso() };
+        if (!existingRefKeys.has(refKey(ref)) && !newRefs.some((r) => refKey(r) === refKey(ref))) newRefs.push(ref);
+      });
       if (newRefs.length) {
         try { await StorageService.set(KEYS.references, [...(existingRefs || []), ...newRefs]); window.dispatchEvent(new CustomEvent("lw:references-updated")); seeded.references = newRefs.length; } catch (_) {}
       }

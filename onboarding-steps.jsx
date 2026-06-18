@@ -492,11 +492,18 @@ const Step_Cast = ({ data, set, callbacks }) => {
             <div className="ob-grid ob-grid--3">
               <Field label="Name"><input className="ob-input" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })}/></Field>
               <Field label="Aliases" optional><input className="ob-input" placeholder="The Diviner, Veyling" value={editing.aliases} onChange={(e) => setEditing({ ...editing, aliases: e.target.value })}/></Field>
-              <Field label="Role"><input className="ob-input" placeholder="Protagonist · Antagonist · Ally" value={editing.role} onChange={(e) => setEditing({ ...editing, role: e.target.value })}/></Field>
+              <Field label="Role"><input className="ob-input" list="ob-role-options" placeholder="Protagonist · Antagonist · Ally" value={editing.role} onChange={(e) => setEditing({ ...editing, role: e.target.value })}/></Field>
               <Field label="Race / species" optional><input className="ob-input" value={editing.race} onChange={(e) => setEditing({ ...editing, race: e.target.value })}/></Field>
               <Field label="Class / archetype" optional><input className="ob-input" placeholder="Diviner, Knight-errant…" value={editing.klass} onChange={(e) => setEditing({ ...editing, klass: e.target.value })}/></Field>
-              <Field label="Faction" optional><input className="ob-input" value={editing.faction} onChange={(e) => setEditing({ ...editing, faction: e.target.value })}/></Field>
+              <Field label="Faction" optional><input className="ob-input" list="ob-faction-options" placeholder="House Vey…" value={editing.faction} onChange={(e) => setEditing({ ...editing, faction: e.target.value })}/></Field>
             </div>
+            {/* Suggestions (free text still allowed): roles + factions named in the World step */}
+            <datalist id="ob-role-options">
+              {["Protagonist", "Antagonist", "Deuteragonist", "Ally", "Mentor", "Rival", "Love interest", "Foil", "Confidant", "Minor"].map((o) => <option key={o} value={o}/>)}
+            </datalist>
+            <datalist id="ob-faction-options">
+              {((typeof data.world?.factions === "string" ? data.world.factions.split(/[\n·,;|]+/) : []).map((x) => x.trim()).filter(Boolean)).map((o) => <option key={o} value={o}/>)}
+            </datalist>
             <div className="ob-grid ob-grid--2">
               <Field label="Personality notes"><textarea className="ob-textarea" rows={2} value={editing.personality} onChange={(e) => setEditing({ ...editing, personality: e.target.value })}/></Field>
               <Field label="Voice notes" optional><textarea className="ob-textarea" rows={2} placeholder="Speaks in shorter sentences when frightened." value={editing.voice} onChange={(e) => setEditing({ ...editing, voice: e.target.value })}/></Field>
