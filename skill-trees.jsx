@@ -662,6 +662,16 @@ const SkillTreeCanvas = ({
       <rect x="0" y="0" width={W} height={H} fill="url(#stc-grain)" opacity="0.5"/>
 
       <g transform={`translate(${view.x}, ${view.y}) scale(${view.k})`}>
+        {/* Faint celestial star-field — deterministic scatter behind the chart */}
+        <g opacity="0.55">
+          {Array.from({ length: 80 }).map((_, i) => {
+            const sx = _stHash("sx" + tree.id + i) % W;
+            const sy = _stHash("sy" + tree.id + i) % H;
+            const sr = 0.3 + (_stHash("sr" + i) % 12) / 14;
+            const dim = (_stHash("sd" + i) % 100) / 100;
+            return <circle key={"bg" + i} cx={sx} cy={sy} r={sr} fill="#4a381c" opacity={0.18 + dim * 0.22}/>;
+          })}
+        </g>
         {/* Zodiac arcs (faint background) */}
         <g opacity="0.32">
           {[0, 1, 2, 3].map((i) => (
@@ -714,30 +724,33 @@ const SkillTreeCanvas = ({
             const p = posOf(n);
             const x = (p.x / 100) * W;
             const y = (p.y / 100) * H;
-            const r = n.tier === 1 ? 13 : n.tier === 2 ? 10 : n.tier === 3 ? 8 : 7;
+            const r = n.tier === 1 ? 19 : n.tier === 2 ? 16 : n.tier === 3 ? 14 : 12;
             const isSelected = n.id === selectedNodeId;
             const isArmed = n.id === armedNodeId;
             return (
               <g key={n.id} transform={`translate(${x}, ${y})`} data-st-node={n.id}
                  onPointerDown={(e) => onPointerDownNode(e, n)}
                  style={{ cursor: tool === "select" ? "grab" : "pointer" }}>
-                {/* Halo */}
-                {isSelected && (
-                  <>
-                    <circle r={r + 14} fill={tree.color} opacity="0.10"/>
-                    <circle r={r + 6}  fill="none" stroke={tree.color} strokeWidth="1.5"/>
-                  </>
-                )}
+                {/* Soft celestial glow — gilt for unlocked, fainter when just selected */}
+                {(n.unlocked || isSelected) && <circle r={r + 13} fill={n.unlocked ? "#c98a2c" : tree.color} opacity={n.unlocked ? 0.18 : 0.10}/>}
+                {isSelected && <circle r={r + 6} fill="none" stroke={tree.color} strokeWidth="1.5"/>}
                 {isArmed && <circle r={r + 10} fill="none" stroke={tree.color} strokeWidth="1.2" strokeDasharray="4 3"/>}
                 {n.group && <circle r={r + 12} fill="none" stroke={tree.color} strokeOpacity="0.45" strokeWidth="0.8" strokeDasharray="6 4"/>}
                 {show("upgrade") && n.upgrade && <circle r={r + 4} fill="none" stroke="#c98a2c" strokeWidth="1" strokeDasharray="2 2"/>}
                 {show("review") && n.review && <circle r={r + 8} fill="none" stroke="#c98a2c" strokeWidth="0.8" strokeDasharray="1 3"/>}
 
-                {/* Star body */}
-                <circle r={r + 2} fill="rgba(255,248,230,0.95)" stroke={tree.color} strokeWidth="0.8"/>
-                <circle r={r} fill={n.unlocked ? tree.color : "rgba(255,248,230,0.95)"}
-                              stroke={tree.color} strokeWidth={n.unlocked ? 0 : 1.5}/>
-                {/* Inner glow */}
+                {/* Gilded star disc — cream face (so any icon reads), inked outer ring */}
+                <circle r={r + 2.5} fill="#fbf3df" stroke="#3a2c12" strokeOpacity="0.6" strokeWidth="1"/>
+                {(n.icon || n.iconUrl) ? (
+                  <circle r={r} fill={n.unlocked ? "rgba(201,138,44,0.14)" : "#fbf3df"}
+                                stroke={tree.color} strokeOpacity={n.unlocked ? 0.95 : 0.5} strokeWidth={n.unlocked ? 1.6 : 1}/>
+                ) : (
+                  <circle r={r} fill={n.unlocked ? tree.color : "#fbf3df"}
+                                stroke={tree.color} strokeWidth={n.unlocked ? 0 : 1.5}/>
+                )}
+                {/* Gilt accent ring on unlocked stars */}
+                {n.unlocked && <circle r={r - 1.5} fill="none" stroke="#fff" strokeOpacity="0.4" strokeWidth="0.7"/>}
+                {/* Inner glow only for the plain glyph (no icon) case */}
                 {n.unlocked && !n.icon && !n.iconUrl && <circle r={r * 0.5} fill="#fff" opacity="0.5"/>}
                 {/* Star face: custom image > chosen element/class icon > type glyph */}
                 {n.iconUrl ? (
