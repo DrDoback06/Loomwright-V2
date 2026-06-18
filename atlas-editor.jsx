@@ -1028,6 +1028,15 @@ const AtlasEditor = ({
     await B.AtlasService.updatePlacement(locId, { symbolSize: size });
     window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
   };
+  // Seed a complete example world from the empty-map prompt.
+  const handleSeedDemo = async () => {
+    const W = window.AtlasSampleWorld;
+    if (!W || !W.seed) return;
+    _aeNotice("Conjuring a demo world…");
+    const res = await W.seed();
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+    if (res && res.ok) _aeNotice("Demo world ready — " + res.count + " places. Double-click Aldercrown to step inside.");
+  };
   const handleSelect = (loc) => {
     // Two-tap road drawing when the Add Route tool is armed.
     if ((tool === "addRoute" || tool === "path-road" || tool === "path-route" || tool === "path-river") && loc) {
@@ -1109,7 +1118,8 @@ const AtlasEditor = ({
             title={activeMap === "world" ? "The Known World" : mapStack[mapStack.length - 1].name}
             tool={tool} onMapPoint={onMapPoint} onMovePin={onMovePin} onDrawShape={onDrawShape} onReshape={onReshape}
             onResizeSymbol={onResizeSymbol}
-            view={view} onViewChange={setView} onDrillDown={onDrillDown}/>
+            view={view} onViewChange={setView} onDrillDown={onDrillDown}
+            onSeedDemo={activeMap === "world" ? handleSeedDemo : null}/>
           {tool === "stamp" && (
             <div className="atlas-editor__stamphint" data-ui="AtlasStampHint"
                  style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 6,

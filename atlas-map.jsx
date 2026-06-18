@@ -743,6 +743,11 @@ const AtlasSymbols = ({
       const focused = loc.id === focusId;
       const dim = (ctxLocs && !ctxLocs.has(loc.id)) || (dimFn && dimFn(loc));
       const half = (SYMBOL_BOX / 2) * size;
+      // Selective labels keep dense clusters legible: always label the
+      // focused stamp, settlements, and sized-up landmarks; hide minor
+      // props (wells, signposts, small structures) until they're selected.
+      const meta = _AM_SYMBOL_BY_ID[loc.symbol];
+      const labelThis = showLabels && loc.name && (focused || (meta && meta.cat === "settlement") || size >= 1.2);
       return (
         <g key={loc.id} data-atm-symbol={loc.id} className={"atm-symbol" + (focused ? " is-focused" : "")}
            opacity={dim ? 0.34 : 1} transform={`translate(${p.x}, ${p.y})`}
@@ -752,7 +757,7 @@ const AtlasSymbols = ({
            onClick={(e) => { e.stopPropagation(); onSelect && onSelect(loc); }}>
           {focused && <circle r={half + 7} fill="rgba(255,200,80,0.16)" stroke="#c98a2c" strokeWidth="1.4" strokeDasharray="5 4"/>}
           <g transform={`scale(${size})`} filter="url(#atm-shadow)">{motif}</g>
-          {showLabels && loc.name && (
+          {labelThis && (
             <text x="0" y={half + 13} textAnchor="middle" fontFamily="var(--font-display)" fontSize="11.5" fontWeight="600"
                   fill="#2a2218" pointerEvents="none"
                   style={{ paintOrder: "stroke", stroke: "rgba(250,242,221,0.92)", strokeWidth: 3, strokeLinejoin: "round" }}>
@@ -1000,7 +1005,7 @@ const AtlasMap = ({
   // Live editing (editor variant): active tool + placement callbacks.
   tool = "select", onMapPoint = null, onMovePin = null, onDrawShape = null, onReshape = null,
   onResizeSymbol = null,
-  view = null, onViewChange = null, onDrillDown = null,
+  view = null, onViewChange = null, onDrillDown = null, onSeedDemo = null,
 }) => {
   const vt = view || { z: 1, x: 0, y: 0 };
   const locById = _um_am(() => Object.fromEntries(locations.map((l) => [l.id, l])), [locations]);
@@ -1415,15 +1420,22 @@ const AtlasMap = ({
       {/* Empty plate prompt — no placed locations yet */}
       {locations.every((l) => l.placed === false) && (
         <g data-ui="AtlasEmptyPlate">
-          <rect x="350" y="290" width="500" height="120" rx="8" fill="rgba(250,242,221,0.92)" stroke="rgba(74,56,28,0.35)" strokeWidth="1" strokeDasharray="6 4"/>
-          <text x="600" y="340" textAnchor="middle" fontFamily="var(--font-display)" fontStyle="italic" fontSize="19" fill="#4a3a22">
+          <rect x="350" y="278" width="500" height={onSeedDemo ? 172 : 120} rx="8" fill="rgba(250,242,221,0.92)" stroke="rgba(74,56,28,0.35)" strokeWidth="1" strokeDasharray="6 4"/>
+          <text x="600" y="326" textAnchor="middle" fontFamily="var(--font-display)" fontStyle="italic" fontSize="19" fill="#4a3a22">
             {locations.length === 0 ? "No locations yet" : "Nothing placed on the map yet"}
           </text>
-          <text x="600" y="368" textAnchor="middle" fontFamily="var(--font-sans)" fontSize="12.5" fill="#76684c">
+          <text x="600" y="354" textAnchor="middle" fontFamily="var(--font-sans)" fontSize="12.5" fill="#76684c">
             {locations.length === 0
               ? "Create a location, or extract them from your chapters."
               : "Open the editor, pick “Add Location”, and tap the parchment."}
           </text>
+          {onSeedDemo && (
+            <g data-ui="AtlasSeedDemo" style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); onSeedDemo(); }}>
+              <rect x="476" y="378" width="248" height="38" rx="19" fill="#c98a2c" stroke="#9a6a1c" strokeWidth="1"/>
+              <text x="600" y="402" textAnchor="middle" fontFamily="var(--font-display)" fontSize="14" fontWeight="700" fill="#fff8ea" letterSpacing="0.03em">✦ Conjure a demo world</text>
+              <text x="600" y="436" textAnchor="middle" fontFamily="var(--font-sans)" fontSize="10.5" fill="#8a7657" fontStyle="italic">a full example world you can explore and edit</text>
+            </g>
+          )}
         </g>
       )}
       </g>

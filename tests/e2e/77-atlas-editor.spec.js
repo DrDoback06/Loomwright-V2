@@ -263,4 +263,48 @@ test.describe("T77. Atlas editor — shapes + unplaced tray", () => {
     const size = await page.evaluate((id) => window.LoomwrightBackend.EntityService.getSync(id, "locations")?.data?.symbolSize, loc.id);
     expect(size).toBeGreaterThan(1.2);
   });
+
+  test("the empty-map prompt conjures a full demo world (every element)", async ({ page }) => {
+    await openFreshApp(page);
+    await openAtlasEditor(page);
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    // the empty plate offers a one-click example world
+    await expect(editor.locator("[data-ui='AtlasSeedDemo']")).toBeVisible({ timeout: 5000 });
+    await editor.locator("[data-ui='AtlasSeedDemo']").click();
+    await page.waitForTimeout(800);
+
+    // the seed exercises every element: drawn regions, object stamps,
+    // road/sea routes, and a drilled-down interior.
+    const stats = await page.evaluate(() => {
+      const list = window.LoomwrightBackend.EntityService.listSync("locations");
+      return {
+        total: list.length,
+        withShape: list.filter((l) => l.data && l.data.shape).length,
+        withSymbol: list.filter((l) => l.data && l.data.symbol).length,
+        interior: list.filter((l) => l.data && l.data.atlasMap && l.data.atlasMap !== "world").length,
+        withRoutes: list.filter((l) => l.data && Array.isArray(l.data.routes) && l.data.routes.length).length,
+      };
+    });
+    expect(stats.total).toBeGreaterThanOrEqual(60);
+    expect(stats.withShape).toBeGreaterThanOrEqual(10);  // regions + rivers/roads + rooms
+    expect(stats.withSymbol).toBeGreaterThanOrEqual(30); // object stamps
+    expect(stats.interior).toBeGreaterThanOrEqual(7);    // castle rooms + interior stamps
+    expect(stats.withRoutes).toBeGreaterThanOrEqual(3);  // road/sea connections
+
+    // re-conjuring is idempotent (stable ids) — no duplicate world
+    await page.evaluate(() => window.AtlasSampleWorld.seed());
+    await page.waitForTimeout(500);
+    const total2 = await page.evaluate(() => window.LoomwrightBackend.EntityService.listSync("locations").length);
+    expect(total2).toBe(stats.total);
+
+    // a known landmark renders as a stamp; drilling in reveals its interior
+    const cap = await page.evaluate(() => (window.LoomwrightBackend.EntityService.listSync("locations").find((l) => l.name === "Aldercrown") || {}).id);
+    await expect(editor.locator(`[data-atm-symbol='${cap}']`)).toBeVisible({ timeout: 5000 });
+    await editor.locator(`[data-atm-symbol='${cap}']`).dblclick();
+    await expect(editor.locator(`[data-atlas-crumb='${cap}']`)).toBeVisible({ timeout: 5000 });
+    await expect(editor.locator('.atm__svg [fill="url(#atm-floor)"]').first()).toBeVisible({ timeout: 3000 });
+    if (process.env.SHOT) await page.screenshot({ path: "/tmp/atlas-demo-world.png" });
+  });
 });

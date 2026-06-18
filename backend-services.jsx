@@ -357,22 +357,6 @@
       all[entityType] = { ...byType, [id]: entity };
       await StorageService.set(KEYS.entities, all);
       applyEntityGlobals(all);
-      if (!opts.skipAudit) {
-        try {
-          AuditService.log({
-            action: previous ? "entity.update" : "entity.create",
-            label: (previous ? "Updated " : "Created ") + (entity.name || id) + " (" + entityType + ")",
-            targetType: "entity",
-            targetId: id,
-            targetName: entity.name,
-            entityType,
-            before: previous,
-            after: entity,
-            source: "EntityService",
-            sourceSurface: opts.sourceSurface || null,
-          });
-        } catch (_) {}
-      }
       if (status === "draft") await ReviewService.add({
         id: uuid("rq"),
         entityId: id,
@@ -408,6 +392,55 @@
         } catch (_) {}
       }
       return entity;
+    },
+
+    // Bulk create/update — one read + one write for the whole batch
+    // (save() rewrites the entire store per call, which is O(n²) for big
+    // imports/seeds). Pass explicit fields.id to cross-reference rows
+    // within the same batch. Returns the saved entities in input order.
+    async saveMany(type, list = [], opts = {}) {
+      if (!Array.isArray(list) || !list.length) return [];
+      const all = await StorageService.get(KEYS.entities, {});
+      const out = [];
+      const audits = [];
+      for (const fields of list) {
+        const entityType = normaliseType(type || fields.type || fields.entityType);
+        const byType = all[entityType] || (all[entityType] = {});
+        const id = fields.id || uuid(entityType);
+        const previous = byType[id] || null;
+        const status = opts.status || fields.status || previous?.status || "active";
+        const entity = {
+          ...(previous || {}),
+          ...clone(fields),
+          id,
+          type: entityType,
+          name: fields.name || fields.title || previous?.name || "Untitled",
+          glyphChar: fields.glyphChar || previous?.glyphChar || initialsFor(fields.name || fields.title || previous?.name),
+          status,
+          sourceMentions: fields.sourceMentions || previous?.sourceMentions || [],
+          reviewQueueCount: opts.reviewQueueCount ?? fields.reviewQueueCount ?? previous?.reviewQueueCount ?? 0,
+          createdAt: previous?.createdAt || fields.createdAt || nowIso(),
+          updatedAt: nowIso(),
+        };
+        byType[id] = entity;
+        out.push(entity);
+        if (!opts.skipAudit) audits.push({ previous, entity, entityType, id, status });
+      }
+      await StorageService.set(KEYS.entities, all);
+      applyEntityGlobals(all);
+      for (const a of audits) {
+        try {
+          const isRestore = a.previous && a.previous.status === "deleted" && a.status === "active";
+          const isCreate = !a.previous;
+          AuditService.log({
+            action: isRestore ? "entity.restore" : isCreate ? "entity.create" : "entity.update",
+            label: (isCreate ? "Created " : isRestore ? "Restored " : "Updated ") + (a.entity.name || a.id) + " (" + a.entityType + ")",
+            targetType: "entity", targetId: a.id, targetName: a.entity.name, entityType: a.entityType,
+            before: a.previous, after: a.entity, source: "EntityService", sourceSurface: opts.sourceSurface || null,
+          });
+        } catch (_) {}
+      }
+      return out;
     },
 
     async update(type, id, patch = {}, opts = {}) {
