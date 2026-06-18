@@ -279,13 +279,12 @@ const DockedPanel = ({
         onClearPanelFilter={onClearPanelFilter}
       />
 
+      {/* Panel-level actions only (Extract / Review). The per-type search,
+          filter, and sort live inside each body (bespoke bodies + the
+          framework EntityRoster), so the old toolbar's placeholder search
+          and the inert Filter/Sort buttons were dead, duplicate chrome. */}
       <div className="panel__toolbar">
-        <div className="panel__search">
-          <Icon name="search" size={12}/>
-          <span style={{ flex: 1 }}>Search in {panel.title.toLowerCase()}…</span>
-        </div>
-        <Btn variant="ghost" size="sm" icon="filter" title="Filter" data-callback="onFilterPanel"/>
-        <Btn variant="ghost" size="sm" icon="sort" title="Sort" data-callback="onSortPanel"/>
+        <span style={{ flex: 1 }}/>
         {panel.entityType && (
           <Btn variant="ghost" size="sm" icon="sparkle" title={"Extract " + panel.title.toLowerCase() + " from the manuscript"} data-testid="panel-extract"
             onClick={() => window.LoomwrightDispatchCallback?.("onOpenExtractionWizard", { detail: { scope: "manuscript", typeFocus: panel.entityType } })}/>
