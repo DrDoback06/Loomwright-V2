@@ -276,6 +276,7 @@ const SkillTreeMini = ({ tree, selectedNodeId, onSelectNode }) => {
         <g key={n.id} transform={`translate(${n.x}, ${n.y})`}
            onClick={() => onSelectNode && onSelectNode(n.id)}
            style={{ cursor: "pointer" }}>
+          <title>{n.name + (n.type ? " · " + n.type : "") + (n.unlocked ? " (unlocked)" : "")}</title>
           {selectedNodeId === n.id && <circle r={4} fill={tree.color} opacity="0.25"/>}
           <circle r={n.tier === 1 ? 1.6 : n.tier === 2 ? 1.3 : 1.1}
                   fill={n.unlocked ? "#fff" : "#9a8c6e"}

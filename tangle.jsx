@@ -354,7 +354,8 @@ const AtlasRegionMini = ({ locationId, atlasData, w = 172, h = 116 }) => {
         const isTarget = l.id === locationId;
         const pin = PIN[l.type] || { icon: "•" };
         return (
-          <g key={l.id} transform={`translate(${nx(l).toFixed(1)}, ${ny(l).toFixed(1)})`}>
+          <g key={l.id} transform={`translate(${nx(l).toFixed(1)}, ${ny(l).toFixed(1)})`} style={{ cursor: "help" }}>
+            <title>{l.name + (l.type ? " · " + _tnCap(l.type) : "")}</title>
             <circle r={isTarget ? 2.8 : 1.7} fill={isTarget ? "#c98a2c" : "rgba(74,56,28,0.5)"} stroke="#fbf3df" strokeWidth="0.3"/>
             {l.symbol
               ? <text fontSize={isTarget ? 4 : 3} textAnchor="middle" dominantBaseline="central">{l.symbol}</text>
