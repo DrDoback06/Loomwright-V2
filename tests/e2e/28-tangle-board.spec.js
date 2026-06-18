@@ -175,4 +175,33 @@ test.describe("U28b. Tangle — discoverable", () => {
       expect(cls).not.toMatch(/disabled/);
     }
   });
+
+  test("entity tokens carry a type visual and reveal details on hover", async ({ page }) => {
+    await openFreshApp(page);
+    const ids = await page.evaluate(async () => {
+      const B = window.LoomwrightBackend;
+      const sk = await B.EntityService.save("skills", { name: "Emberstrike", summary: "A searing lunge.", data: { skillType: "active", icon: "fire" } }, { status: "active" });
+      const hero = await B.EntityService.save("cast", { name: "Aelinor Vey", summary: "Heir to the Auger." }, { status: "active" });
+      const board = await B.TangleService.ensureBoard();
+      await B.TangleService.addEntityNode(board.id, B.EntityService.getSync(sk.id, "skills"), { x: 260, y: 240 });
+      await B.TangleService.addEntityNode(board.id, B.EntityService.getSync(hero.id, "cast"), { x: 500, y: 340 });
+      return { sk: sk.id };
+    });
+    await openTangle(page);
+    await page.locator("[data-testid='tan-open-canvas']").click();
+    const fs = page.locator("[data-ui='TangleFullScreen']");
+    await expect(fs).toBeVisible({ timeout: 5000 });
+
+    // the skill type is now draggable from the tray (was missing before)
+    await expect(fs.locator(`[data-testid='tan-tray-${ids.sk}']`)).toBeVisible({ timeout: 5000 });
+    await expect(fs.locator("[data-ui='TangleNode']")).toHaveCount(2);
+
+    // hover the skill token -> detail popover with summary, type, and Open
+    await fs.locator("[data-ui='TangleNode']", { hasText: "Emberstrike" }).hover();
+    const pop = page.locator("[data-ui='TangleEntityCard']");
+    await expect(pop).toBeVisible({ timeout: 4000 });
+    await expect(pop).toContainText("A searing lunge");
+    await expect(pop).toContainText("Skill");
+    await expect(pop.locator("[data-testid='tan-pop-open']")).toBeVisible();
+  });
 });

@@ -31,6 +31,13 @@ const TANGLE_NODE_TYPES = [
   { id: "quests",    label: "Quest",           glyph: "✦", color: "#8a3a4f" },
   { id: "events",    label: "Event",           glyph: "◈", color: "#c79545" },
   { id: "lore",      label: "Lore fact",       glyph: "◉", color: "#7a5a3a" },
+  { id: "factions",  label: "Faction",         glyph: "▣", color: "#3d3a78" },
+  { id: "skills",    label: "Skill",           glyph: "★", color: "#7a6aa3" },
+  { id: "abilities", label: "Ability",         glyph: "✸", color: "#8a6a2a" },
+  { id: "classes",   label: "Class",           glyph: "♦", color: "#5d6d4e" },
+  { id: "races",     label: "Race",            glyph: "❦", color: "#a8553f" },
+  { id: "stats",     label: "Stat",            glyph: "▦", color: "#3e6db5" },
+  { id: "relationships", label: "Relationship", glyph: "⇌", color: "#b86a82" },
   { id: "references",label: "Reference",       glyph: "▤", color: "#76684c" },
   { id: "image",     label: "Image",           glyph: "▢", color: "#5d7896" },
   { id: "quote",     label: "Quote",           glyph: "❝", color: "#a8553f" },
@@ -233,9 +240,59 @@ const TanglePanelBody = ({ panel }) => {
 // ---------------------------------------------------------------------
 // TangleNode — draggable node on the canvas
 // ---------------------------------------------------------------------
+// A small entity-type visual for a token head: a skill's chosen icon, a
+// character avatar, or the type glyph. Lets a dragged entity "look like
+// itself" on the board.
+const _tnEntityBadge = (ent, entityType, t) => {
+  if (!ent) return <span style={{ fontFamily: "var(--font-display)", fontSize: 13, color: t.color }}>{t.glyph}</span>;
+  const d = ent.data || {};
+  if (entityType === "skills") {
+    if (d.iconUrl) return <img src={d.iconUrl} alt="" style={{ width: 18, height: 18, objectFit: "cover", borderRadius: "50%", verticalAlign: "middle" }}/>;
+    const ch = (typeof _stIconChar === "function" && d.icon) ? _stIconChar(d.icon) : "";
+    return <span style={{ fontSize: 14 }}>{ch || "✦"}</span>;
+  }
+  if (entityType === "cast") {
+    const initials = (ent.name || "?").split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2).toUpperCase();
+    return <span style={{ display: "inline-flex", width: 18, height: 18, borderRadius: "50%", background: t.color, color: "#fff", fontSize: 9, fontWeight: 700, alignItems: "center", justifyContent: "center" }}>{initials}</span>;
+  }
+  return <span style={{ fontFamily: "var(--font-display)", fontSize: 13, color: t.color }}>{t.glyph}</span>;
+};
+
+// Hover/click detail card for an entity token — name, type, status, summary,
+// a few notable facts, and a jump-to-panel action. Reads the live entity.
+const TANGLE_FACT_KEYS = [["kind", "Kind"], ["itemType", "Type"], ["rarity", "Rarity"], ["role", "Role"], ["category", "Category"], ["skillType", "Skill"], ["eventType", "Event"], ["danger", "Danger"], ["band", "Canon"], ["chapter", "Chapter"], ["facType", "Faction"]];
+const TangleEntityCard = ({ entityId, entityType }) => {
+  const ent = window.LoomwrightBackend?.EntityService?.getSync?.(entityId, entityType);
+  if (!ent) return null;
+  const d = ent.data || {};
+  const t = _tnType(entityType);
+  const facts = TANGLE_FACT_KEYS.map(([k, label]) => { const v = d[k]; return (v != null && v !== "" && typeof v !== "object") ? { label, v: String(v) } : null; }).filter(Boolean).slice(0, 4);
+  return (
+    <div data-ui="TangleEntityCard" onPointerDown={(e) => e.stopPropagation()}
+         style={{ position: "absolute", left: 0, bottom: "calc(100% + 8px)", width: 230, zIndex: 60, background: "var(--paper, #fbf3df)", border: "1px solid var(--gold, #c98a2c)", borderRadius: 8, boxShadow: "0 8px 24px rgba(40,30,12,0.28)", padding: 10, cursor: "default", textAlign: "left" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+        <span style={{ color: t.color, fontWeight: 700 }}>{t.label}</span>
+        {ent.status && <span style={{ marginLeft: "auto", color: "var(--ink-3, #76684c)" }}>{ent.status}</span>}
+      </div>
+      <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 14, margin: "3px 0" }}>{ent.name || "—"}</div>
+      {(ent.summary || d.summary) && <div style={{ fontSize: 11, color: "var(--ink-2, #4a381c)", lineHeight: 1.4, maxHeight: 54, overflow: "hidden" }}>{ent.summary || d.summary}</div>}
+      {facts.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 10px", marginTop: 6, fontSize: 10.5, color: "var(--ink-3, #76684c)" }}>
+          {facts.map((f, i) => <span key={i}><b>{f.label}:</b> {f.v}</span>)}
+        </div>
+      )}
+      <button data-testid="tan-pop-open"
+              onClick={() => window.dispatchEvent(new CustomEvent("lw:focus-entity", { detail: { entityType, entityId } }))}
+              style={{ marginTop: 8, fontSize: 11, cursor: "pointer", border: "1px solid var(--gold,#c98a2c)", background: "rgba(201,138,44,0.12)", borderRadius: 6, padding: "3px 8px" }}>Open →</button>
+    </div>
+  );
+};
+
 const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnect, scale }) => {
   const ref = _tn_ur(null);
+  const [hover, setHover] = _tn_us(false);
   const t = _tnType(node.kind);
+  const ent = node.entityId ? (window.LoomwrightBackend?.EntityService?.getSync?.(node.entityId, node.entityType) || null) : null;
 
   // Pointer events so the same drag works for mouse, pen, and touch.
   const onPointerDown = (e) => {
@@ -275,9 +332,12 @@ const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnec
       data-ui="TangleNode"
       style={{ left: node.x, top: node.y, "--ec": t.color }}
       onPointerDown={onPointerDown}
+      onMouseEnter={() => ent && setHover(true)}
+      onMouseLeave={() => setHover(false)}
     >
+      {hover && ent && <TangleEntityCard entityId={node.entityId} entityType={node.entityType}/>}
       <div className="tan-node__head">
-        <span style={{ fontFamily: "var(--font-display)", fontSize: 12, color: t.color }}>{t.glyph}</span>
+        {_tnEntityBadge(ent, node.entityType, t)}
         <span>{node.unlinked ? t.label + " (unlinked)" : t.label}</span>
       </div>
       <div className="tan-node__title">{node.title}</div>
@@ -505,12 +565,12 @@ const TangleFullScreen = ({ onClose }) => {
     if (!Bk?.EntityService) return [];
     const q = traySearch.trim().toLowerCase();
     const out = [];
-    for (const type of ["cast", "locations", "items", "quests", "events", "lore", "factions"]) {
+    for (const type of ["cast", "locations", "items", "quests", "events", "lore", "factions", "skills", "abilities", "classes", "races", "stats"]) {
       for (const ent of Bk.EntityService.listSync(type)) {
         if (!ent || ent.status === "deleted") continue;
         if (q && !String(ent.name || "").toLowerCase().includes(q)) continue;
         out.push(ent);
-        if (out.length >= 24) return out;
+        if (out.length >= 60) return out;
       }
     }
     return out;
