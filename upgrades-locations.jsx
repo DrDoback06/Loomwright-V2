@@ -524,6 +524,33 @@ const LocReviewCard = ({ item, onAccept, onEdit, onMerge, onDeny, onOpenSource }
 // ---------------------------------------------------------------------
 // LocationDetail — the bespoke dossier body
 // ---------------------------------------------------------------------
+// Inline reparent control — change a location's parent in place. Excludes
+// the location itself and its descendants so the hierarchy can't cycle.
+const LocReparent = ({ entity }) => {
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  if (!entity || !entity.id || !B || !B.EntityService) return null;
+  const all = (B.EntityService.listSync("locations") || []).filter((l) => l.status !== "deleted");
+  const banned = new Set([entity.id]);
+  let grew = true;
+  while (grew) { grew = false; for (const l of all) { const pid = l.data && l.data.parentId; if (pid && banned.has(pid) && !banned.has(l.id)) { banned.add(l.id); grew = true; } } }
+  const candidates = all.filter((l) => !banned.has(l.id)).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const cur = (B.EntityService.getSync(entity.id, "locations") || {}).data?.parentId || "";
+  return (
+    <div className="loc-detail__reparent" style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0 2px", fontSize: "var(--fs-xs)" }}>
+      <label style={{ color: "var(--ink-3, #76684c)", fontWeight: 600 }}>Parent</label>
+      <select data-testid="loc-reparent" value={cur} style={{ flex: 1, maxWidth: 280 }}
+              onChange={async (ev) => {
+                const pid = ev.target.value || null;
+                if (B.LinkService && B.LinkService.setParentLocation) await B.LinkService.setParentLocation(entity.id, pid);
+                window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+              }}>
+        <option value="">— World (no parent) —</option>
+        {candidates.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+      </select>
+    </div>
+  );
+};
+
 const LocationDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSourceMention }) => {
   const e = entity || {};
   const kind = LOCATION_KIND_BY_ID[e.kind] || LOCATION_KIND_BY_ID.other;
@@ -708,27 +735,31 @@ const LocationDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSource
 
       {review.length > 0 && (
         <RpgSection title="Review queue"
-                    action={{ label: "Open queue →", callback: "onOpenLocationsReviewQueue" }}>
+                    action={{ label: "Open queue →", onClick: () => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "review" } })) }}>
           <div className="loc-reviews">
             {review.map((r) => (
               <LocReviewCard key={r.id} item={r}
-                             onAccept={() => {}} onEdit={() => {}}
-                             onMerge={() => {}}  onDeny={() => {}}
+                             onAccept={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onAcceptLocationQueueItem", detail: { id: it.id } } }))}
+                             onEdit={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onEditLocationQueueItem", detail: { id: it.id } } }))}
+                             onMerge={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onMergeLocationQueueItem", detail: { id: it.id } } }))}
+                             onDeny={(it) => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onDenyLocationQueueItem", detail: { id: it.id } } }))}
                              onOpenSource={onOpenSourceMention}/>
             ))}
           </div>
         </RpgSection>
       )}
 
+      <LocReparent entity={e}/>
       <div className="rpg-actions">
-        <button className="rpg-btn rpg-btn--primary" data-callback="onCreateChildLocation" onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations" } }))}>+ Add child</button>
-        <button className="rpg-btn" data-callback="onEditLocation" onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations" } }))}>Edit</button>
-        <button className="rpg-btn" data-callback="onSetParentLocation">Set parent</button>
-        <button className="rpg-btn" data-callback="onMergeLocation">Merge</button>
-        <button className="rpg-btn" data-callback="onDragLocationToAtlas">Drag to Atlas</button>
+        <button className="rpg-btn rpg-btn--primary"
+                onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations", initial: { parentId: e.id, data: { parentId: e.id } } } }))}>+ Add child</button>
+        <button className="rpg-btn"
+                onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations", initial: { id: e.id }, mode: "full" } }))}>Edit</button>
         <span style={{ flex: 1 }}/>
-        <button className="rpg-btn rpg-btn--ghost" data-callback="onShowLocationOnAtlas">Show on Atlas</button>
-        <button className="rpg-btn rpg-btn--ghost" data-callback="onOpenLocationTimeline">Open Timeline</button>
+        <button className="rpg-btn rpg-btn--ghost" data-testid="loc-show-on-atlas"
+                onClick={() => window.dispatchEvent(new CustomEvent("lw:focus-entity", { detail: { panelKind: "atlas", entityId: e.id, label: e.name } }))}>Show on Atlas</button>
+        <button className="rpg-btn rpg-btn--ghost"
+                onClick={() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "timeline" } }))}>Open Timeline</button>
       </div>
     </div>
   );
@@ -748,6 +779,7 @@ const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const [tab, setTab] = _loc_us("dossier"); // dossier | mentions | review | references
   const [kindFilter, setKindFilter] = _loc_us("all");
   const [placedFilter, setPlacedFilter] = _loc_us("all"); // all | placed | unplaced
+  const [sortBy, setSortBy] = _loc_us("name"); // name | type | mentions | placed
 
   // Live locations only — never the demo LOCATIONS_DATA. Project each row
   // through liveLocationToRow so kind/placed/parent read off entity.data.*;
@@ -761,11 +793,19 @@ const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
     if (placedFilter === "unplaced" &&  d.placed) return false;
     return true;
   });
+  // Sort affects sibling/root order in the hierarchy tree.
+  const mentionsOf = (d) => d.mentionCount ?? (Array.isArray(d.mentionsByChapter) ? d.mentionsByChapter.reduce((a, b) => a + b, 0) : 0);
+  const sorted = filtered.slice().sort((a, b) => {
+    if (sortBy === "type") return (a.kind || "").localeCompare(b.kind || "") || (a.name || "").localeCompare(b.name || "");
+    if (sortBy === "mentions") return mentionsOf(b) - mentionsOf(a) || (a.name || "").localeCompare(b.name || "");
+    if (sortBy === "placed") return (a.placed === b.placed ? 0 : (a.placed ? -1 : 1)) || (a.name || "").localeCompare(b.name || "");
+    return (a.name || "").localeCompare(b.name || "");
+  });
 
   // Resolve selection against live data; fall back to the first visible row
   // so a fresh open shows a real dossier instead of the empty plate.
   const _selRaw = rawData.find((d) => d.id === selectedId)
-    || rawData.find((d) => d.id === (filtered[0] || {}).id)
+    || rawData.find((d) => d.id === (sorted[0] || {}).id)
     || null;
   const selected = _selRaw ? liveLocationToDetail(_selRaw) : null;
 
@@ -805,8 +845,14 @@ const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
             <option value="placed">Placed only</option>
             <option value="unplaced">Unplaced only</option>
           </select>
+          <select className="loc-body__filter" data-testid="loc-sort" value={sortBy} onChange={(e) => setSortBy(e.target.value)} title="Sort">
+            <option value="name">Sort: Name</option>
+            <option value="type">Sort: Type</option>
+            <option value="mentions">Sort: Mentions</option>
+            <option value="placed">Sort: Placed first</option>
+          </select>
           <Btn variant="ghost" size="sm" icon="plus" data-callback="onCreateLocation" title="Add location" onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations" } }))}/>
-          <Btn variant="ghost" size="sm" icon="bell" data-callback="onOpenLocationsReviewQueue" title="Review queue"/>
+          <Btn variant="ghost" size="sm" icon="bell" title="Review queue" onClick={() => setTab("review")}/>
         </div>
       </div>
 
@@ -815,19 +861,20 @@ const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
         <aside className="loc-body__tree">
           <div className="loc-body__tree-head">
             <span>Hierarchy</span>
-            <span className="loc-body__tree-count">{filtered.length}</span>
+            <span className="loc-body__tree-count">{sorted.length}</span>
           </div>
           <LocHierarchyTree
-            data={filtered}
+            data={sorted}
             selectedId={selected?.id}
             onSelect={(n) => { setSelectedId(n.id); onSelectEntity && onSelectEntity({ id: n.id, type: "locations", label: n.name }); }}
             onAddChild={(node) => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations", initial: { parentId: node.id, data: { parentId: node.id } } } }))}
             onSetParent={() => {}}
-            onDragToAtlas={() => {}}
+            onDragToAtlas={(node) => window.dispatchEvent(new CustomEvent("lw:focus-entity", { detail: { panelKind: "atlas", entityId: node.id, label: node.name } }))}
           />
           <div className="loc-body__tree-actions">
             <button className="rpg-btn rpg-btn--small" data-callback="onCreateLocation" onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations" } }))}>+ Location</button>
-            <button className="rpg-btn rpg-btn--small rpg-btn--ghost" data-callback="onImportLocations">Import</button>
+            <button className="rpg-btn rpg-btn--small rpg-btn--ghost" title="Extract locations from your manuscript"
+                    onClick={() => { window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } })); window.dispatchEvent(new CustomEvent("lw:open-manuscript-import")); }}>Import</button>
           </div>
         </aside>
 
