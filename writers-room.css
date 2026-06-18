@@ -1159,3 +1159,25 @@
 .wr[data-mobile="true"] .wr-margin-tab { display: none; }
 .wr[data-mobile="true"] .wr-stage__col--left > .wr-margin,
 .wr[data-mobile="true"] .wr-stage__col--right > .wr-margin { max-height: none; }
+
+/* ---- Purpose-built mobile writing surface --------------------------------
+   The desktop chrome wastes scarce phone height: the formatting toolbar wraps
+   to 3-4 rows and the breadcrumb repeats what the chapter strip already shows.
+   On mobile, collapse the toolbar to ONE horizontally-scrollable touch strip,
+   give it larger tap targets, and drop the breadcrumb so the manuscript gets
+   the room. */
+.wr[data-mobile="true"] .wr-toolbar {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  margin-bottom: var(--sp-4);
+  padding: 5px 6px;
+}
+.wr[data-mobile="true"] .wr-toolbar::-webkit-scrollbar { display: none; }
+.wr[data-mobile="true"] .wr-toolbar__group { flex-wrap: nowrap; flex: 0 0 auto; }
+.wr[data-mobile="true"] .wr-toolbar__btn { width: 34px; height: 34px; flex: 0 0 auto; }
+.wr[data-mobile="true"] .wr-canvasbar { flex-wrap: nowrap; margin-bottom: var(--sp-3); }
+.wr[data-mobile="true"] .wr-canvasbar__crumb { display: none; }
+.wr[data-mobile="true"] .wr-canvasbar__chips { flex-wrap: nowrap; flex: 1; justify-content: flex-end; }
