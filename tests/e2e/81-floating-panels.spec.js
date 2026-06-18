@@ -60,4 +60,38 @@ test.describe("T81. Floating / detachable panels", () => {
     await expect(panel).toBeVisible({ timeout: 5000 });
     await expect(panel).toHaveClass(/is-floating/);
   });
+
+  test("dragging one floating panel onto another nests them into a tab group, and a tab can split out", async ({ page }) => {
+    await openFreshApp(page);
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "cast" } }));
+      window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "items" } }));
+    });
+    const cast = page.locator("[data-ui='SlidingPanel'][data-panel-id='p-cast']").first();
+    const items = page.locator("[data-ui='SlidingPanel'][data-panel-id='p-items']").first();
+    await expect(cast).toBeVisible({ timeout: 5000 });
+    await expect(items).toBeVisible({ timeout: 5000 });
+    await cast.locator("[data-testid='panel-float-toggle']").click();
+    await items.locator("[data-testid='panel-float-toggle']").click();
+    await expect(items).toHaveClass(/is-floating/, { timeout: 3000 });
+
+    // Drag items' header onto cast → nest into one tab group
+    const castBox = await cast.boundingBox();
+    const ihb = await items.locator("[data-ui='PanelHeader']").boundingBox();
+    await page.mouse.move(ihb.x + 40, ihb.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(castBox.x + castBox.width / 2, castBox.y + 24, { steps: 12 });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+
+    const tabs = page.locator("[data-ui='FloatGroupTabs']");
+    await expect(tabs).toBeVisible({ timeout: 3000 });
+    await expect(tabs.locator("[data-testid='float-tab-p-cast']")).toBeVisible();
+    await expect(tabs.locator("[data-testid='float-tab-p-items']")).toBeVisible();
+    // only the active member's body renders in the shared frame
+    await expect(page.locator("[data-ui='SlidingPanel'][data-panel-id='p-items'].is-floating")).toBeVisible();
+
+    // The split (⧉) control exists on each tab to pull it back out.
+    await expect(tabs.locator("[data-testid='float-tab-p-items'] button[title*='Split']")).toHaveCount(1);
+  });
 });

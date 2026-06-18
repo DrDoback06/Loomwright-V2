@@ -929,8 +929,29 @@ const AppShell = () => {
       return { ...p, floating: true, collapsed: false, pinned: false, order: max + 1, float: p.float || { x: 140 + off, y: 96 + off, w: 400, h: 480 } };
     });
   }), []);
-  const onMoveFloatPanel = _uc_a((id, x, y) => setPanels((curr) => curr.map((p) => p.id === id ? { ...p, float: { ...(p.float || {}), x, y } } : p)), []);
-  const onResizeFloatPanel = _uc_a((id, w, h) => setPanels((curr) => curr.map((p) => p.id === id ? { ...p, float: { ...(p.float || {}), w, h } } : p)), []);
+  // Move/resize are group-aware: tabbed floats share one frame, so the whole
+  // group moves/resizes together.
+  const onMoveFloatPanel = _uc_a((id, x, y) => setPanels((curr) => {
+    const me = curr.find((p) => p.id === id); const gid = (me && me.groupId) || id;
+    return curr.map((p) => ((p.groupId || p.id) === gid) ? { ...p, float: { ...(p.float || {}), x, y } } : p);
+  }), []);
+  const onResizeFloatPanel = _uc_a((id, w, h) => setPanels((curr) => {
+    const me = curr.find((p) => p.id === id); const gid = (me && me.groupId) || id;
+    return curr.map((p) => ((p.groupId || p.id) === gid) ? { ...p, float: { ...(p.float || {}), w, h } } : p);
+  }), []);
+  // Nest one float into another's tab group (Adobe-style); split pulls it back
+  // out into its own window.
+  const onMergeFloatPanels = _uc_a((dragId, targetId) => setPanels((curr) => {
+    const target = curr.find((p) => p.id === targetId);
+    if (!target || dragId === targetId) return curr;
+    const gid = target.groupId || target.id;
+    const max = curr.reduce((a, p) => Math.max(a, p.order || 0), 0);
+    return curr.map((p) => p.id === dragId ? { ...p, floating: true, groupId: gid, float: { ...(target.float || {}) }, order: max + 1 } : p);
+  }), []);
+  const onSplitFloatPanel = _uc_a((id) => setPanels((curr) => {
+    const max = curr.reduce((a, p) => Math.max(a, p.order || 0), 0);
+    return curr.map((p) => p.id === id ? { ...p, groupId: undefined, order: max + 1, float: { ...(p.float || {}), x: ((p.float && p.float.x) || 140) + 30, y: ((p.float && p.float.y) || 96) + 30 } } : p);
+  }), []);
   // Restore a collapsed/overflow panel — bring to front, uncollapse.
   const onRestorePanel = _uc_a((id) => setPanels((curr) => {
     const max = curr.reduce((a, p) => Math.max(a, p.order || 0), 0);
@@ -1489,6 +1510,8 @@ const AppShell = () => {
               onToggleFloatPanel={onToggleFloatPanel}
               onMoveFloatPanel={onMoveFloatPanel}
               onResizeFloatPanel={onResizeFloatPanel}
+              onMergeFloatPanels={onMergeFloatPanels}
+              onSplitFloatPanel={onSplitFloatPanel}
               onBringPanelToFront={onBringPanelToFront}
               onReorderPanels={onReorderPanels}
               onRestorePanel={onRestorePanel}

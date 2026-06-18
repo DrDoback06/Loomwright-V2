@@ -236,7 +236,7 @@ const DockedPanel = ({
   onClosePanel, onPinPanel, onExpandPanel,
   onBringPanelToFront, onReorderPanels,
   onOpenReviewQueue, onSelectEntity, onClearPanelFilter,
-  onToggleFloatPanel, onMoveFloatPanel, onResizeFloatPanel,
+  onToggleFloatPanel, onMoveFloatPanel, onResizeFloatPanel, onMergeFloatPanels,
   panelActions,
   zoneClass = "",
 }) => {
@@ -255,7 +255,18 @@ const DockedPanel = ({
     onBringPanelToFront && onBringPanelToFront(panel.id);
     const sx = e.clientX, sy = e.clientY, ox = f.x, oy = f.y;
     const mv = (ev) => onMoveFloatPanel && onMoveFloatPanel(panel.id, Math.max(0, Math.round(ox + ev.clientX - sx)), Math.max(0, Math.round(oy + ev.clientY - sy)));
-    const up = () => { document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up); };
+    const up = (ev) => {
+      document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up);
+      // Drop onto another floating panel → nest into its tab group.
+      if (onMergeFloatPanels && ev && document.elementsFromPoint) {
+        const stack = document.elementsFromPoint(ev.clientX, ev.clientY) || [];
+        for (const el of stack) {
+          const fp = el.closest && el.closest("[data-ui='SlidingPanel'].is-floating");
+          const pid = fp && fp.getAttribute("data-panel-id");
+          if (pid && pid !== panel.id) { onMergeFloatPanels(panel.id, pid); break; }
+        }
+      }
+    };
     document.addEventListener("pointermove", mv); document.addEventListener("pointerup", up);
   };
   const startFloatResize = (e) => {
@@ -474,7 +485,7 @@ const DockedPanel = ({
 const PanelStack = ({
   panels, focusedByType,
   onClosePanel, onPinPanel, onExpandPanel,
-  onToggleFloatPanel, onMoveFloatPanel, onResizeFloatPanel,
+  onToggleFloatPanel, onMoveFloatPanel, onResizeFloatPanel, onMergeFloatPanels, onSplitFloatPanel,
   onBringPanelToFront, onReorderPanels, onRestorePanel,
   onOpenReviewQueue, onSelectEntity, onClearPanelFilter,
 }) => {
@@ -549,6 +560,7 @@ const PanelStack = ({
       onToggleFloatPanel={onToggleFloatPanel}
       onMoveFloatPanel={onMoveFloatPanel}
       onResizeFloatPanel={onResizeFloatPanel}
+      onMergeFloatPanels={onMergeFloatPanels}
       panelActions={panelActions}
       zoneClass={zoneClass}
     />
@@ -584,8 +596,50 @@ const PanelStack = ({
         </div>
       )}
 
-      {/* Floating (popped-out) panels — fixed, movable/resizable windows */}
-      {floatingPanels.map((p) => renderPanel(p, "pstk__panel--floating"))}
+      {/* Floating (popped-out) panels — fixed windows. Panels sharing a
+          groupId nest into one frame with a tab strip (Adobe-style). */}
+      {(() => {
+        const groups = {};
+        floatingPanels.forEach((p) => { const g = p.groupId || p.id; (groups[g] = groups[g] || []).push(p); });
+        const out = [];
+        Object.keys(groups).forEach((gid) => {
+          const members = groups[gid].slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+          const active = members[members.length - 1];
+          if (members.length > 1) out.push(
+            <FloatGroupTabs key={"ft-" + gid} members={members} activeId={active.id} float={active.float || {}}
+              onSetActive={onBringPanelToFront} onSplit={onSplitFloatPanel} onClose={onClosePanel}/>
+          );
+          out.push(renderPanel(active, "pstk__panel--floating" + (members.length > 1 ? " is-grouped" : "")));
+        });
+        return out;
+      })()}
+    </div>
+  );
+};
+
+// Tab strip for a nested (grouped) float frame — sits along the top of the
+// frame; click a tab to switch, ⧉ to split it back out, × to close.
+const FloatGroupTabs = ({ members, activeId, float, onSetActive, onSplit, onClose }) => {
+  const f = float || {};
+  return (
+    <div className="pstk-float-tabs" data-ui="FloatGroupTabs"
+         style={{ position: "fixed", left: f.x || 0, top: Math.max(0, (f.y || 0) - 25), width: f.w || 400, height: 25, zIndex: 6000, display: "flex", gap: 2, alignItems: "flex-end", overflowX: "auto" }}>
+      {members.map((m) => {
+        const t = m.entityType ? ENTITY_TYPES[m.entityType] : null;
+        const on = m.id === activeId;
+        return (
+          <div key={m.id} className={"pstk-float-tab" + (on ? " is-active" : "")} data-testid={"float-tab-" + m.id}
+               onMouseDown={() => onSetActive && onSetActive(m.id)} title={m.title}
+               style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 7px", maxWidth: 170, cursor: "pointer", borderRadius: "7px 7px 0 0", fontSize: 11, fontFamily: "var(--font-sans)", whiteSpace: "nowrap",
+                        border: "1px solid var(--gold, #c98a2c)", borderBottom: on ? "1px solid transparent" : "1px solid var(--gold, #c98a2c)",
+                        background: on ? "var(--bg-paper-2, #fbf3df)" : "rgba(120,96,60,0.14)", color: "var(--ink-1, #2a2218)" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", flex: "0 0 auto", background: (t && t.color) || "var(--ink-4, #76684c)" }}/>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</span>
+            <button title="Split out into its own window" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onSplit && onSplit(m.id); }} style={{ cursor: "pointer", opacity: 0.6, fontSize: 11, lineHeight: 1, border: "none", background: "none", padding: "2px 3px", color: "inherit" }}>⧉</button>
+            <button title="Close" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onClose && onClose(m.id); }} style={{ cursor: "pointer", opacity: 0.6, fontSize: 13, lineHeight: 1, border: "none", background: "none", padding: "2px 3px", color: "inherit" }}>×</button>
+          </div>
+        );
+      })}
     </div>
   );
 };
