@@ -495,6 +495,20 @@ const SpeedReaderPanelBody = ({ panel }) => {
   // reader's true font-size; the narrow desktop side-panel still caps at 44.
   const srMobile = typeof useIsMobile !== "undefined" ? useIsMobile() : false;
   const split = srSplitWord(sr.beat ? sr.beat.word : "—");
+  // Swipe the reading stage to seek: left = forward, right = back; a long
+  // swipe jumps a whole sentence. Touch-only, so it's inert with a mouse.
+  const srSwipe = React.useRef(null);
+  const onStageTouchStart = (e) => { const t = e.touches && e.touches[0]; if (t) srSwipe.current = { x: t.clientX, y: t.clientY }; };
+  const onStageTouchEnd = (e) => {
+    const s = srSwipe.current; srSwipe.current = null;
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!s || !t) return;
+    const dx = t.clientX - s.x, dy = t.clientY - s.y;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return; // not a horizontal swipe
+    const big = Math.abs(dx) > 130;
+    if (dx < 0) { big ? sr.nextSentence() : sr.nextWord(); }
+    else { big ? sr.previousSentence() : sr.previousWord(); }
+  };
   const srEntityMap = srUseEntityLookup();
   const entityHit = srEntityFor(srEntityMap, sr.beat ? sr.beat.word : "");
   const wordsLeft = Math.max(0, sr.beats.length - (sr.idx + 1));
@@ -546,7 +560,9 @@ const SpeedReaderPanelBody = ({ panel }) => {
         </button>
       </div>
 
-      <div className={"sr-panel__stage " + (sr.focusMode ? "is-focus" : "")}>
+      <div className={"sr-panel__stage " + (sr.focusMode ? "is-focus" : "")}
+        onTouchStart={onStageTouchStart} onTouchEnd={onStageTouchEnd}
+        style={{ touchAction: "pan-y" }}>
         <div className={"sr-panel__word" + (entityHit ? " is-entity" : "")}
           data-ui="SpeedReaderWord" data-testid="sr-word"
           data-entity-type={entityHit ? entityHit.type : undefined}
