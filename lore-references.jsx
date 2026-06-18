@@ -89,7 +89,7 @@ const buildLoreContext = () => {
     const fact = {
       id: e.id,
       text: e.name || d.body || "Untitled fact",
-      scope: _lrScopeOf(d.kind || d.loreKind),
+      scope: _lrScopeOf(d.kind || d.loreKind || e.kind),
       hardness: band === "canon" ? "hard" : "soft",
       band,
       confidence: _lrConfidenceOf(band),

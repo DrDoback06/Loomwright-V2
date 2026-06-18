@@ -42,4 +42,34 @@ test.describe("T67. Lore / Canon tab", () => {
     expect(band).toBe("provisional");
     if (process.env.SHOT) await page.screenshot({ path: "/tmp/lore.png" });
   });
+
+  test("editing a fact opens the purpose-built canon editor (not the generic)", async ({ page }) => {
+    await openFreshApp(page);
+    await saveEntity(page, "lore", {
+      name: "Salt wards the dead",
+      summary: "A burial custom of the Reach.",
+      data: { kind: "cultural belief", band: "provisional", body: "Graves are lined with salt." },
+    }, { status: "active" });
+    await openLorePanel(page);
+    const card = page.locator(".lore-fact").first();
+    await expect(card).toBeVisible({ timeout: 5000 });
+    await card.getByRole("button", { name: "Edit" }).click();
+
+    const editor = page.locator("[data-ui='EntityEditor'][data-entity-type='lore']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+    // purpose-built lore fields (the generic fallback would not have these)
+    await expect(editor).toContainText("Confidence band");
+    await expect(editor).toContainText("Full statement");
+  });
+
+  test("a fact whose kind is stored top-level (editor-saved) still resolves its scope", async ({ page }) => {
+    await openFreshApp(page);
+    // the editor persists `kind` as a top-level identity key, not under data;
+    // buildLoreContext must read it so the scope isn't silently wrong.
+    await saveEntity(page, "lore", { name: "The moon pulls the tides", kind: "cosmology", data: { band: "canon" } }, { status: "active" });
+    await openLorePanel(page);
+    const card = page.locator(".lore-fact").first();
+    await expect(card).toBeVisible({ timeout: 5000 });
+    await expect(card).toContainText(/magic rule/i); // cosmology -> magic rule (read from top-level kind)
+  });
 });

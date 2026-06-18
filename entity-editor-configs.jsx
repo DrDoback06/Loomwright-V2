@@ -628,7 +628,9 @@ const EE_GENERIC = {
 };
 
 // ---------------------------------------------------------------------
-// Registry
+// Registry. NOTE: lore / cast / bestiary / factions / relationships /
+// timeline editor configs live in entity-editor-configs-extended.jsx,
+// which loads after this file and merges them into the registry.
 // ---------------------------------------------------------------------
 const ENTITY_EDITOR_CONFIGS = {
   locations: EE_LOCATION,
