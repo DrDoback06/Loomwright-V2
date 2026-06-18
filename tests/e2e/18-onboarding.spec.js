@@ -106,4 +106,33 @@ test.describe("T18. Onboarding wizard", () => {
     await page.waitForTimeout(400);
     await expect(page.locator("[data-ui='OnboardingOverlay']")).toHaveCount(0);
   });
+
+  test("completion seeds factions, locations, classes & races from the setup answers", async ({ page }) => {
+    await freshFirstRun(page);
+    await expect(page.locator("[data-ui='OnboardingOverlay']")).toBeVisible({ timeout: 6000 });
+    await page.evaluate(async () => {
+      await window.LoomwrightBackend.OnboardingService.applyCompletion({
+        welcome: { title: "The Salt Reach", genre: "Grimdark" },
+        foundation: { premise: "A reluctant heir hunts a stolen relic.", toneWords: ["bleak"] },
+        world: { factions: "House Vey · House Hess\nThe Mendicants", locations: "Pale Reach, The Auger's Hold" },
+        cast: { seeds: [
+          { id: "s1", name: "Aelinor Vey", role: "Protagonist", klass: "Diviner, Knight-errant", race: "Diviner-born", faction: "House Vey" },
+          { id: "s2", name: "Mara of Hess", role: "Antagonist", klass: "Knight-errant", race: "Hessian", faction: "House Hess" },
+        ] },
+        ai: { mode: "local" }, workspace: { startTab: "cast" },
+      });
+    });
+    const out = await page.evaluate(() => {
+      const L = (t) => window.LoomwrightBackend.EntityService.listSync(t).map((e) => e.name);
+      const f = window.LoomwrightBackend.EntityService.listSync("factions").find((e) => e.name === "House Vey");
+      const a = window.LoomwrightBackend.EntityService.listSync("cast").find((e) => e.name === "Aelinor Vey");
+      return { factions: L("factions"), locations: L("locations"), classes: L("classes"), races: L("races"),
+               veyMembers: (f && f.data && f.data.members) || [], aId: a && a.id };
+    });
+    expect(out.factions).toEqual(expect.arrayContaining(["House Vey", "House Hess", "The Mendicants"]));
+    expect(out.locations).toEqual(expect.arrayContaining(["Pale Reach", "The Auger's Hold"]));
+    expect(out.classes).toEqual(expect.arrayContaining(["Diviner", "Knight-errant"]));   // multi-class string split
+    expect(out.races).toEqual(expect.arrayContaining(["Diviner-born", "Hessian"]));
+    expect(out.veyMembers).toContain(out.aId);   // faction members linked by name
+  });
 });

@@ -825,22 +825,58 @@
       const seeded = { cast: 0, chapters: 0, references: 0 };
 
       // Cast seeds → cast entities (skip names that already exist so a
-      // re-run doesn't duplicate).
-      const existingCastNames = new Set(EntityService.listSync("cast").map((e) => (e.name || "").toLowerCase()));
-      for (const s of (data.cast && data.cast.seeds) || []) {
+      // re-run doesn't duplicate). Capture name→id so we can link factions.
+      const castSeeds = (data.cast && data.cast.seeds) || [];
+      const castIdByName = new Map();
+      EntityService.listSync("cast").forEach((e) => castIdByName.set((e.name || "").toLowerCase(), e.id));
+      const existingCastNames = new Set(castIdByName.keys());
+      for (const s of castSeeds) {
         if (!s || !s.name || existingCastNames.has(s.name.toLowerCase())) continue;
         const aliases = typeof s.aliases === "string"
           ? s.aliases.split(",").map((x) => x.trim()).filter(Boolean)
           : (Array.isArray(s.aliases) ? s.aliases : []);
         try {
-          await EntityService.save("cast", {
+          const savedCast = await EntityService.save("cast", {
             name: s.name, aliases, summary: s.personality || "",
             data: { role: s.role || "", race: s.race || "", class: s.klass || "", faction: s.faction || "", voice: s.voice || "", goals: s.goals || "", fears: s.fears || "", secrets: s.secrets || "", relationships: s.relationships || "", source: "onboarding" },
           }, { status: "active" });
+          if (savedCast && savedCast.id) castIdByName.set(s.name.toLowerCase(), savedCast.id);
           existingCastNames.add(s.name.toLowerCase());
           seeded.cast++;
         } catch (_) {}
       }
+
+      // The extensive setup also names factions/locations (World step) and a
+      // class/race per character — seed those as real entities so the rich
+      // answers actually populate the Factions / Locations / Classes / Races
+      // tabs (deduped; faction members linked by name; locations left unplaced
+      // for the author to drop on the Atlas).
+      const _obSplit = (v) => (typeof v === "string" ? v.split(/[\n·,;|]+/) : (Array.isArray(v) ? v : []))
+        .map((x) => String(x && x.name ? x.name : x).trim()).filter(Boolean);
+      const seedNamed = async (type, names, mkData) => {
+        const existing = new Set(EntityService.listSync(type).map((e) => (e.name || "").toLowerCase()));
+        for (const name of names) {
+          const key = name.toLowerCase();
+          if (!name || existing.has(key)) continue;
+          try {
+            await EntityService.save(type, { name, data: { source: "onboarding", ...(mkData ? mkData(name) : {}) } }, { status: "active" });
+            existing.add(key); seeded[type] = (seeded[type] || 0) + 1;
+          } catch (_) {}
+        }
+      };
+      const classNames = new Set(), raceNames = new Set();
+      for (const s of castSeeds) { _obSplit(s.klass).forEach((n) => classNames.add(n)); _obSplit(s.race).forEach((n) => raceNames.add(n)); }
+      await seedNamed("classes", classNames);
+      await seedNamed("races", raceNames);
+      const facNames = new Set(_obSplit(data.world && data.world.factions));
+      castSeeds.forEach((s) => _obSplit(s.faction).forEach((n) => facNames.add(n)));
+      await seedNamed("factions", facNames, (name) => {
+        const members = castSeeds
+          .filter((s) => _obSplit(s.faction).some((f) => f.toLowerCase() === name.toLowerCase()))
+          .map((s) => castIdByName.get((s.name || "").toLowerCase())).filter(Boolean);
+        return members.length ? { members } : {};
+      });
+      await seedNamed("locations", new Set(_obSplit(data.world && data.world.locations)));
 
       // Manuscript → chapters. NEVER overwrite existing written chapters — a
       // re-run of onboarding must not destroy the user's manuscript.
