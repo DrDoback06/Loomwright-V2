@@ -249,4 +249,29 @@ test.describe("U28b. Tangle — discoverable", () => {
     await expect(node).toBeVisible({ timeout: 5000 });
     await expect(node.locator("svg").first()).toBeVisible();   // embedded SkillTreeMini constellation
   });
+
+  test("dragging an entity from another panel drops it onto the canvas", async ({ page }) => {
+    await openFreshApp(page);
+    const id = await page.evaluate(async () => {
+      const B = window.LoomwrightBackend;
+      const e = await B.EntityService.save("cast", { name: "Captain Brec", summary: "Holds the pass." }, { status: "active" });
+      await B.TangleService.ensureBoard();
+      return e.id;
+    });
+    await openTangle(page);
+    await page.locator("[data-testid='tan-open-canvas']").click();
+    const fs = page.locator("[data-ui='TangleFullScreen']");
+    await expect(fs).toBeVisible({ timeout: 5000 });
+    // simulate a cross-panel drop onto the canvas (ENTITY_DRAG fallback path)
+    await page.evaluate((eid) => {
+      window.ENTITY_DRAG.set({ active: true, payload: { id: eid, entityType: "cast", name: "Captain Brec", summary: "Holds the pass." } });
+      const canvas = document.querySelector(".tan-fs__canvas");
+      const r = canvas.getBoundingClientRect();
+      const ev = new Event("drop", { bubbles: true, cancelable: true });
+      ev.clientX = r.left + 240; ev.clientY = r.top + 200; ev.dataTransfer = { getData: () => "" };
+      canvas.dispatchEvent(ev);
+    }, id);
+    await page.waitForTimeout(300);
+    await expect(fs.locator("[data-ui='TangleNode']", { hasText: "Captain Brec" })).toBeVisible({ timeout: 4000 });
+  });
 });

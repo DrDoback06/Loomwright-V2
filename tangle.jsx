@@ -26,6 +26,7 @@ const { useState: _tn_us, useRef: _tn_ur, useEffect: _tn_ue, useCallback: _tn_uc
 const TANGLE_NODE_TYPES = [
   { id: "note",      label: "Text note",       glyph: "✎", color: "#9a7b3a" },
   { id: "cast",      label: "Character",       glyph: "◐", color: "#7a6aa3" },
+  { id: "bestiary",  label: "Creature",        glyph: "🐾", color: "#9a5a3a" },
   { id: "locations", label: "Location",        glyph: "▲", color: "#6b8a4a" },
   { id: "items",     label: "Item",            glyph: "✧", color: "#b08a3e" },
   { id: "quests",    label: "Quest",           glyph: "✦", color: "#8a3a4f" },
@@ -244,19 +245,54 @@ const TanglePanelBody = ({ panel }) => {
 // A small entity-type visual for a token head: a skill's chosen icon, a
 // character avatar, or the type glyph. Lets a dragged entity "look like
 // itself" on the board.
+const _tnCap = (s) => { s = String(s == null ? "" : s); return s.charAt(0).toUpperCase() + s.slice(1); };
+const _TN_RARITY = { common: "#8a8a7a", uncommon: "#5d8a4a", rare: "#3e6db5", heirloom: "#b08a3e", mythic: "#9a4fb8", legendary: "#c98a2c", cursed: "#a83a3a", artifact: "#9a4fb8" };
+
+// Up to three short, type-appropriate facts for a token (some get a tint).
+const _tnEntityFacts = (ent, type) => {
+  const d = (ent && ent.data) || {};
+  const F = [];
+  const add = (v, tint) => { if (v != null && v !== "" && typeof v !== "object") F.push({ t: _tnCap(v), tint: tint || null }); };
+  switch (type) {
+    case "cast":      add(d.role); add(d.species || d.race); break;
+    case "locations": add(d.kind || d.customKind || "place"); break;
+    case "items":     add(d.rarity, _TN_RARITY[String(d.rarity || "").toLowerCase()]); add(d.itemType); add(d.slot); break;
+    case "bestiary":  add(d.threatLevel ? _tnCap(d.threatLevel) + " threat" : null, "#a83a3a"); add(d.speciesType || d.species); break;
+    case "factions":  { add(d.kind); const m = (d.members || []).length; if (m) F.push({ t: m + " member" + (m > 1 ? "s" : ""), tint: null }); break; }
+    case "quests":    { add(d.status); const s = Array.isArray(d.steps) ? d.steps : []; if (s.length) F.push({ t: s.filter((x) => x && x.status === "done").length + "/" + s.length + " steps", tint: null }); break; }
+    case "events":    add(d.eventType); add(d.chapter ? "Ch. " + String(d.chapter).replace(/^ch\.?\s*/i, "") : null); break;
+    case "lore":      { const band = String(d.band || "").toLowerCase(); add(d.band, band === "canon" ? "#c98a2c" : null); add(d.kind || d.loreKind); break; }
+    case "classes":   add(d.category); add(d.role); break;
+    case "races":     add(d.category); break;
+    case "stats":     { add(d.valueType); if (d.defaultValue != null && d.defaultValue !== "") F.push({ t: "def " + d.defaultValue, tint: null }); break; }
+    case "abilities":
+    case "skills":    add(d.skillType); break;
+    case "relationships": add(d.bondType); break;
+    default: break;
+  }
+  return F.slice(0, 3);
+};
+
 const _tnEntityBadge = (ent, entityType, t) => {
-  if (!ent) return <span style={{ fontFamily: "var(--font-display)", fontSize: 13, color: t.color }}>{t.glyph}</span>;
+  const disc = (content, bg, fg, isImg) => isImg
+    ? <img src={content} alt="" style={{ width: 18, height: 18, objectFit: "cover", borderRadius: "50%", flex: "0 0 auto" }}/>
+    : <span style={{ display: "inline-flex", width: 18, height: 18, borderRadius: "50%", background: bg, color: fg, fontSize: 10, fontWeight: 700, alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}>{content}</span>;
+  if (!ent) return disc(t.glyph, t.color + "22", t.color);
   const d = ent.data || {};
-  if (entityType === "skills") {
-    if (d.iconUrl) return <img src={d.iconUrl} alt="" style={{ width: 18, height: 18, objectFit: "cover", borderRadius: "50%", verticalAlign: "middle" }}/>;
+  if (entityType === "skills" || entityType === "abilities") {
+    if (d.iconUrl) return disc(d.iconUrl, null, null, true);
     const ch = (typeof _stIconChar === "function" && d.icon) ? _stIconChar(d.icon) : "";
-    return <span style={{ fontSize: 14 }}>{ch || "✦"}</span>;
+    return disc(ch || t.glyph, t.color + "22", t.color);
   }
   if (entityType === "cast") {
     const initials = (ent.name || "?").split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2).toUpperCase();
-    return <span style={{ display: "inline-flex", width: 18, height: 18, borderRadius: "50%", background: t.color, color: "#fff", fontSize: 9, fontWeight: 700, alignItems: "center", justifyContent: "center" }}>{initials}</span>;
+    return disc(initials, t.color, "#fff");
   }
-  return <span style={{ fontFamily: "var(--font-display)", fontSize: 13, color: t.color }}>{t.glyph}</span>;
+  if (entityType === "items") {
+    const rc = _TN_RARITY[String(d.rarity || "").toLowerCase()] || t.color;
+    return disc(t.glyph, rc + "22", rc);
+  }
+  return disc(t.glyph, t.color + "22", t.color);
 };
 
 // Hover/click detail card for an entity token — name, type, status, summary,
@@ -292,8 +328,8 @@ const TangleEntityCard = ({ entityId, entityType }) => {
 // A mini Atlas region for a location token: the place + all its descendants
 // (towns, buildings…) drawn as positioned pins/symbols, scaled to fit. Reuses
 // the Atlas data model + PIN_BY_TYPE so a dragged City "brings its map".
-const AtlasRegionMini = ({ locationId, w = 172, h = 116 }) => {
-  const data = window.LoomwrightBackend?.AtlasService?.buildAtlasDataSync?.();
+const AtlasRegionMini = ({ locationId, atlasData, w = 172, h = 116 }) => {
+  const data = atlasData || window.LoomwrightBackend?.AtlasService?.buildAtlasDataSync?.();
   if (!data || !Array.isArray(data.locations)) return null;
   const byId = {}; const kids = {};
   for (const l of data.locations) { byId[l.id] = l; (kids[l.parent] = kids[l.parent] || []).push(l); }
@@ -336,15 +372,17 @@ const AtlasRegionMini = ({ locationId, w = 172, h = 116 }) => {
 
 // Whole-skill-tree token: embeds the read-only SkillTreeMini constellation
 // for a dragged tree (trees aren't entities, so the node carries a treeId).
-const TangleTreeMini = ({ treeId }) => {
+const TangleTreeMini = ({ treeId, stCtx }) => {
   const B = window.LoomwrightBackend;
   const raw = ((B?.SkillTreeService?.loadSync?.() || {}).trees || []).find((t) => t.id === treeId);
-  if (!raw || typeof liveTreeToView !== "function" || typeof buildSTContext !== "function" || typeof SkillTreeMini === "undefined") return null;
-  const view = liveTreeToView(raw, buildSTContext());
+  if (!raw || typeof liveTreeToView !== "function" || typeof SkillTreeMini === "undefined") return null;
+  const ctx = stCtx || (typeof buildSTContext === "function" ? buildSTContext() : null);
+  if (!ctx) return null;
+  const view = liveTreeToView(raw, ctx);
   return <div style={{ width: 132, height: 132, margin: "4px auto 0" }}><SkillTreeMini tree={view} selectedNodeId={null} onSelectNode={() => {}}/></div>;
 };
 
-const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnect, scale }) => {
+const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnect, scale, atlasData, stCtx }) => {
   const ref = _tn_ur(null);
   const [hover, setHover] = _tn_us(false);
   const t = _tnType(node.kind);
@@ -397,8 +435,24 @@ const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnec
         <span>{node.unlinked ? t.label + " (unlinked)" : t.label}</span>
       </div>
       <div className="tan-node__title">{node.title}</div>
-      {node.kind === "skillTree" && node.treeId && <TangleTreeMini treeId={node.treeId}/>}
-      {node.entityType === "locations" && ent && <div style={{ marginTop: 4 }}><AtlasRegionMini locationId={node.entityId}/></div>}
+      {ent && (() => {
+        const facts = _tnEntityFacts(ent, node.entityType);
+        return facts.length ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, margin: "1px 0 3px" }}>
+            {facts.map((f, i) => (
+              <span key={i} style={{
+                fontFamily: "var(--font-sans)", fontSize: 9.5, lineHeight: "15px", padding: "0 6px", borderRadius: 9,
+                textTransform: "capitalize",
+                color: f.tint || "var(--ink-3, #76684c)",
+                background: (f.tint || "#76684c") + "1a",
+                border: "1px solid " + ((f.tint || "#76684c") + "33"),
+              }}>{f.t}</span>
+            ))}
+          </div>
+        ) : null;
+      })()}
+      {node.kind === "skillTree" && node.treeId && <TangleTreeMini treeId={node.treeId} stCtx={stCtx}/>}
+      {node.entityType === "locations" && ent && <div style={{ marginTop: 4 }}><AtlasRegionMini locationId={node.entityId} atlasData={atlasData}/></div>}
       {node.preview && <div className="tan-node__preview">{node.preview}</div>}
       {node.cite && <span className="tan-node__cite">{node.cite}</span>}
       <span
@@ -420,6 +474,12 @@ const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnec
 const TangleFullScreen = ({ onClose }) => {
   const live = useTangleState();
   const B = () => window.LoomwrightBackend;
+
+  // Heavy, entity-derived data for the rich tokens (Atlas region maps, skill
+  // constellations). Built once per live snapshot — NOT per node, per frame —
+  // so dragging/hovering doesn't rebuild the whole world for every token.
+  const atlasData = _tn_um(() => window.LoomwrightBackend?.AtlasService?.buildAtlasDataSync?.() || null, [live]);
+  const stCtx = _tn_um(() => (typeof buildSTContext === "function" ? buildSTContext() : null), [live]);
 
   // Local optimistic node positions while dragging (id → {x,y}).
   const [dragPos, setDragPos] = _tn_us({});
@@ -636,7 +696,7 @@ const TangleFullScreen = ({ onClose }) => {
     if (!Bk?.EntityService) return [];
     const q = traySearch.trim().toLowerCase();
     const out = [];
-    for (const type of ["cast", "locations", "items", "quests", "events", "lore", "factions", "skills", "abilities", "classes", "races", "stats"]) {
+    for (const type of ["cast", "bestiary", "locations", "items", "quests", "events", "lore", "factions", "skills", "abilities", "classes", "races", "stats"]) {
       for (const ent of Bk.EntityService.listSync(type)) {
         if (!ent || ent.status === "deleted") continue;
         if (q && !String(ent.name || "").toLowerCase().includes(q)) continue;
@@ -840,6 +900,13 @@ const TangleFullScreen = ({ onClose }) => {
         onPointerDown={onCanvasPointerDown}
         onWheel={onWheel}
         onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          let payload = null;
+          try { const raw = e.dataTransfer.getData("application/x-loom-entity"); if (raw) payload = JSON.parse(raw); } catch (_e) {}
+          if (!payload) { const g = window.ENTITY_DRAG && window.ENTITY_DRAG.get && window.ENTITY_DRAG.get(); if (g && g.active) payload = g.payload; }
+          if (payload && payload.id) onEntityDrop({ id: payload.id, type: payload.entityType || payload.type, name: payload.name, summary: payload.summary }, e);
+        }}
       >
         {/* Floating toolbar */}
         <div className="tan-fs__toolbar">
@@ -941,6 +1008,8 @@ const TangleFullScreen = ({ onClose }) => {
                 onDragEnd={onDragNodeEnd}
                 onStartConnect={onStartConnect}
                 scale={scale}
+                atlasData={atlasData}
+                stCtx={stCtx}
               />
             </div>
           ))}
