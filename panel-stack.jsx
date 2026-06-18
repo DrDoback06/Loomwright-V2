@@ -97,7 +97,7 @@ const useLocksVersion = () => {
 
 const PanelChrome = ({
   panel, isFront, panelFilter,
-  onPinPanel, onExpandPanel, onClosePanel, onBringPanelToFront, onClearPanelFilter,
+  onPinPanel, onExpandPanel, onClosePanel, onToggleFloatPanel, onBringPanelToFront, onClearPanelFilter,
 }) => {
   const t = panel.entityType ? ENTITY_TYPES[panel.entityType] : null;
   const style = t ? { "--ec": t.color, "--es": t.soft, "--ed": t.deep } : {};
@@ -178,6 +178,15 @@ const PanelChrome = ({
           <Icon name="expand" size={12}/>
         </button>
         <button
+          className={"pstk__btn " + (panel.floating ? "is-active" : "")}
+          onClick={(e) => { e.stopPropagation(); onToggleFloatPanel && onToggleFloatPanel(panel.id); }}
+          data-callback="onToggleFloatPanel"
+          data-testid="panel-float-toggle"
+          title={panel.floating ? "Dock back into the stack" : "Pop out into a floating window"}
+        >
+          <Icon name="grip" size={12}/>
+        </button>
+        <button
           className="pstk__btn pstk__btn--close"
           onClick={(e) => { e.stopPropagation(); onClosePanel && onClosePanel(panel.id); }}
           data-callback="onClosePanel"
@@ -227,10 +236,35 @@ const DockedPanel = ({
   onClosePanel, onPinPanel, onExpandPanel,
   onBringPanelToFront, onReorderPanels,
   onOpenReviewQueue, onSelectEntity, onClearPanelFilter,
+  onToggleFloatPanel, onMoveFloatPanel, onResizeFloatPanel,
   panelActions,
   zoneClass = "",
 }) => {
   const dragRef = _ps_ur(null);
+  // Floating mode: the panel positions itself as a fixed, movable/resizable
+  // window over the workspace (opt-in; the docked stack is unchanged).
+  const floating = !!panel.floating;
+  const f = panel.float || { x: 140, y: 96, w: 400, h: 480 };
+  const floatStyle = floating
+    ? { position: "fixed", left: f.x, top: f.y, width: f.w, height: f.h, zIndex: 230 + (panel.order || 0), display: "flex", flexDirection: "column", margin: 0 }
+    : undefined;
+  const startFloatMove = (e) => {
+    if (!floating || !e.target.closest) return;
+    if (!e.target.closest(".pstk__head") || e.target.closest("button, input, select, textarea")) return;
+    e.preventDefault();
+    onBringPanelToFront && onBringPanelToFront(panel.id);
+    const sx = e.clientX, sy = e.clientY, ox = f.x, oy = f.y;
+    const mv = (ev) => onMoveFloatPanel && onMoveFloatPanel(panel.id, Math.max(0, Math.round(ox + ev.clientX - sx)), Math.max(0, Math.round(oy + ev.clientY - sy)));
+    const up = () => { document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up); };
+    document.addEventListener("pointermove", mv); document.addEventListener("pointerup", up);
+  };
+  const startFloatResize = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const sx = e.clientX, sy = e.clientY, ow = f.w, oh = f.h;
+    const mv = (ev) => onResizeFloatPanel && onResizeFloatPanel(panel.id, Math.max(300, Math.round(ow + ev.clientX - sx)), Math.max(240, Math.round(oh + ev.clientY - sy)));
+    const up = () => { document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up); };
+    document.addEventListener("pointermove", mv); document.addEventListener("pointerup", up);
+  };
   const onDragStart = (e) => {
     e.dataTransfer.setData("text/loomwright-panel-id", panel.id);
     e.dataTransfer.effectAllowed = "move";
@@ -249,6 +283,7 @@ const DockedPanel = ({
     panel.expanded && "is-expanded",
     isFront && "is-front",
     panel.pinned && "is-pinned",
+    floating && "is-floating",
   ].filter(Boolean).join(" ");
 
   return (
@@ -262,11 +297,13 @@ const DockedPanel = ({
       data-pinned={panel.pinned ? "true" : "false"}
       role="dialog"
       aria-label={panel.title}
-      draggable
+      draggable={!floating}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onMouseDown={() => onBringPanelToFront && onBringPanelToFront(panel.id)}
+      onPointerDown={startFloatMove}
+      style={floatStyle}
     >
       <PanelChrome
         panel={panel}
@@ -275,9 +312,15 @@ const DockedPanel = ({
         onPinPanel={onPinPanel}
         onExpandPanel={onExpandPanel}
         onClosePanel={onClosePanel}
+        onToggleFloatPanel={onToggleFloatPanel}
         onBringPanelToFront={onBringPanelToFront}
         onClearPanelFilter={onClearPanelFilter}
       />
+      {floating && (
+        <span className="pstk__float-resize" data-testid="panel-float-resize" onPointerDown={startFloatResize}
+              title="Resize"
+              style={{ position: "absolute", right: 2, bottom: 2, width: 15, height: 15, cursor: "nwse-resize", borderRight: "2px solid var(--ink-4, #76684c)", borderBottom: "2px solid var(--ink-4, #76684c)", opacity: 0.55, zIndex: 5 }}/>
+      )}
 
       {/* Panel-level actions only (Extract / Review). The per-type search,
           filter, and sort live inside each body (bespoke bodies + the
@@ -431,6 +474,7 @@ const DockedPanel = ({
 const PanelStack = ({
   panels, focusedByType,
   onClosePanel, onPinPanel, onExpandPanel,
+  onToggleFloatPanel, onMoveFloatPanel, onResizeFloatPanel,
   onBringPanelToFront, onReorderPanels, onRestorePanel,
   onOpenReviewQueue, onSelectEntity, onClearPanelFilter,
 }) => {
@@ -457,9 +501,14 @@ const PanelStack = ({
   // Sort by 'order' for deterministic render
   const sorted = [...panels].sort((a, b) => (a.order || 0) - (b.order || 0));
 
-  const pinned       = isMobile ? [] : sorted.filter((p) => p.pinned && !p.collapsed);
-  const unpinnedAll  = isMobile ? sorted.filter((p) => !p.collapsed) : sorted.filter((p) => !p.pinned && !p.collapsed);
-  const userCollapsed = sorted.filter((p) => p.collapsed);
+  // Floating (popped-out) panels live in their own fixed layer — keep them out
+  // of the docked zone maths entirely.
+  const floatingPanels = isMobile ? [] : sorted.filter((p) => p.floating && !p.collapsed);
+  const docked = isMobile ? sorted : sorted.filter((p) => !p.floating);
+
+  const pinned       = isMobile ? [] : docked.filter((p) => p.pinned && !p.collapsed);
+  const unpinnedAll  = isMobile ? docked.filter((p) => !p.collapsed) : docked.filter((p) => !p.pinned && !p.collapsed);
+  const userCollapsed = docked.filter((p) => p.collapsed);
 
   // Cap visible unpinned. Oldest (lowest order) overflows to the rail.
   const maxVisible = isMobile ? 1 : MAX_VISIBLE_UNPINNED;
@@ -497,6 +546,9 @@ const PanelStack = ({
       onOpenReviewQueue={onOpenReviewQueue}
       onSelectEntity={onSelectEntity}
       onClearPanelFilter={onClearPanelFilter}
+      onToggleFloatPanel={onToggleFloatPanel}
+      onMoveFloatPanel={onMoveFloatPanel}
+      onResizeFloatPanel={onResizeFloatPanel}
       panelActions={panelActions}
       zoneClass={zoneClass}
     />
@@ -531,6 +583,9 @@ const PanelStack = ({
           ))}
         </div>
       )}
+
+      {/* Floating (popped-out) panels — fixed, movable/resizable windows */}
+      {floatingPanels.map((p) => renderPanel(p, "pstk__panel--floating"))}
     </div>
   );
 };

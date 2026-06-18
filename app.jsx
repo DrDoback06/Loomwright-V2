@@ -898,6 +898,21 @@ const AppShell = () => {
     return curr.map((p) => p.id === id ? { ...p, pinned: !p.pinned, collapsed: false, order: max + 1 } : p);
   }), []);
   const onExpandPanel = _uc_a((id) => setPanels((curr) => curr.map((p) => p.id === id ? { ...p, expanded: !p.expanded } : p)), []);
+  // Detach a panel into a free-floating, movable/resizable window (opt-in);
+  // toggling again re-docks it into the stack. New floats cascade so they
+  // don't stack exactly on top of each other.
+  const onToggleFloatPanel = _uc_a((id) => setPanels((curr) => {
+    const max = curr.reduce((a, p) => Math.max(a, p.order || 0), 0);
+    const floatN = curr.filter((p) => p.floating).length;
+    return curr.map((p) => {
+      if (p.id !== id) return p;
+      if (p.floating) return { ...p, floating: false, order: max + 1 };
+      const off = (floatN % 6) * 30;
+      return { ...p, floating: true, collapsed: false, pinned: false, order: max + 1, float: p.float || { x: 140 + off, y: 96 + off, w: 400, h: 480 } };
+    });
+  }), []);
+  const onMoveFloatPanel = _uc_a((id, x, y) => setPanels((curr) => curr.map((p) => p.id === id ? { ...p, float: { ...(p.float || {}), x, y } } : p)), []);
+  const onResizeFloatPanel = _uc_a((id, w, h) => setPanels((curr) => curr.map((p) => p.id === id ? { ...p, float: { ...(p.float || {}), w, h } } : p)), []);
   // Restore a collapsed/overflow panel — bring to front, uncollapse.
   const onRestorePanel = _uc_a((id) => setPanels((curr) => {
     const max = curr.reduce((a, p) => Math.max(a, p.order || 0), 0);
@@ -1450,6 +1465,9 @@ const AppShell = () => {
               onClosePanel={onClosePanel}
               onPinPanel={onPinPanel}
               onExpandPanel={onExpandPanel}
+              onToggleFloatPanel={onToggleFloatPanel}
+              onMoveFloatPanel={onMoveFloatPanel}
+              onResizeFloatPanel={onResizeFloatPanel}
               onBringPanelToFront={onBringPanelToFront}
               onReorderPanels={onReorderPanels}
               onRestorePanel={onRestorePanel}
