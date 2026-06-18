@@ -45,4 +45,30 @@ test.describe("T63. Skill Trees tab", () => {
     expect(persisted).toBe("Court arts (revised)");
     if (process.env.SHOT) await page.screenshot({ path: "/tmp/skilltrees.png" });
   });
+
+  test("picking a star icon persists to the skill node", async ({ page }) => {
+    await openFreshApp(page);
+    const skill = await saveEntity(page, "skills", { name: "Embercall", data: { skillType: "active" } }, { status: "active" });
+    const treeId = await page.evaluate(async (sid) => {
+      const S = window.LoomwrightBackend.SkillTreeService;
+      const t = await S.addTree({ name: "Pyromancy" });
+      await S.addNode(t.id, sid, { x: 50, y: 60 });   // 0-100 space, on-canvas
+      return t.id;
+    }, skill.id);
+
+    await openSkillTreesPanel(page);
+    await expect(page.locator(".stp-host")).toBeVisible({ timeout: 5000 });
+    await page.evaluate((tid) => window.dispatchEvent(new CustomEvent("lw:open-existing-fullscreen", { detail: { workspaceId: "skill-tree-editor", entityId: tid } })), treeId);
+    const editor = page.locator("[data-ui='SkillTreeEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    await editor.locator("[data-st-node]").first().click();      // select the star
+    const picker = page.locator("[data-ui='StIconPicker']");
+    await expect(picker).toBeVisible({ timeout: 5000 });
+    await picker.locator("[data-testid='ste-icon-fire']").click();
+    await page.waitForTimeout(250);
+
+    const icon = await page.evaluate((sid) => window.LoomwrightBackend.EntityService.getSync(sid, "skills").data.icon, skill.id);
+    expect(icon).toBe("fire");
+  });
 });

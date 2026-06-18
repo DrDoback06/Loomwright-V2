@@ -24,6 +24,46 @@ const { useState: _st_us, useMemo: _st_um, useCallback: _st_uc, useRef: _st_ur, 
 const ST_GLYPHS = ["✷", "◈", "❋", "✦", "✺", "✹", "◇", "✶"];
 const ST_COLORS = ["#7a6aa3", "#3e6db5", "#a8553f", "#5d6d4e", "#8a6a2a", "#b86a82", "#3d3a78", "#c98a2c"];
 const _stHash = (s) => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+
+// Default "star" icons for skill nodes — recognisable element/class glyphs.
+// A node stores either data.icon (one of these ids) or data.iconUrl (a custom
+// uploaded image data-URL); it falls back to the node's type glyph when set
+// to neither. Users pick from this set or upload their own in the inspector.
+const ST_SKILL_ICONS = [
+  { id: "sword",   char: "⚔️", label: "Sword",     group: "Combat" },
+  { id: "axe",     char: "🪓", label: "Axe",       group: "Combat" },
+  { id: "bow",     char: "🏹", label: "Bow",       group: "Combat" },
+  { id: "dagger",  char: "🗡️", label: "Dagger", group: "Combat" },
+  { id: "spear",   char: "🔱", label: "Spear",     group: "Combat" },
+  { id: "fist",    char: "✊",       label: "Fist",      group: "Combat" },
+  { id: "hammer",  char: "🔨", label: "Hammer",    group: "Combat" },
+  { id: "bomb",    char: "💣", label: "Bomb",      group: "Combat" },
+  { id: "shield",  char: "🛡️", label: "Shield", group: "Defense" },
+  { id: "boots",   char: "🥾", label: "Boots",     group: "Defense" },
+  { id: "gloves",  char: "🧤", label: "Gloves",    group: "Defense" },
+  { id: "helm",    char: "⛑️", label: "Helm",      group: "Defense" },
+  { id: "armor",   char: "🦺", label: "Armour",    group: "Defense" },
+  { id: "fire",    char: "🔥", label: "Fire",      group: "Element" },
+  { id: "water",   char: "💧", label: "Water",     group: "Element" },
+  { id: "ice",     char: "❄️", label: "Ice",       group: "Element" },
+  { id: "lightning", char: "⚡",     label: "Lightning", group: "Element" },
+  { id: "earth",   char: "🪨", label: "Earth",     group: "Element" },
+  { id: "wind",    char: "🌀", label: "Wind",      group: "Element" },
+  { id: "poison",  char: "🧪", label: "Poison",    group: "Element" },
+  { id: "nature",  char: "🌿", label: "Nature",    group: "Element" },
+  { id: "light",   char: "☀️", label: "Light",     group: "Element" },
+  { id: "dark",    char: "🌑", label: "Dark",      group: "Element" },
+  { id: "arcane",  char: "✨",       label: "Arcane",    group: "Mystic" },
+  { id: "heart",   char: "❤️", label: "Vitality",  group: "Mystic" },
+  { id: "skull",   char: "💀", label: "Death",     group: "Mystic" },
+  { id: "eye",     char: "👁️", label: "Sight", group: "Mystic" },
+  { id: "book",    char: "📖", label: "Lore",      group: "Mystic" },
+  { id: "star",    char: "⭐",       label: "Star",      group: "Mystic" },
+  { id: "crown",   char: "👑", label: "Crown",     group: "Mystic" },
+];
+const ST_ICON_BY_ID = Object.fromEntries(ST_SKILL_ICONS.map((i) => [i.id, i]));
+// Resolve a stored icon value (id, or a raw glyph for forward-compat) to a char.
+const _stIconChar = (icon) => icon ? ((ST_ICON_BY_ID[icon] && ST_ICON_BY_ID[icon].char) || icon) : "";
 const _stInitials = (name) => {
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] || "") + (parts[1]?.[0] || parts[0]?.[1] || "")).toUpperCase() || "?";
@@ -107,6 +147,8 @@ const liveTreeToView = (tree, ctx) => {
       id,
       name: skill.name || "Untitled skill",
       type: d.skillType || "active",
+      icon: d.icon || "",
+      iconUrl: d.iconUrl || "",
       tier: _stTierOf(pos, d),
       x: Number(pos.x) || 0,
       y: Number(pos.y) || 0,
@@ -695,14 +737,25 @@ const SkillTreeCanvas = ({
                 <circle r={r + 2} fill="rgba(255,248,230,0.95)" stroke={tree.color} strokeWidth="0.8"/>
                 <circle r={r} fill={n.unlocked ? tree.color : "rgba(255,248,230,0.95)"}
                               stroke={tree.color} strokeWidth={n.unlocked ? 0 : 1.5}/>
-                {/* Inner glow / type glyph */}
-                {n.unlocked && <circle r={r * 0.5} fill="#fff" opacity="0.5"/>}
-                <text textAnchor="middle" dominantBaseline="central"
-                      fontFamily="var(--font-display)" fontWeight="700"
-                      fontSize={n.tier === 1 ? 14 : 11}
-                      fill={n.unlocked ? "#fff" : tree.color}>
-                  {n.type === "active" ? "✦" : n.type === "passive" ? "◐" : n.type === "triggered" ? "⚡" : n.type === "one-time" ? "✷" : "◇"}
-                </text>
+                {/* Inner glow */}
+                {n.unlocked && !n.icon && !n.iconUrl && <circle r={r * 0.5} fill="#fff" opacity="0.5"/>}
+                {/* Star face: custom image > chosen element/class icon > type glyph */}
+                {n.iconUrl ? (
+                  <>
+                    <clipPath id={"stc-clip-" + n.id}><circle r={r}/></clipPath>
+                    <image href={n.iconUrl} x={-r} y={-r} width={r * 2} height={r * 2}
+                           clipPath={`url(#stc-clip-${n.id})`} preserveAspectRatio="xMidYMid slice"/>
+                  </>
+                ) : n.icon ? (
+                  <text textAnchor="middle" dominantBaseline="central" fontSize={r * 1.5}>{_stIconChar(n.icon)}</text>
+                ) : (
+                  <text textAnchor="middle" dominantBaseline="central"
+                        fontFamily="var(--font-display)" fontWeight="700"
+                        fontSize={n.tier === 1 ? 14 : 11}
+                        fill={n.unlocked ? "#fff" : tree.color}>
+                    {n.type === "active" ? "✦" : n.type === "passive" ? "◐" : n.type === "triggered" ? "⚡" : n.type === "one-time" ? "✷" : "◇"}
+                  </text>
+                )}
 
                 {/* Label */}
                 {showLabels && (
@@ -814,6 +867,43 @@ const _stAutoLayout = async (view) => {
 // ---------------------------------------------------------------------
 // SkillTreeEditor — full-screen editor overlay
 // ---------------------------------------------------------------------
+// Star-icon picker for the inspector: choose an element/class glyph or
+// upload a custom image. Writes to the skill entity's data.{icon,iconUrl}.
+const StIconPicker = ({ node, ctx }) => {
+  const rec = ctx.skills.get(node.id);
+  const data = (rec && rec.data) || {};
+  const cur = data.iconUrl ? "custom" : (data.icon || "");
+  const save = (patch) => window.LoomwrightBackend?.EntityService?.update("skills", node.id, { data: { ...data, ...patch } });
+  const onUpload = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => save({ iconUrl: String(rd.result || ""), icon: "" });
+    rd.readAsDataURL(f);
+  };
+  const cell = (on) => ({
+    fontSize: 15, lineHeight: "22px", height: 26, border: on ? "1px solid var(--gold, #c98a2c)" : "1px solid rgba(120,96,60,0.18)",
+    borderRadius: 6, background: on ? "rgba(201,138,44,0.16)" : "rgba(120,96,60,0.06)", cursor: "pointer", padding: 0,
+  });
+  return (
+    <div className="ste-insp__sec" data-ui="StIconPicker">
+      <div className="ste-insp__sech">Star icon</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 3, marginBottom: 6 }}>
+        <button title="No icon (use type glyph)" onClick={() => save({ icon: "", iconUrl: "" })} style={cell(!cur)}>∅</button>
+        {ST_SKILL_ICONS.map((ic) => (
+          <button key={ic.id} title={ic.label} data-testid={"ste-icon-" + ic.id}
+                  onClick={() => save({ icon: ic.id, iconUrl: "" })} style={cell(cur === ic.id)}>{ic.char}</button>
+        ))}
+      </div>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+        {data.iconUrl ? <img src={data.iconUrl} alt="" style={{ width: 26, height: 26, objectFit: "cover", borderRadius: 5, border: "1px solid var(--gold,#c98a2c)" }}/> : null}
+        <span className="rpg-btn rpg-btn--small" style={{ pointerEvents: "none" }}>{data.iconUrl ? "Replace image…" : "Upload image…"}</span>
+        <input type="file" accept="image/*" style={{ display: "none" }} onChange={onUpload} data-testid="ste-icon-upload"/>
+      </label>
+    </div>
+  );
+};
+
 const SkillTreeEditor = ({ ctx, views, initialTreeId, onExit }) => {
   const [activeTreeId, setActiveTreeId] = _st_us(initialTreeId || null);
   const [selectedNodeId, setSelectedNodeId] = _st_us(null);
@@ -1167,6 +1257,7 @@ const SkillTreeEditor = ({ ctx, views, initialTreeId, onExit }) => {
                 </div>
                 <div className={"ste-insp__type ste-insp__type--" + node.type}>{node.type} skill</div>
                 <p className="ste-insp__sum">{node.summary}</p>
+                <StIconPicker node={node} ctx={ctx}/>
                 {node.effect && <STRow k="Effect"  v={node.effect}/>}
                 {node.cost && <STRow k="Cost"    v={node.cost}/>}
                 <STRow k="Locked"  v={node.unlocked ? "Unlocked" : "Locked"}/>
