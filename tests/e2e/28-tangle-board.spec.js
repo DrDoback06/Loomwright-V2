@@ -226,4 +226,27 @@ test.describe("U28b. Tangle — discoverable", () => {
     await expect(region.locator("circle")).toHaveCount(3);   // city + 2 children, drawn as pins
     await expect(region).toContainText("Pale Reach Hold");
   });
+
+  test("a whole skill tree drops onto the board as a constellation token", async ({ page }) => {
+    await openFreshApp(page);
+    const treeId = await page.evaluate(async () => {
+      const B = window.LoomwrightBackend, ES = B.EntityService, ST = B.SkillTreeService;
+      const a = (await ES.save("skills", { name: "Footwork", data: { skillType: "passive", icon: "boots" } }, { status: "active" })).id;
+      const b = (await ES.save("skills", { name: "Riposte",  data: { skillType: "active",  icon: "sword" } }, { status: "active" })).id;
+      const t = await ST.addTree({ name: "Saltsworn Discipline", nodeIds: [a, b], edges: [{ from: a, to: b, kind: "prereq" }], layout: { [a]: { x: 50, y: 75 }, [b]: { x: 40, y: 45 } } });
+      await B.TangleService.ensureBoard();
+      return t.id;
+    });
+    await openTangle(page);
+    await page.locator("[data-testid='tan-open-canvas']").click();
+    const fs = page.locator("[data-ui='TangleFullScreen']");
+    await expect(fs).toBeVisible({ timeout: 5000 });
+
+    // the tree shows in the tray; tapping it drops a constellation token
+    await fs.locator(`[data-testid='tan-tray-tree-${treeId}']`).click();
+    await page.waitForTimeout(400);
+    const node = fs.locator("[data-ui='TangleNode']", { hasText: "Saltsworn Discipline" });
+    await expect(node).toBeVisible({ timeout: 5000 });
+    await expect(node.locator("svg").first()).toBeVisible();   // embedded SkillTreeMini constellation
+  });
 });

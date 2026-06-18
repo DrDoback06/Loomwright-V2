@@ -38,6 +38,7 @@ const TANGLE_NODE_TYPES = [
   { id: "races",     label: "Race",            glyph: "❦", color: "#a8553f" },
   { id: "stats",     label: "Stat",            glyph: "▦", color: "#3e6db5" },
   { id: "relationships", label: "Relationship", glyph: "⇌", color: "#b86a82" },
+  { id: "skillTree", label: "Skill tree",      glyph: "✪", color: "#7a6aa3" },
   { id: "references",label: "Reference",       glyph: "▤", color: "#76684c" },
   { id: "image",     label: "Image",           glyph: "▢", color: "#5d7896" },
   { id: "quote",     label: "Quote",           glyph: "❝", color: "#a8553f" },
@@ -333,6 +334,16 @@ const AtlasRegionMini = ({ locationId, w = 172, h = 116 }) => {
   );
 };
 
+// Whole-skill-tree token: embeds the read-only SkillTreeMini constellation
+// for a dragged tree (trees aren't entities, so the node carries a treeId).
+const TangleTreeMini = ({ treeId }) => {
+  const B = window.LoomwrightBackend;
+  const raw = ((B?.SkillTreeService?.loadSync?.() || {}).trees || []).find((t) => t.id === treeId);
+  if (!raw || typeof liveTreeToView !== "function" || typeof buildSTContext !== "function" || typeof SkillTreeMini === "undefined") return null;
+  const view = liveTreeToView(raw, buildSTContext());
+  return <div style={{ width: 132, height: 132, margin: "4px auto 0" }}><SkillTreeMini tree={view} selectedNodeId={null} onSelectNode={() => {}}/></div>;
+};
+
 const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnect, scale }) => {
   const ref = _tn_ur(null);
   const [hover, setHover] = _tn_us(false);
@@ -386,6 +397,7 @@ const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnec
         <span>{node.unlinked ? t.label + " (unlinked)" : t.label}</span>
       </div>
       <div className="tan-node__title">{node.title}</div>
+      {node.kind === "skillTree" && node.treeId && <TangleTreeMini treeId={node.treeId}/>}
       {node.entityType === "locations" && ent && <div style={{ marginTop: 4 }}><AtlasRegionMini locationId={node.entityId}/></div>}
       {node.preview && <div className="tan-node__preview">{node.preview}</div>}
       {node.cite && <span className="tan-node__cite">{node.cite}</span>}
@@ -605,6 +617,19 @@ const TangleFullScreen = ({ onClose }) => {
     if (row) setSelectedId(row.id);
   };
 
+  // Skill trees aren't entities — add one as a tree token (carries treeId).
+  const addTreeNode = async (tree, pos) => {
+    const row = await B()?.TangleService?.addNode({ boardId: live.activeBoardId, kind: "skillTree", treeId: tree.id, title: tree.name || "Skill tree", x: pos.x, y: pos.y });
+    if (row) { setSelectedId(row.id); _tnNotice((tree.name || "Skill tree") + " constellation added to the board."); }
+  };
+  const onTreeDrop = (tree, e) => addTreeNode(tree, canvasPoint(e));
+  const onTrayTapTree = (tree) => addTreeNode(tree, canvasCentre());
+  const trayTrees = _tn_um(() => {
+    const q = traySearch.trim().toLowerCase();
+    return (((window.LoomwrightBackend?.SkillTreeService?.loadSync?.() || {}).trees) || [])
+      .filter((t) => t && (!q || String(t.name || "").toLowerCase().includes(q)));
+  }, [traySearch, live.nodes.length]);
+
   // Live entity tray rows (search across the main types).
   const trayEntities = _tn_um(() => {
     const Bk = window.LoomwrightBackend;
@@ -721,6 +746,20 @@ const TangleFullScreen = ({ onClose }) => {
             )}
           </div>
         </div>
+        {trayTrees.length > 0 && (
+          <div className="tan-fs__tray-section">
+            <h4>Skill trees — drag a whole constellation</h4>
+            {trayTrees.map((tr) => (
+              <div key={tr.id} className="tan-fs__tray-tile" data-testid={"tan-tray-tree-" + tr.id}
+                   draggable onDragEnd={(e) => onTreeDrop(tr, e)}
+                   onClick={() => onTrayTapTree(tr)}
+                   title={"Add the " + (tr.name || "skill tree") + " constellation to the board"}>
+                <span style={{ color: "#7a6aa3", fontFamily: "var(--font-display)" }}>✪</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr.name || "Skill tree"}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="tan-fs__tray-section">
           <h4>Blank cards</h4>
           {TANGLE_NODE_TYPES.filter((t) => ["note", "quote", "image", "custom"].includes(t.id)).map((t) => (
