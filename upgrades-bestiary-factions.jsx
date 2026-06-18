@@ -338,6 +338,7 @@ const BestiaryDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRel
 // ---------------------------------------------------------------------
 const BestiaryPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const [selectedId, setSelectedId] = _bf_us(panel?.selected?.id || "");
+  const md = useMobileMasterDetail();
   // Follow host-driven selection (locked entities, lw:focus-entity).
   React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [search, setSearch] = _bf_us("");
@@ -360,7 +361,8 @@ const BestiaryPanelBody = ({ panel, panelContext, onSelectEntity }) => {
         </div>
       </div>
 
-      <div className="loc-body__split">
+      <div className="loc-body__split" {...md.splitProps}>
+        {md.backButton}
         <LocTreePane title="Catalogue" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((b) => (
@@ -686,6 +688,7 @@ const FactionDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRela
 // ---------------------------------------------------------------------
 const FactionsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const [selectedId, setSelectedId] = _bf_us(panel?.selected?.id || "");
+  const md = useMobileMasterDetail();
   // Follow host-driven selection (locked entities, lw:focus-entity).
   React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [search, setSearch] = _bf_us("");
@@ -707,7 +710,8 @@ const FactionsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
         </div>
       </div>
 
-      <div className="loc-body__split">
+      <div className="loc-body__split" {...md.splitProps}>
+        {md.backButton}
         <LocTreePane title="Factions" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((f) => (

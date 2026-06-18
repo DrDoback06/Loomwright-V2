@@ -48,6 +48,36 @@ const LocTreePane = ({ title, count, children, defaultOpen = true, testid = "loc
 };
 
 // ---------------------------------------------------------------------
+// useMobileMasterDetail — phone master-detail for the bespoke split panels.
+//
+// On a phone a split panel shows the roster OR the dossier, not both. The
+// shared onClick on .loc-body__split flips to the dossier when a roster row
+// is tapped (no per-panel onSelect edits); the back button returns to the
+// list. Desktop is unaffected — view is "both" so neither hide rule matches.
+//
+// Per panel: const md = useMobileMasterDetail();
+//   <div className="loc-body__split" {...md.splitProps}>{md.backButton} … </div>
+// ---------------------------------------------------------------------
+const useMobileMasterDetail = () => {
+  const isMobile = typeof useIsMobile !== "undefined" ? useIsMobile() : false;
+  const [view, setView] = React.useState("list");
+  const onSplitClick = (e) => {
+    if (!isMobile) return;
+    const t = e.target;
+    if (t && t.closest && t.closest(".loc-tree__row, .item-roster__row, [data-entity-id]")) setView("detail");
+  };
+  return {
+    isMobile,
+    splitProps: { "data-md": isMobile ? view : "both", onClick: onSplitClick },
+    backButton: isMobile ? (
+      <button type="button" className="loc-md-back" data-testid="loc-md-back" onClick={() => setView("list")}>
+        <span aria-hidden="true">‹</span> All
+      </button>
+    ) : null,
+  };
+};
+
+// ---------------------------------------------------------------------
 // Hierarchy data
 // ---------------------------------------------------------------------
 // Each location can have parent/children. The tree below is the seeded
@@ -806,6 +836,7 @@ const LocationDetail = ({ entity, onSelectEntity, onOpenRelatedTab, onOpenSource
 const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const [search, setSearch] = _loc_us("");
   const [selectedId, setSelectedId] = _loc_us(panel?.selected?.id || "");
+  const md = useMobileMasterDetail();
   // Follow host-driven selection (locked entities, lw:focus-entity).
   React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [tab, setTab] = _loc_us("dossier"); // dossier | mentions | review | references
@@ -890,7 +921,8 @@ const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
       </div>
 
       {/* Body — splits into tree + dossier; widens when expanded */}
-      <div className="loc-body__split">
+      <div className="loc-body__split" {...md.splitProps}>
+        {md.backButton}
         <aside className={"loc-body__tree" + (treeOpen ? "" : " is-collapsed")}>
           <button type="button" className="loc-body__tree-head" data-testid="loc-tree-toggle"
                   aria-expanded={treeOpen} onClick={() => setTreeOpen((v) => !v)}

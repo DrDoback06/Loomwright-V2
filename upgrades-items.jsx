@@ -318,6 +318,7 @@ const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const rawData = (window.LoomwrightBackend?.EntityService?.listSync("items")) || [];
   const data = rawData.map(liveItemToRow);
   const [selectedId, setSelectedId] = _it_us(panel?.selected?.id || (rawData[0] && rawData[0].id) || null);
+  const md = useMobileMasterDetail();
   const [search, setSearch]         = _it_us("");
   const [statusFilter, setStatus]   = _it_us("all");
   const [rarityFilter, setRarity]   = _it_us("all");
@@ -407,7 +408,8 @@ const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
       </div>
 
       {/* Split: roster + dossier */}
-      <div className="loc-body__split">
+      <div className="loc-body__split" {...md.splitProps}>
+        {md.backButton}
         {/* Left: roster */}
         <LocTreePane title="Inventory" count={filtered.length}>
           <div className="item-roster">

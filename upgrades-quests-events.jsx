@@ -936,6 +936,7 @@ const EventsFullScreen = ({ onClose }) => {
 // ---------------------------------------------------------------------
 const QuestsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const [selectedId, setSelectedId] = _qe_us(panel?.selected?.id || "");
+  const md = useMobileMasterDetail();
   const [search, setSearch] = _qe_us("");
   const [statusFilter, setStatusFilter] = _qe_us("all");
   const [fullScreen, setFullScreen] = _qe_us(false);
@@ -978,7 +979,8 @@ const QuestsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
         </div>
       </div>
 
-      <div className="loc-body__split">
+      <div className="loc-body__split" {...md.splitProps}>
+        {md.backButton}
         <LocTreePane title="Quest log" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((q) => (
@@ -1028,6 +1030,7 @@ const QuestsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
 // ---------------------------------------------------------------------
 const EventsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const [selectedId, setSelectedId] = _qe_us(panel?.selected?.id || "e1");
+  const md = useMobileMasterDetail();
   const [search, setSearch] = _qe_us("");
   const [typeFilter, setTypeFilter] = _qe_us("all");
   const [fullScreen, setFullScreen] = _qe_us(false);
@@ -1064,7 +1067,8 @@ const EventsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
         </div>
       </div>
 
-      <div className="loc-body__split">
+      <div className="loc-body__split" {...md.splitProps}>
+        {md.backButton}
         <LocTreePane title="Event ledger" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((ev) => (

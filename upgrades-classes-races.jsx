@@ -308,6 +308,7 @@ const AbilitiesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const [search, setSearch] = _crab_us("");
   const [typeFilter, setTypeFilter] = _crab_us("all");
   const [selectedId, setSelectedId] = _crab_us(panel?.selected?.id || null);
+  const md = useMobileMasterDetail();
   // Follow host-driven selection (locked entities, lw:focus-entity).
   React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
 
@@ -354,7 +355,8 @@ const AbilitiesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
         </div>
       </div>
 
-      <div className="loc-body__split">
+      <div className="loc-body__split" {...md.splitProps}>
+        {md.backButton}
         <LocTreePane title="Abilities" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((e) => (

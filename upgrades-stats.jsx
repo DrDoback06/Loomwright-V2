@@ -526,6 +526,7 @@ const StatDetailUpgraded = ({ entity, onSelectEntity, onOpenSourceMention }) => 
 // ---------------------------------------------------------------------
 const StatsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   const [selectedId, setSelectedId] = _sx_us(panel?.selected?.id || "");
+  const md = useMobileMasterDetail();
   // Follow host-driven selection (locked entities, lw:focus-entity).
   React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [search, setSearch] = _sx_us("");
@@ -556,7 +557,8 @@ const StatsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
         </div>
       </div>
 
-      <div className="loc-body__split">
+      <div className="loc-body__split" {...md.splitProps}>
+        {md.backButton}
         <LocTreePane title="Stats" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((s) => (

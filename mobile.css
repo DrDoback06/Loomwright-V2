@@ -274,6 +274,23 @@
 .app-shell[data-mobile="true"] .loc-body__detail { min-height: 0; }
 .app-shell[data-mobile="true"] .loc-body__top { flex-wrap: wrap; }
 
+/* Master-detail: on the phone a split panel shows the roster OR the dossier.
+   Tapping a roster row flips to the dossier (data-md=detail); the back button
+   returns to the list. Desktop keeps both panes (data-md=both). */
+.app-shell[data-mobile="true"] .loc-body__split[data-md="detail"] .loc-body__tree { display: none; }
+.app-shell[data-mobile="true"] .loc-body__split[data-md="list"] .loc-body__detail { display: none; }
+.app-shell[data-mobile="true"] .loc-body__split[data-md="list"] .loc-body__tree {
+  max-height: none; flex: 1; border-bottom: none;
+}
+.loc-md-back { display: none; }
+.app-shell[data-mobile="true"] .loc-body__split[data-md="detail"] .loc-md-back {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin: 8px 8px 2px; padding: 7px 12px;
+  background: var(--bg-paper-2); border: 1px solid var(--line-2);
+  border-radius: var(--r-3); cursor: pointer;
+  font-family: var(--font-sans); font-size: 13px; color: var(--ink-2);
+}
+
 /* ---------------------------------------------------------------------
    Review queue — touch-friendly triage on the phone. Bigger filter
    controls and card-action targets; Accept grows so the common "yes"
