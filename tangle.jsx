@@ -288,6 +288,51 @@ const TangleEntityCard = ({ entityId, entityType }) => {
   );
 };
 
+// A mini Atlas region for a location token: the place + all its descendants
+// (towns, buildings…) drawn as positioned pins/symbols, scaled to fit. Reuses
+// the Atlas data model + PIN_BY_TYPE so a dragged City "brings its map".
+const AtlasRegionMini = ({ locationId, w = 172, h = 116 }) => {
+  const data = window.LoomwrightBackend?.AtlasService?.buildAtlasDataSync?.();
+  if (!data || !Array.isArray(data.locations)) return null;
+  const byId = {}; const kids = {};
+  for (const l of data.locations) { byId[l.id] = l; (kids[l.parent] = kids[l.parent] || []).push(l); }
+  // gather the location + all descendants
+  const region = []; const seen = new Set(); const stack = [locationId];
+  while (stack.length) { const id = stack.pop(); if (seen.has(id)) continue; seen.add(id); if (byId[id]) region.push(byId[id]); (kids[id] || []).forEach((c) => stack.push(c.id)); }
+  const placed = region.filter((l) => isFinite(l.x) && isFinite(l.y));
+  if (placed.length < 1) return null;   // nothing to map -> token falls back to its card
+  const xs = placed.map((l) => l.x), ys = placed.map((l) => l.y);
+  let minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const spanX = Math.max(maxX - minX, 1), spanY = Math.max(maxY - minY, 1);
+  const padX = Math.max(spanX * 0.2, 6), padY = Math.max(spanY * 0.2, 6);
+  minX -= padX; maxX += padX; minY -= padY; maxY += padY;
+  const vbW = maxX - minX, vbH = maxY - minY;
+  const nx = (l) => ((l.x - minX) / vbW) * 100, ny = (l) => ((l.y - minY) / vbH) * 70;
+  const PIN = (typeof PIN_BY_TYPE !== "undefined") ? PIN_BY_TYPE : {};
+  const self = byId[locationId];
+  return (
+    <svg width={w} height={h} viewBox="0 0 100 70" preserveAspectRatio="xMidYMid meet"
+         data-ui="AtlasRegionMini" style={{ display: "block", borderRadius: 6, background: "rgba(160,140,90,0.10)", border: "1px solid rgba(120,96,60,0.25)" }}>
+      {placed.map((l) => {
+        const isTarget = l.id === locationId;
+        const pin = PIN[l.type] || { icon: "•" };
+        return (
+          <g key={l.id} transform={`translate(${nx(l).toFixed(1)}, ${ny(l).toFixed(1)})`}>
+            <circle r={isTarget ? 2.8 : 1.7} fill={isTarget ? "#c98a2c" : "rgba(74,56,28,0.5)"} stroke="#fbf3df" strokeWidth="0.3"/>
+            {l.symbol
+              ? <text fontSize={isTarget ? 4 : 3} textAnchor="middle" dominantBaseline="central">{l.symbol}</text>
+              : (pin.icon ? <text fontSize={isTarget ? 3.6 : 2.6} textAnchor="middle" dominantBaseline="central" fill={isTarget ? "#fff" : "rgba(74,56,28,0.7)"}>{pin.icon}</text> : null)}
+          </g>
+        );
+      })}
+      {self && isFinite(self.x) && (
+        <text x={nx(self).toFixed(1)} y={(ny(self) + 5.5).toFixed(1)} fontSize="3.6" textAnchor="middle"
+              fill="#3a2c12" fontFamily="var(--font-display)" fontWeight="700">{self.name}</text>
+      )}
+    </svg>
+  );
+};
+
 const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnect, scale }) => {
   const ref = _tn_ur(null);
   const [hover, setHover] = _tn_us(false);
@@ -341,6 +386,7 @@ const TangleNode = ({ node, selected, onSelect, onDrag, onDragEnd, onStartConnec
         <span>{node.unlinked ? t.label + " (unlinked)" : t.label}</span>
       </div>
       <div className="tan-node__title">{node.title}</div>
+      {node.entityType === "locations" && ent && <div style={{ marginTop: 4 }}><AtlasRegionMini locationId={node.entityId}/></div>}
       {node.preview && <div className="tan-node__preview">{node.preview}</div>}
       {node.cite && <span className="tan-node__cite">{node.cite}</span>}
       <span

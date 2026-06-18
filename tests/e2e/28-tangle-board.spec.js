@@ -204,4 +204,26 @@ test.describe("U28b. Tangle — discoverable", () => {
     await expect(pop).toContainText("Skill");
     await expect(pop.locator("[data-testid='tan-pop-open']")).toBeVisible();
   });
+
+  test("a location token renders its Atlas region with child places", async ({ page }) => {
+    await openFreshApp(page);
+    const ids = await page.evaluate(async () => {
+      const B = window.LoomwrightBackend, ES = B.EntityService, T = B.TangleService;
+      const city = await ES.save("locations", { name: "Pale Reach Hold", summary: "A salt-bitten fortress town.", data: { kind: "city", placed: true, coords: { x: 50, y: 50 } } }, { status: "active" });
+      await ES.save("locations", { name: "Tidewatch",      data: { kind: "town",     placed: true, coords: { x: 40, y: 62 }, parentId: city.id } }, { status: "active" });
+      await ES.save("locations", { name: "The Gull's Rest", data: { kind: "building", placed: true, coords: { x: 58, y: 42 }, parentId: city.id } }, { status: "active" });
+      const board = await T.ensureBoard();
+      await T.addEntityNode(board.id, ES.getSync(city.id, "locations"), { x: 320, y: 240 });
+      return { city: city.id };
+    });
+    await openTangle(page);
+    await page.locator("[data-testid='tan-open-canvas']").click();
+    const fs = page.locator("[data-ui='TangleFullScreen']");
+    await expect(fs).toBeVisible({ timeout: 5000 });
+
+    const region = fs.locator("[data-ui='TangleNode']", { hasText: "Pale Reach Hold" }).locator("[data-ui='AtlasRegionMini']");
+    await expect(region).toBeVisible({ timeout: 5000 });
+    await expect(region.locator("circle")).toHaveCount(3);   // city + 2 children, drawn as pins
+    await expect(region).toContainText("Pale Reach Hold");
+  });
 });
