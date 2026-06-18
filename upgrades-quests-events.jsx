@@ -446,8 +446,8 @@ function liveQuestToDetail(entity) {
     items: _qeRefList(d.items, "items"),
     factions: _qeRefList(d.factions, "factions"),
     relatedEvents: _qeRefList(d.relatedEvents, "events"),
-    consequenceChain: [],
-    contradictions: [],
+    consequenceChain: Array.isArray(d.consequenceChain) ? d.consequenceChain : [],
+    contradictions: Array.isArray(d.contradictions) ? d.contradictions : [],
     mentionsByChapter: m.mentionsByChapter,
     sourceMentions: m.sourceMentions,
   };
@@ -627,10 +627,8 @@ const QuestDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelate
       <div className="rpg-actions">
         <button className="rpg-btn rpg-btn--primary" data-callback="onAddQuestStep">+ Add step</button>
         <button className="rpg-btn" data-callback="onBranchQuest">Branch</button>
-        <button className="rpg-btn" data-callback="onCreateEventFromQuestStep">Make event from step</button>
-        <button className="rpg-btn" data-callback="onLinkQuestCharacter">+ Character</button>
-        <button className="rpg-btn" data-callback="onLinkQuestLocation">+ Location</button>
-        <button className="rpg-btn" data-callback="onLinkQuestItem">+ Item</button>
+        <button className="rpg-btn" data-testid="quest-edit"
+                onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "quests", initial: { id: e.id }, mode: "full" } }))}>Edit</button>
         <span style={{ flex: 1 }}/>
         <button className="rpg-btn rpg-btn--ghost" data-callback="onShowQuestOnAtlas">Show on Atlas</button>
         <button className="rpg-btn rpg-btn--ghost" data-callback="onOpenQuestTimeline">Open Timeline</button>
@@ -751,10 +749,8 @@ const EventDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelate
       )}
 
       <div className="rpg-actions">
-        <button className="rpg-btn rpg-btn--primary" data-callback="onCreateEventConsequence">+ Consequence</button>
-        <button className="rpg-btn" data-callback="onCreateRelationshipChangeFromEvent">+ Rel. change</button>
-        <button className="rpg-btn" data-callback="onLinkEventCharacter">+ Character</button>
-        <button className="rpg-btn" data-callback="onLinkEventQuest">+ Quest</button>
+        <button className="rpg-btn rpg-btn--primary" data-testid="event-edit"
+                onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "events", initial: { id: e.id }, mode: "full" } }))}>Edit</button>
         <span style={{ flex: 1 }}/>
         <button className="rpg-btn rpg-btn--ghost" data-callback="onShowEventOnAtlas">Show on Atlas</button>
         <button className="rpg-btn rpg-btn--ghost" data-callback="onOpenEventTimeline">Open Timeline</button>
@@ -1085,7 +1081,8 @@ const EventsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                    onClick={() => { setSelectedId(ev.id); onSelectEntity && onSelectEntity({ id: ev.id, type: "events", label: ev.name || ev.title }); }}>
                 <span className="loc-tree__glyph" style={{ color: "var(--ec, #c79545)" }}>◈</span>
                 <span className="loc-tree__name">{ev.name || ev.title}</span>
-                <span className="loc-tree__children">{ev.data?.chapter || ""}</span>
+                {ev.data?.chapter ? <span className="loc-tree__children">{ev.data.chapter}</span> : null}
+                {((ev.reviewQueueCount || ev.queue) || 0) > 0 && <span className="loc-tree__queue">{ev.reviewQueueCount || ev.queue}</span>}
               </div>
             ))}
           </div>

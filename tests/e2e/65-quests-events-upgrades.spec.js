@@ -71,4 +71,26 @@ test.describe("T65. Quests + Events tab upgrades", () => {
     await expect(detail).toContainText("Hess negotiation");      // data.relatedQuests resolved
     if (process.env.SHOT) await page.screenshot({ path: "/tmp/events.png" });
   });
+
+  test("event ledger shows review badges; quest/event Edit opens the editor", async ({ page }) => {
+    await openFreshApp(page);
+    await saveEntity(page, "events", { title: "Salt-wraith attack", data: { eventType: "Battle", chapter: "Ch. 6" } }, { status: "active", reviewQueueCount: 2 });
+    await openPanel(page, "events");
+    const events = page.locator("[data-ui='EventsPanelBody']");
+    await expect(events).toBeVisible({ timeout: 5000 });
+    // review badge on the event row (parity with quests; was missing)
+    await expect(events.locator(".loc-tree__queue")).toContainText("2");
+    // the reworked action row exposes a real Edit (dead +Consequence/+Quest buttons removed)
+    await events.locator("[data-testid='event-edit']").click();
+    await expect(page.locator("[data-ui='EntityEditor'][data-entity-type='events']")).toBeVisible({ timeout: 5000 });
+
+    // quests Edit likewise opens the quest editor
+    await openFreshApp(page);
+    await saveEntity(page, "quests", { title: "The Auger's Walk", data: { questType: "Main" } }, { status: "active" });
+    await openPanel(page, "quests");
+    const quests = page.locator("[data-ui='QuestsPanelBody']");
+    await expect(quests).toBeVisible({ timeout: 5000 });
+    await quests.locator("[data-testid='quest-edit']").click();
+    await expect(page.locator("[data-ui='EntityEditor'][data-entity-type='quests']")).toBeVisible({ timeout: 5000 });
+  });
 });
