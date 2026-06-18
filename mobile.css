@@ -254,6 +254,27 @@
 .app-shell[data-mobile="true"] .sr-panel__t-btn--play { width: 60px; height: 60px; font-size: 24px; }
 
 /* ---------------------------------------------------------------------
+   Entity browse & lookup — the bespoke split panels (Locations, Items,
+   Bestiary, Factions, Stats, Quests, Events, …) stack into a single
+   column on the phone. The desktop 220px-roster + detail grid left the
+   dossier unusably narrow at 390px; now the roster is a capped, scrollable
+   list on top and its collapsible caret frees the whole sheet for the
+   dossier below.
+   --------------------------------------------------------------------- */
+.app-shell[data-mobile="true"] .loc-body__split {
+  display: flex;
+  flex-direction: column;
+}
+.app-shell[data-mobile="true"] .loc-body__tree {
+  max-height: 38vh;
+  border-right: none;
+  border-bottom: 1px solid var(--line-1);
+}
+.app-shell[data-mobile="true"] .loc-body__tree.is-collapsed { max-height: none; }
+.app-shell[data-mobile="true"] .loc-body__detail { min-height: 0; }
+.app-shell[data-mobile="true"] .loc-body__top { flex-wrap: wrap; }
+
+/* ---------------------------------------------------------------------
    5. Full-screen workspaces (fws-*) collapse to a single column.
    --------------------------------------------------------------------- */
 @media (max-width: 700px) {
