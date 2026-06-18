@@ -142,4 +142,21 @@ test.describe("T18. Onboarding wizard", () => {
     expect(out.cast).toContain("Saren of Hess");   // POV character seeded as a lead
     expect(out.veyMembers).toContain(out.aId);   // faction members linked by name
   });
+
+  test("'Draft with my AI' fills a step from the configured model (stubbed)", async ({ page }) => {
+    await freshFirstRun(page);
+    await expect(page.locator("[data-ui='OnboardingOverlay']")).toBeVisible({ timeout: 6000 });
+    // Stub the BYOK call so no real key/network is needed.
+    await page.evaluate(() => {
+      window.LoomwrightBackend.AIService.completeJson = async () => ({ premise: "AI-drafted: a drowned heir hunts the Auger.", toneWords: ["bleak", "wry"] });
+    });
+    await page.locator("[data-step='foundation']").click();
+    await page.locator(".ob-jsontab__handle").click();                       // open JSON tools drawer
+    await page.locator(".ob-jsondrawer__tab", { hasText: "Copy prompt" }).click();
+    await page.locator("[data-testid='ob-ai-draft']").click();               // run the step prompt via the (stubbed) AI
+    await page.locator("button:has-text('Apply to project')").click();       // preview -> apply
+    await page.waitForTimeout(1000);
+    const premise = await page.evaluate(() => (window.LoomwrightBackend.OnboardingService.loadSync({}).foundation || {}).premise || "");
+    expect(premise).toContain("AI-drafted");
+  });
 });

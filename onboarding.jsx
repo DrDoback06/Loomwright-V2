@@ -221,6 +221,25 @@ const OnboardingWizard = ({ initial = {}, onCompleteOnboarding, onExitOnboarding
     onApplyStepJson: ({ category, parsed }) => {
       if (category && parsed && typeof parsed === "object") setSection(category, { ...(data[category] || {}), ...parsed });
     },
+    // One-click AI draft for a step: runs the step's existing JSON prompt
+    // through the author's configured BYOK model and returns parsed fields to
+    // preview (same apply path as a pasted reply — never auto-applied).
+    onDraftStepWithAI: async ({ category, prompt } = {}) => {
+      const B = window.LoomwrightBackend;
+      if (!B || !B.AIService || !B.AIService.completeJson) return { ok: false, error: "AI is unavailable in this project." };
+      const prov = (data.ai && data.ai.provider) || "anthropic";
+      try {
+        const cur = data[category] || {};
+        const ctx = Object.keys(cur).length ? ("\n\nThe author already entered some values — improve and extend these, don't discard them:\n" + JSON.stringify(cur)) : "";
+        const parsed = await B.AIService.completeJson({ providerId: prov, prompt: (prompt || "") + ctx, temperature: 0.7 });
+        if (!parsed || typeof parsed !== "object") return { ok: false, error: "The AI didn't return usable JSON — try again, or paste a reply manually." };
+        return { ok: true, parsed };
+      } catch (e) {
+        const msg = (e && e.message) || "";
+        if (/api key|no key|configured/i.test(msg)) return { ok: false, error: "Add & validate your key in the “AI & Privacy” step to enable one-click drafting." };
+        return { ok: false, error: msg.slice(0, 140) || "AI drafting failed." };
+      }
+    },
     onOpenIntelFile: () => setIntelOpen(true),
     onValidateProviderKey: async ({ provider, key } = {}) => {
       const prov = provider || data.ai?.provider || "anthropic";
@@ -296,6 +315,7 @@ const OnboardingWizard = ({ initial = {}, onCompleteOnboarding, onExitOnboarding
               onCopyStepJsonPrompt={callbacks.onCopyStepJsonPrompt}
               onPasteStepJson={callbacks.onPasteStepJson}
               onApplyStepJson={callbacks.onApplyStepJson}
+              onDraftStepWithAI={callbacks.onDraftStepWithAI}
               onOpenIntelFile={() => setIntelOpen(true)}
             />
           )}

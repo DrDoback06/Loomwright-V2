@@ -87,6 +87,7 @@ const StepJsonTools = ({
   onCopyStepJsonPrompt,
   onPasteStepJson,
   onApplyStepJson,
+  onDraftStepWithAI,
   onOpenIntelFile,
 }) => {
   const [open, setOpen]     = _us_pi(false);
@@ -95,6 +96,18 @@ const StepJsonTools = ({
   const [status, setStatus] = _us_pi({ kind: "empty" });
   const [parsed, setParsed] = _us_pi(null);
   const [copied, setCopied] = _us_pi(false);
+  const [drafting, setDrafting] = _us_pi(false);
+
+  const draftWithAI = async () => {
+    if (!onDraftStepWithAI || drafting) return;
+    setDrafting(true); setStatus({ kind: "empty" });
+    try {
+      const res = await onDraftStepWithAI({ category, prompt });
+      if (res && res.ok && res.parsed) { tryParse(JSON.stringify(res.parsed, null, 2)); setTab("preview"); }
+      else { setStatus({ kind: "invalid", text: (res && res.error) || "AI drafting failed." }); }
+    } catch (e) { setStatus({ kind: "invalid", text: (e && e.message) || "AI drafting failed." }); }
+    finally { setDrafting(false); }
+  };
 
   const tryParse = (val) => {
     setText(val);
@@ -154,7 +167,7 @@ const StepJsonTools = ({
         </button>
         <div className="ob-jsondrawer__eyebrow">JSON tools · {category}</div>
         <div className="ob-jsondrawer__title">Fill this step from a chat</div>
-        <div className="ob-jsondrawer__sub">Copy the prompt to ChatGPT or Claude, then paste the JSON back here. Loomwright never auto-sends.</div>
+        <div className="ob-jsondrawer__sub">Copy the prompt to ChatGPT or Claude and paste the JSON back — or, if you've set up your AI key, let Loomwright draft it in one click. Either way you preview before it's written.</div>
       </div>
       <div className="ob-jsondrawer__tabs">
         <button type="button" className={"ob-jsondrawer__tab " + (tab === "prompt" ? "is-active" : "")} onClick={() => setTab("prompt")}>
@@ -171,11 +184,16 @@ const StepJsonTools = ({
         {tab === "prompt" && (
           <>
             <textarea className="ob-textarea ob-textarea--mono" readOnly value={prompt} rows={14}/>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <Btn variant="primary" size="sm" icon="paper" onClick={doCopyPrompt} data-callback="onCopyStepJsonPrompt">
                 {copied ? "Copied" : "Copy prompt"}
               </Btn>
-              <span style={{ fontSize: "var(--fs-xs)", color: "var(--ink-3)" }}>Then paste the JSON reply in the next tab.</span>
+              {onDraftStepWithAI && (
+                <Btn variant="outline" size="sm" icon="sparkle" onClick={draftWithAI} disabled={drafting} data-testid="ob-ai-draft" data-callback="onDraftStepWithAI">
+                  {drafting ? "Drafting…" : "Draft with my AI"}
+                </Btn>
+              )}
+              <span style={{ fontSize: "var(--fs-xs)", color: "var(--ink-3)" }}>Paste a reply, or draft it with your configured key.</span>
             </div>
           </>
         )}
