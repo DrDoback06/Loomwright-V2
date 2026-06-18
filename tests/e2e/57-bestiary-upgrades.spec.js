@@ -40,4 +40,16 @@ test.describe("T57. Bestiary tab upgrades", () => {
     await page.locator("[data-callback='onOpenBestiaryReviewQueue']").click();
     await expect(page.getByText("Nothing waiting on you")).toBeVisible({ timeout: 5000 });
   });
+
+  test("Edit opens the editor for the selected creature (auto-selected, no stale resolution)", async ({ page }) => {
+    await openFreshApp(page);
+    await saveEntity(page, "bestiary", { name: "Brine Howler", data: { speciesType: "beast" } }, { status: "active" });
+    await openBestiaryPanel(page);
+    // default selection now lands on the first live entry (was a demo "b1"),
+    // so the dossier + its Edit button render without clicking the roster
+    const detail = page.locator("[data-ui='BestiaryDetail']");
+    await expect(detail.locator("[data-testid='bes-edit']")).toBeVisible({ timeout: 5000 });
+    await detail.locator("[data-testid='bes-edit']").click();
+    await expect(page.locator("[data-ui='EntityEditor'][data-entity-type='bestiary']")).toBeVisible({ timeout: 5000 });
+  });
 });

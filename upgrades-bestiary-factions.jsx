@@ -128,19 +128,12 @@ function _besThreatToNum(v) {
 // Adapt a LIVE bestiary entity (fields under entity.data.* with editor ids)
 // into the flat shape BestiaryDetail renders, and derive mentions + source
 // quotes from the occurrence index. Mirrors liveCastToDossier.
-function liveBestiaryToDetail(entity) {
-  if (!entity) return entity;
-  const d = entity.data || {};
+// Derive manuscript mention data (sparkline counts + up to 6 quotes) for an
+// entity from the occurrence index. Shared by the bestiary + faction adapters.
+function _bfDeriveMentions(entityId) {
   const B = (typeof window !== "undefined") && window.LoomwrightBackend;
-  const refItems = (arr) => (Array.isArray(arr) ? arr : []).filter(Boolean).map((r) => {
-    if (r && typeof r === "object") return { id: r.id, name: r.name || r.label || r.id, type: r.type || "" };
-    let nm = r, ty = "";
-    try { const ent = B && B.EntityService && B.EntityService.getSync(r); if (ent) { nm = ent.name || r; ty = ent.type || ""; } } catch (_e) {}
-    return { id: r, name: nm, type: ty };
-  });
-  const strList = (arr) => (Array.isArray(arr) ? arr : []).map((x) => (x && typeof x === "object" ? (x.name || x.label || "") : x)).filter(Boolean);
   let occ = [];
-  try { occ = (B && B.OccurrenceService && (B.OccurrenceService.listByEntitySync ? B.OccurrenceService.listByEntitySync(entity.id) : (B.OccurrenceService.listAllSync() || []).filter((o) => o.entityId === entity.id))) || []; } catch (_e) {}
+  try { occ = (B && B.OccurrenceService && (B.OccurrenceService.listByEntitySync ? B.OccurrenceService.listByEntitySync(entityId) : (B.OccurrenceService.listAllSync() || []).filter((o) => o.entityId === entityId))) || []; } catch (_e) {}
   let chapters = [];
   try { chapters = ((B && B.ManuscriptChapterService && B.ManuscriptChapterService.loadSync().chapters) || []).filter((c) => c && !c.reserved); } catch (_e) {}
   const numById = new Map(); chapters.forEach((c, i) => numById.set(c.id, c.num || i + 1));
@@ -153,6 +146,21 @@ function liveBestiaryToDetail(entity) {
     if (n != null && mentionsByChapter[n - 1] != null) mentionsByChapter[n - 1] += 1;
     if (sourceMentions.length < 6 && o.exactText) sourceMentions.push({ id: o.occurrenceId || ("occ-" + sourceMentions.length), cite: n != null ? "Ch. " + n : "—", excerpt: o.exactText, chapterId: o.chapterId });
   }
+  return { mentionsByChapter, sourceMentions };
+}
+
+function liveBestiaryToDetail(entity) {
+  if (!entity) return entity;
+  const d = entity.data || {};
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  const refItems = (arr) => (Array.isArray(arr) ? arr : []).filter(Boolean).map((r) => {
+    if (r && typeof r === "object") return { id: r.id, name: r.name || r.label || r.id, type: r.type || "" };
+    let nm = r, ty = "";
+    try { const ent = B && B.EntityService && B.EntityService.getSync(r); if (ent) { nm = ent.name || r; ty = ent.type || ""; } } catch (_e) {}
+    return { id: r, name: nm, type: ty };
+  });
+  const strList = (arr) => (Array.isArray(arr) ? arr : []).map((x) => (x && typeof x === "object" ? (x.name || x.label || "") : x)).filter(Boolean);
+  const { mentionsByChapter, sourceMentions } = _bfDeriveMentions(entity.id);
   return {
     ...entity,
     species: d.speciesType || d.species || "",
@@ -174,8 +182,53 @@ function liveBestiaryToDetail(entity) {
   };
 }
 
+// Live faction -> flat detail shape (mirrors liveBestiaryToDetail). Without
+// this the FactionDetail read flat keys (facType/leaders/members/…) that live
+// under entity.data.*, so every section rendered empty for real factions.
+function liveFactionToDetail(entity) {
+  if (!entity) return entity;
+  const d = entity.data || {};
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  const refItems = (arr) => (Array.isArray(arr) ? arr : []).filter(Boolean).map((r) => {
+    if (r && typeof r === "object") return { id: r.id, name: r.name || r.label || r.id, type: r.type || "" };
+    let nm = r, ty = "";
+    try { const ent = B && B.EntityService && B.EntityService.getSync(r); if (ent) { nm = ent.name || r; ty = ent.type || ""; } } catch (_e) {}
+    return { id: r, name: nm, type: ty };
+  });
+  const one = (v) => (v ? (refItems([v])[0] || null) : null);
+  const strList = (arr) => (Array.isArray(arr) ? arr : []).map((x) => (x && typeof x === "object" ? (x.name || x.label || "") : x)).filter(Boolean);
+  const leader = one(d.leader);
+  const hq = one(d.headquarters);
+  const relationships = [
+    ...refItems(d.allies).map((f) => ({ id: "ally-" + f.id, kind: "ally", with: { id: f.id, label: f.name }, note: "" })),
+    ...refItems(d.enemies).map((f) => ({ id: "enemy-" + f.id, kind: "enemy", with: { id: f.id, label: f.name }, note: "" })),
+  ];
+  const { mentionsByChapter, sourceMentions } = _bfDeriveMentions(entity.id);
+  return {
+    ...entity,
+    facType: entity.kind || d.facType || d.kind || "",      // kind is an IDENTITY key -> stored top-level
+    summary: entity.summary || d.summary || d.description || "",
+    ideology: d.ideology || "",
+    goals: Array.isArray(d.goals) ? d.goals.join(" · ") : (d.goals || ""),
+    leaders: leader ? [{ id: leader.id, label: leader.name, role: "Leader" }] : [],
+    members: refItems(d.members),
+    territory: hq ? [hq] : [],
+    controlledLocations: refItems(d.controlsLocations),
+    relationships,
+    resources: strList(d.resources),
+    quests: refItems(d.quests),
+    events: refItems(d.events),
+    lore: refItems(d.lore).map((x) => x.name),
+    timeline: Array.isArray(d.timeline) ? d.timeline : [],
+    mentionsByChapter,
+    sourceMentions,
+  };
+}
+
 const BestiaryDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelatedTab }) => {
   const e = entity || {};
+  const editCreature = () => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "bestiary", initial: { id: e.id }, mode: "full" } }));
+  const showOnAtlas = () => { const l = (e.locations || [])[0]; if (l) window.dispatchEvent(new CustomEvent("lw:focus-entity", { detail: { panelKind: "atlas", entityId: l.id, label: l.name } })); };
   return (
     <div className="rpg-detail bes-detail" data-ui="BestiaryDetail">
       <RpgFacets items={[
@@ -207,7 +260,7 @@ const BestiaryDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRel
 
       {(e.locations || []).length > 0 && (
         <RpgSection title="Related locations"
-                    action={{ label: "Show on Atlas →", callback: "onOpenBestiaryOnAtlas" }}>
+                    action={{ label: "Show on Atlas →", onClick: showOnAtlas }}>
           <RpgChipRow items={e.locations} onSelect={onSelectEntity}/>
         </RpgSection>
       )}
@@ -273,8 +326,8 @@ const BestiaryDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRel
         <button className="rpg-btn rpg-btn--primary" data-callback="onCreateBestiaryEntry">+ Add creature</button>
         {e.id && <button className="rpg-btn" data-testid="bes-fill" onClick={() => window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name: "onFillEntityFromManuscript", detail: { entityId: e.id, entityType: "bestiary" } } }))} title="Suggest fields from this creature's manuscript mentions (lands in Review)">Fill from manuscript</button>}
         <span style={{ flex: 1 }}/>
-        <button className="rpg-btn rpg-btn--ghost" data-callback="onOpenBestiaryOnAtlas">Show on Atlas</button>
-        <button className="rpg-btn rpg-btn--ghost" data-callback="onEditBestiaryEntry">Edit</button>
+        <button className="rpg-btn rpg-btn--ghost" onClick={showOnAtlas}>Show on Atlas</button>
+        <button className="rpg-btn rpg-btn--ghost" data-testid="bes-edit" onClick={editCreature}>Edit</button>
       </div>
     </div>
   );
@@ -284,14 +337,14 @@ const BestiaryDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRel
 // BestiaryPanelBody
 // ---------------------------------------------------------------------
 const BestiaryPanelBody = ({ panel, panelContext, onSelectEntity }) => {
-  const [selectedId, setSelectedId] = _bf_us(panel?.selected?.id || "b1");
+  const [selectedId, setSelectedId] = _bf_us(panel?.selected?.id || "");
   // Follow host-driven selection (locked entities, lw:focus-entity).
   React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [search, setSearch] = _bf_us("");
   // Live bestiary entries only — never the demo BESTIARY_DATA.
   const _src = (window.LoomwrightBackend?.EntityService?.listSync("bestiary")) || [];
   const filtered = _src.filter((b) => !search || (b.name || "").toLowerCase().includes(search.toLowerCase()));
-  const _selectedRaw = filtered.find((b) => b.id === selectedId) || null;
+  const _selectedRaw = filtered.find((b) => b.id === selectedId) || filtered[0] || null;
   const selected = _selectedRaw ? liveBestiaryToDetail(_selectedRaw) : null;
 
   return (
@@ -502,6 +555,8 @@ const FactionRelGraph = ({ rels }) => {
 
 const FactionDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRelatedTab }) => {
   const e = entity || {};
+  const editFaction = () => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "factions", initial: { id: e.id }, mode: "full" } }));
+  const showTerritoryOnAtlas = () => { const t = (e.territory || [])[0]; if (t) window.dispatchEvent(new CustomEvent("lw:focus-entity", { detail: { panelKind: "atlas", entityId: t.id, label: t.name } })); };
   return (
     <div className="rpg-detail fac-detail" data-ui="FactionDetail">
       <RpgFacets items={[
@@ -531,7 +586,7 @@ const FactionDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRela
 
       {(e.leaders || []).length > 0 && (
         <RpgSection title="Leaders"
-                    action={{ label: "+ Assign leader", callback: "onAssignFactionLeader" }}>
+                    action={{ label: "+ Assign leader", onClick: editFaction }}>
           <div className="fac-leaders">
             {e.leaders.map((l) => <FactionLeaderCard key={l.id} leader={l}/>)}
           </div>
@@ -540,14 +595,14 @@ const FactionDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRela
 
       {(e.members || []).length > 0 && (
         <RpgSection title="Members"
-                    action={{ label: "+ Assign member", callback: "onAssignFactionMember" }}>
+                    action={{ label: "+ Assign member", onClick: editFaction }}>
           <RpgChipRow items={e.members} onSelect={onSelectEntity}/>
         </RpgSection>
       )}
 
       {(e.territory || []).length > 0 && (
         <RpgSection title="Territory"
-                    action={{ label: "Show on Atlas →", callback: "onOpenFactionOnAtlas" }}>
+                    action={{ label: "Show on Atlas →", onClick: showTerritoryOnAtlas }}>
           <RpgChipRow items={e.territory} onSelect={onSelectEntity}/>
         </RpgSection>
       )}
@@ -560,7 +615,7 @@ const FactionDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRela
 
       {(e.relationships || []).length > 0 && (
         <RpgSection title="Relationship graph"
-                    action={{ label: "Open Relationships →", callback: "onOpenFactionRelationships" }}>
+                    action={{ label: "Open Relationships →", onClick: () => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "relationships" } })) }}>
           <FactionRelGraph rels={e.relationships}/>
           <ul className="fac-rel-list" style={{ marginTop: 8 }}>
             {e.relationships.map((r) => (
@@ -619,13 +674,11 @@ const FactionDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRela
       )}
 
       <div className="rpg-actions">
-        <button className="rpg-btn rpg-btn--primary" data-callback="onCreateFaction">+ Create faction</button>
-        <button className="rpg-btn" data-callback="onAssignFactionLeader">+ Leader</button>
-        <button className="rpg-btn" data-callback="onAssignFactionMember">+ Member</button>
-        <button className="rpg-btn" data-callback="onAssignFactionTerritory">+ Territory</button>
+        <button className="rpg-btn rpg-btn--primary" data-testid="fac-edit" onClick={editFaction}>Edit</button>
+        <button className="rpg-btn" data-callback="onCreateFaction">+ New faction</button>
         <span style={{ flex: 1 }}/>
-        <button className="rpg-btn rpg-btn--ghost" data-callback="onOpenFactionOnAtlas">Show on Atlas</button>
-        <button className="rpg-btn rpg-btn--ghost" data-callback="onOpenFactionRelationships">Relationships</button>
+        <button className="rpg-btn rpg-btn--ghost" onClick={showTerritoryOnAtlas}>Show on Atlas</button>
+        <button className="rpg-btn rpg-btn--ghost" onClick={() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "relationships" } }))}>Relationships</button>
         <button className="rpg-btn rpg-btn--ghost" data-callback="onOpenFactionTimeline">Timeline</button>
       </div>
     </div>
@@ -636,13 +689,14 @@ const FactionDetail = ({ entity, onSelectEntity, onOpenSourceMention, onOpenRela
 // FactionsPanelBody
 // ---------------------------------------------------------------------
 const FactionsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
-  const [selectedId, setSelectedId] = _bf_us(panel?.selected?.id || "f1");
+  const [selectedId, setSelectedId] = _bf_us(panel?.selected?.id || "");
   // Follow host-driven selection (locked entities, lw:focus-entity).
   React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [search, setSearch] = _bf_us("");
   const _src = (window.LoomwrightBackend?.EntityService?.listSync("factions")) || [];
   const filtered = _src.filter((f) => !search || (f.name || "").toLowerCase().includes(search.toLowerCase()));
-  const selected = filtered.find((f) => f.id === selectedId) || null;
+  const _selectedRaw = filtered.find((f) => f.id === selectedId) || filtered[0] || null;
+  const selected = _selectedRaw ? liveFactionToDetail(_selectedRaw) : null;
 
   return (
     <div className="loc-body" data-ui="FactionsPanelBody">
@@ -670,8 +724,8 @@ const FactionsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                    onClick={() => { setSelectedId(f.id); onSelectEntity && onSelectEntity({ id: f.id, type: "factions", label: f.name }); }}>
                 <span className="loc-tree__glyph" style={{ color: "var(--ec, #3d3a78)" }}>▣</span>
                 <span className="loc-tree__name">{f.name}</span>
-                {(f.queue || 0) > 0 && <span className="loc-tree__queue">{f.queue}</span>}
-                <span className="loc-tree__children">{(f.members || []).length}m</span>
+                {((f.reviewQueueCount || f.queue) || 0) > 0 && <span className="loc-tree__queue">{f.reviewQueueCount || f.queue}</span>}
+                <span className="loc-tree__children">{((f.data && f.data.members) || []).length}m</span>
               </div>
             ))}
           </div>
@@ -711,8 +765,8 @@ window.FACTIONS_DATA = FACTIONS_DATA;
 window.ENTITY_SAMPLES = window.ENTITY_SAMPLES || {};
 
 window.RPG_DETAIL_RENDERERS = window.RPG_DETAIL_RENDERERS || {};
-window.RPG_DETAIL_RENDERERS.bestiary = (entity, ctx) => <BestiaryDetail entity={entity} {...ctx}/>;
-window.RPG_DETAIL_RENDERERS.factions = (entity, ctx) => <FactionDetail  entity={entity} {...ctx}/>;
+window.RPG_DETAIL_RENDERERS.bestiary = (entity, ctx) => <BestiaryDetail entity={liveBestiaryToDetail(entity)} {...ctx}/>;
+window.RPG_DETAIL_RENDERERS.factions = (entity, ctx) => <FactionDetail  entity={liveFactionToDetail(entity)} {...ctx}/>;
 
 window.RPG_FILTERS = window.RPG_FILTERS || {};
 window.RPG_FILTERS.bestiary = [

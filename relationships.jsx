@@ -402,7 +402,8 @@ const RelCompareView = ({ ctx, aId, bId, onSelectCharacter, onCreateRelationship
           <div className="rel-compare__actions">
             <button data-callback="onChangeRelationshipType"
                     onClick={() => onChangeType && onChangeType(rel, aId, bId)}>Change type</button>
-            <button data-callback="onCreateEventFromRelationship">Create event</button>
+            <button data-testid="rel-create-event"
+                    onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "events", initial: { data: { participants: [aId, bId].filter(Boolean) } }, mode: "full" } }))}>Create event</button>
             <button data-callback="onOpenAtlasForSharedLocations"
                     onClick={() => onShowSharedPlaces && onShowSharedPlaces(aId, bId)}>Show shared places</button>
             <button data-callback="onOpenCharacterDossier"

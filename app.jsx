@@ -132,6 +132,7 @@ const PANEL_PRESETS = {
   abilities:     { id: "p-abilities",     kind: "entity", entityType: "abilities",     title: "Abilities",     subtitle: "",    state: "overview" },
   skillTrees:    { id: "p-skillTrees",    kind: "entity", entityType: "skills",        title: "Skill Trees",   subtitle: "",                    state: "overview" },
   relationships: { id: "p-relationships", kind: "entity", entityType: "relationships", title: "Relationships", subtitle: "",                   state: "overview" },
+  factions:      { id: "p-factions",      kind: "entity", entityType: "factions",      title: "Factions",      subtitle: "",                   state: "overview" },
   quests:        { id: "p-quests",        kind: "entity", entityType: "quests",        title: "Quests",        subtitle: "",                   state: "overview" },
   events:        { id: "p-events",        kind: "entity", entityType: "events",        title: "Events",        subtitle: "",                   state: "overview" },
   timeline:      { id: "p-timeline",      kind: "entity", entityType: "timeline",      title: "Timeline",      subtitle: "",          state: "overview" },
