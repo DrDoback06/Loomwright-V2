@@ -42,4 +42,26 @@ test.describe("T84. Mobile writing surface", () => {
     const btnW = await page.locator(".wr-toolbar__btn").first().evaluate((el) => Math.round(el.getBoundingClientRect().width));
     expect(btnW).toBeGreaterThanOrEqual(32);
   });
+
+  test("a narrow DESKTOP window keeps the original toolbar (no mobile leak)", async ({ page }) => {
+    // 800px is below the Writer's Room's own 860px compact mode but ABOVE the
+    // app's 700px mobile cut-off — the desktop website must be untouched.
+    await page.setViewportSize({ width: 800, height: 900 });
+    await page.goto("/Loomwright%20Shell.html");
+    await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
+    await page.evaluate(async () => {
+      try { await window.LoomwrightBackend.OnboardingService.setStatus("skipped"); } catch (_) {}
+    });
+    await page.goto("/Loomwright%20Shell.html");
+    await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
+
+    await expect(page.locator(".app-shell")).toHaveAttribute("data-mobile", "false");
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } })));
+    const toolbar = page.locator("[data-ui='ManuscriptToolbar']");
+    await expect(toolbar).toBeVisible({ timeout: 5000 });
+    // Original desktop toolbar wraps (not the mobile single-row strip).
+    expect(await toolbar.evaluate((el) => getComputedStyle(el).flexWrap)).toBe("wrap");
+    // Breadcrumb is still shown on desktop.
+    await expect(page.locator(".wr-canvasbar__crumb")).toBeVisible();
+  });
 });

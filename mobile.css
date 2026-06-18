@@ -241,6 +241,29 @@
 .app-shell[data-mobile="true"] .panel__toolbar button { min-width: 36px; min-height: 36px; }
 
 /* ---------------------------------------------------------------------
+   Writing (Writer's Room) — purpose-built phone manuscript surface.
+   Gated on the app shell's true-mobile flag (<=700px), NOT the Writer's
+   Room's own <=860px compact mode, so narrow DESKTOP windows keep the
+   original toolbar/breadcrumb. The toolbar collapses to one scrollable
+   touch strip and the redundant breadcrumb is dropped.
+   --------------------------------------------------------------------- */
+.app-shell[data-mobile="true"] .wr-toolbar {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  margin-bottom: var(--sp-4);
+  padding: 5px 6px;
+}
+.app-shell[data-mobile="true"] .wr-toolbar::-webkit-scrollbar { display: none; }
+.app-shell[data-mobile="true"] .wr-toolbar__group { flex-wrap: nowrap; flex: 0 0 auto; }
+.app-shell[data-mobile="true"] .wr-toolbar__btn { width: 34px; height: 34px; flex: 0 0 auto; }
+.app-shell[data-mobile="true"] .wr-canvasbar { flex-wrap: nowrap; margin-bottom: var(--sp-3); }
+.app-shell[data-mobile="true"] .wr-canvasbar__crumb { display: none; }
+.app-shell[data-mobile="true"] .wr-canvasbar__chips { flex-wrap: nowrap; flex: 1; justify-content: flex-end; }
+
+/* ---------------------------------------------------------------------
    Reading (Speed Reader) — purpose-built phone layout. The full-screen
    sheet turns the compact side-panel into a real RSVP reading surface:
    a big centred pivot word and thumb-sized transport controls.
