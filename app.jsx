@@ -841,6 +841,24 @@ const AppShell = () => {
     });
   }, []);
 
+  // Open (or re-home) a panel as a FLOATING window at a drop point — used when
+  // a tab is dragged out of the menu onto the workspace.
+  const onOpenPanelFloating = _uc_a((kind, x, y) => {
+    setPanels((curr) => {
+      const preset = PANEL_PRESETS[kind];
+      if (!preset) return curr;
+      const maxOrder = curr.reduce((a, p) => Math.max(a, p.order || 0), 0);
+      const floatN = curr.filter((p) => p.floating).length;
+      const fx = x != null ? Math.max(0, Math.round(x) - 60) : 140 + (floatN % 6) * 30;
+      const fy = y != null ? Math.max(0, Math.round(y) - 14) : 96 + (floatN % 6) * 30;
+      const existing = curr.find((p) => p.id === preset.id);
+      if (existing) return curr.map((p) => p.id === preset.id
+        ? { ...p, floating: true, collapsed: false, pinned: false, order: maxOrder + 1, float: { x: fx, y: fy, w: (p.float && p.float.w) || 400, h: (p.float && p.float.h) || 480 } }
+        : p);
+      return [...curr, { ...preset, pinned: false, expanded: false, collapsed: false, floating: true, order: maxOrder + 1, float: { x: fx, y: fy, w: 400, h: 480 }, selected: lockedSelectionFor(preset) }];
+    });
+  }, []);
+
   // Left-rail click protocol (per panel rules brief):
   //   * closed panel        → open it
   //   * already-open panel  → bring to front + uncollapse (NEVER close)
@@ -1409,7 +1427,10 @@ const AppShell = () => {
           />
         </div>
 
-        <div className="app-work">
+        <div className="app-work"
+          onDragOver={(e) => { try { if (e.dataTransfer.types && Array.prototype.indexOf.call(e.dataTransfer.types, "text/loomwright-nav-kind") !== -1) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } } catch (_e) {} }}
+          onDrop={(e) => { try { const kind = e.dataTransfer.getData("text/loomwright-nav-kind"); if (kind) { e.preventDefault(); onOpenPanelFloating(kind, e.clientX, e.clientY); } } catch (_e) {} }}
+        >
           {view === "shell" && !isMobile && typeof LockTray !== "undefined" && <LockTray/>}
           {view === "shell" ? (
             routeId === "writers-room" ? (

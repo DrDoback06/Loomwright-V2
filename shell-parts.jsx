@@ -176,6 +176,18 @@ const LeftRailItem = ({
       aria-selected={active || open}
       aria-disabled={disabled || undefined}
       tabIndex={disabled ? -1 : 0}
+      draggable={!disabled && !isRoute}
+      onDragStart={(e) => {
+        if (disabled || isRoute) return;
+        const kind = item.panelKind || item.entity || item.id;
+        try {
+          e.dataTransfer.setData("text/loomwright-nav-kind", kind);
+          e.dataTransfer.setData("text/plain", item.label || kind);
+          e.dataTransfer.effectAllowed = "copy";
+        } catch (_e) {}
+        onHideTooltip && onHideTooltip();
+      }}
+      title={!isRoute && !disabled ? "Click to open · drag onto the canvas for a floating window" : undefined}
       onClick={(e) => {
         if (disabled) return;
         onActivate && onActivate(item, { meta: e.metaKey || e.ctrlKey });
