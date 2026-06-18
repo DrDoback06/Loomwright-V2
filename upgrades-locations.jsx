@@ -16,6 +16,38 @@
 const { useState: _loc_us, useMemo: _loc_um, useCallback: _loc_uc } = React;
 
 // ---------------------------------------------------------------------
+// LocTreePane — reusable collapsible roster/tree pane.
+//
+// Every bespoke list panel (Locations, Items, Bestiary, Factions,
+// Classes, Races, Quests, Events) renders a left "loc-body__tree" aside
+// with a head + list + actions. Wrapping that aside in this component
+// turns the head into a caret toggle so the whole roster can collapse to
+// reclaim width — matching the collapsible dossier sections (RpgSection).
+//
+// Usage:
+//   <LocTreePane title="Inventory" count={filtered.length}>
+//     {list}
+//     <div className="loc-body__tree-actions">…</div>
+//   </LocTreePane>
+// ---------------------------------------------------------------------
+const LocTreePane = ({ title, count, children, defaultOpen = true, testid = "loc-tree-toggle" }) => {
+  const [open, setOpen] = React.useState(defaultOpen !== false);
+  return (
+    <aside className={"loc-body__tree" + (open ? "" : " is-collapsed")} data-collapsed={open ? "false" : "true"}>
+      <button type="button" className="loc-body__tree-head loc-body__tree-toggle" data-testid={testid}
+              aria-expanded={open} title={open ? "Collapse" : "Expand"}
+              onClick={() => setOpen((v) => !v)}
+              style={{ width: "100%", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, textAlign: "left" }}>
+        <span aria-hidden="true" style={{ display: "inline-block", width: 9, fontSize: 9, opacity: 0.6, transition: "transform 120ms", transform: open ? "none" : "rotate(-90deg)" }}>▾</span>
+        <span>{title}</span>
+        {count != null && <span className="loc-body__tree-count" style={{ marginLeft: "auto" }}>{count}</span>}
+      </button>
+      {open && children}
+    </aside>
+  );
+};
+
+// ---------------------------------------------------------------------
 // Hierarchy data
 // ---------------------------------------------------------------------
 // Each location can have parent/children. The tree below is the seeded
@@ -777,6 +809,7 @@ const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
   // Follow host-driven selection (locked entities, lw:focus-entity).
   React.useEffect(() => { if (panel?.selected?.id) setSelectedId(panel.selected.id); }, [panel?.selected?.id]);
   const [tab, setTab] = _loc_us("dossier"); // dossier | mentions | review | references
+  const [treeOpen, setTreeOpen] = _loc_us(true); // collapsible Hierarchy pane
   const [kindFilter, setKindFilter] = _loc_us("all");
   const [placedFilter, setPlacedFilter] = _loc_us("all"); // all | placed | unplaced
   const [sortBy, setSortBy] = _loc_us("name"); // name | type | mentions | placed
@@ -858,24 +891,27 @@ const LocationsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
 
       {/* Body — splits into tree + dossier; widens when expanded */}
       <div className="loc-body__split">
-        <aside className="loc-body__tree">
-          <div className="loc-body__tree-head">
+        <aside className={"loc-body__tree" + (treeOpen ? "" : " is-collapsed")}>
+          <button type="button" className="loc-body__tree-head" data-testid="loc-tree-toggle"
+                  aria-expanded={treeOpen} onClick={() => setTreeOpen((v) => !v)}
+                  style={{ width: "100%", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+            <span aria-hidden="true" style={{ display: "inline-block", width: 9, fontSize: 9, opacity: 0.6, transition: "transform 120ms", transform: treeOpen ? "none" : "rotate(-90deg)" }}>▾</span>
             <span>Hierarchy</span>
-            <span className="loc-body__tree-count">{sorted.length}</span>
-          </div>
-          <LocHierarchyTree
+            <span className="loc-body__tree-count" style={{ marginLeft: "auto" }}>{sorted.length}</span>
+          </button>
+          {treeOpen && <LocHierarchyTree
             data={sorted}
             selectedId={selected?.id}
             onSelect={(n) => { setSelectedId(n.id); onSelectEntity && onSelectEntity({ id: n.id, type: "locations", label: n.name }); }}
             onAddChild={(node) => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations", initial: { parentId: node.id, data: { parentId: node.id } } } }))}
             onSetParent={() => {}}
             onDragToAtlas={(node) => window.dispatchEvent(new CustomEvent("lw:focus-entity", { detail: { panelKind: "atlas", entityId: node.id, label: node.name } }))}
-          />
-          <div className="loc-body__tree-actions">
+          />}
+          {treeOpen && <div className="loc-body__tree-actions">
             <button className="rpg-btn rpg-btn--small" data-callback="onCreateLocation" onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "locations" } }))}>+ Location</button>
             <button className="rpg-btn rpg-btn--small rpg-btn--ghost" title="Extract locations from your manuscript"
                     onClick={() => { window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } })); window.dispatchEvent(new CustomEvent("lw:open-manuscript-import")); }}>Import</button>
-          </div>
+          </div>}
         </aside>
 
         <section className="loc-body__detail">

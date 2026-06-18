@@ -20,20 +20,32 @@ const { useState: _us_rpg } = React;
 // SHARED PRIMITIVES (used by every detail body)
 // =====================================================================
 
-// Card-like section with a title + optional action.
-const RpgSection = ({ title, action, children }) => (
-  <section className="rpg-section" data-ui="RpgSection">
-    <header className="rpg-section__head">
-      <span className="rpg-section__title">{title}</span>
-      {action && (
-        <button className="rpg-section__action"
-                data-callback={action.callback}
-                onClick={action.onClick}>{action.label}</button>
-      )}
-    </header>
-    <div className="rpg-section__body">{children}</div>
-  </section>
-);
+// Card-like section with a title + optional action. The title is a toggle —
+// click it to collapse the body (reclaims room when many sections are open).
+// Works identically in docked and floating panels.
+const RpgSection = ({ title, action, children, defaultCollapsed = false }) => {
+  const [collapsed, setCollapsed] = React.useState(!!defaultCollapsed);
+  return (
+    <section className={"rpg-section" + (collapsed ? " is-collapsed" : "")} data-ui="RpgSection" data-collapsed={collapsed ? "true" : "false"}>
+      <header className="rpg-section__head">
+        <button type="button" className="rpg-section__title rpg-section__toggle"
+                aria-expanded={!collapsed} data-testid="rpg-section-toggle"
+                title={collapsed ? "Expand section" : "Collapse section"}
+                onClick={() => setCollapsed((c) => !c)}
+                style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, textAlign: "left" }}>
+          <span aria-hidden="true" style={{ display: "inline-block", width: 9, fontSize: 9, opacity: 0.6, transition: "transform 120ms", transform: collapsed ? "rotate(-90deg)" : "none" }}>▾</span>
+          {title}
+        </button>
+        {action && (
+          <button className="rpg-section__action"
+                  data-callback={action.callback}
+                  onClick={action.onClick}>{action.label}</button>
+        )}
+      </header>
+      {!collapsed && <div className="rpg-section__body">{children}</div>}
+    </section>
+  );
+};
 
 // Faceted top chips ("type / rarity / owner / status …")
 const RpgFacets = ({ items }) => (

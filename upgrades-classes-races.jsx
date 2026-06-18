@@ -355,11 +355,7 @@ const AbilitiesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
       </div>
 
       <div className="loc-body__split">
-        <aside className="loc-body__tree">
-          <div className="loc-body__tree-head">
-            <span>Abilities</span>
-            <span className="loc-body__tree-count">{filtered.length}</span>
-          </div>
+        <LocTreePane title="Abilities" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((e) => (
               <div key={e.id}
@@ -388,7 +384,7 @@ const AbilitiesPanelBody = ({ panel, panelContext, onSelectEntity }) => {
                 body="Create one, or let extraction find powers in your manuscript. Skill Trees arrange these records into progressions."/>
             )}
           </div>
-        </aside>
+        </LocTreePane>
 
         <section className="loc-body__detail">
           {selected ? (

@@ -409,11 +409,7 @@ const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
       {/* Split: roster + dossier */}
       <div className="loc-body__split">
         {/* Left: roster */}
-        <aside className="loc-body__tree">
-          <div className="loc-body__tree-head">
-            <span>Inventory</span>
-            <span className="loc-body__tree-count">{filtered.length}</span>
-          </div>
+        <LocTreePane title="Inventory" count={filtered.length}>
           <div className="item-roster">
             {filtered.length === 0 ? (
               <div className="item-roster__empty">No items match.</div>
@@ -454,7 +450,7 @@ const ItemsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
             <button className="rpg-btn rpg-btn--small" onClick={onCreate} data-callback="onCreateItem">+ Item</button>
             <button className="rpg-btn rpg-btn--small rpg-btn--ghost" data-callback="onImportItems">Import</button>
           </div>
-        </aside>
+        </LocTreePane>
 
         {/* Right: dossier with tabs */}
         <section className="loc-body__detail">

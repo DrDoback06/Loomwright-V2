@@ -361,11 +361,7 @@ const BestiaryPanelBody = ({ panel, panelContext, onSelectEntity }) => {
       </div>
 
       <div className="loc-body__split">
-        <aside className="loc-body__tree">
-          <div className="loc-body__tree-head">
-            <span>Catalogue</span>
-            <span className="loc-body__tree-count">{filtered.length}</span>
-          </div>
+        <LocTreePane title="Catalogue" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((b) => (
               <div key={b.id}
@@ -377,7 +373,7 @@ const BestiaryPanelBody = ({ panel, panelContext, onSelectEntity }) => {
               </div>
             ))}
           </div>
-        </aside>
+        </LocTreePane>
 
         <section className="loc-body__detail">
           {selected ? (
@@ -712,11 +708,7 @@ const FactionsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
       </div>
 
       <div className="loc-body__split">
-        <aside className="loc-body__tree">
-          <div className="loc-body__tree-head">
-            <span>Factions</span>
-            <span className="loc-body__tree-count">{filtered.length}</span>
-          </div>
+        <LocTreePane title="Factions" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((f) => (
               <div key={f.id}
@@ -729,7 +721,7 @@ const FactionsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
               </div>
             ))}
           </div>
-        </aside>
+        </LocTreePane>
 
         <section className="loc-body__detail">
           {selected ? (

@@ -557,11 +557,7 @@ const StatsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
       </div>
 
       <div className="loc-body__split">
-        <aside className="loc-body__tree">
-          <div className="loc-body__tree-head">
-            <span>Stats</span>
-            <span className="loc-body__tree-count">{filtered.length}</span>
-          </div>
+        <LocTreePane title="Stats" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((s) => (
               <div key={s.id}
@@ -577,7 +573,7 @@ const StatsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
           <div className="loc-body__tree-actions">
             <button className="rpg-btn rpg-btn--small" data-callback="onCreateStat">+ Stat</button>
           </div>
-        </aside>
+        </LocTreePane>
 
         <section className="loc-body__detail">
           {selected ? (

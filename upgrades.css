@@ -103,6 +103,26 @@
   background: var(--bg-app);
 }
 
+/* Collapsible roster/tree pane (LocTreePane + Locations Hierarchy).
+   When the aside is collapsed it holds only its caret toggle, so shrink
+   the split's left column to content width and reclaim the space. */
+.loc-body__tree-toggle {
+  font-family: var(--font-sans);
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-4);
+  border-bottom: 1px solid var(--line-1) !important;
+}
+.loc-body__tree-toggle:hover { color: var(--ink-2); background: var(--bg-paper-2) !important; }
+.loc-body__tree.is-collapsed { border-right: 1px solid var(--line-1); }
+.loc-body__tree.is-collapsed .loc-body__tree-toggle { width: auto !important; white-space: nowrap; }
+.loc-body__tree.is-collapsed .loc-body__tree-count { display: none; }
+.loc-body__split:has(> .loc-body__tree.is-collapsed),
+.panel.is-expanded .loc-body__split:has(> .loc-body__tree.is-collapsed) {
+  grid-template-columns: auto 1fr;
+}
+
 .loc-tree {
   flex: 1;
   overflow-y: auto;

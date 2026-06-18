@@ -979,11 +979,7 @@ const QuestsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
       </div>
 
       <div className="loc-body__split">
-        <aside className="loc-body__tree">
-          <div className="loc-body__tree-head">
-            <span>Quest log</span>
-            <span className="loc-body__tree-count">{filtered.length}</span>
-          </div>
+        <LocTreePane title="Quest log" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((q) => (
               <div key={q.id}
@@ -997,7 +993,7 @@ const QuestsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
               </div>
             ))}
           </div>
-        </aside>
+        </LocTreePane>
 
         <section className="loc-body__detail">
           {selected ? (
@@ -1069,11 +1065,7 @@ const EventsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
       </div>
 
       <div className="loc-body__split">
-        <aside className="loc-body__tree">
-          <div className="loc-body__tree-head">
-            <span>Event ledger</span>
-            <span className="loc-body__tree-count">{filtered.length}</span>
-          </div>
+        <LocTreePane title="Event ledger" count={filtered.length}>
           <div className="loc-tree">
             {filtered.map((ev) => (
               <div key={ev.id}
@@ -1086,7 +1078,7 @@ const EventsPanelBody = ({ panel, panelContext, onSelectEntity }) => {
               </div>
             ))}
           </div>
-        </aside>
+        </LocTreePane>
 
         <section className="loc-body__detail">
           {selected ? (
