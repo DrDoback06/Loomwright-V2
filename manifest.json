@@ -1,0 +1,25 @@
+{
+  "name": "Loomwright — Shape the book. Track the world.",
+  "short_name": "Loomwright",
+  "description": "Local-first novel-writing studio: manuscript, world bible, extraction, and AI drafting tools.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4ecd8",
+  "theme_color": "#f4ecd8",
+  "icons": [
+    {
+      "src": "icons/loomwright-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/loomwright-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Loomwright wax-seal glyph — maskable: artwork stays inside the
+       80% safe zone (102px padding on each side). -->
+  <rect width="512" height="512" fill="#f4ecd8"/>
+  <circle cx="256" cy="256" r="150" fill="#9a7b3a"/>
+  <circle cx="256" cy="256" r="138" fill="none" stroke="#f4ecd8" stroke-width="6"/>
+  <!-- quill nib / loom thread monogram -->
+  <path d="M256 150
+           C 214 196, 198 252, 214 318
+           C 228 296, 240 286, 256 282
+           C 272 286, 284 296, 298 318
+           C 314 252, 298 196, 256 150 Z"
+        fill="#f4ecd8"/>
+  <path d="M256 282 L 256 360" stroke="#f4ecd8" stroke-width="14" stroke-linecap="round"/>
+</svg>
