@@ -994,6 +994,12 @@ const SkillTreeEditor = ({ ctx, views, initialTreeId, onExit }) => {
   const [layers, setLayers] = _st_us({ unlocked: true, locked: true, upgrade: true, review: true, connections: true });
   const [armedNodeId, setArmedNodeId] = _st_us(null);
   const [draftTreePick, setDraftTreePick] = _st_us({});
+  // Mobile: the 3-column desk collapses to a full-screen canvas; the two rails
+  // become slide-up drawers toggled by edge buttons. Selecting a node opens the
+  // inspector so editing works one-handed.
+  const stIsMobile = typeof useIsMobile !== "undefined" ? useIsMobile() : false;
+  const [mobileDrawer, setMobileDrawer] = _st_us(null); // null | "left" | "right"
+  _st_ue(() => { if (stIsMobile && selectedNodeId) { setRightTab("inspector"); setMobileDrawer("right"); } }, [selectedNodeId, stIsMobile]);
   const promptRef = _st_ur(null);
   const B = () => window.LoomwrightBackend;
 
@@ -1111,7 +1117,7 @@ const SkillTreeEditor = ({ ctx, views, initialTreeId, onExit }) => {
   }
 
   return (
-    <div className="ste" data-ui="SkillTreeEditor">
+    <div className="ste" data-ui="SkillTreeEditor" data-mobile-drawer={mobileDrawer || ""}>
       {/* Toolbar */}
       <div className="ste-tb">
         <div className="ste-tb__brand">
@@ -1528,6 +1534,21 @@ const SkillTreeEditor = ({ ctx, views, initialTreeId, onExit }) => {
           })}
         </div>
       </div>
+
+      {/* Mobile: backdrop + edge buttons that toggle the rail drawers. */}
+      {stIsMobile && (
+        <>
+          {mobileDrawer && <div className="ste__drawer-backdrop" data-testid="ste-drawer-backdrop" onClick={() => setMobileDrawer(null)}/>}
+          <button className="ste__drawer-fab ste__drawer-fab--left" data-testid="ste-mobile-left"
+                  onClick={() => setMobileDrawer((d) => (d === "left" ? null : "left"))} title="Trees, nodes & layers">
+            <Icon name="stack" size={16}/>
+          </button>
+          <button className="ste__drawer-fab ste__drawer-fab--right" data-testid="ste-mobile-right"
+                  onClick={() => setMobileDrawer((d) => (d === "right" ? null : "right"))} title="Inspector & review">
+            <Icon name="paper" size={16}/>
+          </button>
+        </>
+      )}
     </div>
   );
 };

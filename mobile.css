@@ -343,6 +343,46 @@
 .app-shell[data-mobile="true"] .stm { grid-template-columns: 1fr; }
 
 /* ---------------------------------------------------------------------
+   Skill-tree EDITOR — phone layout. The 3-column desk (rails + canvas)
+   becomes a full-screen touch canvas; the two rails turn into slide-up
+   drawers toggled by the round edge buttons, and the bottom progression
+   strip hides. The constellation SVG already handles pinch/pan/drag.
+   --------------------------------------------------------------------- */
+.app-shell[data-mobile="true"] .ste { position: relative; grid-template-rows: auto 1fr; }
+.app-shell[data-mobile="true"] .ste__strip { display: none; }
+.app-shell[data-mobile="true"] .ste__body { grid-template-columns: 1fr; }
+.app-shell[data-mobile="true"] .ste-tb { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+.app-shell[data-mobile="true"] .ste-tb::-webkit-scrollbar { display: none; }
+.app-shell[data-mobile="true"] .ste-tb__group { flex: 0 0 auto; }
+.app-shell[data-mobile="true"] .ste__rail {
+  /* Anchored ABOVE the bottom nav: .pstk (z-40) is below .mnav (z-60), so a
+     higher inner z-index can't beat the nav — we clear it by position. */
+  position: absolute; left: 0; right: 0; bottom: calc(54px + env(safe-area-inset-bottom, 0px)); top: auto;
+  width: 100%; max-height: 58%; z-index: 1300;
+  border-radius: 14px 14px 0 0;
+  border-left: none; border-right: none; border-top: 1px solid var(--st-line-1, #2a2a3a);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.34);
+  transform: translateY(120%);
+  transition: transform 220ms var(--ease-out, ease-out);
+}
+.app-shell[data-mobile="true"] .ste[data-mobile-drawer="left"]  .ste__rail--left  { transform: none; }
+.app-shell[data-mobile="true"] .ste[data-mobile-drawer="right"] .ste__rail--right { transform: none; }
+.ste__drawer-backdrop, .ste__drawer-fab { display: none; }
+.app-shell[data-mobile="true"] .ste__drawer-backdrop {
+  display: block; position: absolute; inset: 0; z-index: 1290; background: rgba(0, 0, 0, 0.4);
+}
+.app-shell[data-mobile="true"] .ste__drawer-fab {
+  display: inline-flex; align-items: center; justify-content: center;
+  position: absolute; bottom: calc(54px + env(safe-area-inset-bottom, 0px) + 12px);
+  width: 44px; height: 44px; z-index: 1295;
+  border-radius: 50%; border: 1px solid var(--st-line-1, #2a2a3a);
+  background: var(--st-accent, #6b5a8a); color: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); cursor: pointer;
+}
+.app-shell[data-mobile="true"] .ste__drawer-fab--left  { left: 14px; }
+.app-shell[data-mobile="true"] .ste__drawer-fab--right { right: 14px; }
+
+/* ---------------------------------------------------------------------
    5. Full-screen workspaces (fws-*) collapse to a single column.
    --------------------------------------------------------------------- */
 @media (max-width: 700px) {
