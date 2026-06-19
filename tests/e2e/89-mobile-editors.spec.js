@@ -49,4 +49,36 @@ test.describe("T89. Mobile full-screen editors", () => {
     await page.locator("[data-testid='ste-drawer-backdrop']").click();
     await expect(editor).toHaveAttribute("data-mobile-drawer", "");
   });
+
+  test("atlas editor: full-screen map + slide-up rail drawers", async ({ page }) => {
+    await openFreshApp(page);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "atlas" } })));
+    await expect(page.locator("[data-ui='SlidingPanel'][data-panel-id='p-atlas']").first()).toBeVisible({ timeout: 5000 });
+
+    // Open the full-screen atlas editor.
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-existing-fullscreen", { detail: { panelKind: "atlas" } })));
+    const editor = page.locator("[data-ui='AtlasEditor']");
+    await expect(editor).toBeVisible({ timeout: 5000 });
+
+    // Map is full-width: the 3-column desk is a single column.
+    const tracks = await editor.locator(".atlas-editor__desk").evaluate((el) => getComputedStyle(el).gridTemplateColumns.trim().split(/\s+/).length);
+    expect(tracks).toBe(1);
+
+    // Edge buttons present; rails off-canvas by default.
+    await expect(page.locator("[data-testid='ae-mobile-left']")).toBeVisible();
+    await expect(page.locator("[data-testid='ae-mobile-right']")).toBeVisible();
+    await expect(editor).toHaveAttribute("data-mobile-drawer", "");
+
+    // Tap the right edge button → inspector rail slides in over a backdrop.
+    await page.locator("[data-testid='ae-mobile-right']").click();
+    await expect(editor).toHaveAttribute("data-mobile-drawer", "right");
+    await expect(page.locator("[data-testid='ae-drawer-backdrop']")).toBeVisible();
+    const railBox = await editor.locator(".ae-rrail").boundingBox();
+    const edBox = await editor.boundingBox();
+    expect(railBox.y).toBeLessThan(edBox.y + edBox.height);
+
+    // Backdrop tap closes it.
+    await page.locator("[data-testid='ae-drawer-backdrop']").click();
+    await expect(editor).toHaveAttribute("data-mobile-drawer", "");
+  });
 });

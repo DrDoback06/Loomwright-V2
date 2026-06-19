@@ -911,6 +911,12 @@ const AtlasEditor = ({
   const [view, setView]           = _us_ae({ z: 1, x: 0, y: 0 });
   const [cleanStyle, setCleanStyle] = _us_ae(false);
   const [stampSymbol, setStampSymbol] = _us_ae(null);
+  // Mobile: the 3-column desk becomes a full-screen map; the two rails turn
+  // into slide-up drawers toggled by edge buttons. Selecting a place opens the
+  // inspector so it can be edited one-handed.
+  const aeIsMobile = typeof useIsMobile !== "undefined" ? useIsMobile() : false;
+  const [mobileDrawer, setMobileDrawer] = _us_ae(null); // null | "left" | "right"
+  _ue_ae(() => { if (aeIsMobile && selected && selected.id) setMobileDrawer("right"); }, [selected && selected.id, aeIsMobile]);
   // Arm the stamp tool with a chosen object; clicking the map drops it.
   const onPickStamp = (id) => { setStampSymbol(id); setTool("stamp"); };
   // Escape cancels stamping.
@@ -1139,7 +1145,7 @@ const AtlasEditor = ({
   ]), [routes, beasts, items, factions, chapters]);
 
   return (
-    <div className="atlas-editor" data-ui="AtlasEditor">
+    <div className="atlas-editor" data-ui="AtlasEditor" data-mobile-drawer={mobileDrawer || ""}>
       <AtlasEdToolbar
         tool={tool} onPickTool={setTool}
         flyoutOpen={flyoutOpen} onToggleFlyout={(id) => setFlyout(flyoutOpen === id ? null : id)}
@@ -1152,7 +1158,7 @@ const AtlasEditor = ({
 
       <div className="atlas-editor__desk">
         <AtlasEdLeftRail
-          collapsed={leftRailCollapsed} onToggle={onToggleLeftRail}
+          collapsed={aeIsMobile ? false : leftRailCollapsed} onToggle={onToggleLeftRail}
           tab={leftTab} onSetTab={onSetLeftTab}
           locations={mapLocations} layers={layers} layerState={layerState}
           cast={cast} selectedId={selected?.id}
@@ -1235,7 +1241,7 @@ const AtlasEditor = ({
         </main>
 
         <AtlasEdRightRail
-          collapsed={rightRailCollapsed} onToggle={onToggleRightRail}
+          collapsed={aeIsMobile ? false : rightRailCollapsed} onToggle={onToggleRightRail}
           tab={rightTab} onSetTab={onSetRightTab}
           selected={selected} locById={locById}
           routes={routes} beasts={beasts} items={items} factions={factions} queue={queue}
@@ -1248,6 +1254,21 @@ const AtlasEditor = ({
         onScrub={onSetScrub} onJumpCurrent={onJumpCurrent}
         routes={routes} locById={locById}
         legendChips={legendChips} activeChips={legendChipsState} onToggleChip={onToggleLegend}/>
+
+      {/* Mobile: backdrop + edge buttons that toggle the rail drawers. */}
+      {aeIsMobile && (
+        <>
+          {mobileDrawer && <div className="ae__drawer-backdrop" data-testid="ae-drawer-backdrop" onClick={() => setMobileDrawer(null)}/>}
+          <button className="ae__drawer-fab ae__drawer-fab--left" data-testid="ae-mobile-left"
+                  onClick={() => setMobileDrawer((d) => (d === "left" ? null : "left"))} title="Places & layers">
+            <Icon name="stack" size={16}/>
+          </button>
+          <button className="ae__drawer-fab ae__drawer-fab--right" data-testid="ae-mobile-right"
+                  onClick={() => setMobileDrawer((d) => (d === "right" ? null : "right"))} title="Inspector">
+            <Icon name="paper" size={16}/>
+          </button>
+        </>
+      )}
     </div>
   );
 };

@@ -383,6 +383,47 @@
 .app-shell[data-mobile="true"] .ste__drawer-fab--right { right: 14px; }
 
 /* ---------------------------------------------------------------------
+   Atlas EDITOR — same phone treatment: full-screen map, rails as slide-up
+   drawers (edge buttons toggle them), chapter scrubber hidden. The map SVG
+   pans via pointer events (touch-action:none); zoom via the toolbar.
+   --------------------------------------------------------------------- */
+.app-shell[data-mobile="true"] .atlas-editor { position: relative; }
+.app-shell[data-mobile="true"] .atlas-editor__desk { grid-template-columns: 1fr; }
+.app-shell[data-mobile="true"] .ae-scrub { display: none; }
+.app-shell[data-mobile="true"] .ae-tb { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+.app-shell[data-mobile="true"] .ae-tb::-webkit-scrollbar { display: none; }
+.app-shell[data-mobile="true"] .atlas-editor__canvas svg { touch-action: none; }
+.app-shell[data-mobile="true"] .ae-rail,
+.app-shell[data-mobile="true"] .ae-rrail {
+  /* The atlas overlay is z-100 but lives inside .pstk (z-40), so the bottom
+     nav (z-60) still paints over its base — clear it by position, not z. */
+  position: absolute; left: 0; right: 0; bottom: calc(54px + env(safe-area-inset-bottom, 0px)); top: auto;
+  width: 100%; max-width: none; max-height: 58%; z-index: 1300;
+  border-radius: 14px 14px 0 0;
+  border-left: none; border-right: none; border-top: 1px solid var(--atl-line-1, rgba(74, 56, 28, 0.3));
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.34);
+  transform: translateY(120%);
+  transition: transform 220ms var(--ease-out, ease-out);
+  overflow: auto;
+}
+.app-shell[data-mobile="true"] .atlas-editor[data-mobile-drawer="left"]  .ae-rail  { transform: none; }
+.app-shell[data-mobile="true"] .atlas-editor[data-mobile-drawer="right"] .ae-rrail { transform: none; }
+.ae__drawer-backdrop, .ae__drawer-fab { display: none; }
+.app-shell[data-mobile="true"] .ae__drawer-backdrop {
+  display: block; position: absolute; inset: 0; z-index: 1290; background: rgba(0, 0, 0, 0.4);
+}
+.app-shell[data-mobile="true"] .ae__drawer-fab {
+  display: inline-flex; align-items: center; justify-content: center;
+  position: absolute; bottom: calc(54px + env(safe-area-inset-bottom, 0px) + 12px);
+  width: 44px; height: 44px; z-index: 1295;
+  border-radius: 50%; border: 1px solid var(--atl-line-1, rgba(74, 56, 28, 0.3));
+  background: var(--accent-deep, #8a5a2c); color: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); cursor: pointer;
+}
+.app-shell[data-mobile="true"] .ae__drawer-fab--left  { left: 14px; }
+.app-shell[data-mobile="true"] .ae__drawer-fab--right { right: 14px; }
+
+/* ---------------------------------------------------------------------
    5. Full-screen workspaces (fws-*) collapse to a single column.
    --------------------------------------------------------------------- */
 @media (max-width: 700px) {
