@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { TopBar } from '@/features/shell/TopBar';
 import { LeftRail } from '@/features/shell/LeftRail';
 import { MobileNav } from '@/features/shell/MobileNav';
@@ -7,6 +8,8 @@ import { Toasts } from '@/features/shell/Toasts';
 import { useIsMobile } from '@/features/shell/useViewport';
 import { useUiStore } from '@/stores/ui';
 import { HomePage } from '@/features/home/HomePage';
+import { TodaySurface } from '@/features/today/TodaySurface';
+import { CommandPalette } from '@/features/search/CommandPalette';
 import { EntityRosterSurface } from '@/features/codex/EntityRosterSurface';
 import { EntityEditorDrawer } from '@/features/codex/EntityEditorDrawer';
 import { TrashSurface } from '@/features/system/TrashSurface';
@@ -24,6 +27,8 @@ function MainSurface() {
   switch (route) {
     case 'home':
       return <HomePage />;
+    case 'today':
+      return <TodaySurface />;
     case 'writers-room':
       return <WritersRoom />;
     case 'codex':
@@ -47,6 +52,20 @@ function MainSurface() {
 
 export function App() {
   const isMobile = useIsMobile();
+  const paletteOpen = useUiStore((s) => s.paletteOpen);
+  const setPaletteOpen = useUiStore((s) => s.setPaletteOpen);
+
+  // Global Ctrl/Cmd+K opens the command palette anywhere.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen(!useUiStore.getState().paletteOpen);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [setPaletteOpen]);
 
   return (
     <ProjectGate>
@@ -60,6 +79,7 @@ export function App() {
         {isMobile && <MobileNav />}
       </div>
       <EntityEditorDrawer />
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       <Toasts />
     </ProjectGate>
   );

@@ -31,6 +31,7 @@ export function WritersRoom() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const setRoute = useUiStore((s) => s.setRoute);
   const setCodexType = useUiStore((s) => s.setCodexType);
+  const pendingChapterId = useUiStore((s) => s.pendingChapterId);
   const setFocus = useFocusStore((s) => s.setFocus);
   const chapters = useLiveQuery(
     async () => (projectId ? listChapters(projectId) : ([] as Chapter[])),
@@ -58,17 +59,23 @@ export function WritersRoom() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedChapterRef = useRef<string | null>(null);
 
-  // Adopt the first chapter (or clear) when the list changes.
+  // Adopt the first chapter (or clear) when the list changes. A pending
+  // request from the palette / Today (consume-once) wins over the default.
   useEffect(() => {
     if (!chapters) return;
     if (chapters.length === 0) {
       setActiveChapterId(null);
       return;
     }
+    const requested = useUiStore.getState().consumePendingChapter();
+    if (requested && chapters.some((c) => c.id === requested)) {
+      setActiveChapterId(requested);
+      return;
+    }
     if (!activeChapterId || !chapters.some((c) => c.id === activeChapterId)) {
       setActiveChapterId(chapters[0].id);
     }
-  }, [chapters, activeChapterId]);
+  }, [chapters, activeChapterId, pendingChapterId]);
 
   const persist = useCallback(
     (editor: Editor, chapterId: string) => {

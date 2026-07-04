@@ -7,6 +7,7 @@ export type Theme = 'parchment-light' | 'midnight-ink';
  * a nav entry is only rendered once its surface genuinely works. */
 export type RouteId =
   | 'home'
+  | 'today'
   | 'writers-room'
   | 'codex'
   | 'atlas'
@@ -22,10 +23,18 @@ interface UiState {
   route: RouteId;
   /** Which entity type the 'codex' route shows. */
   codexType: EntityType;
+  /** Command palette (Ctrl/Cmd+K) visibility. */
+  paletteOpen: boolean;
+  /** Consume-once request for the Writer's Room to open a specific
+   * chapter (set by the palette / Today before routing there). */
+  pendingChapterId: string | null;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   setRoute: (route: RouteId) => void;
   setCodexType: (type: EntityType) => void;
+  setPaletteOpen: (open: boolean) => void;
+  requestChapter: (chapterId: string) => void;
+  consumePendingChapter: () => string | null;
 }
 
 const THEME_KEY = 'lw:theme';
@@ -64,4 +73,13 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   setRoute: (route) => set({ route }),
   setCodexType: (type) => set({ codexType: type }),
+  paletteOpen: false,
+  pendingChapterId: null,
+  setPaletteOpen: (open) => set({ paletteOpen: open }),
+  requestChapter: (chapterId) => set({ pendingChapterId: chapterId }),
+  consumePendingChapter: () => {
+    const id = get().pendingChapterId;
+    if (id) set({ pendingChapterId: null });
+    return id;
+  },
 }));

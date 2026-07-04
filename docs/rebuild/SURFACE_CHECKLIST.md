@@ -147,3 +147,33 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | AI Handoff: Build pack / Copy pack | Self-contained external-AI prompt with known-entity context | `09-ai.spec.ts` |
 | AI Handoff: Import to review queue | Tolerant JSON parse → pending candidates, dedupe | `09-ai.spec.ts` + unit |
 | Settings: extraction detector sliders | Live per-detector confidence overrides (session-wired) | settings surface; engine override unit path |
+
+## Command palette (M8)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Topbar ⌕ button | Opens the palette | `10-search-today.spec.ts` |
+| Ctrl/Cmd+K (global) | Toggles the palette | `10-search-today.spec.ts` |
+| Search input | Live minisearch over entities + chapters (keys/settings never indexed) | `10-search-today.spec.ts` |
+| Entity hit | Focuses the entity and opens its codex dossier | `10-search-today.spec.ts` |
+| Chapter hit | Opens that specific chapter in the Writer's Room | `10-search-today.spec.ts` |
+| "Go to …" commands (all routes) | Route there | `10-search-today.spec.ts` (Today; others same code path) |
+| Arrow keys / Enter / Escape / backdrop | Keyboard nav, run, close | `10-search-today.spec.ts` |
+
+## Today (M8)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Words today tile | Daily words vs. per-day baseline (persisted in uiState) | `10-search-today.spec.ts` |
+| Total words tile | Live sum across chapters | `10-search-today.spec.ts` |
+| Awaiting review tile | Live pending count; click routes to Review | `10-search-today.spec.ts` |
+| Continue "chapter" | Opens the most recently touched chapter | `10-search-today.spec.ts` |
+| Quest-thread suggestion | Next active/pending step; click opens the quest dossier | `10-search-today.spec.ts` |
+| Gathering-dust suggestion | Oldest untouched entities; click opens the dossier | (same handler as quest suggestion; empty state asserted implicitly) |
+| Left rail / bottom nav: Today | Routes to Today | `10-search-today.spec.ts` |
+
+## Home (M8 additions)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Codex entries / Chapters / Total words / Words today / Awaiting review tiles | Live stats; each routes to its surface | `02-cast.spec.ts` (cast tile), `10-search-today.spec.ts` (words baseline) |

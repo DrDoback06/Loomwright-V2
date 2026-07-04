@@ -1,8 +1,11 @@
+import { useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import { getProject } from '@/db/repos/projects';
 import { listAudit } from '@/db/repos/audit';
+import { countPendingCandidates } from '@/db/repos/review';
 import { undoAuditEntry } from '@/db/repos/undo';
+import { ensureWordsBaseline, todayKey } from '@/services/insights';
 import { useProjectStore } from '@/stores/project';
 import { useUiStore } from '@/stores/ui';
 import { toast } from '@/stores/toasts';
@@ -19,6 +22,39 @@ export function HomePage() {
   const castCount = useLiveQuery(
     async () =>
       projectId ? db.entities.where('[projectId+type]').equals([projectId, 'cast']).count() : 0,
+    [projectId],
+    0
+  );
+  const entityCount = useLiveQuery(
+    async () => (projectId ? db.entities.where('projectId').equals(projectId).count() : 0),
+    [projectId],
+    0
+  );
+  const chapterStats = useLiveQuery(
+    async () => {
+      if (!projectId) return { chapters: 0, words: 0 };
+      const chapters = await db.chapters.where('projectId').equals(projectId).toArray();
+      return { chapters: chapters.length, words: chapters.reduce((s, c) => s + c.wordCount, 0) };
+    },
+    [projectId],
+    null
+  );
+  useEffect(() => {
+    if (projectId && chapterStats) void ensureWordsBaseline(projectId, chapterStats.words);
+  }, [projectId, chapterStats]);
+  const wordsToday = useLiveQuery(
+    async () => {
+      if (!projectId || !chapterStats) return 0;
+      const row = await db.uiState.get(`${projectId}:wordsBaseline`);
+      const baseline = row?.value as { date: string; words: number } | undefined;
+      if (!baseline || baseline.date !== todayKey()) return 0;
+      return Math.max(0, chapterStats.words - baseline.words);
+    },
+    [projectId, chapterStats],
+    0
+  );
+  const pendingReview = useLiveQuery(
+    async () => (projectId ? countPendingCandidates(projectId) : 0),
     [projectId],
     0
   );
@@ -50,6 +86,41 @@ export function HomePage() {
         >
           <span className="lw-stattile__value">{castCount}</span>
           <span className="lw-stattile__label">Cast members</span>
+        </button>
+        <button
+          type="button"
+          className="lw-card lw-stattile"
+          onClick={() => {
+            setCodexType('cast');
+            setRoute('codex');
+          }}
+        >
+          <span className="lw-stattile__value">{entityCount}</span>
+          <span className="lw-stattile__label">Codex entries</span>
+        </button>
+        <button
+          type="button"
+          className="lw-card lw-stattile"
+          onClick={() => setRoute('writers-room')}
+        >
+          <span className="lw-stattile__value">{chapterStats?.chapters ?? 0}</span>
+          <span className="lw-stattile__label">Chapters</span>
+        </button>
+        <button
+          type="button"
+          className="lw-card lw-stattile"
+          onClick={() => setRoute('writers-room')}
+        >
+          <span className="lw-stattile__value">{(chapterStats?.words ?? 0).toLocaleString()}</span>
+          <span className="lw-stattile__label">Total words</span>
+        </button>
+        <button type="button" className="lw-card lw-stattile" onClick={() => setRoute('today')}>
+          <span className="lw-stattile__value">{wordsToday.toLocaleString()}</span>
+          <span className="lw-stattile__label">Words today</span>
+        </button>
+        <button type="button" className="lw-card lw-stattile" onClick={() => setRoute('review')}>
+          <span className="lw-stattile__value">{pendingReview}</span>
+          <span className="lw-stattile__label">Awaiting review</span>
         </button>
       </div>
 
@@ -89,10 +160,10 @@ export function HomePage() {
       </div>
 
       <div className="lw-card">
-        <h2 className="lw-card__title">The rebuild is under way</h2>
+        <h2 className="lw-card__title">Find anything, fast</h2>
         <p style={{ marginBottom: 0 }}>
-          Surfaces appear in the sidebar as they become genuinely usable — nothing here is a
-          mock-up. Next up: the Writer&apos;s Room and entity extraction.
+          Press <kbd>Ctrl</kbd>+<kbd>K</kbd> (or the ⌕ button up top) to search every entity,
+          chapter, and command. The <strong>Today</strong> page suggests what to work on next.
         </p>
       </div>
     </div>

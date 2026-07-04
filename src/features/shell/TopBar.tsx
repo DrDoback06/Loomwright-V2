@@ -5,6 +5,7 @@ import icon from '/icons/loomwright.svg';
 export function TopBar() {
   const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
+  const setPaletteOpen = useUiStore((s) => s.setPaletteOpen);
   const dark = theme === 'midnight-ink';
 
   return (
@@ -16,6 +17,15 @@ export function TopBar() {
       </div>
       <ProjectSwitcher />
       <div className="lw-topbar__spacer" />
+      <button
+        type="button"
+        className="lw-iconbtn"
+        onClick={() => setPaletteOpen(true)}
+        aria-label="Search (Ctrl+K)"
+        title="Search everything (Ctrl+K)"
+      >
+        ⌕
+      </button>
       <button
         type="button"
         className="lw-iconbtn"
