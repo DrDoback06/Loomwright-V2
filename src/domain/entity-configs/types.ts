@@ -12,6 +12,7 @@ export type FieldKind =
   | 'related' // single link to another entity
   | 'related-multi' // list of links to other entities
   | 'stat-grid' // rows of { name, value, min?, max? }
+  | 'step-list' // ordered quest steps with per-step status
   | 'image'; // portrait / reference image stored as data URL
 
 export interface FieldDef {
@@ -48,4 +49,11 @@ export interface StatRow {
   value: string;
   min?: string;
   max?: string;
+}
+
+export type StepStatus = 'pending' | 'active' | 'done' | 'skipped';
+
+export interface StepRow {
+  text: string;
+  status: StepStatus;
 }

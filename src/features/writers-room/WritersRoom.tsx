@@ -23,6 +23,7 @@ import { UniqueParagraphId, countWords, paragraphsFromDoc } from './paragraph-id
 import { MentionHighlights } from './mention-highlights';
 import { Toolbar } from './Toolbar';
 import { NotesMargin } from './NotesMargin';
+import { ComposePanel } from './ComposePanel';
 
 export function WritersRoom() {
   const projectId = useProjectStore((s) => s.currentProjectId);
@@ -46,6 +47,7 @@ export function WritersRoom() {
     () => !window.matchMedia('(max-width: 720px)').matches
   );
   const [extracting, setExtracting] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedChapterRef = useRef<string | null>(null);
 
@@ -306,6 +308,14 @@ export function WritersRoom() {
                 <button
                   type="button"
                   className="lw-btn"
+                  aria-pressed={composeOpen}
+                  onClick={() => setComposeOpen((o) => !o)}
+                >
+                  Compose
+                </button>
+                <button
+                  type="button"
+                  className="lw-btn"
                   aria-pressed={notesOpen}
                   onClick={() => setNotesOpen((o) => !o)}
                 >
@@ -340,6 +350,25 @@ export function WritersRoom() {
             </div>
           </div>
 
+          {composeOpen && (
+            <ComposePanel
+              onClose={() => setComposeOpen(false)}
+              onInsert={(brief) => {
+                editor
+                  .chain()
+                  .focus('end')
+                  .insertContent({
+                    type: 'blockquote',
+                    content: brief.split('\n').map((line) => ({
+                      type: 'paragraph',
+                      content: line ? [{ type: 'text', text: line }] : [],
+                    })),
+                  })
+                  .run();
+                setComposeOpen(false);
+              }}
+            />
+          )}
           {notesOpen && (
             <NotesMargin projectId={projectId} chapterId={activeChapter.id} editor={editor} />
           )}

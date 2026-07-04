@@ -1283,3 +1283,144 @@ select.lw-input {
   flex-wrap: wrap;
   gap: var(--sp-4);
 }
+
+/* ---- Step list (quests) ---- */
+
+.lw-steplist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.lw-steplist__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.lw-step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.lw-step__status {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-md);
+  color: var(--ink-3);
+  flex: none;
+}
+
+.lw-step--active .lw-step__status {
+  color: #b06f1c;
+  border-color: #d68a2e;
+}
+
+.lw-step--done .lw-step__status {
+  color: #4f8045;
+  border-color: #4f8045;
+}
+
+.lw-step--skipped .lw-step__status {
+  color: var(--ink-5);
+}
+
+.lw-step--done .lw-step__label {
+  text-decoration: line-through;
+  color: var(--ink-3);
+}
+
+.lw-step__text {
+  flex: 1;
+}
+
+.lw-step__label {
+  font-family: var(--font-serif);
+}
+
+.lw-steplist__progress {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ---- Timeline view ---- */
+
+.lw-viewtoggle {
+  display: flex;
+  gap: var(--sp-3);
+}
+
+.lw-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  border-left: 2px solid var(--line-2);
+}
+
+.lw-timeline__item {
+  position: relative;
+  padding: var(--sp-4) 0 var(--sp-4) var(--sp-7);
+}
+
+.lw-timeline__dot {
+  position: absolute;
+  left: -7px;
+  top: 18px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-paper-2);
+}
+
+.lw-timeline__card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  width: 100%;
+  padding: var(--sp-4) var(--sp-6);
+  border-radius: var(--r-4);
+  border: 1px solid var(--line-1);
+  background: var(--bg-paper);
+}
+
+.lw-timeline__card:hover {
+  border-color: var(--line-3);
+}
+
+.lw-timeline__when {
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+  letter-spacing: 0.06em;
+}
+
+.lw-timeline__name {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+
+.lw-timeline__summary {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.lw-timeline__cause {
+  font-size: var(--fs-2xs);
+  color: var(--ink-4);
+  font-style: italic;
+}

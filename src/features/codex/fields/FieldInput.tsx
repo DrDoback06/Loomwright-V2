@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { FieldDef, StatRow } from '@/domain/entity-configs/types';
+import type { FieldDef, StatRow, StepRow } from '@/domain/entity-configs/types';
 import type { EntityRef } from '@/domain/entity-types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { listEntities } from '@/db/repos/entities';
@@ -66,6 +66,8 @@ export function FieldInput({ field, value, onChange }: FieldInputProps) {
       return <ChipsInput field={field} value={(value as string[]) ?? []} onChange={onChange} />;
     case 'stat-grid':
       return <StatGridInput value={(value as StatRow[]) ?? []} onChange={onChange} />;
+    case 'step-list':
+      return <StepListInput field={field} value={(value as StepRow[]) ?? []} onChange={onChange} />;
     case 'related':
       return (
         <RelatedPicker
@@ -209,6 +211,102 @@ function StatGridInput({ value, onChange }: { value: StatRow[]; onChange: (v: un
       >
         + Add stat
       </button>
+    </div>
+  );
+}
+
+const STEP_CYCLE: StepRow['status'][] = ['pending', 'active', 'done', 'skipped'];
+const STEP_GLYPH: Record<StepRow['status'], string> = {
+  pending: '○',
+  active: '◐',
+  done: '●',
+  skipped: '⊘',
+};
+
+function StepListInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: FieldDef;
+  value: StepRow[];
+  onChange: (v: unknown) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const text = draft.trim();
+    if (!text) return;
+    onChange([...value, { text, status: 'pending' }]);
+    setDraft('');
+  };
+  const update = (i: number, patch: Partial<StepRow>) =>
+    onChange(value.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= value.length) return;
+    const next = [...value];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  return (
+    <div className="lw-steplist">
+      <ol className="lw-steplist__rows">
+        {value.map((row, i) => (
+          <li key={i} className={`lw-step lw-step--${row.status}`}>
+            <button
+              type="button"
+              className="lw-step__status"
+              aria-label={`Step ${i + 1} status: ${row.status}. Click to advance.`}
+              title={row.status}
+              onClick={() =>
+                update(i, {
+                  status: STEP_CYCLE[(STEP_CYCLE.indexOf(row.status) + 1) % STEP_CYCLE.length],
+                })
+              }
+            >
+              {STEP_GLYPH[row.status]}
+            </button>
+            <input
+              className="lw-input lw-step__text"
+              aria-label={`Step ${i + 1} text`}
+              value={row.text}
+              onChange={(e) => update(i, { text: e.target.value })}
+            />
+            <button type="button" className="lw-iconbtn" aria-label={`Move step ${i + 1} up`} onClick={() => move(i, -1)}>
+              ↑
+            </button>
+            <button type="button" className="lw-iconbtn" aria-label={`Move step ${i + 1} down`} onClick={() => move(i, 1)}>
+              ↓
+            </button>
+            <button
+              type="button"
+              className="lw-iconbtn"
+              aria-label={`Remove step ${i + 1}`}
+              onClick={() => onChange(value.filter((_, idx) => idx !== i))}
+            >
+              ×
+            </button>
+          </li>
+        ))}
+      </ol>
+      <div className="lw-chips__add">
+        <input
+          id={`field-${field.id}`}
+          className="lw-input"
+          value={draft}
+          placeholder="Add a step and press Enter"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <button type="button" className="lw-btn" onClick={add} aria-label={`Add ${field.label}`}>
+          Add
+        </button>
+      </div>
     </div>
   );
 }

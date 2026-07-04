@@ -6,8 +6,8 @@ import { mergeEntities } from '@/db/repos/links';
 import { useFocusStore } from '@/stores/focus';
 import { toast } from '@/stores/toasts';
 import { getEntityConfig } from '@/domain/entity-configs';
-import type { FieldDef } from '@/domain/entity-configs/types';
-import type { StatRow } from '@/domain/entity-configs/types';
+import type { FieldDef, StatRow, StepRow } from '@/domain/entity-configs/types';
+import { updateEntity } from '@/db/repos/entities';
 import { ENTITY_TYPE_META, type EntityRef } from '@/domain/entity-types';
 
 interface EntityDetailProps {
@@ -121,8 +121,14 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
 
       {config?.sections.map((section) => {
         const rows = section.fields
-          .filter((f) => !['name', 'aliases', 'summary'].includes(f.id))
-          .map((f) => ({ field: f, rendered: renderValue(f, valueFor(entity, f.id)) }))
+          .filter((f) => !['name', 'title', 'aliases', 'summary'].includes(f.id))
+          .map((f) => ({
+            field: f,
+            rendered:
+              f.kind === 'step-list'
+                ? renderSteps(entity, f, valueFor(entity, f.id))
+                : renderValue(f, valueFor(entity, f.id)),
+          }))
           .filter((r) => r.rendered !== null);
         if (rows.length === 0) return null;
         return (
@@ -145,6 +151,53 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
         <span>Updated {new Date(entity.updatedAt).toLocaleString()}</span>
       </footer>
     </article>
+  );
+}
+
+const STEP_CYCLE: StepRow['status'][] = ['pending', 'active', 'done', 'skipped'];
+const STEP_GLYPH: Record<StepRow['status'], string> = {
+  pending: '○',
+  active: '◐',
+  done: '●',
+  skipped: '⊘',
+};
+
+/** Quest steps advance straight from the dossier — click a step's glyph
+ * to cycle pending → active → done → skipped. */
+function renderSteps(entity: Entity, field: FieldDef, value: unknown): React.ReactNode | null {
+  const steps = (value as StepRow[]) ?? [];
+  if (!Array.isArray(steps) || steps.length === 0) return null;
+  const done = steps.filter((s) => s.status === 'done').length;
+  const advance = (i: number) => {
+    const next = steps.map((row, idx) =>
+      idx === i
+        ? { ...row, status: STEP_CYCLE[(STEP_CYCLE.indexOf(row.status) + 1) % STEP_CYCLE.length] }
+        : row
+    );
+    void updateEntity(entity.id, { fields: { ...entity.fields, [field.id]: next } });
+  };
+  return (
+    <span className="lw-steplist lw-steplist--dossier">
+      <span className="lw-steplist__progress">
+        {done}/{steps.length} done
+      </span>
+      <ol className="lw-steplist__rows">
+        {steps.map((row, i) => (
+          <li key={i} className={`lw-step lw-step--${row.status}`}>
+            <button
+              type="button"
+              className="lw-step__status"
+              aria-label={`Advance step: ${row.text} (now ${row.status})`}
+              title={`${row.status} — click to advance`}
+              onClick={() => advance(i)}
+            >
+              {STEP_GLYPH[row.status]}
+            </button>
+            <span className="lw-step__label">{row.text}</span>
+          </li>
+        ))}
+      </ol>
+    </span>
   );
 }
 

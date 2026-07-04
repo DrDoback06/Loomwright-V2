@@ -11,6 +11,7 @@ import { useFocusStore } from '@/stores/focus';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
 import { EntityDetail } from './EntityDetail';
+import { TimelineView } from './TimelineView';
 import { useEffect } from 'react';
 
 /** Full-page roster + detail surface for one entity type. */
@@ -27,6 +28,8 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
   const consumeFocus = useFocusStore((s) => s.consumeFocus);
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const timelineCapable = type === 'events' || type === 'timeline';
+  const [view, setView] = useState<'list' | 'timeline'>('list');
 
   // Adopt cross-panel focus once: a mention click or review "Open" that
   // focused an entity of this type selects it here; consuming stops a
@@ -93,6 +96,28 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
             + Create {config?.displayName.toLowerCase() ?? meta.label.toLowerCase()}
           </button>
         </header>
+        {timelineCapable && (
+          <div className="lw-viewtoggle" role="radiogroup" aria-label="View">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={view === 'list'}
+              className={view === 'list' ? 'lw-pill lw-pill--active' : 'lw-pill'}
+              onClick={() => setView('list')}
+            >
+              List
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={view === 'timeline'}
+              className={view === 'timeline' ? 'lw-pill lw-pill--active' : 'lw-pill'}
+              onClick={() => setView('timeline')}
+            >
+              Timeline
+            </button>
+          </div>
+        )}
         <input
           className="lw-input lw-roster__search"
           type="search"
@@ -101,7 +126,9 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {filtered.length === 0 ? (
+        {view === 'timeline' && timelineCapable ? (
+          <TimelineView type={type} entities={filtered} onSelect={setSelectedId} />
+        ) : filtered.length === 0 ? (
           <div className="lw-empty">
             {entities.length === 0 ? (
               <>

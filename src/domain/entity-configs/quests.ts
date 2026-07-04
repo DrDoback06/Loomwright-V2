@@ -37,8 +37,7 @@ export const questsConfig: EntityConfig = {
       id: 'structure',
       title: 'Steps & branches',
       fields: [
-        // TODO(M5): legacy kind 'step-list' — restore ordered step rows (title / chapter / location).
-        { id: 'steps', label: 'Steps', kind: 'chips', hint: 'Sequential beats of the quest' },
+        { id: 'steps', label: 'Steps', kind: 'step-list', hint: 'Sequential beats — advance them as the story moves.' },
         // TODO(M5): legacy kind 'branch-list' — restore structured branch rows.
         { id: 'branches', label: 'Branches', kind: 'chips', hint: 'Optional / divergent paths' },
         // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.

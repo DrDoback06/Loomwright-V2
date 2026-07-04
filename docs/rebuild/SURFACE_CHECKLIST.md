@@ -89,3 +89,16 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Panel: ⤢ expand / × close | Full surface / close panel | covered via panel persistence assertions |
 | Dossier: Lock / Merge into… | Lock context; merge with full reference/mention rewrite | `05-cross-panel.spec.ts` |
 | Stats entities extend the stat-change detector vocabulary | extraction picks up custom stats | engine unit path |
+
+## Document workspaces (M5)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Quest editor: step-list (add/reorder/remove, status cycle) | Ordered steps with pending/active/done/skipped | `06-workspaces.spec.ts` |
+| Quest dossier: step glyph click | Advances the step live, progress counter, persists | `06-workspaces.spec.ts` |
+| Events/Timeline surface: List ↔ Timeline toggle | Chronological lane ordered by when/chapter/order fields | `06-workspaces.spec.ts` |
+| Timeline card click | Selects + focuses the event | `06-workspaces.spec.ts` |
+| Writer's Room: Compose toggle | Opens the composition panel | `06-workspaces.spec.ts` |
+| Compose: mode/POV/length/direction + context chips | Builds a structured writing brief from focused/locked entities | `06-workspaces.spec.ts` |
+| Compose: Insert brief | Inserts as manuscript blockquote (persists) | `06-workspaces.spec.ts` |
+| Compose: Copy for external AI | Copies the brief to the clipboard | manual (clipboard) |
