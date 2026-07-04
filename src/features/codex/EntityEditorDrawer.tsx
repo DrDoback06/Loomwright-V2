@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getEntityConfig } from '@/domain/entity-configs';
+import type { EntityConfig } from '@/domain/entity-configs/types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { createEntity, getEntity, updateEntity } from '@/db/repos/entities';
 import type { Entity } from '@/db/types';
@@ -9,14 +10,26 @@ import { toast } from '@/stores/toasts';
 import { FieldInput } from './fields/FieldInput';
 
 /** Field ids that live on the Entity record itself rather than in
- * entity.fields — kept aligned with extraction + import round-trips. */
-const TOP_LEVEL_FIELDS = new Set(['name', 'aliases', 'summary', 'tags']);
+ * entity.fields — kept aligned with extraction + import round-trips.
+ * Some configs (quests, events, lore, references, timeline) call their
+ * name field 'title'; relationships derive theirs from from → to. */
+const TOP_LEVEL_FIELDS = new Set(['name', 'title', 'aliases', 'summary', 'tags']);
 
 type FormState = Record<string, unknown>;
 
-function formFromEntity(entity: Entity): FormState {
+function nameFieldIdOf(config: EntityConfig): 'name' | 'title' | null {
+  for (const section of config.sections) {
+    for (const f of section.fields) {
+      if (f.id === 'name') return 'name';
+      if (f.id === 'title') return 'title';
+    }
+  }
+  return null;
+}
+
+function formFromEntity(entity: Entity, nameFieldId: 'name' | 'title' | null): FormState {
   return {
-    name: entity.name,
+    ...(nameFieldId ? { [nameFieldId]: entity.name } : {}),
     aliases: entity.aliases,
     summary: entity.summary,
     tags: entity.tags,
@@ -24,13 +37,22 @@ function formFromEntity(entity: Entity): FormState {
   };
 }
 
-function splitForm(form: FormState) {
+function deriveName(form: FormState, nameFieldId: 'name' | 'title' | null): string {
+  if (nameFieldId) return String(form[nameFieldId] ?? '').trim();
+  const from = form.from as { name?: string } | undefined;
+  const to = form.to as { name?: string } | undefined;
+  if (from?.name && to?.name) return `${from.name} → ${to.name}`;
+  return '';
+}
+
+function splitForm(form: FormState, nameFieldId: 'name' | 'title' | null) {
   const fields: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(form)) {
+    if (key === nameFieldId || key === 'name') continue;
     if (!TOP_LEVEL_FIELDS.has(key) && value !== undefined && value !== '') fields[key] = value;
   }
   return {
-    name: String(form.name ?? '').trim(),
+    name: deriveName(form, nameFieldId),
     aliases: (form.aliases as string[]) ?? [],
     summary: String(form.summary ?? ''),
     tags: (form.tags as string[]) ?? [],
@@ -61,7 +83,7 @@ export function EntityEditorDrawer() {
     (async () => {
       if (target.mode === 'edit') {
         const entity = await getEntity(target.entityId);
-        if (!cancelled && entity) setForm(formFromEntity(entity));
+        if (!cancelled && entity && config) setForm(formFromEntity(entity, nameFieldIdOf(config)));
       } else {
         setForm({ aliases: [], tags: [], ...(target.initial ?? {}) });
       }
@@ -78,14 +100,20 @@ export function EntityEditorDrawer() {
   if (!target || !config || !meta || !projectId) return null;
 
   const section = config.sections.find((s) => s.id === activeSection) ?? config.sections[0];
-  const name = String(form.name ?? '').trim();
+  const nameFieldId = nameFieldIdOf(config);
+  const name = deriveName(form, nameFieldId);
 
   const save = async () => {
     if (!name) {
-      toast('A name is required.', { kind: 'error' });
+      toast(
+        nameFieldId
+          ? `A ${nameFieldId} is required.`
+          : 'Pick both characters for this relationship first.',
+        { kind: 'error' }
+      );
       return;
     }
-    const data = splitForm(form);
+    const data = splitForm(form, nameFieldId);
     if (target.mode === 'edit') {
       await updateEntity(target.entityId, data);
       toast(`${data.name} saved.`, { kind: 'success' });

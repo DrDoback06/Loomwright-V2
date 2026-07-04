@@ -10,6 +10,7 @@ import { toast } from '@/stores/toasts';
 export function HomePage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const setRoute = useUiStore((s) => s.setRoute);
+  const setCodexType = useUiStore((s) => s.setCodexType);
 
   const project = useLiveQuery(
     async () => (projectId ? getProject(projectId) : undefined),
@@ -39,7 +40,14 @@ export function HomePage() {
       </div>
 
       <div className="lw-statrow">
-        <button type="button" className="lw-card lw-stattile" onClick={() => setRoute('cast')}>
+        <button
+          type="button"
+          className="lw-card lw-stattile"
+          onClick={() => {
+            setCodexType('cast');
+            setRoute('codex');
+          }}
+        >
           <span className="lw-stattile__value">{castCount}</span>
           <span className="lw-stattile__label">Cast members</span>
         </button>

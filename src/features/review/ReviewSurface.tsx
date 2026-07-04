@@ -17,6 +17,7 @@ const BAND_LABEL: Record<ReviewCandidate['confidenceBand'], string> = {
 export function ReviewSurface() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const setRoute = useUiStore((s) => s.setRoute);
+  const setCodexType = useUiStore((s) => s.setCodexType);
   const setFocus = useFocusStore((s) => s.setFocus);
 
   const pending = useLiveQuery(
@@ -36,7 +37,8 @@ export function ReviewSurface() {
           label: 'Open',
           run: () => {
             setFocus({ id: entity.id, type: entity.type, name: entity.name });
-            if (entity.type === 'cast') setRoute('cast');
+            setCodexType(entity.type);
+            setRoute('codex');
           },
         },
       });

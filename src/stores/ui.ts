@@ -1,17 +1,21 @@
 import { create } from 'zustand';
+import type { EntityType } from '@/domain/entity-types';
 
 export type Theme = 'parchment-light' | 'midnight-ink';
 
 /** Routes that exist in the rebuilt app. Grows milestone by milestone —
  * a nav entry is only rendered once its surface genuinely works. */
-export type RouteId = 'home' | 'writers-room' | 'cast' | 'review' | 'trash';
+export type RouteId = 'home' | 'writers-room' | 'codex' | 'review' | 'trash';
 
 interface UiState {
   theme: Theme;
   route: RouteId;
+  /** Which entity type the 'codex' route shows. */
+  codexType: EntityType;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   setRoute: (route: RouteId) => void;
+  setCodexType: (type: EntityType) => void;
 }
 
 const THEME_KEY = 'lw:theme';
@@ -38,6 +42,7 @@ function applyTheme(theme: Theme) {
 export const useUiStore = create<UiState>((set, get) => ({
   theme: initialTheme(),
   route: 'home',
+  codexType: 'cast',
   setTheme: (theme) => {
     applyTheme(theme);
     set({ theme });
@@ -48,4 +53,5 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ theme: next });
   },
   setRoute: (route) => set({ route }),
+  setCodexType: (type) => set({ codexType: type }),
 }));

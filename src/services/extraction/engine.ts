@@ -44,6 +44,7 @@ export function runLocalExtraction(input: ExtractionInput): ExtractionResult {
     index,
     entities,
     confidenceOverrides: input.confidenceOverrides,
+    extraStatNames: entities.filter((e) => e.type === 'stats').map((e) => e.name),
   });
 
   const candidates = dedupeCandidates([...discovered, ...detectorCandidates]);

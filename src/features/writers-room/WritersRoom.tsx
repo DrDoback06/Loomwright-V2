@@ -27,6 +27,7 @@ import { NotesMargin } from './NotesMargin';
 export function WritersRoom() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const setRoute = useUiStore((s) => s.setRoute);
+  const setCodexType = useUiStore((s) => s.setCodexType);
   const setFocus = useFocusStore((s) => s.setFocus);
   const chapters = useLiveQuery(
     async () => (projectId ? listChapters(projectId) : ([] as Chapter[])),
@@ -215,10 +216,11 @@ export function WritersRoom() {
       void db.entities.get(entityId).then((entity) => {
         if (!entity) return;
         setFocus({ id: entity.id, type: entity.type, name: entity.name });
-        if (entity.type === 'cast') setRoute('cast');
+        setCodexType(entity.type);
+        setRoute('codex');
       });
     },
-    [setFocus, setRoute]
+    [setFocus, setRoute, setCodexType]
   );
 
   editorRef.current = editor;

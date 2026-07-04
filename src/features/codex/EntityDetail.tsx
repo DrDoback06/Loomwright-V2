@@ -1,5 +1,10 @@
 import { useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import type { Entity } from '@/db/types';
+import { listEntities } from '@/db/repos/entities';
+import { mergeEntities } from '@/db/repos/links';
+import { useFocusStore } from '@/stores/focus';
+import { toast } from '@/stores/toasts';
 import { getEntityConfig } from '@/domain/entity-configs';
 import type { FieldDef } from '@/domain/entity-configs/types';
 import type { StatRow } from '@/domain/entity-configs/types';
@@ -16,6 +21,27 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
   const meta = ENTITY_TYPE_META[entity.type];
   const config = getEntityConfig(entity.type);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const lock = useFocusStore((s) => s.lock);
+  const toggleLock = useFocusStore((s) => s.toggleLock);
+  const isLocked = lock?.id === entity.id;
+
+  const mergeTargets = useLiveQuery(
+    async () =>
+      merging ? (await listEntities(entity.projectId, entity.type)).filter((e) => e.id !== entity.id) : [],
+    [merging, entity.projectId, entity.type, entity.id],
+    [] as Entity[]
+  );
+
+  const doMerge = async (targetId: string) => {
+    const result = await mergeEntities(entity.id, targetId);
+    setMerging(false);
+    if (result) {
+      toast(`${entity.name} merged into ${result.name}. Mentions and references now point at ${result.name}.`, { kind: 'success' });
+    } else {
+      toast('Merge failed — the target may have been deleted.', { kind: 'error' });
+    }
+  };
 
   const portrait = typeof entity.fields.portrait === 'string' ? entity.fields.portrait : '';
 
@@ -42,6 +68,17 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
           <button type="button" className="lw-btn" onClick={onEdit}>
             Edit
           </button>
+          <button
+            type="button"
+            className="lw-btn"
+            aria-pressed={isLocked}
+            onClick={() => toggleLock({ id: entity.id, type: entity.type, name: entity.name })}
+          >
+            {isLocked ? '🔒 Locked' : 'Lock'}
+          </button>
+          <button type="button" className="lw-btn" onClick={() => setMerging((m) => !m)}>
+            Merge into…
+          </button>
           {confirmingDelete ? (
             <span className="lw-confirm">
               <button type="button" className="lw-btn lw-btn--danger" onClick={onDelete}>
@@ -58,6 +95,29 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
           )}
         </div>
       </header>
+
+      {merging && (
+        <div className="lw-card lw-mergebox" data-testid="merge-picker">
+          <p className="lw-mergebox__note">
+            Merge <strong>{entity.name}</strong> into another {config?.displayName.toLowerCase() ?? 'record'}.
+            Its name becomes an alias; every mention, reference, and link is rewritten. This cannot
+            be undone.
+          </p>
+          {mergeTargets.length === 0 ? (
+            <p className="lw-empty__note">No other {meta.plural.toLowerCase()} to merge into.</p>
+          ) : (
+            <ul className="lw-mergebox__list">
+              {mergeTargets.map((t) => (
+                <li key={t.id}>
+                  <button type="button" className="lw-btn" onClick={() => void doMerge(t.id)}>
+                    Merge into {t.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {config?.sections.map((section) => {
         const rows = section.fields

@@ -1,5 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { countPendingCandidates } from '@/db/repos/review';
+import { configuredEntityTypes } from '@/domain/entity-configs';
+import { ALL_ENTITY_TYPES, ENTITY_TYPE_META } from '@/domain/entity-types';
 import { useProjectStore } from '@/stores/project';
 import { useUiStore, type RouteId } from '@/stores/ui';
 
@@ -15,7 +17,6 @@ interface NavEntry {
 export const NAV_ENTRIES: NavEntry[] = [
   { route: 'home', label: 'Home', glyph: '⌂', group: 'workspace' },
   { route: 'writers-room', label: "Writer's Room", glyph: '✎', group: 'workspace' },
-  { route: 'cast', label: 'Cast', glyph: '◐', group: 'panels' },
   { route: 'review', label: 'Review', glyph: '☑', group: 'utilities' },
   { route: 'trash', label: 'Trash', glyph: '♺', group: 'utilities' },
 ];
@@ -29,6 +30,8 @@ const GROUP_LABELS: Record<NavEntry['group'], string> = {
 export function LeftRail() {
   const route = useUiStore((s) => s.route);
   const setRoute = useUiStore((s) => s.setRoute);
+  const codexType = useUiStore((s) => s.codexType);
+  const setCodexType = useUiStore((s) => s.setCodexType);
   const projectId = useProjectStore((s) => s.currentProjectId);
   const reviewCount = useLiveQuery(
     async () => (projectId ? countPendingCandidates(projectId) : 0),
@@ -40,6 +43,35 @@ export function LeftRail() {
   return (
     <nav className="lw-leftrail" aria-label="Workspace">
       {groups.map((group) => {
+        if (group === 'panels') {
+          const types = ALL_ENTITY_TYPES.filter((t) => configuredEntityTypes().includes(t));
+          return (
+            <div key={group}>
+              <div className="lw-leftrail__group">{GROUP_LABELS[group]}</div>
+              {types.map((type) => {
+                const meta = ENTITY_TYPE_META[type];
+                const current = route === 'codex' && codexType === type;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    className="lw-navitem"
+                    aria-current={current ? 'page' : undefined}
+                    onClick={() => {
+                      setCodexType(type);
+                      setRoute('codex');
+                    }}
+                  >
+                    <span aria-hidden style={{ color: meta.color }}>
+                      {meta.glyph}
+                    </span>
+                    {meta.plural}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        }
         const entries = NAV_ENTRIES.filter((e) => e.group === group);
         if (entries.length === 0) return null;
         return (

@@ -65,6 +65,9 @@ export interface DetectorContext {
   entities: KnownEntity[];
   /** Settings ▸ Extraction per-detector confidence overrides. */
   confidenceOverrides?: Record<string, number>;
+  /** Project-defined stat names (stats entities) extend the built-in
+   * stat vocabulary for the stat-change detector. */
+  extraStatNames?: string[];
 }
 
 function detectorConfidence(
@@ -252,8 +255,14 @@ export function detectStatChanges(ctx: DetectorContext): ExtractionCandidate[] {
   const { text, entities } = ctx;
   if (!text) return [];
   const out: ExtractionCandidate[] = [];
+  const statNames = [
+    ...COMMON_STATS,
+    ...(ctx.extraStatNames ?? [])
+      .map((n) => n.toLowerCase().trim())
+      .filter((n) => /^[a-z][a-z -]{1,30}$/.test(n)),
+  ];
   const re = new RegExp(
-    `([A-Z][A-Za-z]+)(?:'s)\\s+(${COMMON_STATS.join('|')})\\s+(${inner(STAT_VERBS)})`,
+    `([A-Z][A-Za-z]+)(?:'s)\\s+(${[...new Set(statNames)].join('|')})\\s+(${inner(STAT_VERBS)})`,
     'gi'
   );
   let m: RegExpExecArray | null;

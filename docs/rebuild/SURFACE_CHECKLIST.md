@@ -74,3 +74,18 @@ controls that are absent from this list. (Replaces the legacy callback audit.)
 
 Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 `tests/unit/extraction-fixtures.spec.ts`.
+
+## All 16 codex types + cross-panel context (M4)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Nav: 16 codex type entries (desktop rail + mobile bottom nav) | Route to that type's roster/dossier surface | `05-cross-panel.spec.ts` |
+| Editor drawer for every type | Config-driven sections/fields (legacy field-id parity); title-named types + derived relationship names supported | `05-cross-panel.spec.ts` (locations/items/factions/quests spot-check) |
+| Dock strip glyphs (desktop) | Open codex panel beside any surface; persists per project | `05-cross-panel.spec.ts` |
+| Panel: row click | Focus entity (broadcasts to all panels) | `05-cross-panel.spec.ts` |
+| Panel: filter chip | Filters roster to entities related to the foreign focus; dismissible | `05-cross-panel.spec.ts` |
+| Panel: lock 🔓/🔒 | Pins context; with same-type focus shows pair strip | `05-cross-panel.spec.ts` |
+| Pair strip: Unlock | Clears the lock | `05-cross-panel.spec.ts` |
+| Panel: ⤢ expand / × close | Full surface / close panel | covered via panel persistence assertions |
+| Dossier: Lock / Merge into… | Lock context; merge with full reference/mention rewrite | `05-cross-panel.spec.ts` |
+| Stats entities extend the stat-change detector vocabulary | extraction picks up custom stats | engine unit path |
