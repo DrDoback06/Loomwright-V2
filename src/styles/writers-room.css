@@ -1,0 +1,342 @@
+/* =====================================================================
+   writers-room.css — chapter strip, manuscript canvas, toolbar, notes.
+   ===================================================================== */
+
+.lw-wroom {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ---- Chapter strip ---- */
+
+.lw-wroom__chapters {
+  display: flex;
+  gap: var(--sp-4);
+  padding: var(--sp-6) var(--sp-8);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line-1);
+  background: var(--bg-paper-2);
+  flex: none;
+}
+
+.lw-chaptertab {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 132px;
+  padding: var(--sp-5) var(--sp-6);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-5);
+  background: var(--bg-paper);
+  text-align: left;
+}
+
+.lw-chaptertab:hover {
+  border-color: var(--line-3);
+}
+
+.lw-chaptertab[aria-selected='true'] {
+  background: var(--bg-elev);
+  border-color: var(--accent, #9a7b3a);
+  box-shadow: var(--shadow-1, 0 1px 2px rgba(42, 34, 24, 0.08));
+}
+
+.lw-chaptertab__num {
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+  letter-spacing: 0.08em;
+}
+
+.lw-chaptertab__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.lw-chaptertab__words {
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+}
+
+.lw-chaptertab--new {
+  justify-content: center;
+  align-items: center;
+  color: var(--ink-3);
+  border-style: dashed;
+  min-width: 110px;
+  font-size: var(--fs-sm);
+}
+
+/* ---- Body layout ---- */
+
+.lw-wroom__body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.lw-wroom__editorcol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.lw-wroom__chapterhead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+  padding: var(--sp-6) var(--sp-10) 0;
+  flex-wrap: wrap;
+}
+
+.lw-wroom__title {
+  flex: 1;
+  min-width: 180px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-display);
+  font-size: var(--fs-3xl);
+  font-weight: 600;
+  color: var(--ink-1);
+  padding: var(--sp-2) 0;
+}
+
+.lw-wroom__title:focus {
+  outline: none;
+  border-bottom: 2px solid var(--accent, #9a7b3a);
+}
+
+.lw-wroom__chapteractions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+/* ---- Toolbar ---- */
+
+.lw-wtoolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-10);
+  border-bottom: 1px solid var(--line-1);
+  flex: none;
+}
+
+.lw-wtoolbar__btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-3);
+  font-family: var(--font-serif);
+  font-size: var(--fs-md);
+  color: var(--ink-2);
+}
+
+.lw-wtoolbar__btn:hover:not(:disabled) {
+  background: var(--bg-tint);
+  color: var(--ink-1);
+}
+
+.lw-wtoolbar__btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.lw-wtoolbar__btn--active {
+  background: var(--bg-sunken);
+  color: var(--ink-1);
+  font-weight: 700;
+}
+
+.lw-wtoolbar__gap {
+  flex: 1;
+}
+
+/* ---- Manuscript canvas ---- */
+
+.lw-wroom__canvas {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.lw-manuscript {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: var(--sp-10) var(--sp-9) var(--sp-14);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.75;
+  color: var(--ink-1);
+  min-height: 60vh;
+  outline: none;
+}
+
+.lw-manuscript p {
+  margin: 0 0 1em;
+}
+
+.lw-manuscript h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.lw-manuscript blockquote {
+  margin: 1em 0;
+  padding-left: var(--sp-8);
+  border-left: 3px solid var(--line-2);
+  color: var(--ink-2);
+  font-style: italic;
+}
+
+.lw-manuscript hr {
+  border: none;
+  text-align: center;
+  margin: 1.6em 0;
+}
+
+.lw-manuscript hr::after {
+  content: '⁂';
+  color: var(--ink-4);
+  font-size: var(--fs-lg);
+}
+
+/* ---- Status strip ---- */
+
+.lw-wroom__status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-4) var(--sp-10);
+  border-top: 1px solid var(--line-1);
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  background: var(--bg-paper-2);
+  flex: none;
+}
+
+.lw-wroom__local {
+  margin-left: auto;
+  color: var(--ink-4);
+}
+
+/* ---- Notes rail ---- */
+
+.lw-notesrail {
+  width: 280px;
+  flex: none;
+  border-left: 1px solid var(--line-1);
+  background: var(--bg-paper-2);
+  padding: var(--sp-7);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+
+.lw-notesrail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.lw-notesrail__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+
+.lw-notesrail__filter {
+  font-size: var(--fs-2xs);
+}
+
+.lw-notesrail__add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  align-items: flex-start;
+}
+
+.lw-notesrail__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.lw-note {
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-5);
+  background: var(--bg-paper);
+  padding: var(--sp-5) var(--sp-6);
+}
+
+.lw-note--resolved {
+  opacity: 0.6;
+}
+
+.lw-note__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+  margin-bottom: var(--sp-3);
+  font-family: var(--font-mono);
+}
+
+.lw-note__text {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+}
+
+.lw-note__actions {
+  display: flex;
+  gap: var(--sp-3);
+}
+
+/* ---- Mobile ---- */
+
+@media (max-width: 720px) {
+  .lw-notesrail {
+    position: fixed;
+    right: 0;
+    top: var(--topbar-h);
+    bottom: var(--bottomnav-h, 56px);
+    width: min(320px, 88vw);
+    z-index: var(--z-overlay);
+    box-shadow: var(--shadow-3, -12px 0 32px rgba(42, 34, 24, 0.2));
+  }
+
+  .lw-wroom__chapterhead {
+    padding: var(--sp-5) var(--sp-6) 0;
+  }
+
+  .lw-wtoolbar {
+    padding: var(--sp-3) var(--sp-6);
+    overflow-x: auto;
+  }
+
+  .lw-manuscript {
+    padding: var(--sp-8) var(--sp-7) var(--sp-13);
+    font-size: 16px;
+  }
+
+  .lw-wroom__status {
+    padding: var(--sp-4) var(--sp-6);
+  }
+}

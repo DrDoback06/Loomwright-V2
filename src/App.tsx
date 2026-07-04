@@ -9,12 +9,15 @@ import { HomePage } from '@/features/home/HomePage';
 import { EntityRosterSurface } from '@/features/codex/EntityRosterSurface';
 import { EntityEditorDrawer } from '@/features/codex/EntityEditorDrawer';
 import { TrashSurface } from '@/features/system/TrashSurface';
+import { WritersRoom } from '@/features/writers-room/WritersRoom';
 
 function MainSurface() {
   const route = useUiStore((s) => s.route);
   switch (route) {
     case 'home':
       return <HomePage />;
+    case 'writers-room':
+      return <WritersRoom />;
     case 'cast':
       return <EntityRosterSurface type="cast" />;
     case 'trash':

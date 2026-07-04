@@ -45,3 +45,17 @@ controls that are absent from this list. (Replaces the legacy callback audit.)
 | --- | --- | --- |
 | Cast members stat tile | Live count; click routes to Cast | `02-cast.spec.ts` |
 | Recent activity: Undo | Reverts the audited action | `02-cast.spec.ts` |
+
+## Writer's Room (M2)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Chapter strip tabs | Switch active chapter | `03-writers-room.spec.ts` |
+| + New chapter (strip + empty state) | Creates and opens a chapter | `03-writers-room.spec.ts` |
+| Chapter title input | Renames live, persists | `03-writers-room.spec.ts` |
+| Move earlier / later | Reorders chapters, persists | `03-writers-room.spec.ts` |
+| Delete → Move to trash | Soft-deletes; restorable from Trash with full text | `03-writers-room.spec.ts` |
+| Toolbar: Bold/Italic/Underline/Strike/Heading/Quote/Scene break/Undo/Redo | Real persisted marks & nodes | `03-writers-room.spec.ts` (bold; others same code path) |
+| Manuscript body | Typing autosaves (600ms), word count live | `03-writers-room.spec.ts` |
+| Notes toggle | Opens/closes paragraph-note rail | `03-writers-room.spec.ts` |
+| Add note / Resolve / Reopen / Delete / Show resolved | Paragraph-keyed notes CRUD, persists | `03-writers-room.spec.ts` |

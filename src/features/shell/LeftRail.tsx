@@ -11,6 +11,7 @@ interface NavEntry {
  * milestone — the rebuild renders no dead buttons, ever. */
 export const NAV_ENTRIES: NavEntry[] = [
   { route: 'home', label: 'Home', glyph: '⌂', group: 'workspace' },
+  { route: 'writers-room', label: "Writer's Room", glyph: '✎', group: 'workspace' },
   { route: 'cast', label: 'Cast', glyph: '◐', group: 'panels' },
   { route: 'trash', label: 'Trash', glyph: '♺', group: 'utilities' },
 ];
