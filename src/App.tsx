@@ -13,6 +13,8 @@ import { TrashSurface } from '@/features/system/TrashSurface';
 import { ReviewSurface } from '@/features/review/ReviewSurface';
 import { WritersRoom } from '@/features/writers-room/WritersRoom';
 import { AtlasSurface } from '@/features/atlas/AtlasSurface';
+import { TangleSurface } from '@/features/tangle/TangleSurface';
+import { SkillTreesSurface } from '@/features/skill-trees/SkillTreesSurface';
 
 function MainSurface() {
   const route = useUiStore((s) => s.route);
@@ -26,6 +28,10 @@ function MainSurface() {
       return <EntityRosterSurface type={codexType} />;
     case 'atlas':
       return <AtlasSurface />;
+    case 'tangle':
+      return <TangleSurface />;
+    case 'skill-trees':
+      return <SkillTreesSurface />;
     case 'review':
       return <ReviewSurface />;
     case 'trash':

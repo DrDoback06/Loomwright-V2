@@ -2,6 +2,8 @@ import Dexie, { type EntityTable } from 'dexie';
 import type {
   AtlasMap,
   AuditEntry,
+  SkillTree,
+  TangleBoard,
   Chapter,
   Entity,
   Link,
@@ -31,6 +33,8 @@ export class LoomwrightDB extends Dexie {
   settings!: EntityTable<SettingsRow, 'key'>;
   uiState!: EntityTable<UiStateRow, 'key'>;
   atlasMaps!: EntityTable<AtlasMap, 'id'>;
+  skillTrees!: EntityTable<SkillTree, 'id'>;
+  tangleBoards!: EntityTable<TangleBoard, 'id'>;
   // Domain-doc tables (atlas maps, skill trees, tangle boards, templates,
   // random tables, timeline snapshots) join in their milestones via
   // additive version() bumps.
@@ -57,6 +61,10 @@ export class LoomwrightDB extends Dexie {
     });
     this.version(3).stores({
       atlasMaps: 'id, projectId',
+    });
+    this.version(4).stores({
+      skillTrees: 'id, projectId',
+      tangleBoards: 'id, projectId',
     });
   }
 }

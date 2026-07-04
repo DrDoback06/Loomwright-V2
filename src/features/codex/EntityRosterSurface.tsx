@@ -12,6 +12,7 @@ import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
 import { EntityDetail } from './EntityDetail';
 import { TimelineView } from './TimelineView';
+import { RelationshipGraph } from './RelationshipGraph';
 import { useEffect } from 'react';
 
 /** Full-page roster + detail surface for one entity type. */
@@ -29,7 +30,8 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const timelineCapable = type === 'events' || type === 'timeline';
-  const [view, setView] = useState<'list' | 'timeline'>('list');
+  const graphCapable = type === 'relationships';
+  const [view, setView] = useState<'list' | 'timeline' | 'graph'>('list');
 
   // Adopt cross-panel focus once: a mention click or review "Open" that
   // focused an entity of this type selects it here; consuming stops a
@@ -74,6 +76,67 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
     });
   };
 
+  const viewToggle = (timelineCapable || graphCapable) && (
+    <div className="lw-viewtoggle" role="radiogroup" aria-label="View">
+      <button
+        type="button"
+        role="radio"
+        aria-checked={view === 'list'}
+        className={view === 'list' ? 'lw-pill lw-pill--active' : 'lw-pill'}
+        onClick={() => setView('list')}
+      >
+        List
+      </button>
+      {timelineCapable && (
+        <button
+          type="button"
+          role="radio"
+          aria-checked={view === 'timeline'}
+          className={view === 'timeline' ? 'lw-pill lw-pill--active' : 'lw-pill'}
+          onClick={() => setView('timeline')}
+        >
+          Timeline
+        </button>
+      )}
+      {graphCapable && (
+        <button
+          type="button"
+          role="radio"
+          aria-checked={view === 'graph'}
+          className={view === 'graph' ? 'lw-pill lw-pill--active' : 'lw-pill'}
+          onClick={() => setView('graph')}
+        >
+          Graph
+        </button>
+      )}
+    </div>
+  );
+
+  // Graph and timeline views take the full surface width.
+  if (view !== 'list' && (graphCapable || timelineCapable)) {
+    return (
+      <div className="lw-altview" data-testid={`surface-${type}`}>
+        <header className="lw-altview__head">
+          <h1 className="lw-roster__title">
+            <span style={{ color: meta.color }} aria-hidden>
+              {meta.glyph}
+            </span>{' '}
+            {meta.plural}
+            <span className="lw-roster__count">{entities.length}</span>
+          </h1>
+          {viewToggle}
+        </header>
+        <div className="lw-altview__body">
+          {view === 'graph' ? (
+            <RelationshipGraph relationships={entities} />
+          ) : (
+            <TimelineView type={type} entities={entities} onSelect={setSelectedId} />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={selected ? 'lw-roster-surface lw-roster-surface--detail' : 'lw-roster-surface'}
@@ -96,28 +159,7 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
             + Create {config?.displayName.toLowerCase() ?? meta.label.toLowerCase()}
           </button>
         </header>
-        {timelineCapable && (
-          <div className="lw-viewtoggle" role="radiogroup" aria-label="View">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={view === 'list'}
-              className={view === 'list' ? 'lw-pill lw-pill--active' : 'lw-pill'}
-              onClick={() => setView('list')}
-            >
-              List
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={view === 'timeline'}
-              className={view === 'timeline' ? 'lw-pill lw-pill--active' : 'lw-pill'}
-              onClick={() => setView('timeline')}
-            >
-              Timeline
-            </button>
-          </div>
-        )}
+        {viewToggle}
         <input
           className="lw-input lw-roster__search"
           type="search"
@@ -126,9 +168,7 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {view === 'timeline' && timelineCapable ? (
-          <TimelineView type={type} entities={filtered} onSelect={setSelectedId} />
-        ) : filtered.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="lw-empty">
             {entities.length === 0 ? (
               <>

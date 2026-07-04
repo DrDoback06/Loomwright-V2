@@ -116,3 +116,19 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Travel routes | Derived polylines from cast travelHistory → currentLocation | `07-atlas.spec.ts` |
 | Pinned list: row / unpin × | Focus / remove pin | covered by place+focus flows |
 | Canvas pan (drag) + wheel zoom + pinch | Shared useCanvas primitives (all M6 canvases) | `07-atlas.spec.ts` (touch pan path) |
+
+## Canvas workspaces (M6b)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Nav: Tangle / Skill Trees | Open the canvas workspaces | `08-canvases.spec.ts` |
+| Tangle: board select / + New / rename / Delete | Board management, persists | `08-canvases.spec.ts` |
+| Tangle: note card place / entity card place | Click-to-place cards (entity cards colored by type) | `08-canvases.spec.ts` |
+| Tangle: Connect two cards (+ label + directed toggle) | Click-click labelled threads with arrows | `08-canvases.spec.ts` |
+| Tangle: thread click | Removes the thread | covered by connect flow |
+| Tangle: selected card → Focus entity / Remove card | Cross-panel focus / delete | node-click path |
+| Skill Trees: tree management, node place (codex skill or free label) | Constellation building | `08-canvases.spec.ts` |
+| Skill Trees: Link prerequisite (directed) / line click removes | Prerequisite edges | `08-canvases.spec.ts` |
+| Skill Trees: Unlocked toggle | Per-node unlock state (green ring), persists | `08-canvases.spec.ts` |
+| Relationships: Graph view | d3-force network of bonds; node click focuses; lock highlighted | `08-canvases.spec.ts` |
+| Node drag (all canvases) | Pointer-drag with persistence (tangle/skill trees) | shared NodeGraphCanvas + atlas drag spec |

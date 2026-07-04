@@ -1564,3 +1564,165 @@ select.lw-input {
     max-height: 40vh;
   }
 }
+
+/* ---- Node graph canvas (tangle, skill trees, relationship map) ---- */
+
+.lw-tangle {
+  display: grid;
+  grid-template-columns: 290px 1fr;
+  height: 100%;
+  min-height: 0;
+}
+
+.lw-tangle__side {
+  padding: var(--sp-8);
+  border-right: 1px solid var(--line-1);
+  background: var(--bg-paper-2);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.lw-tangle__boards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.lw-graphcanvas {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-sunken);
+  touch-action: none;
+  cursor: grab;
+  height: 100%;
+  min-height: 320px;
+}
+
+.lw-graphcanvas--placing {
+  cursor: crosshair;
+}
+
+.lw-graphcanvas__svg {
+  transform-origin: 0 0;
+  display: block;
+}
+
+.lw-graphcanvas__hint {
+  position: absolute;
+  top: var(--sp-5);
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: var(--sp-3) var(--sp-7);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  box-shadow: var(--shadow-1, 0 1px 2px rgba(42, 34, 24, 0.08));
+}
+
+.lw-graph__node {
+  cursor: pointer;
+}
+
+.lw-graph__nodebox {
+  fill: var(--bg-paper-2);
+  stroke: var(--line-3);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 1px 2px rgba(42, 34, 24, 0.15));
+}
+
+.lw-graph__node--selected .lw-graph__nodebox {
+  stroke-width: 3;
+}
+
+.lw-graph__nodelabel {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  fill: var(--ink-1);
+  pointer-events: none;
+}
+
+.lw-graph__unlock {
+  fill: var(--bg-paper);
+  stroke: var(--line-3);
+  stroke-width: 1.5;
+}
+
+.lw-graph__unlock--on {
+  fill: #4f8045;
+  stroke: #4f8045;
+}
+
+.lw-graph__edge line {
+  stroke: var(--ink-4);
+  stroke-width: 1.6;
+}
+
+.lw-graph__edgehit {
+  stroke: transparent !important;
+  stroke-width: 14 !important;
+  cursor: pointer;
+}
+
+.lw-graph__arrowhead {
+  fill: var(--ink-4);
+}
+
+.lw-graph__edgelabel {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  fill: var(--ink-3);
+  paint-order: stroke;
+  stroke: var(--bg-sunken);
+  stroke-width: 3;
+}
+
+@media (max-width: 720px) {
+  .lw-tangle {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .lw-tangle__side {
+    border-right: none;
+    border-bottom: 1px solid var(--line-1);
+    max-height: 45vh;
+  }
+}
+
+/* ---- Full-width alternate views (timeline / graph) ---- */
+
+.lw-altview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.lw-altview__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  padding: var(--sp-6) var(--sp-8);
+  border-bottom: 1px solid var(--line-1);
+  background: var(--bg-paper-2);
+  flex-wrap: wrap;
+}
+
+.lw-altview__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+}
+
+.lw-altview__body .lw-timeline {
+  max-width: 720px;
+  margin: var(--sp-8) auto;
+  padding-right: var(--sp-8);
+}

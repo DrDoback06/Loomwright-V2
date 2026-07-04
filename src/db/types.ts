@@ -147,6 +147,43 @@ export interface AtlasMap {
   updatedAt: number;
 }
 
+export interface GraphNode {
+  id: string;
+  /** Bound entity (tangle entity cards / skill nodes) or free label. */
+  entity?: EntityRef;
+  label: string;
+  x: number;
+  y: number;
+  /** skill trees: unlock state */
+  unlocked?: boolean;
+}
+
+export interface GraphEdge {
+  id: string;
+  from: string;
+  to: string;
+  label?: string;
+  directed?: boolean;
+}
+
+export interface TangleBoard {
+  id: string;
+  projectId: string;
+  name: string;
+  cards: GraphNode[];
+  edges: GraphEdge[];
+  updatedAt: number;
+}
+
+export interface SkillTree {
+  id: string;
+  projectId: string;
+  name: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  updatedAt: number;
+}
+
 export interface SettingsRow {
   /** `${projectId}:${section}` or `global:${section}` */
   key: string;
