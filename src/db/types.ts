@@ -184,6 +184,17 @@ export interface SkillTree {
   updatedAt: number;
 }
 
+/** Encrypted API-key rows + the non-extractable root CryptoKey
+ * ('__root__'). Key material NEVER appears in exports, search, or audit. */
+export interface KeyRow {
+  provider: string;
+  /** AES-GCM ciphertext of the API key (absent on the root row). */
+  iv?: number[];
+  data?: number[];
+  /** Root row only: the non-extractable AES key (structured-cloned). */
+  cryptoKey?: CryptoKey;
+}
+
 export interface SettingsRow {
   /** `${projectId}:${section}` or `global:${section}` */
   key: string;

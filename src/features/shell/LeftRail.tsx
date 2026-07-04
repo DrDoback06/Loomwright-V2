@@ -21,6 +21,8 @@ export const NAV_ENTRIES: NavEntry[] = [
   { route: 'tangle', label: 'Tangle', glyph: '✕', group: 'workspace' },
   { route: 'skill-trees', label: 'Skill Trees', glyph: '❋', group: 'workspace' },
   { route: 'review', label: 'Review', glyph: '☑', group: 'utilities' },
+  { route: 'handoff', label: 'AI Handoff', glyph: '⇄', group: 'utilities' },
+  { route: 'settings', label: 'Settings', glyph: '⚙', group: 'utilities' },
   { route: 'trash', label: 'Trash', glyph: '♺', group: 'utilities' },
 ];
 

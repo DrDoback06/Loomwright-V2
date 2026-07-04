@@ -132,3 +132,18 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Skill Trees: Unlocked toggle | Per-node unlock state (green ring), persists | `08-canvases.spec.ts` |
 | Relationships: Graph view | d3-force network of bonds; node click focuses; lock highlighted | `08-canvases.spec.ts` |
 | Node drag (all canvases) | Pointer-drag with persistence (tangle/skill trees) | shared NodeGraphCanvas + atlas drag spec |
+
+## AI layer (M7)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Settings: provider key Save / Clear | AES-GCM-encrypts in this browser only; never exported | `09-ai.spec.ts` + `ai-layer` unit |
+| Settings: default provider radio | Selects the active provider, persists | `09-ai.spec.ts` |
+| Settings: Test connection | Mock-verified reachability check (no manuscript text sent) | `09-ai.spec.ts` |
+| Settings: Local-only mode | Hides/blocks every AI entry point; offline paths remain | `09-ai.spec.ts` |
+| Settings: privacy guard toggle | Ask vs always-allow before sending text | `09-ai.spec.ts` (guard shown) |
+| Compose: Generate with AI → guard → draft → Insert draft | In-app drafting; drafts insert as prose paragraphs | `09-ai.spec.ts` |
+| Writer's Room: Deep Extract (AI) → guard | Chunked AI pass feeding the same review queue (deduped) | `09-ai.spec.ts` |
+| AI Handoff: Build pack / Copy pack | Self-contained external-AI prompt with known-entity context | `09-ai.spec.ts` |
+| AI Handoff: Import to review queue | Tolerant JSON parse → pending candidates, dedupe | `09-ai.spec.ts` + unit |
+| Settings: extraction detector sliders | Live per-detector confidence overrides (session-wired) | settings surface; engine override unit path |

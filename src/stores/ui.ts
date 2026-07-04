@@ -13,6 +13,8 @@ export type RouteId =
   | 'tangle'
   | 'skill-trees'
   | 'review'
+  | 'handoff'
+  | 'settings'
   | 'trash';
 
 interface UiState {

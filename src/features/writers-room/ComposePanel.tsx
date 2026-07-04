@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import { ENTITY_TYPE_META, type EntityRef } from '@/domain/entity-types';
+import { complete } from '@/services/ai/providers';
+import { getAiSettings, resolveProvider, saveAiSettings } from '@/services/ai/settings';
 import { useFocusStore } from '@/stores/focus';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
@@ -11,7 +13,10 @@ const POVS = ['third limited', 'third omniscient', 'first person', 'second perso
 const LENGTHS = ['a few paragraphs', 'half a chapter', 'a full chapter'] as const;
 
 interface ComposePanelProps {
+  /** Insert the planning brief (renders as a blockquote note). */
   onInsert: (briefText: string) => void;
+  /** Insert generated prose as real manuscript paragraphs. */
+  onInsertProse: (prose: string) => void;
   onClose: () => void;
 }
 
@@ -19,7 +24,7 @@ interface ComposePanelProps {
  * (focus per type + lock) into a structured writing brief. Offline it
  * inserts the brief into the chapter or copies it for an external AI;
  * M7 adds in-app generation on top of the same brief. */
-export function ComposePanel({ onInsert, onClose }: ComposePanelProps) {
+export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelProps) {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const focusedByType = useFocusStore((s) => s.focusedByType);
   const lock = useFocusStore((s) => s.lock);
@@ -29,6 +34,15 @@ export function ComposePanel({ onInsert, onClose }: ComposePanelProps) {
   const [length, setLength] = useState<(typeof LENGTHS)[number]>('a few paragraphs');
   const [instruction, setInstruction] = useState('');
   const [dropped, setDropped] = useState<EntityRef[]>([]);
+  const [aiReady, setAiReady] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!projectId) return;
+    void resolveProvider(projectId).then((c) => setAiReady(!!c));
+  }, [projectId]);
 
   const contextRefs: EntityRef[] = (() => {
     const map = new Map<string, EntityRef>();
@@ -64,6 +78,29 @@ export function ComposePanel({ onInsert, onClose }: ComposePanelProps) {
     if (instruction.trim()) lines.push(`Direction: ${instruction.trim()}`);
     lines.push('Stay consistent with the codex; do not contradict established canon.');
     return lines.join('\n');
+  };
+
+  const runGenerate = async () => {
+    if (!projectId) return;
+    const config = await resolveProvider(projectId);
+    if (!config) {
+      toast('Configure an AI provider in Settings first.', { kind: 'error' });
+      return;
+    }
+    setGenerating(true);
+    try {
+      const text = await complete(config, {
+        system:
+          'You are a fiction co-writer. Write polished prose following the brief exactly. Return only the prose — no preamble, no notes.',
+        prompt: buildBrief(),
+        maxTokens: 1800,
+      });
+      setDraft(text.trim());
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Generation failed.', { kind: 'error' });
+    } finally {
+      setGenerating(false);
+    }
   };
 
   if (!projectId) return null;
@@ -159,6 +196,86 @@ export function ComposePanel({ onInsert, onClose }: ComposePanelProps) {
       />
 
       <div className="lw-compose__actions">
+        {aiReady && !draft && !confirming && (
+          <button
+            type="button"
+            className="lw-btn lw-btn--primary"
+            disabled={generating}
+            onClick={async () => {
+              if (!projectId) return;
+              const settings = await getAiSettings(projectId);
+              if (settings.privacy === 'ask') {
+                setConfirming(true);
+                return;
+              }
+              await runGenerate();
+            }}
+          >
+            {generating ? 'Generating…' : 'Generate with AI'}
+          </button>
+        )}
+        {confirming && (
+          <div className="lw-mergebox lw-card" data-testid="privacy-guard">
+            <p className="lw-mergebox__note">
+              This sends the brief (entity names, summaries, your direction) to your
+              configured provider. Continue?
+            </p>
+            <div className="lw-chips__add">
+              <button
+                type="button"
+                className="lw-btn lw-btn--primary"
+                onClick={async () => {
+                  setConfirming(false);
+                  await runGenerate();
+                }}
+              >
+                Send once
+              </button>
+              <button
+                type="button"
+                className="lw-btn"
+                onClick={async () => {
+                  if (projectId) await saveAiSettings(projectId, { privacy: 'always-allow' });
+                  setConfirming(false);
+                  await runGenerate();
+                }}
+              >
+                Always allow
+              </button>
+              <button type="button" className="lw-btn" onClick={() => setConfirming(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        {draft && (
+          <div className="lw-compose__draft" data-testid="ai-draft">
+            <p className="lw-fieldnote">AI draft — review before inserting:</p>
+            <textarea
+              className="lw-input lw-input--area"
+              rows={8}
+              aria-label="AI draft"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+            <div className="lw-chips__add">
+              <button
+                type="button"
+                className="lw-btn lw-btn--primary"
+                onClick={() => {
+                  onInsertProse(draft);
+                  setDraft('');
+                  toast('Draft inserted — it reads as your manuscript now.', { kind: 'success' });
+                }}
+              >
+                Insert draft
+              </button>
+              <button type="button" className="lw-btn" onClick={() => setDraft('')}>
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
         <button
           type="button"
           className="lw-btn lw-btn--primary"

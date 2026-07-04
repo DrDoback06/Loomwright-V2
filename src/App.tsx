@@ -15,6 +15,8 @@ import { WritersRoom } from '@/features/writers-room/WritersRoom';
 import { AtlasSurface } from '@/features/atlas/AtlasSurface';
 import { TangleSurface } from '@/features/tangle/TangleSurface';
 import { SkillTreesSurface } from '@/features/skill-trees/SkillTreesSurface';
+import { SettingsSurface } from '@/features/settings/SettingsSurface';
+import { HandoffSurface } from '@/features/handoff/HandoffSurface';
 
 function MainSurface() {
   const route = useUiStore((s) => s.route);
@@ -34,6 +36,10 @@ function MainSurface() {
       return <SkillTreesSurface />;
     case 'review':
       return <ReviewSurface />;
+    case 'handoff':
+      return <HandoffSurface />;
+    case 'settings':
+      return <SettingsSurface />;
     case 'trash':
       return <TrashSurface />;
   }

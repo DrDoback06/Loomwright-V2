@@ -15,6 +15,8 @@ import {
 } from '@/db/repos/chapters';
 import { db } from '@/db/schema';
 import { extractChapter } from '@/services/extraction/session';
+import { runDeepExtraction } from '@/services/ai/deep-extraction';
+import { getAiSettings, resolveProvider } from '@/services/ai/settings';
 import { useProjectStore } from '@/stores/project';
 import { useFocusStore } from '@/stores/focus';
 import { useUiStore } from '@/stores/ui';
@@ -48,6 +50,11 @@ export function WritersRoom() {
   );
   const [extracting, setExtracting] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [aiReady, setAiReady] = useState(false);
+  const [deepConfirming, setDeepConfirming] = useState(false);
+  useEffect(() => {
+    if (projectId) void resolveProvider(projectId).then((c) => setAiReady(!!c));
+  }, [projectId]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedChapterRef = useRef<string | null>(null);
 
@@ -207,6 +214,40 @@ export function WritersRoom() {
     }
   }, [editor, activeChapterId, flushSave, setRoute]);
 
+  const runDeep = useCallback(async () => {
+    if (!editor || !activeChapterId || !projectId) return;
+    setDeepConfirming(false);
+    setExtracting(true);
+    try {
+      await flushSave(editor, activeChapterId);
+      const chapter = await getChapter(activeChapterId);
+      const config = await resolveProvider(projectId);
+      if (!chapter || !config) return;
+      const rows = await db.entities.where('projectId').equals(projectId).toArray();
+      const known = rows.map((e) => ({ id: e.id, type: e.type, name: e.name, aliases: e.aliases }));
+      const { added } = await runDeepExtraction(chapter, config, known);
+      toast(
+        added > 0
+          ? `AI deep pass found ${added} new candidate${added === 1 ? '' : 's'}.`
+          : 'AI deep pass found nothing beyond the local scan.',
+        added > 0
+          ? { kind: 'success', action: { label: 'Review', run: () => setRoute('review') } }
+          : {}
+      );
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Deep extraction failed.', { kind: 'error' });
+    } finally {
+      setExtracting(false);
+    }
+  }, [editor, activeChapterId, projectId, flushSave, setRoute]);
+
+  const deepClick = useCallback(async () => {
+    if (!projectId) return;
+    const settings = await getAiSettings(projectId);
+    if (settings.privacy === 'ask') setDeepConfirming(true);
+    else await runDeep();
+  }, [projectId, runDeep]);
+
   // Clicking a highlighted mention opens its entity.
   const onCanvasClick = useCallback(
     (e: React.MouseEvent) => {
@@ -305,6 +346,26 @@ export function WritersRoom() {
                 >
                   {extracting ? 'Extracting…' : 'Save & Extract'}
                 </button>
+                {aiReady && !deepConfirming && (
+                  <button
+                    type="button"
+                    className="lw-btn"
+                    disabled={extracting}
+                    onClick={() => void deepClick()}
+                  >
+                    Deep Extract (AI)
+                  </button>
+                )}
+                {deepConfirming && (
+                  <span className="lw-confirm" data-testid="deep-privacy-guard">
+                    <button type="button" className="lw-btn lw-btn--primary" onClick={() => void runDeep()}>
+                      Send chapter to provider
+                    </button>
+                    <button type="button" className="lw-btn" onClick={() => setDeepConfirming(false)}>
+                      Cancel
+                    </button>
+                  </span>
+                )}
                 <button
                   type="button"
                   className="lw-btn"
@@ -353,6 +414,22 @@ export function WritersRoom() {
           {composeOpen && (
             <ComposePanel
               onClose={() => setComposeOpen(false)}
+              onInsertProse={(prose) => {
+                editor
+                  .chain()
+                  .focus('end')
+                  .insertContent(
+                    prose
+                      .split(/\n{2,}/)
+                      .filter((p) => p.trim())
+                      .map((p) => ({
+                        type: 'paragraph',
+                        content: [{ type: 'text', text: p.replace(/\s*\n\s*/g, ' ').trim() }],
+                      }))
+                  )
+                  .run();
+                setComposeOpen(false);
+              }}
               onInsert={(brief) => {
                 editor
                   .chain()
