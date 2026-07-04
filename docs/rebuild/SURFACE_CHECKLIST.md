@@ -59,3 +59,18 @@ controls that are absent from this list. (Replaces the legacy callback audit.)
 | Manuscript body | Typing autosaves (600ms), word count live | `03-writers-room.spec.ts` |
 | Notes toggle | Opens/closes paragraph-note rail | `03-writers-room.spec.ts` |
 | Add note / Resolve / Reopen / Delete / Show resolved | Paragraph-keyed notes CRUD, persists | `03-writers-room.spec.ts` |
+
+## Extraction + Review (M3)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Save & Extract (Writer's Room) | Flush-saves, runs offline extraction, toasts results | `04-extraction-review.spec.ts` |
+| Mention highlight (manuscript) | Click opens the entity's dossier | `04-extraction-review.spec.ts` |
+| Review nav badge | Live pending count | `04-extraction-review.spec.ts` |
+| Queue card: Accept | Creates/updates/merges the entity, backfills mentions | `04-extraction-review.spec.ts` |
+| Queue card: Deny | Dismisses candidate + its pending mentions, persists | `04-extraction-review.spec.ts` |
+| Accept all strong | Bulk-accepts blue+green candidates | (unit `review` path; e2e in M4 sweep) |
+| Toast: Review action | Routes to the review queue | `04-extraction-review.spec.ts` |
+
+Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
+`tests/unit/extraction-fixtures.spec.ts`.

@@ -1,3 +1,6 @@
+import { useLiveQuery } from 'dexie-react-hooks';
+import { countPendingCandidates } from '@/db/repos/review';
+import { useProjectStore } from '@/stores/project';
 import { useUiStore, type RouteId } from '@/stores/ui';
 
 interface NavEntry {
@@ -13,6 +16,7 @@ export const NAV_ENTRIES: NavEntry[] = [
   { route: 'home', label: 'Home', glyph: '⌂', group: 'workspace' },
   { route: 'writers-room', label: "Writer's Room", glyph: '✎', group: 'workspace' },
   { route: 'cast', label: 'Cast', glyph: '◐', group: 'panels' },
+  { route: 'review', label: 'Review', glyph: '☑', group: 'utilities' },
   { route: 'trash', label: 'Trash', glyph: '♺', group: 'utilities' },
 ];
 
@@ -25,6 +29,12 @@ const GROUP_LABELS: Record<NavEntry['group'], string> = {
 export function LeftRail() {
   const route = useUiStore((s) => s.route);
   const setRoute = useUiStore((s) => s.setRoute);
+  const projectId = useProjectStore((s) => s.currentProjectId);
+  const reviewCount = useLiveQuery(
+    async () => (projectId ? countPendingCandidates(projectId) : 0),
+    [projectId],
+    0
+  );
   const groups: NavEntry['group'][] = ['workspace', 'panels', 'utilities'];
 
   return (
@@ -45,6 +55,11 @@ export function LeftRail() {
               >
                 <span aria-hidden>{entry.glyph}</span>
                 {entry.label}
+                {entry.route === 'review' && reviewCount > 0 ? (
+                  <span className="lw-navbadge" aria-label={`${reviewCount} pending`}>
+                    {reviewCount}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>

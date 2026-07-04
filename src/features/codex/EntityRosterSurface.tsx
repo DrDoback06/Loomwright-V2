@@ -7,9 +7,11 @@ import { deleteEntityToTrash, listEntities } from '@/db/repos/entities';
 import { restoreFromTrash } from '@/db/repos/trash';
 import type { Entity } from '@/db/types';
 import { useEditorStore } from '@/stores/editor';
+import { useFocusStore } from '@/stores/focus';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
 import { EntityDetail } from './EntityDetail';
+import { useEffect } from 'react';
 
 /** Full-page roster + detail surface for one entity type. */
 export function EntityRosterSurface({ type }: { type: EntityType }) {
@@ -19,8 +21,22 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
   const openCreate = useEditorStore((s) => s.openCreate);
   const openEdit = useEditorStore((s) => s.openEdit);
 
+  const focus = useFocusStore((s) => s.focus);
+  const adoptionPending = useFocusStore((s) => s.adoptionPending);
+  const setFocus = useFocusStore((s) => s.setFocus);
+  const consumeFocus = useFocusStore((s) => s.consumeFocus);
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Adopt cross-panel focus once: a mention click or review "Open" that
+  // focused an entity of this type selects it here; consuming stops a
+  // stale focus from hijacking the roster on later visits.
+  useEffect(() => {
+    if (adoptionPending && focus && focus.type === type) {
+      setSelectedId(focus.id);
+      consumeFocus();
+    }
+  }, [adoptionPending, focus, type, consumeFocus]);
 
   const entities = useLiveQuery(
     async () => (projectId ? listEntities(projectId, type) : []),
@@ -107,7 +123,10 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
                   type="button"
                   className="lw-rostercard"
                   aria-current={entity.id === selectedId ? 'true' : undefined}
-                  onClick={() => setSelectedId(entity.id)}
+                  onClick={() => {
+                    setSelectedId(entity.id);
+                    setFocus({ id: entity.id, type: entity.type, name: entity.name });
+                  }}
                 >
                   <span
                     className="lw-rostercard__avatar"

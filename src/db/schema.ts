@@ -48,6 +48,11 @@ export class LoomwrightDB extends Dexie {
       settings: 'key',
       uiState: 'key',
     });
+    this.version(2).stores({
+      candidates:
+        'id, projectId, [projectId+status], [projectId+createdAt], [projectId+chapterId]',
+      occurrences: 'id, projectId, [projectId+entityId], [projectId+chapterId], candidateId',
+    });
   }
 }
 

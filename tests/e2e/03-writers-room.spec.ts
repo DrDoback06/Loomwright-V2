@@ -27,14 +27,26 @@ test.describe("writer's room", () => {
     await body.click();
     await page.keyboard.type('The light over Pale Reach was the colour of old coin.');
 
-    // Select "Pale Reach" by double-clicking a word then extending — simpler:
-    // select all and bold, then assert strong tag exists.
+    const seqBefore = Number(
+      (await page.getByTestId('save-state').getAttribute('data-save-seq')) ?? '0'
+    );
+
+    // Select all and bold, then assert the strong mark exists.
     await page.keyboard.press('ControlOrMeta+a');
     await page.getByRole('toolbar', { name: 'Formatting' }).getByRole('button', { name: 'Bold' }).click();
     await expect(body.locator('strong')).toContainText('Pale Reach');
 
-    // Autosave then reload.
-    await expect(page.getByText(/Saved/)).toBeVisible();
+    // Wait for the POST-BOLD autosave to land: at least one save has
+    // completed since before the bold AND nothing is pending. The state
+    // machine only reports 'saved' when no debounce timer is armed.
+    await expect
+      .poll(async () => {
+        const el = page.getByTestId('save-state');
+        const seq = Number((await el.getAttribute('data-save-seq')) ?? '0');
+        const state = await el.getAttribute('data-save-state');
+        return state === 'saved' && seq > seqBefore;
+      })
+      .toBe(true);
     await page.reload();
     await openWritersRoom(page);
     const bodyAfter = page.getByLabel('Manuscript body');

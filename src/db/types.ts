@@ -64,46 +64,43 @@ export interface ParagraphNote {
 export interface Occurrence {
   id: string;
   projectId: string;
-  entityId: string;
+  /** null while the mention belongs to a pending discovery candidate;
+   * accept backfills it. */
+  entityId: string | null;
+  entityType: EntityType;
   chapterId: string;
-  paragraphId: string;
+  paragraphId: string | null;
   start: number;
   end: number;
   exactText: string;
-  detector: string;
+  isPronounResolution?: boolean;
+  candidateId?: string;
   createdAt: number;
 }
 
-export type CandidateKind =
-  | 'new-entity'
-  | 'alias'
-  | 'field-change'
-  | 'relationship'
-  | 'stat-change'
-  | 'quest-progress'
-  | 'event';
-
 export type CandidateStatus = 'pending' | 'accepted' | 'denied' | 'merged';
 
-export interface CandidateEvidence {
-  chapterId: string;
-  paragraphId: string;
-  excerpt: string;
-  start: number;
-  end: number;
-}
-
+/** A review-queue row — the persisted form of an ExtractionCandidate. */
 export interface ReviewCandidate {
   id: string;
   projectId: string;
-  kind: CandidateKind;
+  chapterId?: string;
   entityType: EntityType;
-  proposed: { name: string } & Record<string, unknown>;
-  evidence: CandidateEvidence[];
+  name: string;
+  suggestedAction: 'create' | 'update' | 'merge';
+  matchType: 'exact' | 'new' | 'ambiguous' | 'nickname' | 'fuzzy';
+  existingEntityId?: string | null;
+  suggestedChanges?: Record<string, unknown> | null;
   /** 0..1 */
   confidence: number;
+  confidenceBand: 'blue' | 'green' | 'orange' | 'red';
+  sourceQuote: string;
+  sourceQuotes?: string[];
+  relatedEntityIds?: string[];
+  summary?: string;
+  detector?: string;
   status: CandidateStatus;
-  mergedIntoId?: string;
+  acceptedEntityId?: string;
   source: 'local' | 'ai' | 'handoff';
   createdAt: number;
 }
