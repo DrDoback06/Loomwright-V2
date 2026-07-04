@@ -129,6 +129,24 @@ export interface TrashRow {
   deletedAt: number;
 }
 
+export interface AtlasPin {
+  id: string;
+  entity: EntityRef;
+  /** Map-space coordinates (0..1000 square). */
+  x: number;
+  y: number;
+}
+
+export interface AtlasMap {
+  id: string;
+  projectId: string;
+  name: string;
+  pins: AtlasPin[];
+  /** Layer visibility flags. */
+  layers: { labels: boolean; travel: boolean; grid: boolean };
+  updatedAt: number;
+}
+
 export interface SettingsRow {
   /** `${projectId}:${section}` or `global:${section}` */
   key: string;

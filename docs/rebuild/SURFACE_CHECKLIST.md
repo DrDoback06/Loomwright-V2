@@ -102,3 +102,17 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Compose: mode/POV/length/direction + context chips | Builds a structured writing brief from focused/locked entities | `06-workspaces.spec.ts` |
 | Compose: Insert brief | Inserts as manuscript blockquote (persists) | `06-workspaces.spec.ts` |
 | Compose: Copy for external AI | Copies the brief to the clipboard | manual (clipboard) |
+
+## Atlas (M6a)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Nav: Atlas | Opens the world map | `07-atlas.spec.ts` |
+| Unplaced location button | Arms click-to-place mode | `07-atlas.spec.ts` |
+| Canvas click (placing) | Drops the pin, persists | `07-atlas.spec.ts` |
+| Pin drag (pointer) | Moves the pin, position persists after reload | `07-atlas.spec.ts` |
+| Pin click / tap | Focuses the location (cross-panel) | `07-atlas.spec.ts` (mobile tap) |
+| Layer toggles (labels / travel / grid) | Show/hide layers, persist | `07-atlas.spec.ts` |
+| Travel routes | Derived polylines from cast travelHistory → currentLocation | `07-atlas.spec.ts` |
+| Pinned list: row / unpin × | Focus / remove pin | covered by place+focus flows |
+| Canvas pan (drag) + wheel zoom + pinch | Shared useCanvas primitives (all M6 canvases) | `07-atlas.spec.ts` (touch pan path) |

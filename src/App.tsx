@@ -12,6 +12,7 @@ import { EntityEditorDrawer } from '@/features/codex/EntityEditorDrawer';
 import { TrashSurface } from '@/features/system/TrashSurface';
 import { ReviewSurface } from '@/features/review/ReviewSurface';
 import { WritersRoom } from '@/features/writers-room/WritersRoom';
+import { AtlasSurface } from '@/features/atlas/AtlasSurface';
 
 function MainSurface() {
   const route = useUiStore((s) => s.route);
@@ -23,6 +24,8 @@ function MainSurface() {
       return <WritersRoom />;
     case 'codex':
       return <EntityRosterSurface type={codexType} />;
+    case 'atlas':
+      return <AtlasSurface />;
     case 'review':
       return <ReviewSurface />;
     case 'trash':

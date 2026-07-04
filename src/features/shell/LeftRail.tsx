@@ -17,6 +17,7 @@ interface NavEntry {
 export const NAV_ENTRIES: NavEntry[] = [
   { route: 'home', label: 'Home', glyph: '⌂', group: 'workspace' },
   { route: 'writers-room', label: "Writer's Room", glyph: '✎', group: 'workspace' },
+  { route: 'atlas', label: 'Atlas', glyph: '◇', group: 'workspace' },
   { route: 'review', label: 'Review', glyph: '☑', group: 'utilities' },
   { route: 'trash', label: 'Trash', glyph: '♺', group: 'utilities' },
 ];
