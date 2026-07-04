@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { bootWithProject } from './helpers';
 
 // E2E ground rules (enforced for every spec in this suite):
 //  - interact ONLY via real rendered controls (getByRole / getByLabel / getByTestId)
@@ -6,7 +7,7 @@ import { test, expect } from '@playwright/test';
 //  - no synthetic event dispatch, no page.evaluate-driven actions
 
 test.describe('boot', () => {
-  test('app boots with the parchment shell and no console errors', async ({ page }) => {
+  test('fresh origin boots to the welcome gate with no console errors', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(String(err)));
     page.on('console', (msg) => {
@@ -14,12 +15,12 @@ test.describe('boot', () => {
     });
 
     await page.goto('./');
-    await expect(page.getByRole('heading', { name: 'Loomwright' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome to Loomwright' })).toBeVisible();
     expect(errors).toEqual([]);
   });
 
   test('theme toggle switches theme and persists across reload', async ({ page }) => {
-    await page.goto('./');
+    await bootWithProject(page);
     const html = page.locator('html');
     await expect(html).toHaveAttribute('data-theme', 'parchment-light');
 
@@ -29,13 +30,12 @@ test.describe('boot', () => {
     await page.reload();
     await expect(html).toHaveAttribute('data-theme', 'midnight-ink');
 
-    // restore for other tests sharing the storage state
     await page.getByRole('button', { name: 'Switch to light theme' }).click();
     await expect(html).toHaveAttribute('data-theme', 'parchment-light');
   });
 
-  test('navigation renders Home as the current surface', async ({ page }) => {
-    await page.goto('./');
+  test('navigation renders Home as the current surface after setup', async ({ page }) => {
+    await bootWithProject(page);
     const nav = page.getByRole('navigation', { name: 'Workspace' });
     await expect(nav.getByRole('button', { name: 'Home' })).toHaveAttribute(
       'aria-current',

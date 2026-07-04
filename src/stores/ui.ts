@@ -4,7 +4,7 @@ export type Theme = 'parchment-light' | 'midnight-ink';
 
 /** Routes that exist in the rebuilt app. Grows milestone by milestone —
  * a nav entry is only rendered once its surface genuinely works. */
-export type RouteId = 'home';
+export type RouteId = 'home' | 'cast' | 'trash';
 
 interface UiState {
   theme: Theme;

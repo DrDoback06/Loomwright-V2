@@ -1,4 +1,5 @@
 import { useUiStore } from '@/stores/ui';
+import { ProjectSwitcher } from './ProjectSwitcher';
 import icon from '/icons/loomwright.svg';
 
 export function TopBar() {
@@ -13,6 +14,7 @@ export function TopBar() {
         <span className="lw-brand__name">Loomwright</span>
         <span className="lw-brand__tag">Shape the book. Track the world.</span>
       </div>
+      <ProjectSwitcher />
       <div className="lw-topbar__spacer" />
       <button
         type="button"
