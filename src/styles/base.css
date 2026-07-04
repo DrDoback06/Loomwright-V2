@@ -1,0 +1,242 @@
+/* =====================================================================
+   base.css — reset + application chrome primitives.
+   Design tokens come from tokens.css (ported from the legacy design
+   system); this file only provides the reset and shell layout scaffold.
+   ===================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  color: var(--ink-1);
+  background: var(--bg-app);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  height: 100%;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent, #9a7b3a);
+}
+
+/* ---- App shell grid ---- */
+
+.lw-shell {
+  display: grid;
+  grid-template-rows: var(--topbar-h) 1fr;
+  grid-template-columns: var(--leftrail-w, 232px) 1fr;
+  grid-template-areas:
+    'topbar topbar'
+    'rail   main';
+  height: 100%;
+  overflow: hidden;
+}
+
+.lw-shell--mobile {
+  grid-template-rows: var(--topbar-h) 1fr var(--bottomnav-h, 56px);
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    'topbar'
+    'main'
+    'bottomnav';
+}
+
+.lw-topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: 0 var(--sp-8);
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--line-1);
+}
+
+.lw-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+
+.lw-brand__seal {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-3);
+  flex: none;
+}
+
+.lw-brand__name {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.lw-brand__tag {
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.lw-topbar__spacer {
+  flex: 1;
+}
+
+.lw-leftrail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-6);
+  background: var(--bg-deep);
+  border-right: 1px solid var(--line-1);
+  overflow-y: auto;
+}
+
+.lw-leftrail__group {
+  margin: var(--sp-6) 0 var(--sp-2);
+  padding: 0 var(--sp-4);
+  font-size: var(--fs-3xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.lw-main {
+  grid-area: main;
+  overflow: auto;
+  background: var(--bg-paper);
+}
+
+.lw-bottomnav {
+  grid-area: bottomnav;
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-deep);
+  border-top: 1px solid var(--line-1);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.lw-bottomnav__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: var(--fs-3xs);
+  color: var(--ink-3);
+}
+
+.lw-bottomnav__item[aria-current='page'] {
+  color: var(--ink-1);
+  font-weight: 600;
+}
+
+/* ---- Nav item (left rail) ---- */
+
+.lw-navitem {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  height: var(--density-row);
+  padding: 0 var(--sp-5);
+  border-radius: var(--r-4);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  text-align: left;
+  width: 100%;
+}
+
+.lw-navitem:hover {
+  background: var(--bg-tint);
+  color: var(--ink-1);
+}
+
+.lw-navitem[aria-current='page'] {
+  background: var(--bg-paper-2);
+  color: var(--ink-1);
+  font-weight: 600;
+  box-shadow: var(--shadow-1, 0 1px 2px rgba(42, 34, 24, 0.08));
+}
+
+/* ---- Icon button ---- */
+
+.lw-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--density-control);
+  height: var(--density-control);
+  border-radius: var(--r-4);
+  color: var(--ink-2);
+}
+
+.lw-iconbtn:hover {
+  background: var(--bg-tint);
+  color: var(--ink-1);
+}
+
+/* ---- Cards / panels ---- */
+
+.lw-card {
+  background: var(--bg-paper-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-6);
+  padding: var(--sp-9);
+  box-shadow: var(--shadow-1, 0 1px 2px rgba(42, 34, 24, 0.08));
+}
+
+.lw-page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--sp-11) var(--sp-9) var(--sp-14);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-9);
+}
+
+.lw-page__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-3xl);
+  font-weight: 600;
+  margin: 0;
+}
+
+.lw-page__subtitle {
+  color: var(--ink-3);
+  margin: 0;
+}

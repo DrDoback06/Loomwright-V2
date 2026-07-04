@@ -1,12 +1,21 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Loomwright v2</title>
-  <meta http-equiv="refresh" content="0; url=Loomwright%20Shell.html"/>
-</head>
-<body>
-  <p><a href="Loomwright%20Shell.html">Open Loomwright v2</a></p>
-</body>
+<html lang="en" data-theme="parchment-light" data-density="balanced" data-typeset="literary">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4ecd8" />
+    <title>Loomwright</title>
+    <link rel="icon" href="icons/loomwright.svg" type="image/svg+xml" />
+    <script>
+      // Pre-React paint: restore theme before first render to avoid flash.
+      try {
+        var t = localStorage.getItem('lw:theme');
+        if (t) document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

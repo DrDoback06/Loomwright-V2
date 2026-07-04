@@ -1,29 +1,54 @@
 {
   "name": "loomwright-v2",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Extracted Loomwright v2 static design build.",
+  "type": "module",
+  "description": "Loomwright — local-first writing and worldbuilding app (rebuild).",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "start": "npm run dev",
-    "validate": "node scripts/validate-static-site.js && node scripts/audit-callbacks.js",
-    "audit-callbacks": "node scripts/export-callback-names.js && node scripts/generate-callback-names-data.js && node scripts/audit-callbacks.js",
-    "build": "node scripts/build-production.js && node scripts/check-production-build.js",
-    "build:static-legacy": "node scripts/build-static.js",
-    "check:build": "node scripts/check-production-build.js",
-    "preview": "vite preview --host 0.0.0.0 --outDir dist",
-    "test:smoke": "node scripts/smoke-services.js",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "tsc -b",
+    "lint": "eslint src tests",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:preview": "playwright test --config playwright.preview.config.js",
-    "test:e2e:headed": "playwright test --headed"
+    "verify": "npm run typecheck && npm run lint && npm run test:unit && npm run build"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter-tight": "^5.2.7",
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
+    "@fontsource-variable/source-serif-4": "^5.2.9",
+    "@fontsource/cormorant-garamond": "^5.2.11",
+    "@fontsource/eb-garamond": "^5.2.7",
+    "@tiptap/pm": "^3.7.0",
+    "@tiptap/react": "^3.7.0",
+    "@tiptap/starter-kit": "^3.7.0",
+    "d3-force": "^3.0.0",
+    "dexie": "^4.2.0",
+    "dexie-react-hooks": "^4.2.0",
+    "minisearch": "^7.2.0",
+    "nanoid": "^5.1.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
-    "vite": "^8.0.13"
-  },
-  "dependencies": {
-    "@babel/standalone": "^7.29.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "@testing-library/react": "^16.3.0",
+    "@types/d3-force": "^3.0.10",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^9.30.0",
+    "eslint-plugin-react-hooks": "^6.1.0",
+    "fake-indexeddb": "^6.0.0",
+    "happy-dom": "^20.10.6",
+    "typescript": "~5.9.0",
+    "typescript-eslint": "^8.40.0",
+    "vite": "^8.0.13",
+    "vite-plugin-pwa": "^1.0.0",
+    "vitest": "^3.2.0"
   }
 }
