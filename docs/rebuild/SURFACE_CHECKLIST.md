@@ -274,3 +274,24 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | --- | --- | --- |
 | Service-worker boot with network gone | App loads, data reads/writes, extraction runs, all persists | `14-offline.spec.ts` |
 | Home ▸ Install app | Shows the deferred browser install prompt | (browser-gated; manual) |
+
+## Field widgets (M12 — TODO(M5) closeout)
+
+| Widget | Where | Spec |
+| --- | --- | --- |
+| row-list (rules/effects/branches/upgrades — 19 fields) | items, skills, classes, races, events, quests, stats | `15-sweep.spec.ts` (stats rules) + editor round-trip specs |
+| select (long option lists) | locations type, atlas map | (same write path as pills; sweep walks it) |
+| multiselect | stats "applies to" | (same write path as chips) |
+| dual-number (X / Y) | locations coordinates | (same write path as text) |
+| related-multi `any` (cross-type links) | references, lore | powers cross-panel relation chips |
+| phrase-tester (interactive) | stats "test a phrase" | `15-sweep.spec.ts` |
+| Stats phrase rules feed the statChange detector | extraction engine | `15-sweep.spec.ts` (rule → prose → Review) |
+| Equipment slot / parent location | pills / related picker are the pickers | (comment-documented design) |
+
+## Final sweep (M12)
+
+| Check | Spec |
+| --- | --- |
+| Every surface (13 + 16 codex types) renders on the sample project with zero console/page errors, desktop + mobile | `15-sweep.spec.ts` |
+| Palette, help, and editor overlays open/close cleanly | `15-sweep.spec.ts` |
+| Legacy FINAL_QA_REPORT scenario families → covering specs: UAT interaction (02–08), multi-provider AI routing (09), audit/undo (02), search/indexing (10), speed reader (11), project import/export (12), workspace persistence (06–08), field parity (02, 06, 15), extraction quality (04, 15, fixtures) | cross-reference |

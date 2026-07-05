@@ -1,18 +1,23 @@
 import { useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db/schema';
 import type { FieldDef, StatRow, StepRow } from '@/domain/entity-configs/types';
 import type { EntityRef } from '@/domain/entity-types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { listEntities } from '@/db/repos/entities';
+import { findRanges } from '@/services/extraction/text-utils';
 import { useProjectStore } from '@/stores/project';
 
 interface FieldInputProps {
   field: FieldDef;
   value: unknown;
   onChange: (value: unknown) => void;
+  /** The whole form — only kinds that test against sibling fields
+   * (phrase-tester) read it. */
+  form?: Record<string, unknown>;
 }
 
-export function FieldInput({ field, value, onChange }: FieldInputProps) {
+export function FieldInput({ field, value, onChange, form }: FieldInputProps) {
   switch (field.kind) {
     case 'text':
     case 'number':
@@ -62,8 +67,32 @@ export function FieldInput({ field, value, onChange }: FieldInputProps) {
       );
     case 'pills':
       return <PillsInput field={field} value={value as string | undefined} onChange={onChange} />;
+    case 'select':
+      return (
+        <select
+          id={`field-${field.id}`}
+          className="lw-input"
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value || undefined)}
+        >
+          <option value="">Choose…</option>
+          {(field.options ?? []).map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      );
+    case 'multiselect':
+      return <MultiSelectInput field={field} value={(value as string[]) ?? []} onChange={onChange} />;
+    case 'dual-number':
+      return <DualNumberInput field={field} value={value as { x?: string; y?: string } | undefined} onChange={onChange} />;
     case 'chips':
       return <ChipsInput field={field} value={(value as string[]) ?? []} onChange={onChange} />;
+    case 'row-list':
+      return <RowListInput field={field} value={normaliseRows(value)} onChange={onChange} />;
+    case 'phrase-tester':
+      return <PhraseTester field={field} value={(value as string) ?? ''} onChange={onChange} form={form} />;
     case 'stat-grid':
       return <StatGridInput value={(value as StatRow[]) ?? []} onChange={onChange} />;
     case 'step-list':
@@ -78,7 +107,12 @@ export function FieldInput({ field, value, onChange }: FieldInputProps) {
       );
     case 'related-multi':
       return (
-        <RelatedMultiPicker field={field} value={(value as EntityRef[]) ?? []} onChange={onChange} />
+        <RelatedMultiPicker
+          field={field}
+          // Tolerate legacy string[] data where refs now live.
+          value={((value as EntityRef[]) ?? []).filter((r) => r && typeof r === 'object')}
+          onChange={onChange}
+        />
       );
     case 'image':
       return <ImageInput field={field} value={(value as string) ?? ''} onChange={onChange} />;
@@ -314,9 +348,193 @@ function StepListInput({
 function useRelatedOptions(field: FieldDef) {
   const projectId = useProjectStore((s) => s.currentProjectId);
   return useLiveQuery(
-    async () => (projectId && field.related ? listEntities(projectId, field.related) : []),
+    async () => {
+      if (!projectId || !field.related) return [];
+      if (field.related === 'any') {
+        const all = await db.entities.where('projectId').equals(projectId).toArray();
+        return all
+          .filter((e) => e.status === 'active')
+          .sort((a, b) => a.name.localeCompare(b.name));
+      }
+      return listEntities(projectId, field.related);
+    },
     [projectId, field.related],
     []
+  );
+}
+
+/** Old data may hold a newline-separated string where a row-list now
+ * lives — read both, always write string[]. */
+function normaliseRows(value: unknown): string[] {
+  if (Array.isArray(value)) return value as string[];
+  if (typeof value === 'string' && value.trim()) return value.split('\n').filter(Boolean);
+  return [];
+}
+
+function RowListInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: FieldDef;
+  value: string[];
+  onChange: (v: unknown) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const text = draft.trim();
+    if (!text) return;
+    onChange([...value, text]);
+    setDraft('');
+  };
+  return (
+    <div className="lw-steplist">
+      <ol className="lw-steplist__rows">
+        {value.map((row, i) => (
+          <li key={i} className="lw-step">
+            <input
+              className="lw-input lw-step__text"
+              aria-label={`${field.label} row ${i + 1}`}
+              value={row}
+              onChange={(e) => onChange(value.map((r, j) => (j === i ? e.target.value : r)))}
+            />
+            <button
+              type="button"
+              className="lw-iconbtn"
+              aria-label={`Remove ${field.label} row ${i + 1}`}
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+            >
+              ×
+            </button>
+          </li>
+        ))}
+      </ol>
+      <div className="lw-chips__add">
+        <input
+          id={`field-${field.id}`}
+          className="lw-input"
+          placeholder="Add a row and press Enter"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <button type="button" className="lw-btn" onClick={add} aria-label={`Add ${field.label} row`}>
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MultiSelectInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: FieldDef;
+  value: string[];
+  onChange: (v: unknown) => void;
+}) {
+  return (
+    <div className="lw-pills" role="group" aria-label={field.label}>
+      {(field.options ?? []).map((opt) => {
+        const active = value.includes(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            role="checkbox"
+            aria-checked={active}
+            className={active ? 'lw-pill lw-pill--active' : 'lw-pill'}
+            onClick={() => onChange(active ? value.filter((v) => v !== opt) : [...value, opt])}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DualNumberInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: FieldDef;
+  value: { x?: string; y?: string } | undefined;
+  onChange: (v: unknown) => void;
+}) {
+  const current = value ?? {};
+  const patch = (p: Partial<{ x: string; y: string }>) => onChange({ ...current, ...p });
+  return (
+    <div className="lw-dualnum">
+      <input
+        id={`field-${field.id}`}
+        className="lw-input"
+        inputMode="decimal"
+        placeholder="X"
+        aria-label={`${field.label} X`}
+        value={current.x ?? ''}
+        onChange={(e) => patch({ x: e.target.value })}
+      />
+      <span aria-hidden>/</span>
+      <input
+        className="lw-input"
+        inputMode="decimal"
+        placeholder="Y"
+        aria-label={`${field.label} Y`}
+        value={current.y ?? ''}
+        onChange={(e) => patch({ y: e.target.value })}
+      />
+    </div>
+  );
+}
+
+/** Try a sample sentence against this stat's name and phrase rules —
+ * the exact word-boundary matching the extraction detectors use. */
+function PhraseTester({
+  field,
+  value,
+  onChange,
+  form,
+}: {
+  field: FieldDef;
+  value: string;
+  onChange: (v: unknown) => void;
+  form?: Record<string, unknown>;
+}) {
+  const needles = [
+    ...(typeof form?.name === 'string' && form.name.trim() ? [form.name.trim()] : []),
+    ...normaliseRows(form?.extractionRules),
+  ];
+  const hits = value.trim()
+    ? needles.filter((n) => findRanges(value, n).length > 0)
+    : [];
+  return (
+    <div className="lw-phrasetester">
+      <input
+        id={`field-${field.id}`}
+        className="lw-input"
+        placeholder="e.g. Aelinor gains 2 Resolve"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {value.trim() ? (
+        <p className="lw-fieldnote" data-testid="phrase-test-result">
+          {needles.length === 0
+            ? 'Name the stat (and add phrase rules) first.'
+            : hits.length > 0
+              ? `✓ Matches: ${hits.join(', ')} — extraction will pick this up.`
+              : '✗ No rule matches this sample yet.'}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -330,7 +548,7 @@ function RelatedPicker({
   onPick: (ref: EntityRef | null) => void;
 }) {
   const options = useRelatedOptions(field);
-  const meta = field.related ? ENTITY_TYPE_META[field.related] : null;
+  const meta = field.related && field.related !== 'any' ? ENTITY_TYPE_META[field.related] : null;
 
   if (value) {
     return (
@@ -382,7 +600,7 @@ function RelatedMultiPicker({
   onChange: (v: unknown) => void;
 }) {
   const options = useRelatedOptions(field);
-  const meta = field.related ? ENTITY_TYPE_META[field.related] : null;
+  const meta = field.related && field.related !== 'any' ? ENTITY_TYPE_META[field.related] : null;
   const remaining = (options ?? []).filter((o) => !value.some((v) => v.id === o.id));
 
   return (
@@ -390,7 +608,7 @@ function RelatedMultiPicker({
       <div className="lw-chips__row">
         {value.map((ref) => (
           <span key={ref.id} className="lw-chip">
-            {meta?.glyph} {ref.name}
+            {(meta ?? ENTITY_TYPE_META[ref.type])?.glyph} {ref.name}
             <button
               type="button"
               className="lw-chip__x"

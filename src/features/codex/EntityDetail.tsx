@@ -255,6 +255,31 @@ function renderValue(field: FieldDef, value: unknown): React.ReactNode | null {
         </span>
       );
     }
+    case 'multiselect': {
+      const list = value as string[];
+      return list.length ? list.join(', ') : null;
+    }
+    case 'row-list': {
+      const rows = Array.isArray(value)
+        ? (value as string[])
+        : String(value).split('\n').filter(Boolean);
+      if (!rows.length) return null;
+      return (
+        <ol className="lw-steplist__rows lw-steplist__rows--static">
+          {rows.map((r, i) => (
+            <li key={i} className="lw-step">
+              <span className="lw-step__label">{r}</span>
+            </li>
+          ))}
+        </ol>
+      );
+    }
+    case 'dual-number': {
+      const pair = value as { x?: string; y?: string };
+      return pair.x || pair.y ? `${pair.x ?? '—'} / ${pair.y ?? '—'}` : null;
+    }
+    case 'phrase-tester':
+      return null; // editor-only tester, not dossier data
     case 'toggle':
       return value ? 'Yes' : null;
     case 'image':

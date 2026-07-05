@@ -46,5 +46,8 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: true,
+    // A PWA precaches every chunk up front, so the single-bundle warning
+    // doesn't reflect real load cost here; keep logs signal-only.
+    chunkSizeWarningLimit: 2048,
   },
 });

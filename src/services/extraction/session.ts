@@ -22,6 +22,10 @@ async function loadProjectEntities(projectId: string): Promise<KnownEntity[]> {
     aliases: e.aliases,
     pronouns: typeof e.fields.pronouns === 'string' ? e.fields.pronouns : undefined,
     gender: typeof e.fields.gender === 'string' ? e.fields.gender : undefined,
+    statPhrases:
+      e.type === 'stats' && Array.isArray(e.fields.extractionRules)
+        ? (e.fields.extractionRules as string[])
+        : undefined,
   }));
 }
 

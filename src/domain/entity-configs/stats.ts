@@ -35,20 +35,15 @@ export const statsConfig: EntityConfig = {
       id: 'scope',
       title: 'Applies to',
       fields: [
-        // TODO(M5): legacy kind 'multiselect' — restore multi-choice widget
-        // (options: Cast, Bestiary, Items, Classes, Races, Factions, Quests, Events, Custom).
-        { id: 'appliesTo', label: 'Applies to entity types', kind: 'chips', hint: 'One or more of: Cast, Bestiary, Items, Classes, Races, Factions, Quests, Events, Custom.' },
+        { id: 'appliesTo', label: 'Applies to entity types', kind: 'multiselect', options: ['Cast', 'Bestiary', 'Items', 'Classes', 'Races', 'Factions', 'Quests', 'Events', 'Custom'] },
       ],
     },
     {
       id: 'rules',
       title: 'Extraction phrase rules',
       fields: [
-        // TODO(M5): legacy kind 'extraction-rule-list' — restore the structured
-        // phrase-rule editor (match type, effect, confidence per rule).
-        { id: 'extractionRules', label: 'Phrase rules', kind: 'textarea', hint: 'Teach extraction how to translate prose into stat changes.' },
-        // TODO(M5): legacy kind 'test-phrase' — restore the interactive phrase tester.
-        { id: 'testPhrase', label: 'Test a phrase', kind: 'text' },
+        { id: 'extractionRules', label: 'Phrase rules', kind: 'row-list', hint: 'Phrases that signal this stat in prose — extraction scans for them (and the stat name).' },
+        { id: 'testPhrase', label: 'Test a phrase', kind: 'phrase-tester', hint: 'Paste a sample sentence to see whether the rules above catch it.', span: 2 },
       ],
     },
     {

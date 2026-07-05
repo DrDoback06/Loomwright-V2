@@ -50,7 +50,7 @@ export const itemsConfig: EntityConfig = {
         { id: 'currentOwner', label: 'Current owner', kind: 'related', related: 'cast' },
         { id: 'currentLocation', label: 'Current location', kind: 'related', related: 'locations' },
         { id: 'status', label: 'Status', kind: 'pills', options: ITEM_STATUSES },
-        // TODO(M5): legacy kind 'slot-picker' — restore equipment-slot picker widget.
+        // The pill row IS the slot picker (legacy slot-picker equivalent).
         { id: 'slot', label: 'Equipment slot', kind: 'pills', options: EQUIPMENT_SLOTS },
         { id: 'carried', label: 'Carried', kind: 'toggle' },
         { id: 'equipped', label: 'Equipped', kind: 'toggle' },
@@ -60,16 +60,11 @@ export const itemsConfig: EntityConfig = {
       id: 'effects',
       title: 'Properties, modifiers, effects',
       fields: [
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'modifiers', label: 'Stat modifiers', kind: 'chips', hint: 'Each row: target stat, +N/-N, note. e.g. Resolve +2' },
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'affixes', label: 'Affixes / Tags', kind: 'chips', hint: 'Affix name + note. e.g. Salt-bitten' },
-        // TODO(M5): legacy kind 'effects-list' — restore structured effect rows.
-        { id: 'passive', label: 'Passive effects', kind: 'chips', hint: 'Always-on effects when carried' },
-        // TODO(M5): legacy kind 'effects-list' — restore structured effect rows.
-        { id: 'active', label: 'Active effects', kind: 'chips', hint: 'Triggered manually by user' },
-        // TODO(M5): legacy kind 'effects-list' — restore structured effect rows.
-        { id: 'triggered', label: 'Triggered effects', kind: 'chips', hint: 'Triggered by a specific event' },
+        { id: 'modifiers', label: 'Stat modifiers', kind: 'row-list', hint: 'Each row: target stat, +N/-N, note. e.g. Resolve +2' },
+        { id: 'affixes', label: 'Affixes / Tags', kind: 'row-list', hint: 'Affix name + note. e.g. Salt-bitten' },
+        { id: 'passive', label: 'Passive effects', kind: 'row-list', hint: 'Always-on effects when carried' },
+        { id: 'active', label: 'Active effects', kind: 'row-list', hint: 'Triggered manually by user' },
+        { id: 'triggered', label: 'Triggered effects', kind: 'row-list', hint: 'Triggered by a specific event' },
         { id: 'restrictions', label: 'Use restrictions', kind: 'textarea', hint: 'Who can use it, when, where, why not.' },
       ],
     },

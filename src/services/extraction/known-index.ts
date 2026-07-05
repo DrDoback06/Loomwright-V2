@@ -11,6 +11,9 @@ export interface KnownEntity {
   /** cast only: pronouns / gender hints for pronoun resolution */
   pronouns?: string;
   gender?: string;
+  /** stats only: author-defined phrase rules the statChange detector
+   * scans for in addition to the stat name. */
+  statPhrases?: string[];
 }
 
 export interface KnownIndexEntry {

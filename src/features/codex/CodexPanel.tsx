@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { EntityType } from '@/domain/entity-types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
-import { listEntities } from '@/db/repos/entities';
+import { getEntity, listEntities } from '@/db/repos/entities';
 import type { Entity } from '@/db/types';
 import { entitiesRelate } from '@/services/relations';
 import { useFocusStore } from '@/stores/focus';
@@ -47,7 +47,6 @@ export function CodexPanel({ type }: { type: EntityType }) {
   const foreignEntity = useLiveQuery(
     async () => {
       if (!chipActive || !foreignFocus) return undefined;
-      const { getEntity } = await import('@/db/repos/entities');
       return getEntity(foreignFocus.id);
     },
     [chipActive, foreignFocus?.id],

@@ -52,16 +52,11 @@ export const eventsConfig: EntityConfig = {
       id: 'changes',
       title: 'State changes',
       fields: [
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'relationshipChanges', label: 'Relationship changes', kind: 'chips', hint: 'A ↔ B / type / delta' },
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'characterStateChanges', label: 'Character state changes', kind: 'chips' },
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'itemStateChanges', label: 'Item state changes', kind: 'chips' },
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'locationChanges', label: 'Location changes', kind: 'chips' },
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'statChanges', label: 'Stat changes', kind: 'chips' },
+        { id: 'relationshipChanges', label: 'Relationship changes', kind: 'row-list', hint: 'A ↔ B / type / delta' },
+        { id: 'characterStateChanges', label: 'Character state changes', kind: 'row-list' },
+        { id: 'itemStateChanges', label: 'Item state changes', kind: 'row-list' },
+        { id: 'locationChanges', label: 'Location changes', kind: 'row-list' },
+        { id: 'statChanges', label: 'Stat changes', kind: 'row-list' },
       ],
     },
     {

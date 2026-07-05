@@ -28,8 +28,7 @@ export const racesConfig: EntityConfig = {
       fields: [
         { id: 'traits', label: 'Traits', kind: 'chips', hint: 'Short keywords. e.g. Cold-acclimated, Saltsense' },
         { id: 'physical', label: 'Physical features', kind: 'textarea' },
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'weaknesses', label: 'Weaknesses / Limits', kind: 'chips' },
+        { id: 'weaknesses', label: 'Weaknesses / Limits', kind: 'row-list' },
       ],
     },
     {

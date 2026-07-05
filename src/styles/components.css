@@ -2453,3 +2453,25 @@ select.lw-input {
   position: relative;
   min-height: 52px;
 }
+
+/* ---- M12 field widgets ---- */
+
+.lw-dualnum {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.lw-dualnum .lw-input {
+  width: 100%;
+}
+
+.lw-phrasetester {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.lw-steplist__rows--static .lw-step {
+  padding: 2px 0;
+}

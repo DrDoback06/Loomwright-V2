@@ -24,10 +24,9 @@ export const locationsConfig: EntityConfig = {
       fields: [
         { id: 'name', label: 'Name', kind: 'text', required: true, placeholder: 'e.g. Vraska Pass', span: 2 },
         { id: 'aliases', label: 'Aliases', kind: 'chips', hint: 'Other names this place is called by.', span: 2 },
-        // TODO(M5): legacy kind 'select' — restore a dropdown widget for long option lists.
-        { id: 'kind', label: 'Type', kind: 'pills', options: LOCATION_TYPES, required: true },
+        { id: 'kind', label: 'Type', kind: 'select', options: LOCATION_TYPES, required: true },
         { id: 'customKind', label: 'Custom type', kind: 'text', placeholder: "If 'Other' / refine the type", hint: 'Optional override' },
-        // TODO(M5): legacy kind 'parent-picker' — restore hierarchical location picker.
+        // Hierarchy via the standard related picker (legacy parent-picker equivalent).
         { id: 'parentId', label: 'Parent location', kind: 'related', related: 'locations', hint: 'Sits inside…', span: 2 },
         { id: 'summary', label: 'Summary', kind: 'textarea', placeholder: 'One paragraph the wiki opens with.', span: 2 },
       ],
@@ -49,10 +48,8 @@ export const locationsConfig: EntityConfig = {
       title: 'Atlas placement',
       fields: [
         { id: 'placed', label: 'Placed on Atlas', kind: 'toggle', hint: 'Toggle on if pinned to a map.' },
-        // TODO(M5): legacy kind 'dual-number' — restore paired X/Y numeric inputs.
-        { id: 'coords', label: 'Coordinates', kind: 'text', hint: 'X / Y on the Atlas grid (decimals)' },
-        // TODO(M5): legacy kind 'select' — restore dropdown widget.
-        { id: 'atlasMap', label: 'On which Atlas map?', kind: 'pills', options: ATLAS_MAPS },
+        { id: 'coords', label: 'Coordinates', kind: 'dual-number', hint: 'X / Y on the Atlas grid (decimals)' },
+        { id: 'atlasMap', label: 'On which Atlas map?', kind: 'select', options: ATLAS_MAPS },
         { id: 'routes', label: 'Routes / Roads / Connections', kind: 'chips', hint: 'Other location names this place connects to' },
       ],
     },

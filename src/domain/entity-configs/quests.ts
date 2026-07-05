@@ -38,18 +38,15 @@ export const questsConfig: EntityConfig = {
       title: 'Steps & branches',
       fields: [
         { id: 'steps', label: 'Steps', kind: 'step-list', hint: 'Sequential beats — advance them as the story moves.' },
-        // TODO(M5): legacy kind 'branch-list' — restore structured branch rows.
-        { id: 'branches', label: 'Branches', kind: 'chips', hint: 'Optional / divergent paths' },
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'conditions', label: 'Required conditions', kind: 'chips' },
+        { id: 'branches', label: 'Branches', kind: 'row-list', hint: 'Optional / divergent paths' },
+        { id: 'conditions', label: 'Required conditions', kind: 'row-list' },
       ],
     },
     {
       id: 'outcomes',
       title: 'Outcomes & consequences',
       fields: [
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'outcomes', label: 'Possible outcomes', kind: 'chips' },
+        { id: 'outcomes', label: 'Possible outcomes', kind: 'row-list' },
         { id: 'rewards', label: 'Rewards / consequences', kind: 'textarea' },
         { id: 'relatedEvents', label: 'Related events', kind: 'related-multi', related: 'events' },
       ],

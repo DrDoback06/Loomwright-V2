@@ -29,8 +29,7 @@ export const classesConfig: EntityConfig = {
       title: 'Default stats & modifiers',
       fields: [
         { id: 'defaultStats', label: 'Default stats', kind: 'stat-grid', hint: 'Stat name · default value · min · max' },
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'statMods', label: 'Stat modifiers vs baseline', kind: 'chips', hint: 'e.g. Resolve +1, Cunning −1' },
+        { id: 'statMods', label: 'Stat modifiers vs baseline', kind: 'row-list', hint: 'e.g. Resolve +1, Cunning −1' },
       ],
     },
     {
@@ -56,8 +55,7 @@ export const classesConfig: EntityConfig = {
       fields: [
         { id: 'compatibleRaces', label: 'Compatible races / species', kind: 'related-multi', related: 'races' },
         { id: 'compatibleFactions', label: 'Compatible factions', kind: 'related-multi', related: 'factions' },
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'restrictions', label: 'Restrictions', kind: 'chips', hint: 'Rules the class must obey' },
+        { id: 'restrictions', label: 'Restrictions', kind: 'row-list', hint: 'Rules the class must obey' },
         { id: 'progressionNotes', label: 'Progression notes', kind: 'textarea' },
       ],
     },

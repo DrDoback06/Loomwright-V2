@@ -182,6 +182,7 @@ export function EntityEditorDrawer() {
                   <FieldInput
                     field={field}
                     value={form[field.id]}
+                    form={form}
                     onChange={(v) => setForm((f) => ({ ...f, [field.id]: v }))}
                   />
                   {field.hint && field.kind !== 'toggle' ? (

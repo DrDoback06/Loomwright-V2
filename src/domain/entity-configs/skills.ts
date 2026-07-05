@@ -30,24 +30,21 @@ export const skillsConfig: EntityConfig = {
       id: 'requirements',
       title: 'Requirements',
       fields: [
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'requirements', label: 'Requirements', kind: 'chips' },
+        { id: 'requirements', label: 'Requirements', kind: 'row-list' },
       ],
     },
     {
       id: 'effects',
       title: 'Effects',
       fields: [
-        // TODO(M5): legacy kind 'effects-list' — restore structured effect rows.
-        { id: 'effects', label: 'Effects', kind: 'chips' },
+        { id: 'effects', label: 'Effects', kind: 'row-list' },
       ],
     },
     {
       id: 'progression',
       title: 'Upgrade / progression',
       fields: [
-        // TODO(M5): legacy kind 'rule-list' — restore structured rule rows.
-        { id: 'upgradePath', label: 'Upgrade path', kind: 'chips', hint: 'Tier / name / effect' },
+        { id: 'upgradePath', label: 'Upgrade path', kind: 'row-list', hint: 'Tier / name / effect' },
       ],
     },
     {

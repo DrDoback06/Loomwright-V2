@@ -29,9 +29,7 @@ export const loreConfig: EntityConfig = {
       fields: [
         { id: 'subjects', label: 'Subjects', kind: 'chips' },
         { id: 'appliesTo', label: 'Applies to', kind: 'chips', hint: 'e.g. The Pale Reach · Hess Court · Augers' },
-        // TODO(M5): legacy kind 'related-multi' with related:'any' — restore a
-        // cross-type entity picker; until then, free-text entity names.
-        { id: 'relatedEntities', label: 'Related entities', kind: 'chips', hint: 'Names of related entries of any type.' },
+        { id: 'relatedEntities', label: 'Related entities', kind: 'related-multi', related: 'any', hint: 'Link entries of any codex type.' },
       ],
     },
     {
