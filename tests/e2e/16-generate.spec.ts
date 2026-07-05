@@ -171,6 +171,91 @@ test.describe('generation: JSON round-trip, create-anything dialog', () => {
     await expect(drawer.getByLabel('Name *')).not.toHaveValue('');
   });
 
+  test('sorcerer skill tree: ghosts populate the canvas, Accept persists, Undo reverts', async ({
+    page,
+  }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Skill Trees');
+
+    await page.getByRole('button', { name: '✨ Generate tree…' }).first().click();
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByLabel('Theme').selectOption('high-fantasy');
+    await dialog.getByLabel('Tailor it (optional)').fill('sorcerer');
+    await dialog.getByLabel('How many skills').fill('10');
+    await dialog.getByRole('button', { name: '🎲 Roll it' }).click();
+
+    // The tree stages as ghost nodes on the real canvas.
+    await expect(page.getByTestId('staged-bar')).toBeVisible();
+    await expect(page.getByTestId('staged-tree-note')).toBeVisible();
+    await expect(page.locator('.lw-graph__node--staged')).toHaveCount(10);
+    await expect(page.getByTestId('branch-legend').locator('.lw-chip')).not.toHaveCount(0);
+
+    await page.getByTestId('staged-bar').getByRole('button', { name: 'Accept all' }).click();
+    await expect(page.getByText(/created\./)).toBeVisible();
+    await expect(page.getByTestId('staged-bar')).toBeHidden();
+
+    // Real nodes on the canvas, real entries in the Skills codex.
+    await expect(page.locator('.lw-graph__node')).toHaveCount(10);
+    await expect(page.locator('.lw-graph__node--staged')).toHaveCount(0);
+    await openNav(page, 'Skills');
+    await expect(page.locator('.lw-roster__count')).toHaveText('10');
+
+    // One Undo reverts the tree AND all ten skills.
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect(page.getByText('Generation undone.')).toBeVisible();
+    await expect(page.locator('.lw-roster__count')).toHaveText('0');
+    await openNav(page, 'Skill Trees');
+    await expect(page.getByText('No skill trees yet.')).toBeVisible();
+  });
+
+  test('generate branch extends an existing tree; auto-arrange and fit work', async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Skill Trees');
+
+    // Seed a tree via generation and accept it.
+    await page.getByRole('button', { name: '✨ Generate tree…' }).first().click();
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByLabel('How many skills').fill('6');
+    await dialog.getByRole('button', { name: '🎲 Roll it' }).click();
+    await page.getByTestId('staged-bar').getByRole('button', { name: 'Accept all' }).click();
+    await expect(page.getByTestId('staged-bar')).toBeHidden();
+    await expect(page.locator('.lw-graph__node')).toHaveCount(6);
+
+    // Grow a themed branch onto it.
+    await page.getByRole('button', { name: '✨ Generate branch…' }).click();
+    await page.getByTestId('create-anything').getByLabel('Tailor it (optional)').fill('poison');
+    await page.getByTestId('create-anything').getByRole('button', { name: '🎲 Roll it' }).click();
+    await expect(page.locator('.lw-graph__node--staged')).toHaveCount(5);
+    await page.getByTestId('staged-bar').getByRole('button', { name: 'Accept all' }).click();
+    await expect(page.locator('.lw-graph__node')).toHaveCount(11);
+
+    // Surface upgrades: auto-arrange re-lays the tree; fit reframes it.
+    await page.getByRole('button', { name: 'Auto-arrange' }).click();
+    await expect(page.getByText('Tree arranged by tier and branch.')).toBeVisible();
+    await page.getByRole('button', { name: 'Fit to view' }).click();
+    await expect(page.locator('.lw-graph__node')).toHaveCount(11);
+  });
+
+  test('questline stages ghost quests in the roster and accepts with links', async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Quests');
+    await page.getByRole('button', { name: /Generate quest/ }).click();
+
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByRole('tab', { name: 'Random' }).click();
+    await dialog.getByLabel('How many').fill('3');
+    await dialog.getByLabel(/Questline/).check();
+    await dialog.getByRole('button', { name: '🎲 Roll it' }).click();
+
+    // Ghost quest cards land in the roster; events ride along in the bundle.
+    await expect(page.getByTestId('staged-bar')).toBeVisible();
+    await expect(page.getByTestId('staged-rostercard').first()).toBeVisible();
+
+    await page.getByTestId('staged-bar').getByRole('button', { name: 'Accept all' }).click();
+    await expect(page.getByTestId('staged-bar')).toBeHidden();
+    await expect(page.locator('.lw-roster__count')).toHaveText('3');
+  });
+
   test('the drawer paste-JSON action fills fields in place', async ({ page }) => {
     await bootWithProject(page);
     await openNav(page, 'Cast');

@@ -23,7 +23,7 @@ export interface GenerationRequest {
   /** Free-text tailoring: "a poison skill tree for my assassin". */
   hint?: string;
   count?: number;
-  options?: { branches?: number; includeProse?: boolean };
+  options?: { branches?: number; includeProse?: boolean; attachNodeId?: string };
   /** skilltree-branch / add-to-board target. */
   targetGraphId?: string;
   /** Existing entities to build around (relationship sets, questline cast). */

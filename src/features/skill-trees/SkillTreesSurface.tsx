@@ -4,6 +4,7 @@ import { db } from '@/db/schema';
 import {
   addEdge,
   addNode,
+  arrangeNodes,
   createGraph,
   deleteGraph,
   moveNode,
@@ -16,8 +17,20 @@ import { listEntities } from '@/db/repos/entities';
 import type { Entity, GraphEdge, GraphNode, SkillTree } from '@/db/types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { NodeGraphCanvas } from '@/features/canvas/NodeGraphCanvas';
+import { useStagedGraph } from '@/features/generate/useStagedGraph';
+import { layoutTree } from '@/services/generate/layout';
+import { useGenerationStore } from '@/stores/generation';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
+
+/** Branch/group accents drawn from the parchment entity palette. */
+const GROUP_COLORS = ['#7a6aa3', '#a8553f', '#6b8a4a', '#b08a3e', '#5d7896', '#8a3a4f', '#3f8a8a', '#3d3a78'];
+
+function groupColor(group: string): string {
+  let h = 0;
+  for (let i = 0; i < group.length; i++) h = (h * 31 + group.charCodeAt(i)) >>> 0;
+  return GROUP_COLORS[h % GROUP_COLORS.length];
+}
 
 /** Skill Trees: the constellation editor. Nodes are skills (bound to
  * skill entities or free labels) joined by directed prerequisite edges;
@@ -51,14 +64,42 @@ export function SkillTreesSurface() {
   const [placeDraft, setPlaceDraft] = useState('');
   const [placeEntity, setPlaceEntity] = useState<Entity | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [fitCounter, setFitCounter] = useState(0);
+
+  const openGenerate = useGenerationStore((s) => s.openDialog);
+  const overlay = useStagedGraph('skilltree');
+  // A staged bundle just arrived (or rerolled) — frame it.
+  const stagedDraftId = overlay.draft?.localId ?? null;
+  useEffect(() => {
+    if (stagedDraftId) setFitCounter((c) => c + 1);
+  }, [stagedDraftId]);
 
   if (!projectId || trees === null) return null;
 
   const meta = ENTITY_TYPE_META.skills;
 
+  // A staged NEW tree takes over the canvas until Accept/Discard; a
+  // staged branch extension merges into its target tree's arrays.
+  const virtualDraft = overlay.isVirtual ? overlay.draft : null;
+  const displayed = virtualDraft
+    ? { nodes: virtualDraft.nodes, edges: virtualDraft.edges }
+    : overlay.merge(tree?.id ?? null, tree?.nodes ?? [], tree?.edges ?? []);
+  const groups = [...new Set(displayed.nodes.map((n) => n.group).filter((g): g is string => !!g))];
+
   const newTree = async () => {
     const t = await createGraph('skilltree', projectId, `Tree ${trees.length + 1}`);
     setActiveTreeId(t.id);
+  };
+
+  const autoArrange = async () => {
+    if (!tree) return;
+    const positions = layoutTree(
+      tree.nodes.map((n) => n.id),
+      tree.edges.map((e) => ({ from: e.from, to: e.to }))
+    );
+    await arrangeNodes('skilltree', tree.id, positions);
+    setFitCounter((c) => c + 1);
+    toast('Tree arranged by tier and branch.', { kind: 'success' });
   };
 
   const place = async (x: number, y: number) => {
@@ -116,9 +157,11 @@ export function SkillTreesSurface() {
             <select
               id="skilltree-pick"
               className="lw-input"
-              value={tree?.id ?? ''}
+              value={virtualDraft ? '__staged__' : (tree?.id ?? '')}
+              disabled={!!virtualDraft}
               onChange={(e) => setActiveTreeId(e.target.value)}
             >
+              {virtualDraft ? <option value="__staged__">✨ {virtualDraft.name} (staged)</option> : null}
               {trees.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
@@ -129,7 +172,25 @@ export function SkillTreesSurface() {
               + New
             </button>
           </div>
-          {tree && (
+          <div className="lw-chips__add">
+            <button
+              type="button"
+              className="lw-btn"
+              onClick={() => openGenerate({ kind: 'skilltree' })}
+            >
+              ✨ Generate tree…
+            </button>
+            {tree && !virtualDraft ? (
+              <button
+                type="button"
+                className="lw-btn"
+                onClick={() => openGenerate({ kind: 'skilltree-branch', targetGraphId: tree.id })}
+              >
+                ✨ Generate branch…
+              </button>
+            ) : null}
+          </div>
+          {tree && !virtualDraft && (
             <div className="lw-chips__add">
               <input
                 className="lw-input"
@@ -149,9 +210,40 @@ export function SkillTreesSurface() {
               </button>
             </div>
           )}
+          {displayed.nodes.length > 0 && (
+            <div className="lw-chips__add">
+              {tree && !virtualDraft ? (
+                <button type="button" className="lw-btn" onClick={() => void autoArrange()}>
+                  Auto-arrange
+                </button>
+              ) : null}
+              <button type="button" className="lw-btn" onClick={() => setFitCounter((c) => c + 1)}>
+                Fit to view
+              </button>
+            </div>
+          )}
         </div>
 
-        {tree && (
+        {groups.length > 0 && (
+          <>
+            <h2 className="lw-atlas__subhead">Branches</h2>
+            <div className="lw-chips__row" data-testid="branch-legend">
+              {groups.map((g) => (
+                <span key={g} className="lw-chip lw-chip--static" style={{ borderColor: groupColor(g), color: groupColor(g) }}>
+                  {g}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+
+        {virtualDraft && (
+          <p className="lw-fieldnote" data-testid="staged-tree-note">
+            This tree is staged — drag nodes to taste, then Accept or Discard from the bar below.
+          </p>
+        )}
+
+        {tree && !virtualDraft && (
           <>
             <h2 className="lw-atlas__subhead">Add a skill node</h2>
             <select
@@ -252,26 +344,49 @@ export function SkillTreesSurface() {
         )}
       </aside>
 
-      {tree ? (
+      {tree || virtualDraft ? (
         <NodeGraphCanvas
           testId="skilltree-canvas"
-          nodes={tree.nodes}
-          edges={tree.edges}
-          mode={mode}
+          nodes={displayed.nodes}
+          edges={displayed.edges}
+          mode={virtualDraft ? 'select' : mode}
           onPlace={(x, y) => void place(x, y)}
-          onMoveNode={(id, x, y) => void moveNode('skilltree', tree.id, id, x, y)}
+          onMoveNode={(id, x, y) => {
+            if (overlay.stagedIds.has(id)) {
+              overlay.moveStagedNode(id, x, y);
+            } else if (tree) {
+              void moveNode('skilltree', tree.id, id, x, y);
+            }
+          }}
           onConnect={(a, b) => void connect(a, b)}
-          onEdgeClick={onEdgeClick}
-          onNodeClick={(node) => setSelectedNode(node)}
+          onEdgeClick={(edge) => {
+            if (!overlay.stagedIds.has(edge.id)) onEdgeClick(edge);
+          }}
+          onNodeClick={(node) => {
+            if (!overlay.stagedIds.has(node.id)) setSelectedNode(node);
+          }}
           selectedNodeId={liveSelected?.id ?? null}
-          nodeColor={(n) => (n.unlocked ? '#4f8045' : meta.color)}
+          stagedIds={overlay.stagedIds}
+          fitKey={fitCounter}
+          nodeColor={(n) =>
+            n.unlocked ? '#4f8045' : n.group ? groupColor(n.group) : meta.color
+          }
         />
       ) : (
         <div className="lw-empty lw-empty--center">
           <p className="lw-empty__title">No skill trees yet.</p>
-          <button type="button" className="lw-btn lw-btn--primary" onClick={() => void newTree()}>
-            + New tree
-          </button>
+          <div className="lw-chips__add" style={{ justifyContent: 'center' }}>
+            <button type="button" className="lw-btn lw-btn--primary" onClick={() => void newTree()}>
+              + New tree
+            </button>
+            <button
+              type="button"
+              className="lw-btn"
+              onClick={() => openGenerate({ kind: 'skilltree' })}
+            >
+              ✨ Generate tree…
+            </button>
+          </div>
         </div>
       )}
     </div>

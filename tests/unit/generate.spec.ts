@@ -15,9 +15,16 @@ import { entitySpec, generableFields, wireExample } from '@/services/generate/sp
 import { entityToWireJson } from '@/services/generate/serialize';
 import { applyBundle } from '@/services/generate/apply';
 import { parseWireBundle } from '@/services/generate/wire';
-import { generateRandomBundle, rollEmptyFields, rollField } from '@/services/generate/random/engine';
+import {
+  generateRandomBundle,
+  generateSkillTreeBranchBundle,
+  rollEmptyFields,
+  rollField,
+} from '@/services/generate/random/engine';
 import { createRng } from '@/services/generate/random/rng';
 import { matchArchetype } from '@/services/generate/random/packs';
+import { generateTreeTopology } from '@/services/generate/random/topology';
+import { layoutTree } from '@/services/generate/layout';
 import type { FieldSpec } from '@/services/generate/spec';
 import type { GenerationBundle } from '@/services/generate/types';
 
@@ -608,5 +615,119 @@ describe('generate/random engine', () => {
     const rng = createRng(1);
     expect(matchArchetype(rng, pack, 'grimdark', 'a venom blade').id).toBe('poison');
     expect(matchArchetype(rng, pack, 'grimdark', 'flame dancer').id).toBe('fire');
+  });
+});
+
+describe('generate/skill trees', () => {
+  const ctx = { projectId: 'p1', known: [] as KnownEntity[] };
+
+  it('topology is a rooted DAG with the requested branches and no dangling edges', () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const rng = createRng(seed);
+      const topo = generateTreeTopology(rng, { nodeCount: 14, branchCount: 3 });
+      expect(topo.nodes).toHaveLength(14);
+      expect(topo.branchCount).toBe(3);
+      const ids = new Set(topo.nodes.map((n) => n.localId));
+      const incoming = new Map<string, number>();
+      for (const e of topo.edges) {
+        expect(ids.has(e.from), `seed ${seed}`).toBe(true);
+        expect(ids.has(e.to), `seed ${seed}`).toBe(true);
+        incoming.set(e.to, (incoming.get(e.to) ?? 0) + 1);
+      }
+      // Exactly one root (no incoming edges) and every other node reachable.
+      const roots = topo.nodes.filter((n) => !incoming.has(n.localId));
+      expect(roots.map((r) => r.localId), `seed ${seed}`).toEqual([topo.nodes[0].localId]);
+      // Edges always point down a tier (from earlier to later) — acyclic.
+      const tierOf = new Map(topo.nodes.map((n) => [n.localId, n.tier]));
+      for (const e of topo.edges) {
+        expect(tierOf.get(e.to)!, `seed ${seed}`).toBeGreaterThan(tierOf.get(e.from)! - 1);
+      }
+    }
+  });
+
+  it('layout is deterministic and collision-free', () => {
+    const rng = createRng(9);
+    const topo = generateTreeTopology(rng, { nodeCount: 18, branchCount: 4 });
+    const ids = topo.nodes.map((n) => n.localId);
+    const a = layoutTree(ids, topo.edges);
+    const b = layoutTree(ids, topo.edges);
+    expect([...a.entries()]).toEqual([...b.entries()]);
+    const seen = new Set<string>();
+    for (const [, pos] of a) {
+      const key = `${Math.round(pos.x / 40)}:${Math.round(pos.y / 40)}`;
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
+    }
+  });
+
+  it('layout places disconnected components side by side', () => {
+    const positions = layoutTree(
+      ['a1', 'a2', 'b1', 'b2'],
+      [
+        { from: 'a1', to: 'a2' },
+        { from: 'b1', to: 'b2' },
+      ],
+      { jitter: 0 }
+    );
+    expect(positions.get('a1')!.x).not.toBe(positions.get('b1')!.x);
+    expect(positions.get('a1')!.y).toBe(positions.get('b1')!.y);
+  });
+
+  it('generates a full sorcerer tree: skills + positioned, grouped, edged graph', () => {
+    const bundle = generateRandomBundle(
+      { kind: 'skilltree', theme: 'high-fantasy', hint: 'sorcerer', count: 12, options: { branches: 3 } },
+      ctx,
+      21
+    );
+    expect(bundle.entities).toHaveLength(12);
+    expect(bundle.graphs).toHaveLength(1);
+    const graph = bundle.graphs[0];
+    expect(graph.kind).toBe('skilltree');
+    expect(graph.name.length).toBeGreaterThan(3);
+    expect(graph.nodes).toHaveLength(12);
+    // Every node is bound to a skill draft in the same bundle and carries
+    // a position from the layout plus a branch group (except the root).
+    const draftIds = new Set(bundle.entities.map((d) => d.localId));
+    for (const [i, node] of graph.nodes.entries()) {
+      expect(draftIds.has(node.entity!.id)).toBe(true);
+      expect(Number.isFinite(node.x) && Number.isFinite(node.y)).toBe(true);
+      if (i > 0) expect(node.group).toBeTruthy();
+    }
+    // Skill names are unique; sorcery archetype flavors the content.
+    const names = bundle.entities.map((d) => d.name.toLowerCase());
+    expect(new Set(names).size).toBe(names.length);
+    expect(bundle.entities.every((d) => (d.fields.effects as string[]).length > 0)).toBe(true);
+    expect(bundle.entities[0].tags).toContain('sorcery');
+    // Deterministic reroll.
+    const again = generateRandomBundle(bundle.request, ctx, 21);
+    expect(again.graphs[0].name).toBe(graph.name);
+  });
+
+  it('branch bundles attach to an existing tree via real node ids', () => {
+    const tree = {
+      id: 'tree1',
+      projectId: 'p1',
+      name: 'Old Tree',
+      nodes: [
+        { id: 'root', label: 'Root', x: 100, y: 100 },
+        { id: 'leaf', label: 'Leaf', x: 100, y: 210 },
+      ],
+      edges: [{ id: 'e1', from: 'root', to: 'leaf', directed: true }],
+      updatedAt: 1,
+    };
+    const real = generateSkillTreeBranchBundle(
+      { kind: 'skilltree-branch', theme: 'grimdark', hint: 'poison', count: 4, targetGraphId: 'tree1' },
+      ctx,
+      tree,
+      5
+    );
+    expect(real.graphs[0].targetGraphId).toBe('tree1');
+    expect(real.entities.length).toBeGreaterThanOrEqual(4);
+    // The first edge hangs off an existing node of the tree.
+    const treeIds = new Set(tree.nodes.map((n) => n.id));
+    expect(real.graphs[0].edges.some((e) => treeIds.has(e.from))).toBe(true);
+    // New nodes sit in free space right of the existing tree.
+    const maxTreeX = Math.max(...tree.nodes.map((n) => n.x));
+    expect(real.graphs[0].nodes.every((n) => n.x > maxTreeX)).toBe(true);
   });
 });

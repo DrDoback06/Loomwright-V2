@@ -6,12 +6,13 @@ import { draftToInitialForm } from '@/services/generate/coerce';
 import { loadKnownEntities } from '@/services/generate/known';
 import { buildGenerationPrompt, parseWireBundle } from '@/services/generate/wire';
 import { needsStaging, type GenerationBundle } from '@/services/generate/types';
-import { generateRandomBundle } from '@/services/generate/random/engine';
+import { routeForBundle, runRandomGeneration } from '@/services/generate/staging';
 import { THEMES } from '@/services/generate/random/packs/lexicon';
 import { undoAuditEntry } from '@/db/repos/undo';
 import { useEditorStore } from '@/stores/editor';
-import { useGenerationStore } from '@/stores/generation';
+import { useGenerationStore, type GenerationDialogTarget } from '@/stores/generation';
 import { useProjectStore } from '@/stores/project';
+import { useUiStore } from '@/stores/ui';
 import { toast } from '@/stores/toasts';
 
 type TabId = 'manual' | 'random' | 'paste';
@@ -26,14 +27,23 @@ export function CreateAnythingDialog() {
   const stage = useGenerationStore((s) => s.stage);
   const openCreate = useEditorStore((s) => s.openCreate);
   const projectId = useProjectStore((s) => s.currentProjectId);
+  const setRoute = useUiStore((s) => s.setRoute);
+  const setCodexType = useUiStore((s) => s.setCodexType);
 
   const [tab, setTab] = useState<TabId>('random');
 
   if (!target || !projectId) return null;
 
+  const isTreeKind = target.kind === 'skilltree' || target.kind === 'skilltree-branch';
   const meta = target.entityType ? ENTITY_TYPE_META[target.entityType] : null;
   const config = target.entityType ? getEntityConfig(target.entityType) : null;
-  const subject = config?.displayName ?? meta?.label ?? 'anything';
+  const subject = isTreeKind
+    ? target.kind === 'skilltree'
+      ? 'skill tree'
+      : 'skill tree branch'
+    : (config?.displayName ?? meta?.label ?? 'anything');
+  // Trees have no manual/paste path here yet — the surface builds by hand.
+  const activeTab: TabId = isTreeKind ? 'random' : tab;
 
   const openManual = () => {
     closeDialog();
@@ -41,7 +51,7 @@ export function CreateAnythingDialog() {
   };
 
   /** Route a parsed bundle: one plain entity → prefilled drawer (Save =
-   * accept); anything bigger → staged preview / inline accept. */
+   * accept); anything bigger → staged ghost preview in its home surface. */
   const deliver = (bundle: GenerationBundle) => {
     if (!needsStaging(bundle) && bundle.entities.length === 1) {
       const draft = bundle.entities[0];
@@ -57,6 +67,9 @@ export function CreateAnythingDialog() {
       return;
     }
     stage(bundle);
+    const { route, codexType } = routeForBundle(bundle);
+    if (codexType) setCodexType(codexType);
+    setRoute(route);
   };
 
   return (
@@ -79,36 +92,40 @@ export function CreateAnythingDialog() {
           New {subject.toLowerCase()}
         </h2>
         <div className="lw-viewtoggle" role="tablist" aria-label="Creation mode">
+          {!isTreeKind && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'manual'}
+              className={activeTab === 'manual' ? 'lw-pill lw-pill--active' : 'lw-pill'}
+              onClick={() => setTab('manual')}
+            >
+              Manual
+            </button>
+          )}
           <button
             type="button"
             role="tab"
-            aria-selected={tab === 'manual'}
-            className={tab === 'manual' ? 'lw-pill lw-pill--active' : 'lw-pill'}
-            onClick={() => setTab('manual')}
-          >
-            Manual
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'random'}
-            className={tab === 'random' ? 'lw-pill lw-pill--active' : 'lw-pill'}
+            aria-selected={activeTab === 'random'}
+            className={activeTab === 'random' ? 'lw-pill lw-pill--active' : 'lw-pill'}
             onClick={() => setTab('random')}
           >
             Random
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'paste'}
-            className={tab === 'paste' ? 'lw-pill lw-pill--active' : 'lw-pill'}
-            onClick={() => setTab('paste')}
-          >
-            Paste JSON
-          </button>
+          {!isTreeKind && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'paste'}
+              className={activeTab === 'paste' ? 'lw-pill lw-pill--active' : 'lw-pill'}
+              onClick={() => setTab('paste')}
+            >
+              Paste JSON
+            </button>
+          )}
         </div>
 
-        {tab === 'manual' ? (
+        {activeTab === 'manual' ? (
           <div className="lw-gentab">
             <p className="lw-fieldnote">
               Build it yourself in the full editor — every field, every tab.
@@ -122,10 +139,10 @@ export function CreateAnythingDialog() {
               </button>
             </div>
           </div>
-        ) : tab === 'random' ? (
+        ) : activeTab === 'random' ? (
           <RandomTab
             projectId={projectId}
-            entityType={target.entityType}
+            target={target}
             onDeliver={deliver}
             onCancel={closeDialog}
           />
@@ -195,45 +212,67 @@ function EntityBundlePreview({ bundle, testId }: { bundle: GenerationBundle; tes
 
 function RandomTab({
   projectId,
-  entityType,
+  target,
   onDeliver,
   onCancel,
 }: {
   projectId: string;
-  entityType?: EntityType;
+  target: GenerationDialogTarget;
   onDeliver: (bundle: GenerationBundle) => void;
   onCancel: () => void;
 }) {
+  const isTreeKind = target.kind === 'skilltree' || target.kind === 'skilltree-branch';
+  const canChain = target.entityType === 'quests';
   const [theme, setTheme] = useState('any');
   const [hint, setHint] = useState('');
-  const [count, setCount] = useState(1);
+  const [count, setCount] = useState(isTreeKind ? (target.kind === 'skilltree' ? 12 : 5) : 1);
+  const [branches, setBranches] = useState(3);
+  const [chain, setChain] = useState(false);
   const [parsed, setParsed] = useState<GenerationBundle | null>(null);
 
   const roll = async () => {
-    if (!entityType) return;
-    const known = await loadKnownEntities(projectId);
-    const bundle = generateRandomBundle(
+    const kind = isTreeKind
+      ? target.kind
+      : canChain && chain
+        ? 'questline'
+        : count > 1
+          ? 'entity-batch'
+          : 'entity';
+    const result = await runRandomGeneration(
       {
-        kind: count > 1 ? 'entity-batch' : 'entity',
-        entityType,
+        kind,
+        entityType: target.entityType,
         theme: theme === 'any' ? undefined : theme,
         hint: hint.trim() || undefined,
-        count,
+        count: kind === 'questline' ? Math.max(count, 2) : count,
+        options: target.kind === 'skilltree' ? { branches } : undefined,
+        targetGraphId: target.targetGraphId,
+        contextRefs: target.contextRefs,
       },
-      { projectId, known }
+      projectId
     );
-    if (bundle.entities.length === 1) {
-      onDeliver(bundle);
+    if ('error' in result) {
+      toast(result.error, { kind: 'error' });
       return;
     }
-    setParsed(bundle);
+    if (result.entities.length === 1 && !needsStaging(result)) {
+      onDeliver(result);
+      return;
+    }
+    if (isTreeKind || kind === 'questline') {
+      // Trees and questlines stage as ghosts in their home surface.
+      onDeliver(result);
+      return;
+    }
+    setParsed(result);
   };
 
   return (
     <div className="lw-gentab" data-testid="random-tab">
       <p className="lw-fieldnote">
-        Themed, offline, instant. A single roll lands in the editor — reroll any field with its
-        dice, then save when it sings. Batches preview here first.
+        {isTreeKind
+          ? 'Themed, offline, instant — the tree stages as ghost nodes on the canvas for you to inspect, drag, and accept.'
+          : 'Themed, offline, instant. A single roll lands in the editor — reroll any field with its dice, then save when it sings. Batches preview here first.'}
       </p>
       <div className="lw-genopts">
         <label className="lw-field__label" htmlFor="gen-theme">
@@ -258,22 +297,51 @@ function RandomTab({
         <input
           id="gen-hint"
           className="lw-input"
-          placeholder='e.g. "a sorcerer who hates fire" or "poison"'
+          placeholder={
+            isTreeKind ? 'e.g. "sorcerer" or "poison assassin"' : 'e.g. "a sorcerer who hates fire" or "poison"'
+          }
           value={hint}
           onChange={(e) => setHint(e.target.value)}
         />
         <label className="lw-field__label" htmlFor="gen-count">
-          How many
+          {isTreeKind ? 'How many skills' : 'How many'}
         </label>
         <input
           id="gen-count"
           className="lw-input"
           type="number"
           min={1}
-          max={24}
+          max={isTreeKind ? 40 : 24}
           value={count}
-          onChange={(e) => setCount(Math.max(1, Math.min(24, Number(e.target.value) || 1)))}
+          onChange={(e) =>
+            setCount(Math.max(1, Math.min(isTreeKind ? 40 : 24, Number(e.target.value) || 1)))
+          }
         />
+        {target.kind === 'skilltree' ? (
+          <>
+            <label className="lw-field__label" htmlFor="gen-branches">
+              Branches
+            </label>
+            <select
+              id="gen-branches"
+              className="lw-input"
+              value={branches}
+              onChange={(e) => setBranches(Number(e.target.value))}
+            >
+              {[2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : null}
+        {canChain ? (
+          <label className="lw-toggle">
+            <input type="checkbox" checked={chain} onChange={(e) => setChain(e.target.checked)} />
+            <span>Questline — a linked chain of quests (with events), staged in the roster</span>
+          </label>
+        ) : null}
       </div>
       {parsed ? <EntityBundlePreview bundle={parsed} testId="random-preview" /> : null}
       <div className="lw-chips__add">

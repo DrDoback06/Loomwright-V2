@@ -59,6 +59,26 @@ export async function addNode(
   return node;
 }
 
+/** Bulk re-position (auto-arrange): one write for the whole document. */
+export async function arrangeNodes(
+  kind: Kind,
+  graphId: string,
+  positions: Map<string, { x: number; y: number }>
+) {
+  const row = await table(kind).get(graphId);
+  if (!row) return;
+  await table(kind).update(graphId, {
+    ...withNodes(
+      kind,
+      nodesOf(row).map((n) => {
+        const p = positions.get(n.id);
+        return p ? { ...n, x: p.x, y: p.y } : n;
+      })
+    ),
+    updatedAt: Date.now(),
+  } as never);
+}
+
 export async function moveNode(kind: Kind, graphId: string, nodeId: string, x: number, y: number) {
   const row = await table(kind).get(graphId);
   if (!row) return;

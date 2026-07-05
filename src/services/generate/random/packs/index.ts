@@ -3,6 +3,7 @@ import type { BundleEntityDraft } from '../../types';
 import type { Rng } from '../rng';
 import { hintWords, THEMES, type ThemeId } from './lexicon';
 import { generateGenericDraft, type GenCtx } from './generic';
+import { skillsPack } from './skills';
 
 /** One coherent flavor within a pack: "poison", "sorcerer", "holy"…
  * A single archetype (plus a single rng) drives every field of a draft
@@ -27,7 +28,9 @@ export interface TypePack {
 }
 
 /** Deep packs land per milestone (skills in G3; cast/quests/items/… in G4).
- * Types without one use the config-driven generic filler. */
+ * Types without one use the config-driven generic filler. Populated at
+ * module init by registerBuiltinPacks() below — a lazy import breaks the
+ * type-only circularity with the pack modules. */
 const DEEP_PACKS: Partial<Record<EntityType, TypePack>> = {};
 
 export function registerPack(pack: TypePack): void {
@@ -68,7 +71,13 @@ export function generateDraftFor(rng: Rng, type: EntityType, ctx: GenCtx): Bundl
   const pack = DEEP_PACKS[type];
   if (pack) {
     const arch = matchArchetype(rng, pack, ctx.theme, ctx.hint);
-    return pack.generate(rng, arch, ctx);
+    // Aliased types (abilities → skills pack) keep their stored type.
+    return { ...pack.generate(rng, arch, ctx), type };
   }
   return generateGenericDraft(rng, type, ctx);
 }
+
+// Built-in deep packs. Pack modules import only types from this file, so
+// the value import above cannot form a runtime cycle.
+registerPack(skillsPack);
+DEEP_PACKS.abilities = skillsPack;

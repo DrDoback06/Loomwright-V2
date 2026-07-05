@@ -324,3 +324,17 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Editor drawer: 🎲 per-field dice (create mode) | Rerolls only that field, themed by the generation context | `16-generate.spec.ts` |
 | Editor drawer: 🎲 Fill empty fields | Random-fills only blank fields | `16-generate.spec.ts` |
 | Editor drawer: Reroll all | Replaces the form with a fresh themed draft | (same engine path; unit `generate.spec.ts` determinism) |
+
+## Generation: skill trees + staged preview (G3)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Skill Trees: ✨ Generate tree… (sidebar + empty state) | Opens the dialog (Random tab, skills count + branches) | `16-generate.spec.ts` |
+| Skill Trees: ✨ Generate branch… | Themed chain staged onto the ACTIVE tree | `16-generate.spec.ts` |
+| Staged ghosts on the canvas | Dashed, translucent, staggered pop-in; draggable pre-accept | `16-generate.spec.ts` |
+| Staged bar: Accept all | One transaction (tree + skill entities), one Undo | `16-generate.spec.ts` |
+| Staged bar: 🎲 Reroll | Same request, fresh seed, restaged in place | (same runRandomGeneration path; unit determinism) |
+| Staged bar: Discard | Drops the staged bundle — Dexie never touched | (state-only; covered by bar visibility asserts) |
+| Skill Trees: Auto-arrange | Re-lays the CURRENT tree by tier/branch (one write) | `16-generate.spec.ts` |
+| Skill Trees: Fit to view | Frames every node in the viewport | `16-generate.spec.ts` |
+| Skill Trees: branch legend | Color-coded group chips from node.group | `16-generate.spec.ts` |

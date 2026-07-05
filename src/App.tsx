@@ -14,6 +14,7 @@ import { HelpDialog } from '@/features/help/HelpDialog';
 import { EntityRosterSurface } from '@/features/codex/EntityRosterSurface';
 import { EntityEditorDrawer } from '@/features/codex/EntityEditorDrawer';
 import { CreateAnythingDialog } from '@/features/generate/CreateAnythingDialog';
+import { StagedBundleBar } from '@/features/generate/StagedBundleBar';
 import { TrashSurface } from '@/features/system/TrashSurface';
 import { ReviewSurface } from '@/features/review/ReviewSurface';
 import { WritersRoom } from '@/features/writers-room/WritersRoom';
@@ -94,6 +95,7 @@ export function App() {
         </div>
         <EntityEditorDrawer />
         <CreateAnythingDialog />
+        <StagedBundleBar />
         {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
         {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
       </ProjectGate>

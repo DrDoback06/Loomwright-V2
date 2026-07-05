@@ -52,6 +52,11 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
     [] as Entity[]
   );
 
+  // Staged generation drafts of this type render as ghost cards at the
+  // top of the roster until the bar's Accept/Discard resolves them.
+  const stagedBundle = useGenerationStore((s) => s.staged);
+  const ghosts = stagedBundle?.entities.filter((d) => d.type === type) ?? [];
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return entities;
@@ -183,7 +188,7 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {filtered.length === 0 ? (
+        {filtered.length === 0 && ghosts.length === 0 ? (
           <div className="lw-empty">
             {entities.length === 0 ? (
               <>
@@ -199,6 +204,24 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
           </div>
         ) : (
           <ul className="lw-roster__list">
+            {ghosts.map((draft) => (
+              <li key={draft.localId}>
+                <div className="lw-rostercard lw-rostercard--staged" data-testid="staged-rostercard">
+                  <span
+                    className="lw-rostercard__avatar"
+                    style={{ background: meta.soft, color: meta.deep }}
+                  >
+                    ✨
+                  </span>
+                  <span className="lw-rostercard__text">
+                    <span className="lw-rostercard__name">{draft.name}</span>
+                    {draft.summary ? (
+                      <span className="lw-rostercard__sub">{draft.summary}</span>
+                    ) : null}
+                  </span>
+                </div>
+              </li>
+            ))}
             {filtered.map((entity) => (
               <li key={entity.id}>
                 <button

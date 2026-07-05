@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GraphEdge, GraphNode } from '@/db/types';
 import { useCanvas } from './useCanvas';
 
@@ -15,6 +15,10 @@ export interface NodeGraphCanvasProps {
   selectedNodeId?: string | null;
   /** Per-node accent color (defaults to parchment ink). */
   nodeColor?: (node: GraphNode) => string | undefined;
+  /** Node/edge ids rendered as staged ghosts (generation preview). */
+  stagedIds?: Set<string>;
+  /** Change this value to fit the viewport around all current nodes. */
+  fitKey?: unknown;
   testId?: string;
 }
 
@@ -35,13 +39,24 @@ export function NodeGraphCanvas({
   onEdgeClick,
   selectedNodeId,
   nodeColor,
+  stagedIds,
+  fitKey,
   testId,
 }: NodeGraphCanvasProps) {
-  const { viewport, rootRef, toCanvas, claimPointer, handlers } = useCanvas({ x: 30, y: 20, scale: 1 });
+  const { viewport, rootRef, toCanvas, claimPointer, fitTo, handlers } = useCanvas({ x: 30, y: 20, scale: 1 });
   const dragging = useRef<{ nodeId: string; moved: boolean } | null>(null);
   const [connectFrom, setConnectFrom] = useState<string | null>(null);
 
   const byId = new Map(nodes.map((n) => [n.id, n]));
+
+  // Fit-to-view on demand: the parent bumps fitKey (staged bundle arrived,
+  // "Fit to view" clicked) and the viewport frames every node.
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  useEffect(() => {
+    if (fitKey === undefined) return;
+    fitTo(nodesRef.current.map((n) => ({ x: n.x, y: n.y })));
+  }, [fitKey, fitTo]);
 
   const startDrag = (e: React.PointerEvent, node: GraphNode) => {
     e.stopPropagation();
@@ -104,8 +119,13 @@ export function NodeGraphCanvas({
           if (!a || !b) return null;
           const mx = (a.x + b.x) / 2;
           const my = (a.y + b.y) / 2;
+          const staged = stagedIds?.has(edge.id);
           return (
-            <g key={edge.id} className="lw-graph__edge" data-testid={`edge-${edge.label ?? edge.id}`}>
+            <g
+              key={edge.id}
+              className={staged ? 'lw-graph__edge lw-graph__edge--staged' : 'lw-graph__edge'}
+              data-testid={`edge-${edge.label ?? edge.id}`}
+            >
               <line
                 x1={a.x}
                 y1={a.y}
@@ -134,14 +154,23 @@ export function NodeGraphCanvas({
           );
         })}
 
-        {nodes.map((node) => {
+        {nodes.map((node, i) => {
           const color = nodeColor?.(node);
           const isSelected = node.id === selectedNodeId || node.id === connectFrom;
+          const staged = stagedIds?.has(node.id);
+          const classes = [
+            'lw-graph__node',
+            isSelected ? 'lw-graph__node--selected' : '',
+            staged ? 'lw-graph__node--staged' : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
           return (
             <g
               key={node.id}
               transform={`translate(${node.x}, ${node.y})`}
-              className={isSelected ? 'lw-graph__node lw-graph__node--selected' : 'lw-graph__node'}
+              className={classes}
+              style={staged ? { animationDelay: `${(i % 24) * 70}ms` } : undefined}
               data-testid={`node-${node.label}`}
               onPointerDown={(e) => startDrag(e, node)}
               onPointerMove={onDragMove}

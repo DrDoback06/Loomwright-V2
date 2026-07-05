@@ -83,6 +83,26 @@ export function useCanvas(initial: Partial<Viewport> = {}) {
     if (pointers.current.size === 0) claimed.current = false;
   }, []);
 
+  /** Pan/zoom so the given canvas-space points all fit in view. */
+  const fitTo = useCallback((points: { x: number; y: number }[], padding = 80) => {
+    if (!points.length) return;
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return;
+    const minX = Math.min(...points.map((p) => p.x)) - padding;
+    const maxX = Math.max(...points.map((p) => p.x)) + padding;
+    const minY = Math.min(...points.map((p) => p.y)) - padding;
+    const maxY = Math.max(...points.map((p) => p.y)) + padding;
+    const scale = Math.min(
+      3,
+      Math.max(0.25, Math.min(rect.width / (maxX - minX), rect.height / (maxY - minY), 1.25))
+    );
+    setViewport({
+      scale,
+      x: (rect.width - (minX + maxX) * scale) / 2,
+      y: (rect.height - (minY + maxY) * scale) / 2,
+    });
+  }, []);
+
   const onWheel = useCallback((e: React.WheelEvent) => {
     const rect = rootRef.current?.getBoundingClientRect();
     const px = e.clientX - (rect?.left ?? 0);
@@ -101,6 +121,7 @@ export function useCanvas(initial: Partial<Viewport> = {}) {
     rootRef,
     toCanvas,
     claimPointer,
+    fitTo,
     handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp, onWheel },
   };
 }
