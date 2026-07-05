@@ -7,12 +7,14 @@ import {
   renameProject,
 } from '@/db/repos/projects';
 import { useProjectStore } from '@/stores/project';
+import { useUiStore } from '@/stores/ui';
 import { toast } from '@/stores/toasts';
 
 export function ProjectSwitcher() {
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
 
+  const setOnboardingOpen = useUiStore((s) => s.setOnboardingOpen);
   const projects = useLiveQuery(listProjects, [], []);
   const current = projects.find((p) => p.id === currentProjectId) ?? null;
 
@@ -139,6 +141,16 @@ export function ProjectSwitcher() {
               + New project
             </button>
           )}
+          <button
+            type="button"
+            className="lw-menu__item"
+            onClick={() => {
+              setOpen(false);
+              setOnboardingOpen(true);
+            }}
+          >
+            Guided setup (interview)…
+          </button>
           {renaming ? (
             <form
               className="lw-menu__form"

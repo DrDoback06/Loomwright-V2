@@ -6,6 +6,7 @@ export function TopBar() {
   const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
   const setPaletteOpen = useUiStore((s) => s.setPaletteOpen);
+  const setHelpOpen = useUiStore((s) => s.setHelpOpen);
   const dark = theme === 'midnight-ink';
 
   return (
@@ -25,6 +26,15 @@ export function TopBar() {
         title="Search everything (Ctrl+K)"
       >
         ⌕
+      </button>
+      <button
+        type="button"
+        className="lw-iconbtn"
+        onClick={() => setHelpOpen(true)}
+        aria-label="Help for this surface"
+        title="Help for this surface"
+      >
+        ?
       </button>
       <button
         type="button"

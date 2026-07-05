@@ -227,3 +227,33 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | --- | --- | --- |
 | Import… → Add reference | Paste text → reference entry (title/kind/body) | `12-interchange.spec.ts` |
 | Import… → From file(s) | .txt/.md files → reference entries | `12-interchange.spec.ts` |
+
+## Welcome gate (M10)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Guided setup | Opens the onboarding interview | `13-onboarding.spec.ts` |
+| Blank project | Reveals the quick name-only form | every spec (`bootWithProject`) |
+| Explore a sample project | Seeds + opens the sample world | `13-onboarding.spec.ts` |
+
+## Onboarding wizard (M10 — flagship)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Step rail (7 steps) + Back/Continue | Navigates; name gates progress | `13-onboarding.spec.ts` |
+| Foundation: name/genre/premise/themes/tone/comparables/is-not | Captured → references + AI brief | `13-onboarding.spec.ts` + unit |
+| Voice: POV/tense pills, style sample, Analyze style | Offline metrics → voice profile | `13-onboarding.spec.ts` + unit |
+| Cast: seed rows + "Suggest cast from this text" | Manual + offline-NER seeds → cast codex | `13-onboarding.spec.ts` |
+| World: place rows | → locations codex | `13-onboarding.spec.ts` |
+| Manuscript: paste/file + split preview + extraction toggle | Auto chapter split; first extraction → Review | `13-onboarding.spec.ts` + unit |
+| AI & privacy: mode radios + guard toggle | Live in Settings immediately | `13-onboarding.spec.ts` |
+| Open the door | Creates + seeds everything, lands Home | `13-onboarding.spec.ts` + unit |
+| Close (draft is saved) | Draft persists across reload | `13-onboarding.spec.ts` |
+| Switcher ▸ Guided setup (interview)… | Reopens the wizard any time | (same component) |
+
+## Help (M10)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Topbar ? button | Opens help for the current surface | `13-onboarding.spec.ts` |
+| Got it / backdrop | Closes | `13-onboarding.spec.ts` |

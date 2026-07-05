@@ -10,6 +10,7 @@ import { useUiStore } from '@/stores/ui';
 import { HomePage } from '@/features/home/HomePage';
 import { TodaySurface } from '@/features/today/TodaySurface';
 import { CommandPalette } from '@/features/search/CommandPalette';
+import { HelpDialog } from '@/features/help/HelpDialog';
 import { EntityRosterSurface } from '@/features/codex/EntityRosterSurface';
 import { EntityEditorDrawer } from '@/features/codex/EntityEditorDrawer';
 import { TrashSurface } from '@/features/system/TrashSurface';
@@ -63,6 +64,8 @@ export function App() {
   const isMobile = useIsMobile();
   const paletteOpen = useUiStore((s) => s.paletteOpen);
   const setPaletteOpen = useUiStore((s) => s.setPaletteOpen);
+  const helpOpen = useUiStore((s) => s.helpOpen);
+  const setHelpOpen = useUiStore((s) => s.setHelpOpen);
 
   // Global Ctrl/Cmd+K opens the command palette anywhere.
   useEffect(() => {
@@ -77,19 +80,24 @@ export function App() {
   }, [setPaletteOpen]);
 
   return (
-    <ProjectGate>
-      <div className={isMobile ? 'lw-shell lw-shell--mobile' : 'lw-shell lw-shell--docked'}>
-        <TopBar />
-        {!isMobile && <LeftRail />}
-        <main className="lw-main">
-          <MainSurface />
-        </main>
-        {!isMobile && <PanelDock />}
-        {isMobile && <MobileNav />}
-      </div>
-      <EntityEditorDrawer />
-      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
+    <>
+      <ProjectGate>
+        <div className={isMobile ? 'lw-shell lw-shell--mobile' : 'lw-shell lw-shell--docked'}>
+          <TopBar />
+          {!isMobile && <LeftRail />}
+          <main className="lw-main">
+            <MainSurface />
+          </main>
+          {!isMobile && <PanelDock />}
+          {isMobile && <MobileNav />}
+        </div>
+        <EntityEditorDrawer />
+        {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
+        {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      </ProjectGate>
+      {/* Toasts live outside the gate so the welcome/onboarding flows
+          can report progress before any project exists. */}
       <Toasts />
-    </ProjectGate>
+    </>
   );
 }

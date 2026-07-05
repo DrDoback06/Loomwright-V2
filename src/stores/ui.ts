@@ -28,6 +28,10 @@ interface UiState {
   codexType: EntityType;
   /** Command palette (Ctrl/Cmd+K) visibility. */
   paletteOpen: boolean;
+  /** Onboarding interview wizard visibility. */
+  onboardingOpen: boolean;
+  /** Per-surface help dialog visibility. */
+  helpOpen: boolean;
   /** Consume-once request for the Writer's Room to open a specific
    * chapter (set by the palette / Today before routing there). */
   pendingChapterId: string | null;
@@ -36,6 +40,8 @@ interface UiState {
   setRoute: (route: RouteId) => void;
   setCodexType: (type: EntityType) => void;
   setPaletteOpen: (open: boolean) => void;
+  setOnboardingOpen: (open: boolean) => void;
+  setHelpOpen: (open: boolean) => void;
   requestChapter: (chapterId: string) => void;
   consumePendingChapter: () => string | null;
 }
@@ -77,8 +83,12 @@ export const useUiStore = create<UiState>((set, get) => ({
   setRoute: (route) => set({ route }),
   setCodexType: (type) => set({ codexType: type }),
   paletteOpen: false,
+  onboardingOpen: false,
+  helpOpen: false,
   pendingChapterId: null,
   setPaletteOpen: (open) => set({ paletteOpen: open }),
+  setOnboardingOpen: (open) => set({ onboardingOpen: open }),
+  setHelpOpen: (open) => set({ helpOpen: open }),
   requestChapter: (chapterId) => set({ pendingChapterId: chapterId }),
   consumePendingChapter: () => {
     const id = get().pendingChapterId;

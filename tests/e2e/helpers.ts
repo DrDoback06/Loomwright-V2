@@ -1,9 +1,10 @@
 import { type Page, expect } from '@playwright/test';
 
 /** Boot the app on a fresh origin and create the first project via the
- * real welcome form. */
+ * real welcome gate (blank-project path). */
 export async function bootWithProject(page: Page, name = 'The Hollow Crown') {
   await page.goto('./');
+  await page.getByRole('button', { name: /Blank project/ }).click();
   await page.getByLabel('Project name').fill(name);
   await page.getByRole('button', { name: 'Create project' }).click();
   await expect(page.getByRole('heading', { name })).toBeVisible();
