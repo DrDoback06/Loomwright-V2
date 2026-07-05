@@ -1,6 +1,7 @@
 import { db } from '../schema';
 import { getAuditEntry, logAudit } from './audit';
 import type { Entity } from '../types';
+import type { GenerateApplyRecord } from '@/services/generate/apply';
 
 /** Undo a reversible audit entry by writing its `before` snapshot back
  * (or removing the record for a create). Logs a fresh audit entry —
@@ -52,6 +53,38 @@ export async function undoAuditEntry(entryId: string): Promise<boolean> {
           reversible: true,
         });
       });
+      return true;
+    }
+    case 'generate.apply': {
+      const record = entry.after as GenerateApplyRecord | null;
+      if (!record) return false;
+      await db.transaction(
+        'rw',
+        [db.entities, db.skillTrees, db.tangleBoards, db.chapters, db.links, db.auditLog],
+        async () => {
+          await db.entities.bulkDelete(record.entityIds);
+          for (const patched of record.patchedEntities) {
+            await db.entities.put(patched.before);
+          }
+          for (const graph of record.graphs) {
+            const table = graph.kind === 'skilltree' ? db.skillTrees : db.tangleBoards;
+            await table.delete(graph.id);
+          }
+          for (const patched of record.patchedGraphs) {
+            const table = patched.kind === 'skilltree' ? db.skillTrees : db.tangleBoards;
+            await table.put(patched.before as never);
+          }
+          await db.chapters.bulkDelete(record.chapterIds);
+          await db.links.bulkDelete(record.linkIds);
+          await logAudit({
+            projectId: entry.projectId,
+            action: 'generate.undo',
+            target: entry.target,
+            before: record,
+            reversible: false,
+          });
+        }
+      );
       return true;
     }
     default:

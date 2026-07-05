@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
+import { configuredEntityTypes, getEntityConfig } from '@/domain/entity-configs';
 import { buildSearchIndex, type SearchHit } from '@/services/search';
+import { useEditorStore } from '@/stores/editor';
 import { useFocusStore } from '@/stores/focus';
+import { useGenerationStore } from '@/stores/generation';
 import { useProjectStore } from '@/stores/project';
 import { useUiStore, type RouteId } from '@/stores/ui';
 
@@ -10,6 +13,8 @@ interface Command {
   title: string;
   subtitle: string;
   run: () => void;
+  /** Hidden until the query matches — keeps the idle palette short. */
+  searchOnly?: boolean;
 }
 
 interface Row {
@@ -28,6 +33,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const setCodexType = useUiStore((s) => s.setCodexType);
   const requestChapter = useUiStore((s) => s.requestChapter);
   const setFocus = useFocusStore((s) => s.setFocus);
+  const openCreate = useEditorStore((s) => s.openCreate);
+  const openGenerate = useGenerationStore((s) => s.openDialog);
 
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -70,14 +77,41 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: 'handoff', title: 'Go to AI Handoff', subtitle: 'External-AI workflow', run: () => go('handoff') },
       { id: 'settings', title: 'Go to Settings', subtitle: 'AI, privacy, extraction', run: () => go('settings') },
       { id: 'trash', title: 'Go to Trash', subtitle: 'Restore deleted things', run: () => go('trash') },
+      // Create anything, from anywhere: one manual + one generate command
+      // per configured entity type.
+      ...configuredEntityTypes().flatMap((type) => {
+        const label = (getEntityConfig(type)?.displayName ?? ENTITY_TYPE_META[type].label).toLowerCase();
+        return [
+          {
+            id: `create-${type}`,
+            title: `Create ${label}…`,
+            subtitle: 'Blank editor',
+            searchOnly: true,
+            run: () => {
+              openCreate(type);
+              onClose();
+            },
+          },
+          {
+            id: `generate-${type}`,
+            title: `Generate ${label}… ✨`,
+            subtitle: 'Random, AI, or paste JSON',
+            searchOnly: true,
+            run: () => {
+              openGenerate({ kind: 'entity', entityType: type });
+              onClose();
+            },
+          },
+        ];
+      }),
     ],
-    []
+    [onClose, openCreate, openGenerate]
   );
 
   const rows: Row[] = useMemo(() => {
     const q = query.trim().toLowerCase();
     const commandRows: Row[] = commands
-      .filter((c) => !q || c.title.toLowerCase().includes(q) || c.subtitle.toLowerCase().includes(q))
+      .filter((c) => (q ? c.title.toLowerCase().includes(q) || c.subtitle.toLowerCase().includes(q) : !c.searchOnly))
       .map((c) => ({ key: `cmd:${c.id}`, glyph: '›', title: c.title, subtitle: c.subtitle, run: c.run }));
     const hitRows: Row[] = hits.map((h) => ({
       key: `${h.kind}:${h.id}`,

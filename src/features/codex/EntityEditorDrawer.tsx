@@ -1,31 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getEntityConfig } from '@/domain/entity-configs';
-import type { EntityConfig } from '@/domain/entity-configs/types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { createEntity, getEntity, updateEntity } from '@/db/repos/entities';
 import type { Entity } from '@/db/types';
 import { useEditorStore } from '@/stores/editor';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
+import { nameFieldIdOf, TOP_LEVEL_FIELD_IDS as TOP_LEVEL_FIELDS } from '@/services/generate/spec';
+import { coerceEntityDraft, draftToInitialForm } from '@/services/generate/coerce';
+import { loadKnownEntities } from '@/services/generate/known';
+import { parseJsonObject } from '@/services/ai/ai-candidates';
 import { FieldInput } from './fields/FieldInput';
 
-/** Field ids that live on the Entity record itself rather than in
- * entity.fields — kept aligned with extraction + import round-trips.
- * Some configs (quests, events, lore, references, timeline) call their
- * name field 'title'; relationships derive theirs from from → to. */
-const TOP_LEVEL_FIELDS = new Set(['name', 'title', 'aliases', 'summary', 'tags']);
-
 type FormState = Record<string, unknown>;
-
-function nameFieldIdOf(config: EntityConfig): 'name' | 'title' | null {
-  for (const section of config.sections) {
-    for (const f of section.fields) {
-      if (f.id === 'name') return 'name';
-      if (f.id === 'title') return 'title';
-    }
-  }
-  return null;
-}
 
 function formFromEntity(entity: Entity, nameFieldId: 'name' | 'title' | null): FormState {
   return {
@@ -68,6 +55,8 @@ export function EntityEditorDrawer() {
   const [form, setForm] = useState<FormState>({});
   const [activeSection, setActiveSection] = useState<string>('');
   const [loadedFor, setLoadedFor] = useState<string>('');
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
 
   const config = target ? getEntityConfig(target.type) : undefined;
   const meta = target ? ENTITY_TYPE_META[target.type] : undefined;
@@ -127,7 +116,38 @@ export function EntityEditorDrawer() {
 
   const cancel = () => {
     setLoadedFor('');
+    setPasteOpen(false);
+    setPasteText('');
     close();
+  };
+
+  /** Paste entity JSON (from Copy as JSON, an external AI, or by hand):
+   * every recognised field coerces into the form; blanks stay untouched. */
+  const applyPastedJson = async () => {
+    const parsed = parseJsonObject(pasteText);
+    if (!parsed) {
+      toast('No JSON object found in that text.', { kind: 'error' });
+      return;
+    }
+    const known = await loadKnownEntities(projectId);
+    const result = coerceEntityDraft(target.type, parsed, { known, siblings: [] });
+    if (!result) {
+      toast('That JSON has no usable name/title for this entry type.', { kind: 'error' });
+      return;
+    }
+    const incoming = draftToInitialForm(result.draft);
+    const values = Object.entries(incoming).filter(
+      ([, v]) => v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0)
+    );
+    setForm((f) => ({ ...f, ...Object.fromEntries(values) }));
+    setPasteOpen(false);
+    setPasteText('');
+    toast(
+      `${values.length} field${values.length === 1 ? '' : 's'} filled from JSON${
+        result.warnings.length ? ` (${result.warnings.length} skipped — see the fields)` : ''
+      }.`,
+      { kind: 'success' }
+    );
   };
 
   return (
@@ -145,10 +165,46 @@ export function EntityEditorDrawer() {
             </div>
             <h2 className="lw-drawer__title">{name || `Untitled ${config.displayName.toLowerCase()}`}</h2>
           </div>
-          <button type="button" className="lw-iconbtn" aria-label="Close editor" onClick={cancel}>
-            ×
-          </button>
+          <div className="lw-drawer__headactions">
+            <button
+              type="button"
+              className="lw-btn"
+              aria-pressed={pasteOpen}
+              onClick={() => setPasteOpen((v) => !v)}
+            >
+              Paste JSON
+            </button>
+            <button type="button" className="lw-iconbtn" aria-label="Close editor" onClick={cancel}>
+              ×
+            </button>
+          </div>
         </header>
+
+        {pasteOpen ? (
+          <div className="lw-drawer__paste" data-testid="drawer-paste">
+            <textarea
+              className="lw-input"
+              rows={5}
+              placeholder="Paste entity JSON — fields auto-fill across every tab."
+              aria-label="Entity JSON"
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+            />
+            <div className="lw-chips__add">
+              <button
+                type="button"
+                className="lw-btn lw-btn--primary"
+                disabled={!pasteText.trim()}
+                onClick={() => void applyPastedJson()}
+              >
+                Fill fields
+              </button>
+              <button type="button" className="lw-btn" onClick={() => setPasteOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="lw-drawer__body">
           <nav className="lw-drawer__nav" aria-label="Editor sections">

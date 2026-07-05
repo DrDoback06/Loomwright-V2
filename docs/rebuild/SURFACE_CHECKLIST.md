@@ -298,3 +298,18 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Every surface (13 + 16 codex types) renders on the sample project with zero console/page errors, desktop + mobile | `15-sweep.spec.ts` |
 | Palette, help, and editor overlays open/close cleanly | `15-sweep.spec.ts` |
 | Legacy FINAL_QA_REPORT scenario families → covering specs: UAT interaction (02–08), multi-provider AI routing (09), audit/undo (02), search/indexing (10), speed reader (11), project import/export (12), workspace persistence (06–08), field parity (02, 06, 15), extraction quality (04, 15, fixtures) | cross-reference |
+
+## Generation: foundations + JSON round-trip (G1)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Roster split button: ✨ Generate | Opens the Create Anything dialog pre-targeted to the type | `16-generate.spec.ts` |
+| Dialog: Manual tab → Open blank editor | Forwards to the plain editor drawer | `16-generate.spec.ts` (dialog flow) |
+| Dialog: Paste JSON tab → Copy prompt for external AI | Copies a config-derived prompt (schema + field guidance + known names) | unit `generate.spec.ts` (prompt content) |
+| Dialog: Paste JSON tab → Stage it | Parses/coerces pasted JSON; single entity prefills the drawer, multiple show a preview | `16-generate.spec.ts` |
+| Dialog: paste preview → Accept all | Creates every entry in one transaction with one Undo | `16-generate.spec.ts` |
+| Toast: Undo (generation) | Reverts the whole accepted bundle as one unit | `16-generate.spec.ts` + unit `generate.spec.ts` |
+| Dossier: Copy as JSON | Copies the entity as portable wire JSON (names, never ids) | `16-generate.spec.ts` |
+| Dossier: Copy AI prompt | Copies a make-one-like-this prompt with the entity as the example | (same code path as Copy as JSON; unit-covered prompt) |
+| Editor drawer: Paste JSON → Fill fields | Coerces pasted JSON into the open form across all tabs | `16-generate.spec.ts` |
+| Palette: Create <type>… / Generate <type>… ✨ | Opens the drawer / the dialog for any configured type | `16-generate.spec.ts` (generate creature) |

@@ -13,6 +13,7 @@ import { CommandPalette } from '@/features/search/CommandPalette';
 import { HelpDialog } from '@/features/help/HelpDialog';
 import { EntityRosterSurface } from '@/features/codex/EntityRosterSurface';
 import { EntityEditorDrawer } from '@/features/codex/EntityEditorDrawer';
+import { CreateAnythingDialog } from '@/features/generate/CreateAnythingDialog';
 import { TrashSurface } from '@/features/system/TrashSurface';
 import { ReviewSurface } from '@/features/review/ReviewSurface';
 import { WritersRoom } from '@/features/writers-room/WritersRoom';
@@ -92,6 +93,7 @@ export function App() {
           {isMobile && <MobileNav />}
         </div>
         <EntityEditorDrawer />
+        <CreateAnythingDialog />
         {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
         {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
       </ProjectGate>

@@ -33,7 +33,9 @@ export const castConfig: EntityConfig = {
         { id: 'pronouns', label: 'Pronouns', kind: 'pills', options: PRONOUNS },
         { id: 'ageRange', label: 'Age range', kind: 'pills', options: AGE_RANGES },
         { id: 'age', label: 'Age (number)', kind: 'text', placeholder: '31' },
-        { id: 'title', label: 'Title / honorific', kind: 'text', placeholder: 'Lady, Captain, Apprentice…' },
+        // id must not be 'title' — the editor treats name/title as the
+        // identity column and would have silently dropped this field on save.
+        { id: 'honorific', label: 'Title / honorific', kind: 'text', placeholder: 'Lady, Captain, Apprentice…' },
         { id: 'species', label: 'Species / race', kind: 'related', related: 'races' },
         { id: 'class', label: 'Class / archetype', kind: 'related', related: 'classes' },
         { id: 'faction', label: 'Faction', kind: 'related', related: 'factions' },

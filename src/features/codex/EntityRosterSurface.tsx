@@ -8,6 +8,7 @@ import { restoreFromTrash } from '@/db/repos/trash';
 import type { Entity } from '@/db/types';
 import { useEditorStore } from '@/stores/editor';
 import { useFocusStore } from '@/stores/focus';
+import { useGenerationStore } from '@/stores/generation';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
 import { EntityDetail } from './EntityDetail';
@@ -23,6 +24,7 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const openCreate = useEditorStore((s) => s.openCreate);
   const openEdit = useEditorStore((s) => s.openEdit);
+  const openGenerate = useGenerationStore((s) => s.openDialog);
 
   const focus = useFocusStore((s) => s.focus);
   const adoptionPending = useFocusStore((s) => s.adoptionPending);
@@ -152,13 +154,24 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
             {meta.plural}
             <span className="lw-roster__count">{entities.length}</span>
           </h1>
-          <button
-            type="button"
-            className="lw-btn lw-btn--primary"
-            onClick={() => openCreate(type)}
-          >
-            + Create {config?.displayName.toLowerCase() ?? meta.label.toLowerCase()}
-          </button>
+          <span className="lw-splitbtn">
+            <button
+              type="button"
+              className="lw-btn lw-btn--primary"
+              onClick={() => openCreate(type)}
+            >
+              + Create {config?.displayName.toLowerCase() ?? meta.label.toLowerCase()}
+            </button>
+            <button
+              type="button"
+              className="lw-btn lw-btn--primary lw-splitbtn__more"
+              aria-label={`Generate ${config?.displayName.toLowerCase() ?? meta.label.toLowerCase()} (random, AI, or paste JSON)`}
+              title="Generate — random, AI, or paste JSON"
+              onClick={() => openGenerate({ kind: 'entity', entityType: type })}
+            >
+              ✨
+            </button>
+          </span>
           {type === 'references' && projectId ? <ReferenceImport projectId={projectId} /> : null}
         </header>
         {viewToggle}

@@ -9,6 +9,9 @@ import { getEntityConfig } from '@/domain/entity-configs';
 import type { FieldDef, StatRow, StepRow } from '@/domain/entity-configs/types';
 import { updateEntity } from '@/db/repos/entities';
 import { saveEntityTemplate } from '@/services/templates';
+import { entityWireString } from '@/services/generate/serialize';
+import { buildGenerationPrompt } from '@/services/generate/wire';
+import { loadKnownEntities } from '@/services/generate/known';
 import { ENTITY_TYPE_META, type EntityRef } from '@/domain/entity-types';
 
 interface EntityDetailProps {
@@ -89,6 +92,36 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
             }}
           >
             Save as template
+          </button>
+          <button
+            type="button"
+            className="lw-btn"
+            onClick={async () => {
+              await navigator.clipboard.writeText(entityWireString(entity));
+              toast(`${entity.name} copied as JSON — paste it into any create menu (or an AI chat).`, { kind: 'success' });
+            }}
+          >
+            Copy as JSON
+          </button>
+          <button
+            type="button"
+            className="lw-btn"
+            onClick={async () => {
+              const known = await loadKnownEntities(entity.projectId);
+              const prompt = [
+                buildGenerationPrompt(
+                  { kind: 'entity', entityType: entity.type },
+                  { projectId: entity.projectId, known }
+                ),
+                '',
+                'Here is an existing entry as a style/shape example — make the new one this rich:',
+                entityWireString(entity),
+              ].join('\n');
+              await navigator.clipboard.writeText(prompt);
+              toast('AI prompt copied — paste it into any AI, then paste the JSON reply into a create menu.', { kind: 'success' });
+            }}
+          >
+            Copy AI prompt
           </button>
           {confirmingDelete ? (
             <span className="lw-confirm">

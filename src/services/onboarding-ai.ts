@@ -1,4 +1,5 @@
 import { parseJsonObject } from '@/services/ai/ai-candidates';
+import { fromSet, str, strList as strListBase } from '@/services/generate/coerce';
 import type { CastSeed, OnboardingAnswers, PlaceSeed } from '@/services/onboarding';
 
 /** The prompt a user copies into any external chat AI (ChatGPT, Claude,
@@ -40,36 +41,10 @@ export function buildOnboardingPrompt(): string {
 const GENRE_SET = new Set(['Fantasy', 'Science fiction', 'Historical', 'Mystery', 'Romance', 'Thriller', 'Literary', 'Horror']);
 const TONE_SET = new Set(['Dark', 'Grounded', 'Hopeful', 'Whimsical', 'Epic', 'Intimate']);
 
-function str(v: unknown, max = 2000): string | undefined {
-  if (typeof v !== 'string') return undefined;
-  const t = v.trim();
-  return t ? t.slice(0, max) : undefined;
-}
-
-/** Coerce anything (string or array) into a clean string[]. */
-function strList(v: unknown, max = 20): string[] {
-  const raw = Array.isArray(v) ? v : typeof v === 'string' ? v.split(/[,\n]/) : [];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const item of raw) {
-    const s = str(item, 60);
-    if (s && !seen.has(s.toLowerCase())) {
-      seen.add(s.toLowerCase());
-      out.push(s);
-    }
-  }
-  return out.slice(0, max);
-}
-
-/** Keep only values that belong to a known option set (case-insensitive). */
-function fromSet(values: string[], set: Set<string>): string[] {
-  const canon = new Map([...set].map((o) => [o.toLowerCase(), o]));
-  const out: string[] = [];
-  for (const v of values) {
-    const hit = canon.get(v.toLowerCase());
-    if (hit && !out.includes(hit)) out.push(hit);
-  }
-  return out;
+/** Onboarding lists stay short: ≤20 items, ≤60 chars each. Shared
+ * coercion helpers live in services/generate/coerce. */
+function strList(v: unknown): string[] {
+  return strListBase(v, 20, 60);
 }
 
 /** Parse an external AI's reply into a partial set of onboarding answers

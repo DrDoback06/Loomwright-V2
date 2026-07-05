@@ -2497,3 +2497,97 @@ select.lw-input {
   font-size: var(--fs-2xs);
   resize: vertical;
 }
+
+/* ---- Generation: create-anything dialog, split button, drawer paste ---- */
+
+.lw-splitbtn {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.lw-splitbtn .lw-btn:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.lw-splitbtn__more {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid color-mix(in srgb, var(--bg-elev) 35%, transparent);
+  padding-inline: var(--sp-3);
+}
+
+.lw-dialog--wide {
+  width: min(680px, calc(100vw - 2 * var(--sp-6)));
+}
+
+.lw-gentab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+}
+
+.lw-gentab textarea.lw-input {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  resize: vertical;
+}
+
+.lw-fieldnote--error {
+  color: var(--danger, #a33);
+}
+
+.lw-genpreview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.lw-genpreview__list {
+  margin: 0;
+  padding-left: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: var(--fs-xs);
+}
+
+.lw-genpreview__list em {
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.lw-genpreview__warnings summary {
+  cursor: pointer;
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+}
+
+.lw-genpreview__warnings ul {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-6);
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+}
+
+.lw-drawer__headactions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-shrink: 0;
+}
+
+.lw-drawer__paste {
+  padding: var(--sp-4) var(--sp-9);
+  border-bottom: 1px solid var(--line-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.lw-drawer__paste textarea.lw-input {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  resize: vertical;
+}

@@ -33,7 +33,7 @@ export interface Link {
   /** e.g. 'related' | field id ('allies') | tangle edge label */
   kind: string;
   note?: string;
-  source: 'manual' | 'extraction' | 'merge' | 'import';
+  source: 'manual' | 'extraction' | 'merge' | 'import' | 'generate';
   createdAt: number;
 }
 
@@ -156,6 +156,8 @@ export interface GraphNode {
   y: number;
   /** skill trees: unlock state */
   unlocked?: boolean;
+  /** skill trees: branch/group name — drives node coloring + legend. */
+  group?: string;
 }
 
 export interface GraphEdge {
