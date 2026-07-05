@@ -6,13 +6,15 @@ import { draftToInitialForm } from '@/services/generate/coerce';
 import { loadKnownEntities } from '@/services/generate/known';
 import { buildGenerationPrompt, parseWireBundle } from '@/services/generate/wire';
 import { needsStaging, type GenerationBundle } from '@/services/generate/types';
+import { generateRandomBundle } from '@/services/generate/random/engine';
+import { THEMES } from '@/services/generate/random/packs/lexicon';
 import { undoAuditEntry } from '@/db/repos/undo';
 import { useEditorStore } from '@/stores/editor';
 import { useGenerationStore } from '@/stores/generation';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
 
-type TabId = 'manual' | 'paste';
+type TabId = 'manual' | 'random' | 'paste';
 
 /** The app-wide four-mode create flow. Opens pre-targeted (a type, a
  * tree, a board…); Manual forwards straight to the editor drawer, the
@@ -25,7 +27,7 @@ export function CreateAnythingDialog() {
   const openCreate = useEditorStore((s) => s.openCreate);
   const projectId = useProjectStore((s) => s.currentProjectId);
 
-  const [tab, setTab] = useState<TabId>('paste');
+  const [tab, setTab] = useState<TabId>('random');
 
   if (!target || !projectId) return null;
 
@@ -44,7 +46,11 @@ export function CreateAnythingDialog() {
     if (!needsStaging(bundle) && bundle.entities.length === 1) {
       const draft = bundle.entities[0];
       closeDialog();
-      openCreate(draft.type, draftToInitialForm(draft));
+      openCreate(draft.type, draftToInitialForm(draft), {
+        theme: bundle.request.theme,
+        hint: bundle.request.hint,
+        seed: bundle.seed,
+      });
       if (bundle.warnings.length) {
         toast(`Prefilled with ${bundle.warnings.length} note${bundle.warnings.length === 1 ? '' : 's'} — check the fields.`, { kind: 'info' });
       }
@@ -85,6 +91,15 @@ export function CreateAnythingDialog() {
           <button
             type="button"
             role="tab"
+            aria-selected={tab === 'random'}
+            className={tab === 'random' ? 'lw-pill lw-pill--active' : 'lw-pill'}
+            onClick={() => setTab('random')}
+          >
+            Random
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={tab === 'paste'}
             className={tab === 'paste' ? 'lw-pill lw-pill--active' : 'lw-pill'}
             onClick={() => setTab('paste')}
@@ -107,6 +122,13 @@ export function CreateAnythingDialog() {
               </button>
             </div>
           </div>
+        ) : tab === 'random' ? (
+          <RandomTab
+            projectId={projectId}
+            entityType={target.entityType}
+            onDeliver={deliver}
+            onCancel={closeDialog}
+          />
         ) : (
           <PasteTab
             projectId={projectId}
@@ -115,6 +137,167 @@ export function CreateAnythingDialog() {
             onCancel={closeDialog}
           />
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Apply an entity bundle and toast one Undo for the lot. */
+async function acceptEntityBundle(bundle: GenerationBundle, onDone: () => void) {
+  const result = await applyBundle(bundle);
+  const total = result.created.length + result.updated.length;
+  onDone();
+  toast(`${total} ${total === 1 ? 'entry' : 'entries'} added.`, {
+    kind: 'success',
+    action: {
+      label: 'Undo',
+      run: async () => {
+        await undoAuditEntry(result.auditId);
+        toast('Generation undone.', { kind: 'success' });
+      },
+    },
+  });
+}
+
+/** Preview list a multi-entity bundle before Accept — shared by the
+ * Random and Paste tabs. */
+function EntityBundlePreview({ bundle, testId }: { bundle: GenerationBundle; testId: string }) {
+  return (
+    <div className="lw-card lw-genpreview" data-testid={testId}>
+      <p className="lw-fieldnote">
+        {bundle.entities.length} entries staged — accepting creates them all (one Undo reverts
+        everything):
+      </p>
+      <ul className="lw-genpreview__list">
+        {bundle.entities.map((d) => (
+          <li key={d.localId}>
+            <span aria-hidden>{ENTITY_TYPE_META[d.type].glyph}</span> {d.name}
+            {d.summary ? <span className="lw-genpreview__sub"> — {d.summary}</span> : null}
+            {d.existingEntityId ? <em> — updates existing</em> : null}
+          </li>
+        ))}
+      </ul>
+      {bundle.warnings.length ? (
+        <details className="lw-genpreview__warnings">
+          <summary>
+            {bundle.warnings.length} note{bundle.warnings.length === 1 ? '' : 's'}
+          </summary>
+          <ul>
+            {bundle.warnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function RandomTab({
+  projectId,
+  entityType,
+  onDeliver,
+  onCancel,
+}: {
+  projectId: string;
+  entityType?: EntityType;
+  onDeliver: (bundle: GenerationBundle) => void;
+  onCancel: () => void;
+}) {
+  const [theme, setTheme] = useState('any');
+  const [hint, setHint] = useState('');
+  const [count, setCount] = useState(1);
+  const [parsed, setParsed] = useState<GenerationBundle | null>(null);
+
+  const roll = async () => {
+    if (!entityType) return;
+    const known = await loadKnownEntities(projectId);
+    const bundle = generateRandomBundle(
+      {
+        kind: count > 1 ? 'entity-batch' : 'entity',
+        entityType,
+        theme: theme === 'any' ? undefined : theme,
+        hint: hint.trim() || undefined,
+        count,
+      },
+      { projectId, known }
+    );
+    if (bundle.entities.length === 1) {
+      onDeliver(bundle);
+      return;
+    }
+    setParsed(bundle);
+  };
+
+  return (
+    <div className="lw-gentab" data-testid="random-tab">
+      <p className="lw-fieldnote">
+        Themed, offline, instant. A single roll lands in the editor — reroll any field with its
+        dice, then save when it sings. Batches preview here first.
+      </p>
+      <div className="lw-genopts">
+        <label className="lw-field__label" htmlFor="gen-theme">
+          Theme
+        </label>
+        <select
+          id="gen-theme"
+          className="lw-input"
+          value={theme}
+          onChange={(e) => setTheme(e.target.value)}
+        >
+          <option value="any">Surprise me</option>
+          {THEMES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <label className="lw-field__label" htmlFor="gen-hint">
+          Tailor it (optional)
+        </label>
+        <input
+          id="gen-hint"
+          className="lw-input"
+          placeholder='e.g. "a sorcerer who hates fire" or "poison"'
+          value={hint}
+          onChange={(e) => setHint(e.target.value)}
+        />
+        <label className="lw-field__label" htmlFor="gen-count">
+          How many
+        </label>
+        <input
+          id="gen-count"
+          className="lw-input"
+          type="number"
+          min={1}
+          max={24}
+          value={count}
+          onChange={(e) => setCount(Math.max(1, Math.min(24, Number(e.target.value) || 1)))}
+        />
+      </div>
+      {parsed ? <EntityBundlePreview bundle={parsed} testId="random-preview" /> : null}
+      <div className="lw-chips__add">
+        {parsed ? (
+          <>
+            <button
+              type="button"
+              className="lw-btn lw-btn--primary"
+              onClick={() => void acceptEntityBundle(parsed, onCancel)}
+            >
+              Accept all
+            </button>
+            <button type="button" className="lw-btn" onClick={() => void roll()}>
+              🎲 Reroll
+            </button>
+          </>
+        ) : (
+          <button type="button" className="lw-btn lw-btn--primary" onClick={() => void roll()}>
+            🎲 Roll it
+          </button>
+        )}
+        <button type="button" className="lw-btn" onClick={onCancel}>
+          Cancel
+        </button>
       </div>
     </div>
   );
@@ -134,7 +317,6 @@ function PasteTab({
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [parsed, setParsed] = useState<GenerationBundle | null>(null);
-  const discardStaged = useGenerationStore((s) => s.discard);
 
   const copyPrompt = async () => {
     const known = await loadKnownEntities(projectId);
@@ -164,23 +346,6 @@ function PasteTab({
     setParsed(result.bundle);
   };
 
-  const acceptAll = async () => {
-    if (!parsed) return;
-    const result = await applyBundle(parsed);
-    const total = result.created.length + result.updated.length;
-    discardStaged();
-    onCancel();
-    toast(`${total} ${total === 1 ? 'entry' : 'entries'} added.`, {
-      kind: 'success',
-      action: {
-        label: 'Undo',
-        run: async () => {
-          await undoAuditEntry(result.auditId);
-          toast('Generation undone.', { kind: 'success' });
-        },
-      },
-    });
-  };
 
   return (
     <div className="lw-gentab" data-testid="paste-tab">
@@ -206,37 +371,14 @@ function PasteTab({
         }}
       />
       {error ? <p className="lw-fieldnote lw-fieldnote--error">{error}</p> : null}
-      {parsed ? (
-        <div className="lw-card lw-genpreview" data-testid="paste-preview">
-          <p className="lw-fieldnote">
-            Parsed {parsed.entities.length} entries — accepting creates them all (one Undo reverts
-            everything):
-          </p>
-          <ul className="lw-genpreview__list">
-            {parsed.entities.map((d) => (
-              <li key={d.localId}>
-                <span aria-hidden>{ENTITY_TYPE_META[d.type].glyph}</span> {d.name}
-                {d.existingEntityId ? <em> — updates existing</em> : null}
-              </li>
-            ))}
-          </ul>
-          {parsed.warnings.length ? (
-            <details className="lw-genpreview__warnings">
-              <summary>
-                {parsed.warnings.length} note{parsed.warnings.length === 1 ? '' : 's'}
-              </summary>
-              <ul>
-                {parsed.warnings.map((w, i) => (
-                  <li key={i}>{w}</li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
-        </div>
-      ) : null}
+      {parsed ? <EntityBundlePreview bundle={parsed} testId="paste-preview" /> : null}
       <div className="lw-chips__add">
         {parsed ? (
-          <button type="button" className="lw-btn lw-btn--primary" onClick={() => void acceptAll()}>
+          <button
+            type="button"
+            className="lw-btn lw-btn--primary"
+            onClick={() => void acceptEntityBundle(parsed, onCancel)}
+          >
             Accept all
           </button>
         ) : (

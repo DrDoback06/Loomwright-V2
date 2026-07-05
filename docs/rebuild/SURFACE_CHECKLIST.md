@@ -313,3 +313,14 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Dossier: Copy AI prompt | Copies a make-one-like-this prompt with the entity as the example | (same code path as Copy as JSON; unit-covered prompt) |
 | Editor drawer: Paste JSON → Fill fields | Coerces pasted JSON into the open form across all tabs | `16-generate.spec.ts` |
 | Palette: Create <type>… / Generate <type>… ✨ | Opens the drawer / the dialog for any configured type | `16-generate.spec.ts` (generate creature) |
+
+## Generation: random engine (G2)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Dialog: Random tab (theme / tailor hint / how many) | Offline themed generation; 1 → prefilled drawer, N → preview | `16-generate.spec.ts` |
+| Random tab: 🎲 Roll it / 🎲 Reroll | Generates (or regenerates with a fresh seed) | `16-generate.spec.ts` |
+| Random preview: Accept all | Creates the batch in one transaction with one Undo | `16-generate.spec.ts` |
+| Editor drawer: 🎲 per-field dice (create mode) | Rerolls only that field, themed by the generation context | `16-generate.spec.ts` |
+| Editor drawer: 🎲 Fill empty fields | Random-fills only blank fields | `16-generate.spec.ts` |
+| Editor drawer: Reroll all | Replaces the form with a fresh themed draft | (same engine path; unit `generate.spec.ts` determinism) |

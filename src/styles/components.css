@@ -2591,3 +2591,39 @@ select.lw-input {
   font-size: var(--fs-2xs);
   resize: vertical;
 }
+
+/* ---- Generation: field dice + random tab ---- */
+
+.lw-field__labelrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.lw-dice {
+  font-size: var(--fs-2xs);
+  line-height: 1;
+  opacity: 0.55;
+}
+
+.lw-dice:hover,
+.lw-dice:focus-visible {
+  opacity: 1;
+}
+
+.lw-genopts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-2);
+}
+
+.lw-genpreview__sub {
+  color: var(--ink-3);
+}
+
+.lw-drawer__foot-tools {
+  display: flex;
+  gap: var(--sp-3);
+  margin-right: auto;
+}

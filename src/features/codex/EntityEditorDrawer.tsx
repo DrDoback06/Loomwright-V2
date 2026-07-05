@@ -9,8 +9,16 @@ import { toast } from '@/stores/toasts';
 import { nameFieldIdOf, TOP_LEVEL_FIELD_IDS as TOP_LEVEL_FIELDS } from '@/services/generate/spec';
 import { coerceEntityDraft, draftToInitialForm } from '@/services/generate/coerce';
 import { loadKnownEntities } from '@/services/generate/known';
+import { generateRandomBundle, rollEmptyFields, rollField } from '@/services/generate/random/engine';
 import { parseJsonObject } from '@/services/ai/ai-candidates';
+import type { FieldDef } from '@/domain/entity-configs/types';
 import { FieldInput } from './fields/FieldInput';
+
+/** Kinds the per-field dice can roll something for. */
+const ROLLABLE_KINDS = new Set<FieldDef['kind']>([
+  'text', 'textarea', 'longtext', 'chips', 'pills', 'select', 'multiselect',
+  'toggle', 'number', 'related', 'related-multi',
+]);
 
 type FormState = Record<string, unknown>;
 
@@ -119,6 +127,54 @@ export function EntityEditorDrawer() {
     setPasteOpen(false);
     setPasteText('');
     close();
+  };
+
+  const generation = target.mode === 'create' ? target.generation : undefined;
+
+  /** Per-field dice: fresh themed content for just this field. */
+  const rollOne = async (field: FieldDef) => {
+    const known = await loadKnownEntities(projectId);
+    const value = rollField(target.type, field.id, {
+      projectId,
+      known,
+      theme: generation?.theme,
+      hint: generation?.hint,
+    });
+    if (value === undefined) {
+      toast(`Nothing to roll for ${field.label} yet — add some entries to link first.`, { kind: 'info' });
+      return;
+    }
+    setForm((f) => ({ ...f, [field.id]: value }));
+  };
+
+  /** Random-fill only the fields that are still blank. */
+  const fillEmpty = async () => {
+    const known = await loadKnownEntities(projectId);
+    const rolled = rollEmptyFields(target.type, form, {
+      projectId,
+      known,
+      theme: generation?.theme,
+      hint: generation?.hint,
+    });
+    const count = Object.keys(rolled).length;
+    if (!count) {
+      toast('Every field already has something — nothing to fill.', { kind: 'info' });
+      return;
+    }
+    setForm((f) => ({ ...f, ...rolled }));
+    toast(`${count} field${count === 1 ? '' : 's'} filled.`, { kind: 'success' });
+  };
+
+  /** Fresh draft, same theme/hint — replaces the whole form. */
+  const rerollAll = async () => {
+    const known = await loadKnownEntities(projectId);
+    const bundle = generateRandomBundle(
+      { kind: 'entity', entityType: target.type, theme: generation?.theme, hint: generation?.hint },
+      { projectId, known }
+    );
+    const draft = bundle.entities[0];
+    if (!draft) return;
+    setForm({ aliases: [], tags: [], ...draftToInitialForm(draft) });
   };
 
   /** Paste entity JSON (from Copy as JSON, an external AI, or by hand):
@@ -231,10 +287,25 @@ export function EntityEditorDrawer() {
                   key={field.id}
                   className={field.span === 2 ? 'lw-field lw-field--full' : 'lw-field'}
                 >
-                  <label className="lw-field__label" htmlFor={`field-${field.id}`}>
-                    {field.label}
-                    {field.required ? ' *' : ''}
-                  </label>
+                  <span className="lw-field__labelrow">
+                    <label className="lw-field__label" htmlFor={`field-${field.id}`}>
+                      {field.label}
+                      {field.required ? ' *' : ''}
+                    </label>
+                    {target.mode === 'create' &&
+                    ROLLABLE_KINDS.has(field.kind) &&
+                    !TOP_LEVEL_FIELDS.has(field.id) ? (
+                      <button
+                        type="button"
+                        className="lw-iconbtn lw-dice"
+                        aria-label={`Reroll ${field.label}`}
+                        title={`Reroll ${field.label}`}
+                        onClick={() => void rollOne(field)}
+                      >
+                        🎲
+                      </button>
+                    ) : null}
+                  </span>
                   <FieldInput
                     field={field}
                     value={form[field.id]}
@@ -251,6 +322,26 @@ export function EntityEditorDrawer() {
         </div>
 
         <footer className="lw-drawer__foot">
+          {target.mode === 'create' ? (
+            <span className="lw-drawer__foot-tools">
+              <button
+                type="button"
+                className="lw-btn"
+                title="Random-fill only the blank fields"
+                onClick={() => void fillEmpty()}
+              >
+                🎲 Fill empty fields
+              </button>
+              <button
+                type="button"
+                className="lw-btn"
+                title="Replace everything with a fresh roll"
+                onClick={() => void rerollAll()}
+              >
+                Reroll all
+              </button>
+            </span>
+          ) : null}
           <button type="button" className="lw-btn" onClick={cancel}>
             Cancel
           </button>

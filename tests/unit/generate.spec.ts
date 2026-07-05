@@ -15,6 +15,9 @@ import { entitySpec, generableFields, wireExample } from '@/services/generate/sp
 import { entityToWireJson } from '@/services/generate/serialize';
 import { applyBundle } from '@/services/generate/apply';
 import { parseWireBundle } from '@/services/generate/wire';
+import { generateRandomBundle, rollEmptyFields, rollField } from '@/services/generate/random/engine';
+import { createRng } from '@/services/generate/random/rng';
+import { matchArchetype } from '@/services/generate/random/packs';
 import type { FieldSpec } from '@/services/generate/spec';
 import type { GenerationBundle } from '@/services/generate/types';
 
@@ -507,5 +510,103 @@ describe('generate/apply + undo', () => {
     const restored = (await db.skillTrees.get('tree1'))!;
     expect(restored.nodes).toHaveLength(1);
     expect(restored.edges).toHaveLength(0);
+  });
+});
+
+describe('generate/random engine', () => {
+  const ctx = { projectId: 'p1', known: [] as KnownEntity[] };
+
+  it('is deterministic for a fixed seed and different across seeds', () => {
+    const req = { kind: 'entity' as const, entityType: 'cast' as const, theme: 'high-fantasy', hint: 'sorcerer' };
+    const a = generateRandomBundle(req, ctx, 42);
+    const b = generateRandomBundle(req, ctx, 42);
+    const c = generateRandomBundle(req, ctx, 43);
+    expect(a.entities[0].name).toBe(b.entities[0].name);
+    expect(a.entities[0].fields).toEqual(b.entities[0].fields);
+    expect(a.seed).toBe(42);
+    expect(a.entities[0].name).not.toBe(c.entities[0].name);
+  });
+
+  it('yields a valid named draft with filled fields for every configured type', () => {
+    for (const type of configuredEntityTypes()) {
+      if (type === 'relationships') continue; // needs cast context; see below
+      const bundle = generateRandomBundle(
+        { kind: 'entity', entityType: type, theme: 'grimdark' },
+        ctx,
+        7
+      );
+      const draft = bundle.entities[0];
+      expect(draft, type).toBeDefined();
+      expect(draft.name.length, type).toBeGreaterThan(2);
+      expect(draft.summary.length, type).toBeGreaterThan(10);
+      expect(Object.keys(draft.fields).length, `${type} fields`).toBeGreaterThan(0);
+      // Everything rolled must survive the coercion path (valid shapes).
+      const recoerced = coerceEntityDraft(
+        type,
+        { name: draft.name, summary: draft.summary, fields: draft.fields },
+        { known: ctx.known, siblings: [] }
+      );
+      expect(recoerced, type).not.toBeNull();
+    }
+  });
+
+  it('links related fields to known entities when they exist', () => {
+    const known: KnownEntity[] = [
+      { id: 'c1', type: 'cast', name: 'Aelinor', aliases: [] },
+      { id: 'r1', type: 'races', name: 'Tidefolk', aliases: [] },
+      { id: 'f1', type: 'factions', name: 'The Veiled Court', aliases: [] },
+    ];
+    // Across many seeds, cast drafts must eventually link a known race.
+    let linked = false;
+    for (let seed = 1; seed < 30 && !linked; seed++) {
+      const draft = generateRandomBundle(
+        { kind: 'entity', entityType: 'cast', theme: 'high-fantasy' },
+        { projectId: 'p1', known },
+        seed
+      ).entities[0];
+      const species = draft.fields.species as { id?: string } | undefined;
+      if (species?.id === 'r1') linked = true;
+    }
+    expect(linked).toBe(true);
+  });
+
+  it('entity-batch produces the requested count', () => {
+    const bundle = generateRandomBundle(
+      { kind: 'entity-batch', entityType: 'items', theme: 'science-fiction', count: 5 },
+      ctx,
+      11
+    );
+    expect(bundle.entities).toHaveLength(5);
+  });
+
+  it('rollField (forced) always produces a valid option for pills', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const value = rollField('cast', 'role', { ...ctx }, seed);
+      expect(typeof value).toBe('string');
+    }
+  });
+
+  it('rollEmptyFields never overwrites existing values', () => {
+    const current = { name: 'Keep Me', role: 'Mentor' };
+    const rolled = rollEmptyFields('cast', current, ctx, 5);
+    expect(rolled.name).toBeUndefined();
+    expect(rolled.role).toBeUndefined();
+    expect(Object.keys(rolled).length).toBeGreaterThan(0);
+  });
+
+  it('matchArchetype picks by hint keywords within theme', () => {
+    const pack = {
+      type: 'skills' as const,
+      archetypes: [
+        { id: 'fire', keywords: ['fire', 'flame'], themes: 'any' as const, lexicon: {} },
+        { id: 'poison', keywords: ['poison', 'venom'], themes: 'any' as const, lexicon: {} },
+      ],
+      generate: () => {
+        throw new Error('unused');
+      },
+    };
+    const rng = createRng(1);
+    expect(matchArchetype(rng, pack, 'grimdark', 'a venom blade').id).toBe('poison');
+    expect(matchArchetype(rng, pack, 'grimdark', 'flame dancer').id).toBe('fire');
   });
 });

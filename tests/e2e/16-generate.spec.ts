@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { bootWithProject, createCastMember, openNav } from './helpers';
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 test.describe('generation: JSON round-trip, create-anything dialog', () => {
   test('pasted single-entity JSON prefills the drawer across tabs; save creates it', async ({
     page,
@@ -11,6 +15,7 @@ test.describe('generation: JSON round-trip, create-anything dialog', () => {
 
     const dialog = page.getByTestId('create-anything');
     await expect(dialog).toBeVisible();
+    await dialog.getByRole('tab', { name: 'Paste JSON' }).click();
     await dialog.getByLabel('Pasted JSON').fill(
       JSON.stringify({
         name: 'Vex Marrow',
@@ -29,7 +34,7 @@ test.describe('generation: JSON round-trip, create-anything dialog', () => {
 
     // The pasted values crossed section tabs (Psychology holds these).
     await drawer.getByRole('button', { name: 'Psychology' }).click();
-    await expect(drawer.getByLabel('Personality')).toHaveValue('wry, watchful');
+    await expect(drawer.getByLabel('Personality', { exact: true })).toHaveValue('wry, watchful');
     // 'fears' is a chips field — the string coerced into one chip.
     await expect(drawer.getByText('open water')).toBeVisible();
 
@@ -61,6 +66,7 @@ test.describe('generation: JSON round-trip, create-anything dialog', () => {
     await page.getByLabel('Palette search').fill('generate creature');
     await page.getByRole('button', { name: /Generate creature/ }).click();
     const dialog = page.getByTestId('create-anything');
+    await dialog.getByRole('tab', { name: 'Paste JSON' }).click();
     await dialog.getByLabel('Pasted JSON').fill(copied);
     await dialog.getByRole('button', { name: 'Stage it' }).click();
 
@@ -77,6 +83,7 @@ test.describe('generation: JSON round-trip, create-anything dialog', () => {
     await page.getByRole('button', { name: /Generate character/ }).click();
 
     const dialog = page.getByTestId('create-anything');
+    await dialog.getByRole('tab', { name: 'Paste JSON' }).click();
     await dialog.getByLabel('Pasted JSON').fill(
       JSON.stringify({
         entities: [
@@ -105,6 +112,63 @@ test.describe('generation: JSON round-trip, create-anything dialog', () => {
     await expect(page.getByText('Generation undone.')).toBeVisible();
     await openNav(page, 'Cast');
     await expect(page.getByText('No cast yet.')).toBeVisible();
+  });
+
+  test('random roll prefills the drawer; a field die rerolls only its field', async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Cast');
+    await page.getByRole('button', { name: /Generate character/ }).click();
+
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByRole('tab', { name: 'Random' }).click();
+    await dialog.getByLabel('Theme').selectOption('high-fantasy');
+    await dialog.getByLabel('Tailor it (optional)').fill('sorcerer');
+    await dialog.getByRole('button', { name: '🎲 Roll it' }).click();
+
+    const drawer = page.getByRole('dialog', { name: 'New Character' });
+    await expect(drawer).toBeVisible();
+    const nameInput = drawer.getByLabel('Name *');
+    await expect(nameInput).not.toHaveValue('');
+    const rolledName = await nameInput.inputValue();
+
+    // A single die rerolls just its own field; the name stays put.
+    await drawer.getByRole('button', { name: 'Identity' }).click();
+    await drawer.getByRole('button', { name: 'Reroll Role in story' }).click();
+    await expect(
+      page.getByRole('radiogroup', { name: 'Role in story' }).locator('[aria-checked="true"]')
+    ).toHaveCount(1);
+    await drawer.getByRole('button', { name: 'Basics' }).click();
+    await expect(nameInput).toHaveValue(rolledName);
+
+    await drawer.getByRole('button', { name: 'Create character' }).click();
+    await expect(drawer).toBeHidden();
+    await expect(page.getByRole('button', { name: new RegExp(escapeRegex(rolledName)) })).toBeVisible();
+  });
+
+  test('random batch previews in the dialog and accepts as one unit', async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Locations');
+    await page.getByRole('button', { name: /Generate location/ }).click();
+
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByRole('tab', { name: 'Random' }).click();
+    await dialog.getByLabel('How many').fill('3');
+    await dialog.getByRole('button', { name: '🎲 Roll it' }).click();
+
+    await expect(page.getByTestId('random-preview')).toContainText('3 entries staged');
+    await dialog.getByRole('button', { name: 'Accept all' }).click();
+    await expect(page.getByText('3 entries added.')).toBeVisible();
+  });
+
+  test('"Fill empty fields" random-fills a blank manual form', async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Cast');
+    await page.getByRole('button', { name: '+ Create character' }).click();
+
+    const drawer = page.getByRole('dialog', { name: 'New Character' });
+    await drawer.getByRole('button', { name: '🎲 Fill empty fields' }).click();
+    await expect(page.getByText(/fields filled\./)).toBeVisible();
+    await expect(drawer.getByLabel('Name *')).not.toHaveValue('');
   });
 
   test('the drawer paste-JSON action fills fields in place', async ({ page }) => {
