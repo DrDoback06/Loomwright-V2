@@ -52,6 +52,34 @@ export async function saveChapterDoc(
   await db.chapters.update(id, { doc, paragraphs, wordCount, updatedAt: Date.now() });
 }
 
+/** Append a plain paragraph to a chapter (random-table results, tool
+ * output). Doc, derived paragraphs, and word count stay in step; the
+ * editor picks the block up like any other on next load. */
+export async function appendParagraphToChapter(id: string, text: string): Promise<void> {
+  const chapter = await db.chapters.get(id);
+  const line = text.trim();
+  if (!chapter || !line) return;
+  const pid = newId();
+  const node = {
+    type: 'paragraph',
+    attrs: { pid },
+    content: [{ type: 'text', text: line }],
+  };
+  const doc = (chapter.doc as { type?: string; content?: unknown[] } | null) ?? {
+    type: 'doc',
+    content: [],
+  };
+  const nextDoc = { ...doc, type: doc.type ?? 'doc', content: [...(doc.content ?? []), node] };
+  const paragraphs = [...chapter.paragraphs, { id: pid, text: line }];
+  const words = line.split(/\s+/).length;
+  await db.chapters.update(id, {
+    doc: nextDoc,
+    paragraphs,
+    wordCount: chapter.wordCount + words,
+    updatedAt: Date.now(),
+  });
+}
+
 /** Move a chapter one slot earlier/later, swapping orders. */
 export async function moveChapter(id: string, direction: 'up' | 'down'): Promise<void> {
   const chapter = await db.chapters.get(id);

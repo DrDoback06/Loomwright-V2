@@ -16,7 +16,10 @@ export type RouteId =
   | 'review'
   | 'handoff'
   | 'settings'
-  | 'trash';
+  | 'trash'
+  | 'random-tables'
+  | 'speed-reader'
+  | 'templates';
 
 interface UiState {
   theme: Theme;

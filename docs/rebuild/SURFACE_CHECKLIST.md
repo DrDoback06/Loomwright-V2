@@ -177,3 +177,53 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Control | Action | Spec |
 | --- | --- | --- |
 | Codex entries / Chapters / Total words / Words today / Awaiting review tiles | Live stats; each routes to its surface | `02-cast.spec.ts` (cast tile), `10-search-today.spec.ts` (words baseline) |
+
+## Random Tables (M9)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Table select (starters + yours) | Switches the active table | `11-tools.spec.ts` |
+| + New table | Creates a project table | `11-tools.spec.ts` |
+| Create-entity type select | Sets which codex type results create | (same write path as rows) |
+| Delete table | Removes a user table (builtins can't be) | unit `tools-services` |
+| ×1/×3/×5 + No repeats + Roll | Weighted rolls, optionally unique | `11-tools.spec.ts` + unit |
+| Result → Writer's Room | Appends to the latest chapter and opens it | `11-tools.spec.ts` |
+| Result → Create entity | Opens the editor prefilled with the result | `11-tools.spec.ts` |
+| Row text/weight inputs, + Add row, remove | Edit rows; editing a starter copies it first | `11-tools.spec.ts` (rows), unit (copy-on-write) |
+
+## Speed Reader (M9)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Source select (chapters / paste) | Loads the text | `11-tools.spec.ts` |
+| Paste textarea | Reads arbitrary text | `11-tools.spec.ts` |
+| Play / Pause / Restart / ‹ › | RSVP transport on real timers | `11-tools.spec.ts` |
+| WPM + word-size sliders | Pace and size | `11-tools.spec.ts` (wpm) |
+| Pause toggles (comma/sentence/long word) | Legacy pacing multipliers | unit `tools-services` |
+| Scrubber | Seeks the reading position | (same state as ‹ ›) |
+
+## Templates (M9)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Entity template "Use" | Opens the create drawer prefilled | `11-tools.spec.ts` |
+| Entity template "Delete" | Removes a user template (builtins can't be) | `11-tools.spec.ts` |
+| Dossier "Save as template" | Snapshots an entity with identity stripped | `11-tools.spec.ts` + unit |
+| Tangle "Save board as template" | Snapshots cards + threads (origin-normalised) | `11-tools.spec.ts` + unit |
+| Tangle "Stamp a template…" | Stamps fresh cards/threads at a click point | `11-tools.spec.ts` |
+| Board template "Stamp in Tangle" | Routes to the Tangle | (route-only) |
+
+## Settings ▸ Data & interchange (M9)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Export project (.json) | Downloads loomwright-project-v2; keys NEVER included | `12-interchange.spec.ts` + unit |
+| Import project… | Creates a new project with full id remap, switches to it | `12-interchange.spec.ts` + unit |
+| World bible (.md / .html) | Downloads the rendered codex + manuscript outline | `12-interchange.spec.ts` + unit |
+
+## References ▸ Import (M9)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Import… → Add reference | Paste text → reference entry (title/kind/body) | `12-interchange.spec.ts` |
+| Import… → From file(s) | .txt/.md files → reference entries | `12-interchange.spec.ts` |

@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import { DETECTOR_BASE_CONFIDENCE } from '@/services/extraction/detectors';
 import { PROVIDERS, testConnection, type ProviderId } from '@/services/ai/providers';
 import { getAiSettings, saveAiSettings, type AiSettings } from '@/services/ai/settings';
+import { exportProject, importProject } from '@/services/archive/project';
+import { renderWorldBible } from '@/services/archive/world-bible';
 import { clearApiKey, listKeyedProviders, saveApiKey } from '@/services/crypto/keys';
+import { downloadFile, fileStem } from '@/lib/download';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
 
@@ -13,6 +16,8 @@ import { toast } from '@/stores/toasts';
  * provider you configured. */
 export function SettingsSurface() {
   const projectId = useProjectStore((s) => s.currentProjectId);
+  const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [ai, setAi] = useState<AiSettings | null>(null);
   const [keyed, setKeyed] = useState<string[]>([]);
   const [keyDrafts, setKeyDrafts] = useState<Partial<Record<ProviderId, string>>>({});
@@ -187,6 +192,80 @@ export function SettingsSurface() {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      <section className="lw-card" data-testid="settings-data">
+        <h2 className="lw-card__title">Data &amp; interchange</h2>
+        <p className="lw-fieldnote">
+          Everything below is a plain local file — nothing is uploaded anywhere. API keys are
+          never included in any export.
+        </p>
+        <div className="lw-chips__add" style={{ flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="lw-btn"
+            onClick={async () => {
+              const archive = await exportProject(projectId);
+              downloadFile(
+                `${fileStem(archive.project.name)}.loomwright.json`,
+                JSON.stringify(archive, null, 2),
+                'application/json'
+              );
+              toast('Project exported.', { kind: 'success' });
+            }}
+          >
+            Export project (.json)
+          </button>
+          <button type="button" className="lw-btn" onClick={() => importInputRef.current?.click()}>
+            Import project…
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            aria-label="Import project file"
+            style={{ display: 'none' }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (!file) return;
+              try {
+                const result = await importProject(JSON.parse(await file.text()));
+                setCurrentProject(result.projectId);
+                toast(
+                  `Imported “${result.name}” — ${result.counts.entities} entries, ${result.counts.chapters} chapters. You're now in the imported project.`,
+                  { kind: 'success' }
+                );
+              } catch (err) {
+                toast(err instanceof Error ? err.message : 'Import failed.', { kind: 'error' });
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="lw-btn"
+            onClick={async () => {
+              const project = await db.projects.get(projectId);
+              const { markdown } = await renderWorldBible(projectId);
+              downloadFile(`${fileStem(project?.name ?? '')}-world-bible.md`, markdown, 'text/markdown');
+              toast('World bible exported (Markdown).', { kind: 'success' });
+            }}
+          >
+            World bible (.md)
+          </button>
+          <button
+            type="button"
+            className="lw-btn"
+            onClick={async () => {
+              const project = await db.projects.get(projectId);
+              const { html } = await renderWorldBible(projectId);
+              downloadFile(`${fileStem(project?.name ?? '')}-world-bible.html`, html, 'text/html');
+              toast('World bible exported (HTML).', { kind: 'success' });
+            }}
+          >
+            World bible (.html)
+          </button>
         </div>
       </section>
 

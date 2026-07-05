@@ -20,6 +20,9 @@ import { TangleSurface } from '@/features/tangle/TangleSurface';
 import { SkillTreesSurface } from '@/features/skill-trees/SkillTreesSurface';
 import { SettingsSurface } from '@/features/settings/SettingsSurface';
 import { HandoffSurface } from '@/features/handoff/HandoffSurface';
+import { RandomTablesSurface } from '@/features/tools/RandomTablesSurface';
+import { SpeedReaderSurface } from '@/features/tools/SpeedReaderSurface';
+import { TemplatesSurface } from '@/features/tools/TemplatesSurface';
 
 function MainSurface() {
   const route = useUiStore((s) => s.route);
@@ -47,6 +50,12 @@ function MainSurface() {
       return <SettingsSurface />;
     case 'trash':
       return <TrashSurface />;
+    case 'random-tables':
+      return <RandomTablesSurface />;
+    case 'speed-reader':
+      return <SpeedReaderSurface />;
+    case 'templates':
+      return <TemplatesSurface />;
   }
 }
 

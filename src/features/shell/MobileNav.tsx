@@ -12,7 +12,7 @@ export function MobileNav() {
   const setCodexType = useUiStore((s) => s.setCodexType);
 
   const workspace = NAV_ENTRIES.filter((e) => e.group === 'workspace');
-  const utilities = NAV_ENTRIES.filter((e) => e.group === 'utilities');
+  const utilities = NAV_ENTRIES.filter((e) => e.group === 'tools' || e.group === 'utilities');
   const types = ALL_ENTITY_TYPES.filter((t) => configuredEntityTypes().includes(t));
 
   return (

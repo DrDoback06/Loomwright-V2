@@ -11,9 +11,10 @@ import {
   removeNode,
   renameGraph,
 } from '@/db/repos/graphs';
-import type { Entity, GraphEdge, GraphNode, TangleBoard } from '@/db/types';
+import type { BoardTemplate, Entity, GraphEdge, GraphNode, TangleBoard } from '@/db/types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { NodeGraphCanvas } from '@/features/canvas/NodeGraphCanvas';
+import { instantiateBoardTemplate, saveBoardTemplate } from '@/services/templates';
 import { useFocusStore } from '@/stores/focus';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
@@ -50,9 +51,19 @@ export function TangleSurface() {
   const [mode, setMode] = useState<'select' | 'connect' | 'place'>('select');
   const [placeDraft, setPlaceDraft] = useState('');
   const [placeEntity, setPlaceEntity] = useState<Entity | null>(null);
+  const [placeTemplate, setPlaceTemplate] = useState<BoardTemplate | null>(null);
   const [edgeLabel, setEdgeLabel] = useState('');
   const [edgeDirected, setEdgeDirected] = useState(true);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+
+  const boardTemplates = useLiveQuery(
+    async () =>
+      projectId
+        ? ((await db.templates.where('[projectId+kind]').equals([projectId, 'board']).toArray()) as BoardTemplate[])
+        : [],
+    [projectId],
+    [] as BoardTemplate[]
+  );
 
   if (!projectId || boards === null) return null;
 
@@ -72,6 +83,18 @@ export function TangleSurface() {
 
   const place = async (x: number, y: number) => {
     if (!board) return;
+    if (placeTemplate) {
+      const stamped = instantiateBoardTemplate(placeTemplate, { x, y });
+      await db.tangleBoards.update(board.id, {
+        cards: [...board.cards, ...stamped.cards],
+        edges: [...board.edges, ...stamped.edges],
+        updatedAt: Date.now(),
+      });
+      toast(`Stamped “${placeTemplate.name}” (${stamped.cards.length} cards).`, { kind: 'success' });
+      setPlaceTemplate(null);
+      setMode('select');
+      return;
+    }
     const label = placeEntity ? placeEntity.name : placeDraft.trim();
     if (!label) return;
     await addNode('tangle', board.id, {
@@ -199,8 +222,50 @@ export function TangleSurface() {
             {mode === 'place' && (
               <p className="lw-atlas__hint" data-testid="tangle-place-hint">
                 Click the board to place{' '}
-                <strong>{placeEntity ? placeEntity.name : placeDraft}</strong>.
+                <strong>
+                  {placeTemplate ? `template “${placeTemplate.name}”` : placeEntity ? placeEntity.name : placeDraft}
+                </strong>
+                .
               </p>
+            )}
+
+            <h2 className="lw-atlas__subhead">Templates</h2>
+            <button
+              type="button"
+              className="lw-btn"
+              onClick={async () => {
+                if (board.cards.length === 0) {
+                  toast('Place some cards first — a template snapshots the board.', { kind: 'error' });
+                  return;
+                }
+                const t = await saveBoardTemplate(projectId, `${board.name} template`, board.cards, board.edges);
+                toast(`Saved “${t.name}” — stamp it here or from Tools ▸ Templates.`, { kind: 'success' });
+              }}
+            >
+              Save board as template
+            </button>
+            {boardTemplates.length > 0 && (
+              <select
+                className="lw-input"
+                aria-label="Stamp template"
+                value=""
+                onChange={(e) => {
+                  const t = boardTemplates.find((x) => x.id === e.target.value);
+                  if (t) {
+                    setPlaceTemplate(t);
+                    setPlaceEntity(null);
+                    setPlaceDraft('');
+                    setMode('place');
+                  }
+                }}
+              >
+                <option value="">Stamp a template…</option>
+                {boardTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.cards.length} cards)
+                  </option>
+                ))}
+              </select>
             )}
 
             <h2 className="lw-atlas__subhead">Connect</h2>

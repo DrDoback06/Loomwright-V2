@@ -9,7 +9,7 @@ interface NavEntry {
   route: RouteId;
   label: string;
   glyph: string;
-  group: 'workspace' | 'panels' | 'utilities';
+  group: 'workspace' | 'panels' | 'tools' | 'utilities';
 }
 
 /** Only surfaces that genuinely work are listed. This grows with each
@@ -21,6 +21,9 @@ export const NAV_ENTRIES: NavEntry[] = [
   { route: 'atlas', label: 'Atlas', glyph: '◇', group: 'workspace' },
   { route: 'tangle', label: 'Tangle', glyph: '✕', group: 'workspace' },
   { route: 'skill-trees', label: 'Skill Trees', glyph: '❋', group: 'workspace' },
+  { route: 'random-tables', label: 'Random Tables', glyph: '⚄', group: 'tools' },
+  { route: 'speed-reader', label: 'Speed Reader', glyph: '⚡', group: 'tools' },
+  { route: 'templates', label: 'Templates', glyph: '⧉', group: 'tools' },
   { route: 'review', label: 'Review', glyph: '☑', group: 'utilities' },
   { route: 'handoff', label: 'AI Handoff', glyph: '⇄', group: 'utilities' },
   { route: 'settings', label: 'Settings', glyph: '⚙', group: 'utilities' },
@@ -30,6 +33,7 @@ export const NAV_ENTRIES: NavEntry[] = [
 const GROUP_LABELS: Record<NavEntry['group'], string> = {
   workspace: 'Workspace',
   panels: 'Codex',
+  tools: 'Tools',
   utilities: 'Utilities',
 };
 
@@ -44,7 +48,7 @@ export function LeftRail() {
     [projectId],
     0
   );
-  const groups: NavEntry['group'][] = ['workspace', 'panels', 'utilities'];
+  const groups: NavEntry['group'][] = ['workspace', 'panels', 'tools', 'utilities'];
 
   return (
     <nav className="lw-leftrail" aria-label="Workspace">

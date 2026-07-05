@@ -184,6 +184,50 @@ export interface SkillTree {
   updatedAt: number;
 }
 
+export interface RandomTableRow {
+  text: string;
+  /** Relative weight ≥ 1; weighted random pick. */
+  weight: number;
+}
+
+export interface RandomTable {
+  id: string;
+  projectId: string;
+  name: string;
+  /** Suggests the entity type "Create entity" preselects (or 'none'). */
+  category: EntityType | 'none';
+  rows: RandomTableRow[];
+  /** Set when this table started as a copy of a code-level builtin. */
+  builtinSource?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface EntityTemplate {
+  id: string;
+  projectId: string;
+  kind: 'entity';
+  name: string;
+  entityType: EntityType;
+  summary: string;
+  /** Snapshot of entity.fields with identity stripped. */
+  fields: Record<string, unknown>;
+  createdAt: number;
+}
+
+export interface BoardTemplate {
+  id: string;
+  projectId: string;
+  kind: 'board';
+  name: string;
+  /** Positions normalised so the top-left card sits at the origin. */
+  cards: GraphNode[];
+  edges: GraphEdge[];
+  createdAt: number;
+}
+
+export type Template = EntityTemplate | BoardTemplate;
+
 /** Encrypted API-key rows + the non-extractable root CryptoKey
  * ('__root__'). Key material NEVER appears in exports, search, or audit. */
 export interface KeyRow {

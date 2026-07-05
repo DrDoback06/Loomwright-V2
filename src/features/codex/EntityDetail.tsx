@@ -8,6 +8,7 @@ import { toast } from '@/stores/toasts';
 import { getEntityConfig } from '@/domain/entity-configs';
 import type { FieldDef, StatRow, StepRow } from '@/domain/entity-configs/types';
 import { updateEntity } from '@/db/repos/entities';
+import { saveEntityTemplate } from '@/services/templates';
 import { ENTITY_TYPE_META, type EntityRef } from '@/domain/entity-types';
 
 interface EntityDetailProps {
@@ -78,6 +79,16 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
           </button>
           <button type="button" className="lw-btn" onClick={() => setMerging((m) => !m)}>
             Merge into…
+          </button>
+          <button
+            type="button"
+            className="lw-btn"
+            onClick={async () => {
+              const t = await saveEntityTemplate(entity.projectId, entity);
+              toast(`Saved “${t.name}” — find it under Tools ▸ Templates.`, { kind: 'success' });
+            }}
+          >
+            Save as template
           </button>
           {confirmingDelete ? (
             <span className="lw-confirm">

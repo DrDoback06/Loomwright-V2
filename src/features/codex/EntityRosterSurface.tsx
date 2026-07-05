@@ -11,6 +11,7 @@ import { useFocusStore } from '@/stores/focus';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
 import { EntityDetail } from './EntityDetail';
+import { ReferenceImport } from './ReferenceImport';
 import { TimelineView } from './TimelineView';
 import { RelationshipGraph } from './RelationshipGraph';
 import { useEffect } from 'react';
@@ -158,6 +159,7 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
           >
             + Create {config?.displayName.toLowerCase() ?? meta.label.toLowerCase()}
           </button>
+          {type === 'references' && projectId ? <ReferenceImport projectId={projectId} /> : null}
         </header>
         {viewToggle}
         <input
