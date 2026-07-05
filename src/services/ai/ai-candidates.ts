@@ -17,8 +17,9 @@ export interface AiExtractionPayload {
 }
 
 /** Extract the first JSON object from arbitrary AI text (handles prose
- * wrappers and ```json fences). Returns null when nothing parses. */
-export function extractJsonBlock(text: string): AiExtractionPayload | null {
+ * wrappers and ```json fences). Returns null when nothing parses. Shared
+ * by every AI paste-back path (deep extraction, handoff, onboarding). */
+export function parseJsonObject(text: string): unknown | null {
   const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
   const candidates = [fenced?.[1], text];
   for (const c of candidates) {
@@ -27,12 +28,17 @@ export function extractJsonBlock(text: string): AiExtractionPayload | null {
     const end = c.lastIndexOf('}');
     if (start === -1 || end <= start) continue;
     try {
-      return JSON.parse(c.slice(start, end + 1)) as AiExtractionPayload;
+      return JSON.parse(c.slice(start, end + 1));
     } catch {
       /* keep trying */
     }
   }
   return null;
+}
+
+/** Extraction-shaped view of {@link parseJsonObject}. */
+export function extractJsonBlock(text: string): AiExtractionPayload | null {
+  return parseJsonObject(text) as AiExtractionPayload | null;
 }
 
 const TYPE_MAP: [keyof AiExtractionPayload, EntityType][] = [

@@ -9,6 +9,7 @@ import {
 } from '@/services/onboarding';
 import { splitManuscript } from '@/services/manuscript-import';
 import { analyzeStyle } from '@/services/style-analysis';
+import { buildOnboardingPrompt, parseOnboardingReply } from '@/services/onboarding-ai';
 import { discoverEntities } from '@/services/extraction/discovery';
 import { useProjectStore } from '@/stores/project';
 import { useUiStore } from '@/stores/ui';
@@ -44,12 +45,14 @@ export function OnboardingWizard({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [themeDraft, setThemeDraft] = useState('');
   const [castText, setCastText] = useState('');
+  const [aiReply, setAiReply] = useState('');
+  const [aiOpen, setAiOpen] = useState(false);
   const loaded = useRef(false);
 
   // Restore a draft once; persist on every change after that.
   useEffect(() => {
     void loadOnboardingDraft().then((draft) => {
-      if (draft) setA({ ...EMPTY_ANSWERS, ...draft });
+      if (draft) setA({ ...EMPTY_ANSWERS, ...draft, ...coerceLists(draft) });
       loaded.current = true;
     });
   }, []);
@@ -112,6 +115,55 @@ export function OnboardingWizard({ onClose }: { onClose: () => void }) {
     </div>
   );
 
+  // Multi-select variant: pick as many as apply (e.g. Fantasy & Romance).
+  const multiPills = (options: string[], values: string[], key: 'genre' | 'tone', name: string) => (
+    <div className="lw-ob__pills" role="group" aria-label={name}>
+      {options.map((o) => {
+        const on = values.includes(o);
+        return (
+          <button
+            key={o}
+            type="button"
+            role="checkbox"
+            aria-checked={on}
+            className={on ? 'lw-btn lw-btn--sm lw-btn--primary' : 'lw-btn lw-btn--sm'}
+            onClick={() => patch({ [key]: on ? values.filter((v) => v !== o) : [...values, o] })}
+          >
+            {o}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const copyPrompt = async () => {
+    const prompt = buildOnboardingPrompt();
+    try {
+      await navigator.clipboard.writeText(prompt);
+      toast('Prompt copied — paste it into ChatGPT, Claude, or any AI, describe your story, then paste its reply back here.', {
+        kind: 'success',
+      });
+    } catch {
+      toast('Copy blocked — select the prompt text below and copy it manually.', { kind: 'info' });
+    }
+  };
+
+  const fillFromReply = () => {
+    const filled = parseOnboardingReply(aiReply);
+    if (!filled) {
+      toast("Couldn't read that reply — paste the whole answer including its { … } JSON block.", {
+        kind: 'error',
+      });
+      return;
+    }
+    patch(filled);
+    setAiReply('');
+    setAiOpen(false);
+    toast(`Filled ${Object.keys(filled).length} section${Object.keys(filled).length === 1 ? '' : 's'} from the AI reply — review and tweak anything.`, {
+      kind: 'success',
+    });
+  };
+
   return (
     <div className="lw-ob-backdrop" role="dialog" aria-label="Project setup" data-testid="onboarding-wizard">
       <div className="lw-ob">
@@ -141,6 +193,57 @@ export function OnboardingWizard({ onClose }: { onClose: () => void }) {
           {step === 0 && (
             <section className="lw-ob__section">
               <h2 className="lw-ob__title">What are we making?</h2>
+
+              <div className="lw-card lw-ob__aicard" data-testid="ob-ai-fill">
+                <div className="lw-ob__aihead">
+                  <div>
+                    <strong>Have AI fill this in</strong>
+                    <p className="lw-fieldnote" style={{ margin: 0 }}>
+                      Not sure what to put? Copy a prompt, describe your story to any AI
+                      (ChatGPT, Claude, a local model), and paste its reply back — it fills
+                      the whole interview.
+                    </p>
+                  </div>
+                  <button type="button" className="lw-btn lw-btn--sm" onClick={() => setAiOpen((o) => !o)}>
+                    {aiOpen ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                {aiOpen && (
+                  <>
+                    <div className="lw-chips__add" style={{ marginTop: 'var(--sp-4)' }}>
+                      <button type="button" className="lw-btn" onClick={() => void copyPrompt()}>
+                        Copy AI prompt
+                      </button>
+                    </div>
+                    <textarea
+                      className="lw-input lw-ob__aiprompt"
+                      data-testid="ob-ai-prompt"
+                      aria-label="AI prompt"
+                      readOnly
+                      rows={4}
+                      value={buildOnboardingPrompt()}
+                    />
+                    <label className="lw-field__label" htmlFor="ob-ai-reply">
+                      Paste the AI&apos;s reply
+                    </label>
+                    <textarea
+                      id="ob-ai-reply"
+                      className="lw-input"
+                      aria-label="AI reply"
+                      rows={4}
+                      placeholder="Paste the whole answer, including its { … } JSON block…"
+                      value={aiReply}
+                      onChange={(e) => setAiReply(e.target.value)}
+                    />
+                    <div className="lw-chips__add">
+                      <button type="button" className="lw-btn lw-btn--primary" onClick={fillFromReply}>
+                        Fill from reply
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
               <label className="lw-field__label" htmlFor="ob-name">Project name *</label>
               <input
                 id="ob-name"
@@ -150,8 +253,8 @@ export function OnboardingWizard({ onClose }: { onClose: () => void }) {
                 value={a.name}
                 onChange={(e) => patch({ name: e.target.value })}
               />
-              <label className="lw-field__label">Genre</label>
-              {pills(GENRES, a.genre, (genre) => patch({ genre }), 'Genre')}
+              <label className="lw-field__label">Genre <span className="lw-fieldnote-inline">(pick any that apply)</span></label>
+              {multiPills(GENRES, a.genre, 'genre', 'Genre')}
               <label className="lw-field__label" htmlFor="ob-premise">Premise — the story in a few sentences</label>
               <textarea
                 id="ob-premise"
@@ -193,8 +296,8 @@ export function OnboardingWizard({ onClose }: { onClose: () => void }) {
                   ))}
                 </div>
               )}
-              <label className="lw-field__label">Tone</label>
-              {pills(TONES, a.tone, (tone) => patch({ tone }), 'Tone')}
+              <label className="lw-field__label">Tone <span className="lw-fieldnote-inline">(pick any that apply)</span></label>
+              {multiPills(TONES, a.tone, 'tone', 'Tone')}
               <label className="lw-field__label" htmlFor="ob-comp">It&apos;s like… (comparables)</label>
               <input
                 id="ob-comp"
@@ -470,8 +573,8 @@ export function OnboardingWizard({ onClose }: { onClose: () => void }) {
               <ul className="lw-ob__summary" data-testid="finish-summary">
                 <li>
                   <strong>{a.name || 'Untitled project'}</strong>
-                  {a.genre ? ` — ${a.genre}` : ''}
-                  {a.tone ? `, ${a.tone.toLowerCase()}` : ''}
+                  {a.genre.length ? ` — ${a.genre.join(', ')}` : ''}
+                  {a.tone.length ? `, ${a.tone.join(', ').toLowerCase()}` : ''}
                 </li>
                 {a.premise && <li>Premise, themes &amp; comparables → saved as references and the AI brief.</li>}
                 {a.styleProfile && <li>Voice profile captured ({a.styleProfile.register}, {a.styleProfile.pacing}).</li>}
@@ -516,6 +619,19 @@ export function OnboardingWizard({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
+}
+
+/** Genre/tone became multi-select — coerce a legacy string draft into an
+ * array so an old saved draft can't crash the checkbox rendering. */
+function coerceLists(draft: Partial<OnboardingAnswers>): Partial<OnboardingAnswers> {
+  const fix = (v: unknown): string[] | undefined =>
+    typeof v === 'string' ? (v ? [v] : []) : undefined;
+  const out: Partial<OnboardingAnswers> = {};
+  const g = fix(draft.genre);
+  if (g) out.genre = g;
+  const t = fix(draft.tone);
+  if (t) out.tone = t;
+  return out;
 }
 
 function ManuscriptFileButton({ onText }: { onText: (text: string) => void }) {

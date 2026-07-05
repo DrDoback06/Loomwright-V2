@@ -21,10 +21,10 @@ export interface PlaceSeed {
 
 export interface OnboardingAnswers {
   name: string;
-  genre: string;
+  genre: string[];
   premise: string;
   themes: string[];
-  tone: string;
+  tone: string[];
   comparables: string;
   isNot: string;
   pov: string;
@@ -41,10 +41,10 @@ export interface OnboardingAnswers {
 
 export const EMPTY_ANSWERS: OnboardingAnswers = {
   name: '',
-  genre: '',
+  genre: [],
   premise: '',
   themes: [],
-  tone: '',
+  tone: [],
   comparables: '',
   isNot: '',
   pov: '',
@@ -86,7 +86,9 @@ export interface OnboardingResult {
 /** The wizard's "Open the door": create the project and seed everything
  * the interview captured. Every answer is consumed — nothing dead. */
 export async function applyOnboarding(answers: OnboardingAnswers): Promise<OnboardingResult> {
-  const project = await createProject(answers.name.trim() || 'Untitled project', answers.genre || undefined);
+  const genreLabel = answers.genre.join(', ');
+  const toneLabel = answers.tone.join(', ');
+  const project = await createProject(answers.name.trim() || 'Untitled project', genreLabel || undefined);
   const projectId = project.id;
 
   // Interview answers persist (sans full manuscript) for later reference.
@@ -142,8 +144,9 @@ export async function applyOnboarding(answers: OnboardingAnswers): Promise<Onboa
   };
   const foundation = [
     answers.premise && `Premise: ${answers.premise}`,
+    genreLabel && `Genre: ${genreLabel}`,
     answers.themes.length > 0 && `Themes: ${answers.themes.join(', ')}`,
-    answers.tone && `Tone: ${answers.tone}`,
+    toneLabel && `Tone: ${toneLabel}`,
     answers.comparables && `Comparable to: ${answers.comparables}`,
     answers.isNot && `This story is NOT: ${answers.isNot}`,
   ]
@@ -152,7 +155,7 @@ export async function applyOnboarding(answers: OnboardingAnswers): Promise<Onboa
   await addReference('Story foundation', 'onboarding answer', foundation);
   await addReference('Style sample', 'style sample', answers.styleSample, { isStyleSample: true });
   const brief = [
-    `Project brief for "${answers.name}"${answers.genre ? ` (${answers.genre})` : ''}.`,
+    `Project brief for "${answers.name}"${genreLabel ? ` (${genreLabel})` : ''}.`,
     foundation,
     answers.pov && `POV: ${answers.pov}${answers.tense ? `, ${answers.tense} tense` : ''}.`,
     answers.styleProfile && `Voice: ${answers.styleProfile.notes.join(' ')}`,

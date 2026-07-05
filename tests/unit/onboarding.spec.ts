@@ -71,10 +71,10 @@ describe('applyOnboarding', () => {
     const result = await applyOnboarding({
       ...EMPTY_ANSWERS,
       name: 'The Hollow Crown',
-      genre: 'Fantasy',
+      genre: ['Fantasy', 'Romance'],
       premise: 'A queen in exile returns for the succession.',
       themes: ['loyalty', 'debt'],
-      tone: 'Grounded',
+      tone: ['Grounded', 'Epic'],
       pov: 'Third limited',
       tense: 'Past',
       cast: [{ name: 'Aelinor Vael', role: 'Protagonist', note: 'Queen in exile.' }],
@@ -92,6 +92,9 @@ describe('applyOnboarding', () => {
     expect(result.candidatesFound).toBeGreaterThan(0);
 
     const projectId = result.projectId;
+    // Multi-select genres join into the project + brief.
+    const project = await db.projects.get(projectId);
+    expect(project?.genre).toBe('Fantasy, Romance');
     const cast = await db.entities.where('[projectId+type]').equals([projectId, 'cast']).toArray();
     expect(cast.map((e) => e.name)).toContain('Aelinor Vael');
     expect(cast[0].fields.role).toBe('Protagonist');
@@ -99,6 +102,10 @@ describe('applyOnboarding', () => {
     expect(refs.map((r) => r.name)).toEqual(
       expect.arrayContaining(['Story foundation', 'Project brief (AI context)'])
     );
+    const brief = refs.find((r) => r.name === 'Project brief (AI context)');
+    expect(brief?.fields.body).toContain('Fantasy, Romance');
+    const foundation = refs.find((r) => r.name === 'Story foundation');
+    expect(foundation?.fields.body).toContain('Tone: Grounded, Epic');
     const pending = await db.candidates.where('[projectId+status]').equals([projectId, 'pending']).toArray();
     expect(pending.length).toBeGreaterThan(0);
     const aiRow = await db.settings.get(`${projectId}:ai`);

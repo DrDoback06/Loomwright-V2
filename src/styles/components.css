@@ -2475,3 +2475,25 @@ select.lw-input {
 .lw-steplist__rows--static .lw-step {
   padding: 2px 0;
 }
+
+/* ---- Onboarding AI fill card (feedback round 1) ---- */
+
+.lw-ob__aicard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  background: var(--bg-tint);
+}
+
+.lw-ob__aihead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.lw-ob__aiprompt {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  resize: vertical;
+}

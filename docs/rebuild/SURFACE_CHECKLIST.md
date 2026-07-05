@@ -241,7 +241,10 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Control | Action | Spec |
 | --- | --- | --- |
 | Step rail (7 steps) + Back/Continue | Navigates; name gates progress | `13-onboarding.spec.ts` |
-| Foundation: name/genre/premise/themes/tone/comparables/is-not | Captured → references + AI brief | `13-onboarding.spec.ts` + unit |
+| Foundation: name/premise/themes/comparables/is-not | Captured → references + AI brief | `13-onboarding.spec.ts` + unit |
+| Foundation: genre & tone (multi-select) | Pick any that apply → joined into project + brief | `13-onboarding.spec.ts` + unit |
+| "Have AI fill this in": Copy AI prompt | Copies a paste-into-any-AI prompt to the clipboard | `13-onboarding.spec.ts` |
+| "Have AI fill this in": Fill from reply | Parses the AI's JSON → fills every interview field | `13-onboarding.spec.ts` + unit (`onboarding-ai`) |
 | Voice: POV/tense pills, style sample, Analyze style | Offline metrics → voice profile | `13-onboarding.spec.ts` + unit |
 | Cast: seed rows + "Suggest cast from this text" | Manual + offline-NER seeds → cast codex | `13-onboarding.spec.ts` |
 | World: place rows | → locations codex | `13-onboarding.spec.ts` |
