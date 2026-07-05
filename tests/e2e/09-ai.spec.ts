@@ -1,13 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
-import { bootWithProject, createCastMember } from './helpers';
+import { bootWithProject, createCastMember, openNav } from './helpers';
 
 // All AI specs mock provider HTTP with page.route — no real keys, no
 // real calls, ever. The fake key below exists only in the test browser.
 const FAKE_KEY = 'sk-ant-e2e-fake';
-
-async function openNav(page: Page, label: string) {
-  await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: label }).click();
-}
 
 function mockAnthropic(page: Page, reply: string | (() => string)) {
   return page.route('https://api.anthropic.com/**', async (route) => {

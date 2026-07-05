@@ -1,8 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
-import { bootWithProject, createCastMember } from './helpers';
+import { bootWithProject, createCastMember, openNav } from './helpers';
 
 async function createLocation(page: Page, name: string) {
-  await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Locations' }).click();
+  await openNav(page, 'Locations');
   await page.getByRole('button', { name: '+ Create location' }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name *').fill(name);
@@ -11,7 +11,7 @@ async function createLocation(page: Page, name: string) {
 }
 
 async function openAtlas(page: Page) {
-  await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Atlas' }).click();
+  await openNav(page, 'Atlas');
   await expect(page.getByTestId('surface-atlas')).toBeVisible();
 }
 

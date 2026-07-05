@@ -1,13 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { test, expect, type Page } from '@playwright/test';
-import { bootWithProject, createCastMember } from './helpers';
+import { test, expect } from '@playwright/test';
+import { bootWithProject, createCastMember, openNav } from './helpers';
 
 // Only ever a fake key — proves export hygiene without any real secret.
 const FAKE_KEY = 'sk-ant-e2e-fake-interchange';
-
-async function openNav(page: Page, label: string) {
-  await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: label }).click();
-}
 
 test.describe('interchange: world bible, project export/import, references', () => {
   test('world bible download carries the codex and manuscript outline', async ({ page }) => {

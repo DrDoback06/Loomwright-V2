@@ -9,7 +9,9 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 2 : undefined,
   reporter: process.env.CI ? 'github' : 'list',
-  timeout: 30_000,
+  // The suite is >100 real-click specs across two workers on small
+  // runners; prose-typing specs legitimately take a while under load.
+  timeout: 60_000,
   use: {
     baseURL: `http://localhost:${PORT}/Loomwright-V2/`,
     trace: 'retain-on-failure',

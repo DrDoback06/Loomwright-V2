@@ -1,9 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
-import { bootWithProject } from './helpers';
-
-async function openNav(page: Page, label: string) {
-  await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: label }).click();
-}
+import { test, expect } from '@playwright/test';
+import { bootWithProject, openNav } from './helpers';
 
 const MANUSCRIPT = [
   'Chapter One — The Short Peal',

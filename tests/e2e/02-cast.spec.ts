@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { bootWithProject, createCastMember } from './helpers';
+import { bootWithProject, createCastMember, openNav } from './helpers';
 
 test.describe('cast codex', () => {
   test('create → dossier shows the data → survives reload', async ({ page }) => {
@@ -12,7 +12,7 @@ test.describe('cast codex', () => {
     await expect(detail.getByText('Queen of the Pale Reach')).toBeVisible();
 
     await page.reload();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Cast' }).click();
+    await openNav(page, 'Cast');
     await page.getByRole('button', { name: /Aelinor Vey/ }).click();
     await expect(page.getByTestId('entity-detail').getByRole('heading', { name: 'Aelinor Vey' })).toBeVisible();
   });
@@ -43,7 +43,7 @@ test.describe('cast codex', () => {
 
     // And they survive a reload.
     await page.reload();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Cast' }).click();
+    await openNav(page, 'Cast');
     await page.getByRole('button', { name: /Captain Brec/ }).click();
     await expect(page.getByTestId('entity-detail').getByText('Watchhouse Captain')).toBeVisible();
   });
@@ -61,35 +61,35 @@ test.describe('cast codex', () => {
     await expect(page.getByText('No cast yet.')).toBeVisible();
 
     // Restore via the Trash surface (real clicks, then reload-check).
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Trash' }).click();
+    await openNav(page, 'Trash');
     const trash = page.getByTestId('surface-trash');
     await expect(trash.getByText('Mara of Hess')).toBeVisible();
     await trash.getByRole('button', { name: 'Restore' }).click();
     await expect(trash.getByText('The trash is empty.')).toBeVisible();
 
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Cast' }).click();
+    await openNav(page, 'Cast');
     await expect(page.getByRole('button', { name: /Mara of Hess/ })).toBeVisible();
     await page.reload();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Cast' }).click();
+    await openNav(page, 'Cast');
     await expect(page.getByRole('button', { name: /Mara of Hess/ })).toBeVisible();
 
     // Now delete + purge for real.
     await page.getByRole('button', { name: /Mara of Hess/ }).click();
     await page.getByTestId('entity-detail').getByRole('button', { name: 'Delete' }).click();
     await page.getByTestId('entity-detail').getByRole('button', { name: 'Move to trash' }).click();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Trash' }).click();
+    await openNav(page, 'Trash');
     await page.getByRole('button', { name: 'Delete forever…' }).click();
     await page.getByRole('button', { name: 'Delete forever', exact: true }).click();
     await expect(page.getByText('The trash is empty.')).toBeVisible();
     await page.reload();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Trash' }).click();
+    await openNav(page, 'Trash');
     await expect(page.getByText('The trash is empty.')).toBeVisible();
   });
 
   test('Home shows live cast count and recent activity with working Undo', async ({ page }) => {
     await bootWithProject(page);
     await createCastMember(page, { name: 'Saren of Hess' });
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Home' }).click();
+    await openNav(page, 'Home');
 
     await expect(page.getByText('Cast members')).toBeVisible();
     await expect(page.getByRole('button', { name: /1\s*Cast members/ })).toBeVisible();

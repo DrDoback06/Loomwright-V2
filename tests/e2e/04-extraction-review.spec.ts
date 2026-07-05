@@ -1,11 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
-import { bootWithProject, createCastMember } from './helpers';
+import { bootWithProject, createCastMember, openNav } from './helpers';
 
 async function openWritersRoom(page: Page) {
-  await page
-    .getByRole('navigation', { name: 'Workspace' })
-    .getByRole('button', { name: "Writer's Room" })
-    .click();
+  await openNav(page, "Writer's Room");
   await expect(page.getByTestId('surface-writers-room')).toBeVisible();
 }
 
@@ -59,11 +56,7 @@ test.describe('extraction + review loop', () => {
     await page.getByRole('button', { name: 'Save & Extract' }).click();
     await expect(page.getByText(/candidate/)).toBeVisible();
 
-    // The nav badge shows pending review items.
-    const reviewNav = page
-      .getByRole('navigation', { name: 'Workspace' })
-      .getByRole('button', { name: /Review/ });
-    await reviewNav.click();
+    await openNav(page, /Review/);
     await expect(page.getByTestId('surface-review')).toBeVisible();
 
     // A cast candidate for Maren exists — accept it via the real button.
@@ -73,10 +66,10 @@ test.describe('extraction + review loop', () => {
     await expect(page.getByText(/Maren added/)).toBeVisible();
 
     // The entity now exists in the Cast roster — and survives reload.
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Cast' }).click();
+    await openNav(page, 'Cast');
     await expect(page.getByRole('button', { name: /Maren/ })).toBeVisible();
     await page.reload();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Cast' }).click();
+    await openNav(page, 'Cast');
     await expect(page.getByRole('button', { name: /Maren/ })).toBeVisible();
   });
 
@@ -89,7 +82,7 @@ test.describe('extraction + review loop', () => {
     );
     await page.getByRole('button', { name: 'Save & Extract' }).click();
 
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: /Review/ }).click();
+    await openNav(page, /Review/);
     const tobbinCard = page.locator('.lw-qcard', { hasText: 'Tobbin' }).first();
     await expect(tobbinCard).toBeVisible();
     await tobbinCard.getByRole('button', { name: 'Deny' }).click();
@@ -97,7 +90,7 @@ test.describe('extraction + review loop', () => {
 
     // Reload — still denied.
     await page.reload();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: /Review/ }).click();
+    await openNav(page, /Review/);
     await expect(page.locator('.lw-qcard', { hasText: 'Tobbin' })).toHaveCount(0);
   });
 
@@ -117,7 +110,7 @@ test.describe('extraction + review loop', () => {
       'Aelinor drew the Blackwork Blade and studied its grain. Aelinor handed the Blackwork Blade to Saren without a word.'
     );
     await page.getByRole('button', { name: 'Save & Extract' }).click();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: /Review/ }).click();
+    await openNav(page, /Review/);
 
     // Discovery suggests the item as a new record.
     const itemCard = page.locator('.lw-qcard', { hasText: 'Blackwork Blade' }).first();
@@ -127,7 +120,7 @@ test.describe('extraction + review loop', () => {
     // Re-extract: now the item is KNOWN, so the transfer detector fires.
     await openWritersRoom(page);
     await page.getByRole('button', { name: 'Save & Extract' }).click();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: /Review/ }).click();
+    await openNav(page, /Review/);
     const transferCard = page.locator('.lw-qcard', { hasText: 'transferred' }).first();
     await expect(transferCard).toBeVisible();
     await expect(transferCard.getByText(/Saren/).first()).toBeVisible();

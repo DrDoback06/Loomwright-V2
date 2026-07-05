@@ -6,6 +6,7 @@ import { listAudit } from '@/db/repos/audit';
 import { countPendingCandidates } from '@/db/repos/review';
 import { undoAuditEntry } from '@/db/repos/undo';
 import { ensureWordsBaseline, todayKey } from '@/services/insights';
+import { useInstallPrompt } from '@/features/shell/useInstallPrompt';
 import { useProjectStore } from '@/stores/project';
 import { useUiStore } from '@/stores/ui';
 import { toast } from '@/stores/toasts';
@@ -14,6 +15,7 @@ export function HomePage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const setRoute = useUiStore((s) => s.setRoute);
   const setCodexType = useUiStore((s) => s.setCodexType);
+  const installPrompt = useInstallPrompt();
 
   const project = useLiveQuery(
     async () => (projectId ? getProject(projectId) : undefined),
@@ -158,6 +160,23 @@ export function HomePage() {
           </ul>
         )}
       </div>
+
+      {installPrompt.available && (
+        <div className="lw-card">
+          <h2 className="lw-card__title">Install Loomwright</h2>
+          <p>
+            Put it on your home screen — it works fully offline, and your projects stay on
+            this device.
+          </p>
+          <button
+            type="button"
+            className="lw-btn lw-btn--primary"
+            onClick={() => void installPrompt.install()}
+          >
+            Install app
+          </button>
+        </div>
+      )}
 
       <div className="lw-card">
         <h2 className="lw-card__title">Find anything, fast</h2>

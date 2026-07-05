@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { bootWithProject, createCastMember } from './helpers';
+import { bootWithProject, createCastMember, openNav } from './helpers';
 
 test.describe('projects', () => {
   test('first run asks for a project; it persists across reload', async ({ page }) => {
@@ -22,7 +22,7 @@ test.describe('projects', () => {
     await page.getByRole('menu').getByRole('button', { name: 'Create' }).click();
 
     // Book Two's cast must be empty.
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Cast' }).click();
+    await openNav(page, 'Cast');
     await expect(page.getByText('No cast yet.')).toBeVisible();
     await expect(page.getByRole('button', { name: /Aelinor Vey/ })).toHaveCount(0);
 
@@ -31,7 +31,7 @@ test.describe('projects', () => {
     await page.getByRole('menu').getByRole('menuitemradio', { name: /Book One/ }).click();
     await expect(page.getByRole('button', { name: /Aelinor Vey/ })).toBeVisible();
     await page.reload();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Cast' }).click();
+    await openNav(page, 'Cast');
     await expect(page.getByRole('button', { name: /Aelinor Vey/ })).toBeVisible();
   });
 

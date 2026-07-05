@@ -1,9 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
-import { bootWithProject, createCastMember } from './helpers';
-
-async function openNav(page: Page, label: string) {
-  await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: label }).click();
-}
+import { test, expect } from '@playwright/test';
+import { bootWithProject, createCastMember, openNav } from './helpers';
 
 test.describe('canvas workspaces', () => {
   test('tangle: note + entity cards, labelled thread, all persist', async ({ page, isMobile }) => {

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { bootWithProject, createCastMember } from './helpers';
+import { bootWithProject, createCastMember, openNav } from './helpers';
 
 async function createEntityViaCodex(
   page: Page,
@@ -8,7 +8,7 @@ async function createEntityViaCodex(
   name: string,
   nameLabel = 'Name *'
 ) {
-  await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: navLabel }).click();
+  await openNav(page, navLabel);
   await page.getByRole('button', { name: `+ Create ${createLabel}` }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel(nameLabel).fill(name);
@@ -26,9 +26,9 @@ test.describe('cross-panel context', () => {
     await createEntityViaCodex(page, 'Quests', 'quest', 'The Silent Errand', 'Title *');
 
     await page.reload();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Quests' }).click();
+    await openNav(page, 'Quests');
     await expect(page.getByRole('button', { name: /The Silent Errand/ })).toBeVisible();
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Factions' }).click();
+    await openNav(page, 'Factions');
     await expect(page.getByRole('button', { name: /Glass Throne/ })).toBeVisible();
   });
 
@@ -105,10 +105,7 @@ test.describe('cross-panel context', () => {
     await createCastMember(page, { name: 'Ael of Hess' });
 
     // A chapter mentioning the duplicate, extracted so occurrences exist.
-    await page
-      .getByRole('navigation', { name: 'Workspace' })
-      .getByRole('button', { name: "Writer's Room" })
-      .click();
+    await openNav(page, "Writer's Room");
     await page
       .getByRole('tablist', { name: 'Chapters' })
       .getByRole('button', { name: '+ New chapter' })
@@ -119,7 +116,7 @@ test.describe('cross-panel context', () => {
     await expect(page.locator('.lw-mention').first()).toBeVisible();
 
     // Merge the duplicate into Aelinor from its dossier.
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Cast' }).click();
+    await openNav(page, 'Cast');
     await page.getByRole('button', { name: /Ael of Hess/ }).click();
     await page.getByTestId('entity-detail').getByRole('button', { name: 'Merge into…' }).click();
     await page.getByTestId('merge-picker').getByRole('button', { name: 'Merge into Aelinor' }).click();
@@ -132,10 +129,7 @@ test.describe('cross-panel context', () => {
 
     // After reload, the manuscript mention now opens Aelinor's dossier.
     await page.reload();
-    await page
-      .getByRole('navigation', { name: 'Workspace' })
-      .getByRole('button', { name: "Writer's Room" })
-      .click();
+    await openNav(page, "Writer's Room");
     await page.locator('.lw-mention').first().click();
     await expect(
       page.getByTestId('entity-detail').getByRole('heading', { name: 'Aelinor' })

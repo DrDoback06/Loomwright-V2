@@ -1,11 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
-import { bootWithProject } from './helpers';
+import { bootWithProject, openNav } from './helpers';
 
 async function openWritersRoom(page: Page) {
-  await page
-    .getByRole('navigation', { name: 'Workspace' })
-    .getByRole('button', { name: "Writer's Room" })
-    .click();
+  await openNav(page, "Writer's Room");
   await expect(page.getByTestId('surface-writers-room')).toBeVisible();
 }
 
@@ -67,6 +64,12 @@ test.describe("writer's room", () => {
       .getByRole('tablist', { name: 'Chapters' })
       .getByRole('button', { name: '+ New chapter' })
       .click();
+    // Creation switches the active chapter asynchronously — wait for the
+    // new tab to be selected before renaming, or the rename hits ch. 1.
+    await expect(page.getByRole('tab', { name: /Chapter 2/ })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
 
     // Rename the active (second) chapter.
     await page.getByLabel('Chapter title').fill('Pale Reach');
@@ -95,7 +98,7 @@ test.describe("writer's room", () => {
     await page.getByRole('button', { name: 'Move to trash' }).click();
     await expect(page.getByText('No chapters yet.')).toBeVisible();
 
-    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('button', { name: 'Trash' }).click();
+    await openNav(page, 'Trash');
     await page.getByTestId('surface-trash').getByRole('button', { name: 'Restore' }).click();
 
     await openWritersRoom(page);
@@ -119,7 +122,9 @@ test.describe("writer's room", () => {
     await page.getByLabel('New note text').fill("Lean into 'architecture' of the face later.");
     await page.getByRole('button', { name: 'Add note' }).click();
     const rail = page.getByRole('complementary', { name: 'Paragraph notes' });
-    await expect(rail.getByText("Lean into 'architecture'")).toBeVisible();
+    // Scope to the saved-note list — the draft textarea briefly holds the
+    // same text until its clear commits.
+    await expect(rail.locator('.lw-note__text', { hasText: "Lean into 'architecture'" })).toBeVisible();
     await expect(rail.getByText('¶ 1')).toBeVisible();
 
     await page.reload();
@@ -129,11 +134,12 @@ test.describe("writer's room", () => {
       await notesToggleAfter.click();
     }
     const railAfter = page.getByRole('complementary', { name: 'Paragraph notes' });
-    await expect(railAfter.getByText("Lean into 'architecture'")).toBeVisible();
+    const savedNote = railAfter.locator('.lw-note__text', { hasText: "Lean into 'architecture'" });
+    await expect(savedNote).toBeVisible();
 
     await railAfter.getByRole('button', { name: 'Resolve' }).click();
-    await expect(railAfter.getByText("Lean into 'architecture'")).toBeHidden();
+    await expect(savedNote).toBeHidden();
     await railAfter.getByLabel('Show resolved').check();
-    await expect(railAfter.getByText("Lean into 'architecture'")).toBeVisible();
+    await expect(savedNote).toBeVisible();
   });
 });

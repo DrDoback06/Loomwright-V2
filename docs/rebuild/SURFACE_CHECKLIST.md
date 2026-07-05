@@ -257,3 +257,20 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | --- | --- | --- |
 | Topbar ? button | Opens help for the current surface | `13-onboarding.spec.ts` |
 | Got it / backdrop | Closes | `13-onboarding.spec.ts` |
+
+## Mobile shell (M11)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Bottom nav: Home / Today / Writer's Room tabs | Direct routes | all specs (mobile project, via openNav) |
+| Browse tab | Opens the codex sheet (all 16 types) | all codex navigation on mobile |
+| More tab (+ pending dot) | Opens canvases/tools/utilities sheet, Review badge | all utility navigation on mobile |
+| Sheet backdrop / re-tap | Closes the sheet | `openNav` fallback path |
+| Safe-area insets | Sheets + nav respect notches | (CSS; manual on device) |
+
+## Offline & install (M11)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Service-worker boot with network gone | App loads, data reads/writes, extraction runs, all persists | `14-offline.spec.ts` |
+| Home ▸ Install app | Shows the deferred browser install prompt | (browser-gated; manual) |
