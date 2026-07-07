@@ -6,6 +6,7 @@ import { generateGenericDraft, type GenCtx } from './generic';
 import { skillsPack } from './skills';
 import { castPack } from './cast';
 import { questsPack } from './quests';
+import { locationsPack } from './locations';
 
 /** One coherent flavor within a pack: "poison", "sorcerer", "holy"…
  * A single archetype (plus a single rng) drives every field of a draft
@@ -84,4 +85,5 @@ export function generateDraftFor(rng: Rng, type: EntityType, ctx: GenCtx): Bundl
 registerPack(skillsPack);
 registerPack(castPack);
 registerPack(questsPack);
+registerPack(locationsPack);
 DEEP_PACKS.abilities = skillsPack;
