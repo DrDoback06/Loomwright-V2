@@ -155,7 +155,16 @@ Maximum smarts **offline with no AI keys**; AI (in-app keys or the paste round-t
 | Own chapters | **One engine, every input** — Save & Extract in the Writer's Room produces the same board as a paste, fully offline |
 | Skill expansion depth | ALL THREE: rich skill sheet (from pack archetype) + tree placement & sibling skills + ripple effects (linked stats, class fit, synergistic items, other characters who could learn it via relationships) |
 | Paste size | **Up to a whole book**: auto-chunk (`chunkText(5000, 500)` exists), progress indicator, cross-chunk dedupe, ONE merged review board — whole-manuscript onboarding is a headline feature |
+| Suggestion voice | **Concrete and ready-to-accept**: every suggestion (mechanical AND story) is a finished, specific artifact — 'Venom Strike II — the coating spreads to thrown weapons (cost: 2 doses)' — with one Accept button. A co-DM handing you finished cards, not open questions |
+| Digest privacy | **Inform once + depth control**: a one-time notice the first time a full-world digest is copied (what it contains, that it goes wherever pasted), plus the always-visible lean/standard/full depth selector. No repeated friction |
+| Mobile | **Full parity, adapted layout**: the grouped cascade board works one-column on phones (groups as expandable cards) with Accept all, flags, AND correction pickers usable — per the repo's mobile e2e rule. A DM at the table pastes from their phone |
+| Board & paste home | User-confirmed: the smart board **upgrades ReviewSurface in place** (route `review`, flat list kept as a toggle during transition); paste box + mega-prompt copy live on the Handoff surface renamed **"Import & Extract"** |
+| Priority | Re-confirmed after the spec was written: generation milestones (G4–G8) finish first |
 | Remaining details | Implementer's judgement, marked as such below |
+
+### Product principle (user-mandated — applies to ALL future features)
+
+**Offline smarts are free forever; AI enriches.** Every tracking/propagation/placement feature MUST work with zero AI keys. Every AI-powered feature MUST degrade gracefully to the copy/paste round-trip so authors can spend their existing LLM subscription instead of ours. Keep this line crisp in every design decision.
 
 ### Architecture — build on what already exists
 
@@ -185,9 +194,7 @@ New module `src/services/intelligence/`. The generation system was built to be t
 | **X5** | Mega-prompt round-trip | World digest builder + depth handling, facts+suggestions reply parsing/verification, whole-book chunked intake with merged board; e2e with canned replies |
 | **X6** | One engine, every input + AI enrichment | Save & Extract produces StoryDelta; in-app AI enrichment through `complete()` with the digest prompt (privacy-guarded); polish, SURFACE_CHECKLIST, docs |
 
-### Implementer's-judgement calls (made, not user-mandated — revisit freely)
+### Implementer's-judgement calls (revisit freely; the first two above were since user-confirmed)
 
-- The board **upgrades ReviewSurface in place** rather than adding a parallel surface; the legacy per-candidate list remains as a "flat view" toggle during transition.
-- The paste box + copy-prompt (with a lean/standard/full-world depth selector) live on an upgraded **Handoff surface**, renamed "Import & Extract" — one home for the whole round-trip.
-- Copying the digest to the clipboard is user-initiated and needs no privacy guard; **in-app** AI calls keep the existing `PrivacyConfirm` gate. Digest targets ≤ ~8k tokens at full depth; over budget it auto-degrades (summaries → names-only) and says so in the prompt header.
+- Copying the digest to the clipboard is user-initiated and needs no per-copy guard (the one-time notice covers it); **in-app** AI calls keep the existing `PrivacyConfirm` gate. Digest targets ≤ ~8k tokens at full depth; over budget it auto-degrades (summaries → names-only) and says so in the prompt header.
 - Suggestion records cap at ~200/project (oldest dismissed first) to keep the inbox honest.
