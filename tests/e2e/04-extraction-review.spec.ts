@@ -127,4 +127,57 @@ test.describe('extraction + review loop', () => {
     await transferCard.getByRole('button', { name: 'Accept', exact: true }).click();
     await expect(page.getByText(/Blackwork Blade updated/)).toBeVisible();
   });
+
+  test('smart board groups a transfer, flags the ownership conflict, accepts as one Undo', async ({
+    page,
+  }) => {
+    await bootWithProject(page);
+    await createCastMember(page, { name: 'Aelinor' });
+    await createCastMember(page, { name: 'Saren' });
+
+    // Chapter introduces the blade (discovery) and its handoff to Saren.
+    await openWritersRoom(page);
+    await typeChapter(
+      page,
+      'Aelinor drew the Blackwork Blade and studied its grain. Aelinor handed the Blackwork Blade to Saren without a word.'
+    );
+    await page.getByRole('button', { name: 'Save & Extract' }).click();
+    await openNav(page, /Review/);
+    await page
+      .locator('.lw-qcard', { hasText: 'Blackwork Blade' })
+      .first()
+      .getByRole('button', { name: 'Accept', exact: true })
+      .click();
+
+    // Re-extract → the transfer detector fires; accept it so the recorded
+    // owner becomes Saren.
+    await openWritersRoom(page);
+    await page.getByRole('button', { name: 'Save & Extract' }).click();
+    await openNav(page, /Review/);
+    await page
+      .locator('.lw-qcard', { hasText: 'transferred' })
+      .first()
+      .getByRole('button', { name: 'Accept', exact: true })
+      .click();
+    await expect(page.getByText(/Blackwork Blade updated/)).toBeVisible();
+
+    // Re-extract once more → a fresh transfer whose giver (Aelinor) no longer
+    // matches the recorded owner (Saren): the smart board flags the conflict.
+    await openWritersRoom(page);
+    await page.getByRole('button', { name: 'Save & Extract' }).click();
+    await openNav(page, /Review/);
+    await page.getByRole('radio', { name: 'Board' }).click();
+
+    const group = page.getByTestId('review-group').filter({ hasText: 'Blackwork Blade' });
+    await expect(group).toBeVisible();
+    await expect(group.getByTestId('review-conflict')).toBeVisible();
+    // The cascade shows a before→after ownership change.
+    await expect(group.locator('.lw-cascade__after').first()).toBeVisible();
+
+    // Accept all selected → applied as one delta with one Undo.
+    await page.getByTestId('review-accept-bar').getByRole('button', { name: 'Accept all selected' }).click();
+    await expect(page.getByText(/Applied \d+ change/)).toBeVisible();
+    await page.locator('.lw-toast__action', { hasText: 'Undo' }).click();
+    await expect(page.getByText(/back in the queue/)).toBeVisible();
+  });
 });

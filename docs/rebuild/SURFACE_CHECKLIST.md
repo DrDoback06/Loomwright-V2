@@ -379,3 +379,16 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Editor drawer: 🔒 field lock | Locks a field — its dice, Reroll all, and Fill empty all skip it | `16-generate.spec.ts` |
 | Accept toast: Save as template / Save board as template | Saves a single accepted entity or new board as a reusable template | `16-generate.spec.ts` (board) + `templates` unit |
 | Staged roster ghost: "updates existing" badge | Duplicate-name drafts flagged before accept (merge, not a dupe row) | `16-generate.spec.ts` |
+
+## Story Intelligence — Extraction 2.0 (X1–X3)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| StoryDelta + applyDelta | Entity creates + field patches (replace/append) applied as one reversible unit | unit `intelligence.spec.ts` |
+| Propagation rules (offline) | Detector output → ownership/travel/nesting/relationship/quest/skill-learning facts + suggestions | unit `propagation.spec.ts` |
+| Review board: Board / Flat list toggle | Grouped cascades (default flat during transition) or the legacy flat queue | `04-extraction-review.spec.ts` |
+| Review board: grouped cascade + before→after diff | Findings grouped by subject; each patch shows before → after | `04-extraction-review.spec.ts` |
+| Review board: ⚑ conflict flag | Flags a change that contradicts recorded state (owner ≠ giver) | `04-extraction-review.spec.ts` |
+| Review board: per-group include checkbox | Toggle a cascade in/out of the accept set | `04-extraction-review.spec.ts` |
+| Review board: Accept all selected | Applies the selected findings as one StoryDelta with one Undo | `04-extraction-review.spec.ts` |
+| Review board: Dismiss group | Denies every candidate in a cascade | (denyCandidate path; flat-view deny tested) |

@@ -104,6 +104,12 @@ export async function acceptCandidate(id: string): Promise<Entity | null> {
   return entity;
 }
 
+/** Return accepted candidates to the pending queue — the mirror of
+ * markCandidatesAccepted, used when the board's one Undo reverts a delta. */
+export async function rependCandidates(ids: string[]): Promise<void> {
+  await db.candidates.where('id').anyOf(ids).modify({ status: 'pending', acceptedEntityId: undefined });
+}
+
 export async function denyCandidate(id: string): Promise<void> {
   const candidate = await db.candidates.get(id);
   if (!candidate || candidate.status !== 'pending') return;
@@ -115,6 +121,35 @@ export async function denyCandidate(id: string): Promise<void> {
     action: 'review.deny',
     target: { table: 'candidates', id, label: candidate.name },
   });
+}
+
+/** Mark candidates resolved WITHOUT re-applying their changes — the smart
+ * board already applied them as one StoryDelta (applyDelta). Backfills
+ * occurrences for create candidates by matching the delta's created rows on
+ * type + name. Audits each as review.accept. */
+export async function markCandidatesAccepted(
+  ids: string[],
+  created: EntityRef[]
+): Promise<void> {
+  for (const id of ids) {
+    const c = await db.candidates.get(id);
+    if (!c || c.status !== 'pending') continue;
+    const match =
+      c.suggestedAction === 'create'
+        ? created.find((r) => r.type === c.entityType && r.name.toLowerCase() === c.name.toLowerCase())?.id
+        : (c.existingEntityId ?? undefined);
+    await db.candidates.update(id, {
+      status: c.suggestedAction === 'merge' ? 'merged' : 'accepted',
+      acceptedEntityId: match,
+    });
+    if (match) await db.occurrences.where('candidateId').equals(id).modify({ entityId: match });
+    await logAudit({
+      projectId: c.projectId,
+      action: 'review.accept',
+      actor: 'user',
+      target: { table: 'candidates', id, label: c.name },
+    });
+  }
 }
 
 export async function acceptAllCandidates(projectId: string, ids?: string[]): Promise<number> {

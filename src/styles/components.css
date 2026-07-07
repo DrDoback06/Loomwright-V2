@@ -981,6 +981,137 @@ select.lw-input {
   flex-wrap: wrap;
 }
 
+/* Smart review board — grouped relational cascades. */
+.lw-review__bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  margin: var(--sp-4) 0;
+  background: var(--parch-1, var(--bg-1, #f4ecd8));
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.lw-groups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.lw-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.lw-group--conflict {
+  border-color: #b06f1c;
+  box-shadow: inset 3px 0 0 #b06f1c;
+}
+
+.lw-group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.lw-group__pick {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+
+.lw-group__conf {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+}
+
+.lw-flag {
+  font-size: var(--fs-2xs);
+  color: #8a3a1a;
+  background: #f0d9c2;
+  border-radius: 6px;
+  padding: 0 var(--sp-1);
+}
+
+.lw-flag--sm {
+  background: none;
+  padding: 0;
+}
+
+.lw-cascade {
+  list-style: none;
+  margin: 0;
+  padding-left: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: var(--fs-xs);
+  border-left: 2px solid var(--line-1);
+}
+
+.lw-cascade__row--new {
+  color: var(--ink-2);
+}
+
+.lw-cascade__field {
+  font-weight: 600;
+}
+
+.lw-cascade__before {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+
+.lw-cascade__after {
+  color: #4f8045;
+  font-weight: 600;
+}
+
+.lw-cascade__row--conflict .lw-cascade__after {
+  color: #8a3a1a;
+}
+
+.lw-cascade__fields {
+  color: var(--ink-3);
+}
+
+.lw-group__warn {
+  font-size: var(--fs-2xs);
+  color: #8a3a1a;
+  margin: 0;
+}
+
+.lw-group__sugs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.lw-sugchip {
+  font-size: var(--fs-2xs);
+  color: var(--ink-2);
+  background: var(--line-1);
+  border-radius: 999px;
+  padding: 2px var(--sp-2);
+}
+
+.lw-group__foot {
+  display: flex;
+  gap: var(--sp-2);
+}
+
 .lw-queue {
   list-style: none;
   margin: 0;
