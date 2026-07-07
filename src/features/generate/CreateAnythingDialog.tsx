@@ -411,9 +411,18 @@ function PasteTab({
 }) {
   const entityType = target.entityType;
   const isTreeKind = target.kind === 'skilltree' || target.kind === 'skilltree-branch';
+  const isBranchKind = target.kind === 'skilltree-branch';
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [parsed, setParsed] = useState<GenerationBundle | null>(null);
+  // What project context to fold into the copied prompt — off by choice
+  // keeps a prompt lean or private before it leaves for an external AI.
+  const [includeCast, setIncludeCast] = useState(true);
+  const [includeLocations, setIncludeLocations] = useState(true);
+  const [includeTree, setIncludeTree] = useState(true);
+  // Cast/location names only appear in entity + questline prompts; the tree
+  // adjacency only in branch prompts.
+  const showEntityContext = !isTreeKind;
 
   const wireContext = async (): Promise<WireContext> => ({
     projectId,
@@ -428,7 +437,11 @@ function PasteTab({
   });
 
   const copyPrompt = async () => {
-    const prompt = buildGenerationPrompt(requestOf(), await wireContext());
+    const prompt = buildGenerationPrompt(requestOf(), await wireContext(), {
+      includeCast,
+      includeLocations,
+      includeTree,
+    });
     await navigator.clipboard.writeText(prompt);
     toast('Prompt copied — paste it into any AI, then paste the JSON reply back here.', {
       kind: 'success',
@@ -463,6 +476,41 @@ function PasteTab({
         Paste entity JSON from an external AI (or another project) and every field auto-fills.
         Need a prompt to send first?
       </p>
+      {(showEntityContext || isBranchKind) && (
+        <div className="lw-genopts" data-testid="paste-context-opts">
+          <span className="lw-field__label">Include in the copied prompt</span>
+          {showEntityContext && (
+            <>
+              <label className="lw-toggle">
+                <input
+                  type="checkbox"
+                  checked={includeCast}
+                  onChange={(e) => setIncludeCast(e.target.checked)}
+                />
+                <span>Your cast names (so the AI can reference them)</span>
+              </label>
+              <label className="lw-toggle">
+                <input
+                  type="checkbox"
+                  checked={includeLocations}
+                  onChange={(e) => setIncludeLocations(e.target.checked)}
+                />
+                <span>Your location names</span>
+              </label>
+            </>
+          )}
+          {isBranchKind && (
+            <label className="lw-toggle">
+              <input
+                type="checkbox"
+                checked={includeTree}
+                onChange={(e) => setIncludeTree(e.target.checked)}
+              />
+              <span>The existing tree (so new skills graft on correctly)</span>
+            </label>
+          )}
+        </div>
+      )}
       <div className="lw-chips__add">
         <button type="button" className="lw-btn" onClick={() => void copyPrompt()}>
           Copy prompt for external AI

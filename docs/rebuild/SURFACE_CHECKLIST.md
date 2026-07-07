@@ -338,3 +338,23 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Skill Trees: Auto-arrange | Re-lays the CURRENT tree by tier/branch (one write) | `16-generate.spec.ts` |
 | Skill Trees: Fit to view | Frames every node in the viewport | `16-generate.spec.ts` |
 | Skill Trees: branch legend | Color-coded group chips from node.group | `16-generate.spec.ts` |
+
+## Generation: deep content packs (G4)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| ✨ Generate (items / bestiary / factions) | Deep hand-authored packs — coherent archetype-driven drafts, not generic filler | unit `generate.spec.ts` (deep packs coherence) |
+| (all seven deep packs: cast, skills, quests, locations, items, bestiary, factions) | Every emitted field id + option validated against the config; deterministic per seed | unit `generate.spec.ts` (coherence: zero coercion warnings) |
+
+## Generation: compound surfaces — relationships, tangle, paste context (G6)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Random tab: Questline toggle (quests) | Rolls a linked quest+event chain instead of one entity | `16-generate.spec.ts` |
+| Random tab: A set toggle (relationships) | Weaves several bonds among existing cast | `16-generate.spec.ts` |
+| Relationships graph view: ✨ Generate relationships | Opens the dialog pre-targeted to a relationship set | `16-generate.spec.ts` |
+| Relationships graph: staged ghost bonds | Staged bonds render dashed; cast endpoints appear; accept persists, one Undo | `16-generate.spec.ts` |
+| Tangle: ✨ Generate board… (sidebar + empty state) | Stages a virtual board that takes over the canvas | `16-generate.spec.ts` |
+| Tangle: ✨ Add generated cards… | Merges generated ghost cards onto the ACTIVE board | `16-generate.spec.ts` |
+| Tangle: staged board ghosts / note + Fit to view | Dashed staged cards, drag-to-taste, framed on arrival | `16-generate.spec.ts` |
+| Paste JSON tab: include cast / locations / tree checkboxes | Gate which project context folds into the copied prompt | unit `generate.spec.ts` (prompt-option gating) |

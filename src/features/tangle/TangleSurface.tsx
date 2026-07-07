@@ -14,8 +14,10 @@ import {
 import type { BoardTemplate, Entity, GraphEdge, GraphNode, TangleBoard } from '@/db/types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { NodeGraphCanvas } from '@/features/canvas/NodeGraphCanvas';
+import { useStagedGraph } from '@/features/generate/useStagedGraph';
 import { instantiateBoardTemplate, saveBoardTemplate } from '@/services/templates';
 import { useFocusStore } from '@/stores/focus';
+import { useGenerationStore } from '@/stores/generation';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
 
@@ -55,6 +57,15 @@ export function TangleSurface() {
   const [edgeLabel, setEdgeLabel] = useState('');
   const [edgeDirected, setEdgeDirected] = useState(true);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [fitCounter, setFitCounter] = useState(0);
+
+  const openGenerate = useGenerationStore((s) => s.openDialog);
+  const overlay = useStagedGraph('tangle');
+  // A staged bundle just arrived (or rerolled) — frame it.
+  const stagedDraftId = overlay.draft?.localId ?? null;
+  useEffect(() => {
+    if (stagedDraftId) setFitCounter((c) => c + 1);
+  }, [stagedDraftId]);
 
   const boardTemplates = useLiveQuery(
     async () =>
@@ -66,6 +77,13 @@ export function TangleSurface() {
   );
 
   if (!projectId || boards === null) return null;
+
+  // A staged NEW board takes over the canvas until Accept/Discard; a staged
+  // "add cards" draft merges its ghost cards into the active board's arrays.
+  const virtualDraft = overlay.isVirtual ? overlay.draft : null;
+  const displayed = virtualDraft
+    ? { nodes: virtualDraft.nodes, edges: virtualDraft.edges }
+    : overlay.merge(board?.id ?? null, board?.cards ?? [], board?.edges ?? []);
 
   const newBoard = async () => {
     const b = await createGraph('tangle', projectId, `Board ${boards.length + 1}`);
@@ -147,9 +165,11 @@ export function TangleSurface() {
             <select
               id="tangle-board"
               className="lw-input"
-              value={board?.id ?? ''}
+              value={virtualDraft ? '__staged__' : (board?.id ?? '')}
+              disabled={!!virtualDraft}
               onChange={(e) => setActiveBoardId(e.target.value)}
             >
+              {virtualDraft ? <option value="__staged__">✨ {virtualDraft.name} (staged)</option> : null}
               {boards.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
@@ -160,7 +180,25 @@ export function TangleSurface() {
               + New
             </button>
           </div>
-          {board && (
+          <div className="lw-chips__add">
+            <button
+              type="button"
+              className="lw-btn"
+              onClick={() => openGenerate({ kind: 'tangle' })}
+            >
+              ✨ Generate board…
+            </button>
+            {board && !virtualDraft ? (
+              <button
+                type="button"
+                className="lw-btn"
+                onClick={() => openGenerate({ kind: 'tangle', targetGraphId: board.id })}
+              >
+                ✨ Add generated cards…
+              </button>
+            ) : null}
+          </div>
+          {board && !virtualDraft && (
             <div className="lw-chips__add">
               <input
                 className="lw-input"
@@ -180,9 +218,22 @@ export function TangleSurface() {
               </button>
             </div>
           )}
+          {displayed.nodes.length > 0 && (
+            <div className="lw-chips__add">
+              <button type="button" className="lw-btn" onClick={() => setFitCounter((c) => c + 1)}>
+                Fit to view
+              </button>
+            </div>
+          )}
         </div>
 
-        {board && (
+        {virtualDraft && (
+          <p className="lw-fieldnote" data-testid="staged-board-note">
+            This board is staged — drag cards to taste, then Accept or Discard from the bar below.
+          </p>
+        )}
+
+        {board && !virtualDraft && (
           <>
             <h2 className="lw-atlas__subhead">Add a note card</h2>
             <div className="lw-chips__add">
@@ -327,26 +378,47 @@ export function TangleSurface() {
         )}
       </aside>
 
-      {board ? (
+      {board || virtualDraft ? (
         <NodeGraphCanvas
           testId="tangle-canvas"
-          nodes={board.cards}
-          edges={board.edges}
-          mode={mode}
+          nodes={displayed.nodes}
+          edges={displayed.edges}
+          mode={virtualDraft ? 'select' : mode}
           onPlace={(x, y) => void place(x, y)}
-          onMoveNode={(id, x, y) => void moveNode('tangle', board.id, id, x, y)}
+          onMoveNode={(id, x, y) => {
+            if (overlay.stagedIds.has(id)) {
+              overlay.moveStagedNode(id, x, y);
+            } else if (board) {
+              void moveNode('tangle', board.id, id, x, y);
+            }
+          }}
           onConnect={(a, b) => void connect(a, b)}
-          onEdgeClick={onEdgeClick}
-          onNodeClick={(node) => setSelectedNode(node)}
+          onEdgeClick={(edge) => {
+            if (!overlay.stagedIds.has(edge.id)) onEdgeClick(edge);
+          }}
+          onNodeClick={(node) => {
+            if (!overlay.stagedIds.has(node.id)) setSelectedNode(node);
+          }}
           selectedNodeId={selectedNode?.id ?? null}
+          stagedIds={overlay.stagedIds}
+          fitKey={fitCounter}
           nodeColor={(n) => (n.entity ? ENTITY_TYPE_META[n.entity.type].color : undefined)}
         />
       ) : (
         <div className="lw-empty lw-empty--center">
           <p className="lw-empty__title">No boards yet.</p>
-          <button type="button" className="lw-btn lw-btn--primary" onClick={() => void newBoard()}>
-            + New board
-          </button>
+          <div className="lw-chips__add" style={{ justifyContent: 'center' }}>
+            <button type="button" className="lw-btn lw-btn--primary" onClick={() => void newBoard()}>
+              + New board
+            </button>
+            <button
+              type="button"
+              className="lw-btn"
+              onClick={() => openGenerate({ kind: 'tangle' })}
+            >
+              ✨ Generate board…
+            </button>
+          </div>
         </div>
       )}
     </div>

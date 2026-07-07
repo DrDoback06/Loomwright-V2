@@ -941,4 +941,38 @@ describe('generate/wire tree + questline payloads', () => {
     expect(questPrompt).toContain('QUESTLINE');
     expect(questPrompt).toContain('"chain"');
   });
+
+  it('gates cast/location/tree context blocks via prompt options', () => {
+    const known: KnownEntity[] = [
+      { id: 'c1', type: 'cast', name: 'Aelinor', aliases: [] },
+      { id: 'l1', type: 'locations', name: 'Vraska Pass', aliases: [] },
+    ];
+    const withCtx = { projectId: 'p1', known };
+    const full = buildGenerationPrompt({ kind: 'entity', entityType: 'items' }, withCtx);
+    expect(full).toContain('Aelinor');
+    expect(full).toContain('Vraska Pass');
+    const lean = buildGenerationPrompt({ kind: 'entity', entityType: 'items' }, withCtx, {
+      includeCast: false,
+      includeLocations: false,
+    });
+    expect(lean).not.toContain('Aelinor');
+    expect(lean).not.toContain('Vraska Pass');
+
+    const tree = {
+      id: 'tree1',
+      projectId: 'p1',
+      name: 'Old Tree',
+      nodes: [
+        { id: 'a', label: 'Old Root', x: 0, y: 0 },
+        { id: 'b', label: 'Old Leaf', x: 0, y: 110 },
+      ],
+      edges: [{ id: 'e', from: 'a', to: 'b', directed: true }],
+      updatedAt: 1,
+    };
+    const branchReq = { kind: 'skilltree-branch' as const, count: 4, targetGraphId: 'tree1' };
+    expect(buildGenerationPrompt(branchReq, { ...ctx, tree })).toContain('The existing tree:');
+    expect(
+      buildGenerationPrompt(branchReq, { ...ctx, tree }, { includeTree: false })
+    ).not.toContain('The existing tree:');
+  });
 });

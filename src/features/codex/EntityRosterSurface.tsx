@@ -132,6 +132,15 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
             {meta.plural}
             <span className="lw-roster__count">{entities.length}</span>
           </h1>
+          {graphCapable && view === 'graph' ? (
+            <button
+              type="button"
+              className="lw-btn lw-btn--primary"
+              onClick={() => openGenerate({ kind: 'relationship-set', entityType: 'relationships' })}
+            >
+              ✨ Generate relationships
+            </button>
+          ) : null}
           {viewToggle}
         </header>
         <div className="lw-altview__body">

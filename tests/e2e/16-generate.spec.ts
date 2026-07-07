@@ -369,4 +369,67 @@ test.describe('generation: JSON round-trip, create-anything dialog', () => {
     await drawer.getByRole('button', { name: 'Identity' }).click();
     await expect(drawer.getByRole('radio', { name: 'Mentor' })).toHaveAttribute('aria-checked', 'true');
   });
+
+  test('relationship set stages dashed ghost bonds in the graph and accepts', async ({ page }) => {
+    await bootWithProject(page);
+    // A set weaves bonds among existing cast — seed three so several pairs exist.
+    await createCastMember(page, { name: 'Aelinor Vael' });
+    await createCastMember(page, { name: 'Brann Duskmere' });
+    await createCastMember(page, { name: 'Vex Marrow' });
+
+    await openNav(page, 'Relationships');
+    // The graph view is where staged bonds render as dashed ghost edges.
+    await page.getByRole('radio', { name: 'Graph' }).click();
+    await expect(page.getByText('No relationships to map yet.')).toBeVisible();
+
+    await page.getByRole('button', { name: '✨ Generate relationships' }).click();
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByLabel('How many').fill('3');
+    await dialog.getByRole('button', { name: '🎲 Roll it' }).click();
+
+    // Ghost bonds appear dashed; their cast endpoints simply show up.
+    await expect(page.getByTestId('staged-bar')).toBeVisible();
+    await expect(page.locator('.lw-graph__edge--staged')).not.toHaveCount(0);
+
+    await page.getByTestId('staged-bar').getByRole('button', { name: 'Accept all' }).click();
+    await expect(page.getByTestId('staged-bar')).toBeHidden();
+    // Accepted bonds are now real (no longer dashed) and drawn on the graph.
+    await expect(page.locator('.lw-graph__edge--staged')).toHaveCount(0);
+    await expect(page.locator('.lw-graph__edge')).not.toHaveCount(0);
+
+    // One Undo reverts the whole set.
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect(page.getByText('Generation undone.')).toBeVisible();
+    await expect(page.getByText('No relationships to map yet.')).toBeVisible();
+  });
+
+  test('tangle board generates as a staged board and accepts', async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Tangle');
+
+    await page.getByRole('button', { name: '✨ Generate board…' }).first().click();
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByLabel('How many').fill('6');
+    await dialog.getByRole('button', { name: '🎲 Roll it' }).click();
+
+    // The virtual staged board takes over the canvas until Accept/Discard.
+    await expect(page.getByTestId('staged-bar')).toBeVisible();
+    await expect(page.getByTestId('staged-board-note')).toBeVisible();
+    await expect(page.locator('.lw-graph__node--staged')).not.toHaveCount(0);
+
+    await page.getByTestId('staged-bar').getByRole('button', { name: 'Accept all' }).click();
+    await expect(page.getByTestId('staged-bar')).toBeHidden();
+    // Real cards persist on the now-real board.
+    await expect(page.locator('.lw-graph__node')).not.toHaveCount(0);
+    await expect(page.locator('.lw-graph__node--staged')).toHaveCount(0);
+
+    // Adding generated cards to the existing board merges more ghosts in.
+    await page.getByRole('button', { name: '✨ Add generated cards…' }).click();
+    await page.getByTestId('create-anything').getByLabel('How many').fill('4');
+    await page.getByTestId('create-anything').getByRole('button', { name: '🎲 Roll it' }).click();
+    await expect(page.locator('.lw-graph__node--staged')).not.toHaveCount(0);
+    await page.getByTestId('staged-bar').getByRole('button', { name: 'Accept all' }).click();
+    await expect(page.getByTestId('staged-bar')).toBeHidden();
+    await expect(page.locator('.lw-graph__node--staged')).toHaveCount(0);
+  });
 });

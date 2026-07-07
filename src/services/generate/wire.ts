@@ -79,10 +79,27 @@ const COMMON_RULES = [
   '- Keep names evocative and consistent with the theme.',
 ];
 
+/** Which project-context blocks to fold into a copied prompt. All default
+ * on; the Paste tab exposes them as checkboxes so a user can keep a prompt
+ * lean (or private) when pasting into an external AI. */
+export interface PromptContextOptions {
+  includeCast?: boolean;
+  includeLocations?: boolean;
+  /** Branch prompts: embed the existing tree's adjacency. */
+  includeTree?: boolean;
+}
+
 /** The prompt a user copies to an external AI (or the app sends to the
  * configured provider). Kind-aware: entities, skill trees, tree branches,
  * and questlines each get their own wire schema. */
-export function buildGenerationPrompt(request: GenerationRequest, ctx: WireContext): string {
+export function buildGenerationPrompt(
+  request: GenerationRequest,
+  ctx: WireContext,
+  options: PromptContextOptions = {}
+): string {
+  const includeCast = options.includeCast ?? true;
+  const includeLocations = options.includeLocations ?? true;
+  const includeTree = options.includeTree ?? true;
   const lines: string[] = [
     'You are generating content for Loomwright, a worldbuilding app for authors.',
     '',
@@ -142,7 +159,7 @@ export function buildGenerationPrompt(request: GenerationRequest, ctx: WireConte
           ? '- Exactly one root skill with an empty requires list; every other skill requires at least one.'
           : '- The FIRST new skill\'s requires must name one of the existing tree nodes below.'
       );
-      if (request.kind === 'skilltree-branch' && ctx.tree) {
+      if (request.kind === 'skilltree-branch' && ctx.tree && includeTree) {
         lines.push('', 'The existing tree:', ...treeAdjacencyLines(ctx.tree));
       }
       break;
@@ -167,7 +184,11 @@ export function buildGenerationPrompt(request: GenerationRequest, ctx: WireConte
         )
       );
       lines.push('', 'Quest field guidance:', ...promptFieldLines('quests'), '', 'Rules:', ...COMMON_RULES);
-      const context = knownNamesBlock(ctx.known, ['cast', 'locations', 'factions']);
+      const qTypes: EntityType[] = [];
+      if (includeCast) qTypes.push('cast');
+      if (includeLocations) qTypes.push('locations');
+      qTypes.push('factions');
+      const context = knownNamesBlock(ctx.known, qTypes);
       if (context.length) {
         lines.push('', 'Existing entries in this project (reference them by name where fitting):', ...context);
       }
@@ -201,9 +222,13 @@ export function buildGenerationPrompt(request: GenerationRequest, ctx: WireConte
         'Rules:',
         ...COMMON_RULES
       );
-      const context = knownNamesBlock(ctx.known, [type, 'cast', 'locations'].filter(
-        (t, i, arr) => arr.indexOf(t) === i
-      ) as EntityType[]);
+      const contextTypes: EntityType[] = [type];
+      if (includeCast) contextTypes.push('cast');
+      if (includeLocations) contextTypes.push('locations');
+      const context = knownNamesBlock(
+        ctx.known,
+        contextTypes.filter((t, i, arr) => arr.indexOf(t) === i)
+      );
       if (context.length) {
         lines.push('', 'Existing entries in this project (reference them by name where fitting):', ...context);
       }

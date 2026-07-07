@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   forceCenter,
   forceCollide,
@@ -13,27 +13,51 @@ import type { EntityRef } from '@/domain/entity-types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { NodeGraphCanvas } from '@/features/canvas/NodeGraphCanvas';
 import { useFocusStore } from '@/stores/focus';
+import { useGenerationStore } from '@/stores/generation';
 
 interface SimNode extends SimulationNodeDatum {
   id: string;
   ref: EntityRef;
 }
 
+/** The minimal relationship shape the network reads — a real Entity or a
+ * staged (not-yet-accepted) draft both satisfy it. */
+interface RelSource {
+  id: string;
+  name: string;
+  fields: Record<string, unknown>;
+}
+
 /** Force-directed network of relationship entities: nodes are the
  * characters referenced by from/to, edges carry the bond type. Layout is
  * computed once per data change (simulation ticked to rest), then nodes
- * stay draggable locally. Clicking a node focuses the character. */
+ * stay draggable locally. Clicking a node focuses the character. Staged
+ * relationship drafts (a generated "relationship set") join in as dashed
+ * ghost bonds until the bundle is accepted or discarded. */
 export function RelationshipGraph({ relationships }: { relationships: Entity[] }) {
   const setFocus = useFocusStore((s) => s.setFocus);
   const lock = useFocusStore((s) => s.lock);
   const focus = useFocusStore((s) => s.focus);
+  const staged = useGenerationStore((s) => s.staged);
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
+
+  // Staged relationship drafts render as ghost bonds; their endpoints are
+  // real cast refs, so those character nodes simply appear.
+  const stagedRels = useMemo<RelSource[]>(
+    () =>
+      (staged?.entities ?? [])
+        .filter((d) => d.type === 'relationships')
+        .map((d) => ({ id: d.localId, name: d.name, fields: d.fields })),
+    [staged]
+  );
+  const stagedEdgeIds = useMemo(() => new Set(stagedRels.map((r) => r.id)), [stagedRels]);
 
   useEffect(() => {
     const refById = new Map<string, EntityRef>();
     const links: { source: string; target: string; label: string; id: string }[] = [];
-    for (const rel of relationships) {
+    const source: RelSource[] = [...relationships, ...stagedRels];
+    for (const rel of source) {
       const from = rel.fields.from as EntityRef | undefined;
       const to = rel.fields.to as EntityRef | undefined;
       if (!from?.id || !to?.id) continue;
@@ -77,7 +101,7 @@ export function RelationshipGraph({ relationships }: { relationships: Entity[] }
       }))
     );
     setEdges(links.map((l) => ({ id: l.id, from: l.source, to: l.target, label: l.label })));
-  }, [relationships]);
+  }, [relationships, stagedRels]);
 
   if (nodes.length === 0) {
     return (
@@ -101,6 +125,7 @@ export function RelationshipGraph({ relationships }: { relationships: Entity[] }
       }
       onNodeClick={(node) => node.entity && setFocus(node.entity)}
       selectedNodeId={focus?.id ?? lock?.id ?? null}
+      stagedIds={stagedEdgeIds}
       nodeColor={(n) =>
         n.id === lock?.id ? '#b06f1c' : n.entity ? ENTITY_TYPE_META[n.entity.type].color : undefined
       }
