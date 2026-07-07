@@ -1,7 +1,14 @@
 # HANDOFF — App-Wide "Create Anything" Generation System
 
-**Branch:** `claude/entity-creation-generation-vafhf4` · **Status:** G1–G3 complete & tested; G4/G5 mostly done; G6 half-done; G7/G8 not started; **X1–X6 (Extraction 2.0, §10) spec'd, not started — comes after G8.**
+**Branch:** `claude/app-completion-handoff-7wabte` (continues `claude/entity-creation-generation-vafhf4`) · **Status:** **G1–G8 COMPLETE & tested** (full suite green: lint · tsc · build · vitest · Playwright desktop+mobile). **X1–X6 (Extraction 2.0, §10) spec'd, not started — the current work.**
 **For:** one agent/session continuing sequentially. Read this file top to bottom before touching code. The approved plan lives in the repo owner's session notes; this document supersedes it as the source of truth for remaining work.
+
+> **Completion log (branch `claude/app-completion-handoff-7wabte`):**
+> - **G4** — items pack registered; `bestiary.ts` + `factions.ts` written (8 archetypes each) + coherence unit tests; shared `article` a/an helper. All seven core types now have deep packs.
+> - **G6** — RelationshipGraph ghost bonds; TangleSurface staged overlay ("✨ Generate board…" / "✨ Add generated cards…"); roster "✨ Generate relationships"; Paste-tab cast/location/tree context checkboxes; e2e.
+> - **G7** — `buildChapter` engine + chapter wire schema/parse; Writer's Room "✨ Generate chapter…" + staged preview; AI "Draft prose for each beat" opt-in; e2e (beats → manuscript paragraphs).
+> - **G8** — generation history (Dexie **v7** `generations` table, cap 25, dialog panel + Re-stage/Copy seed); drawer 🔒 field locks; save-accepted-as-template toast action (toast gained `actions[]`); duplicate-guard badge on staged ghosts. e2e for each.
+> - **Final sweep** — SURFACE_CHECKLIST updated (G4–G8 sections); full suite green (140 e2e passed, 105 unit).
 
 ---
 
@@ -125,7 +132,9 @@ After G8 ships, start §10. It is the user's core product vision — read it in 
 
 ## 9. Session/task list state
 
-Task tracker at handoff: G1–G3 completed; #4 (G4) in progress — items/bestiary/factions packs remain; #5 (G5) effectively done but unverified by a post-WIP full e2e run; #6 (G6) engine done, surface UI remains; #7 (G7 chapters) and #8 (G8 polish) not started. Follow §5 order.
+**G1–G8 are COMPLETE and verified** on branch `claude/app-completion-handoff-7wabte` (committed + pushed per milestone). The generation system is done: all 16 types generate offline (7 with deep packs), skill trees / tangle boards / relationship sets / questlines / chapters all stage-and-accept with one-Undo, the JSON round-trip and in-app AI paths work, and G8's history/locks/templates/badges polish shipped. Full suite green.
+
+**Current work: Extraction 2.0 (§10, milestones X1–X6).** Start at X1 and follow the milestone table in §10 in order.
 
 ---
 
