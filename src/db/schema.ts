@@ -9,6 +9,7 @@ import type {
   Template,
   Chapter,
   Entity,
+  GenerationRecord,
   Link,
   Occurrence,
   ParagraphNote,
@@ -41,6 +42,7 @@ export class LoomwrightDB extends Dexie {
   keys!: EntityTable<KeyRow, 'provider'>;
   randomTables!: EntityTable<RandomTable, 'id'>;
   templates!: EntityTable<Template, 'id'>;
+  generations!: EntityTable<GenerationRecord, 'id'>;
 
   constructor() {
     super('loomwright');
@@ -75,6 +77,9 @@ export class LoomwrightDB extends Dexie {
     this.version(6).stores({
       randomTables: 'id, projectId',
       templates: 'id, projectId, [projectId+kind]',
+    });
+    this.version(7).stores({
+      generations: 'id, projectId, [projectId+createdAt]',
     });
   }
 }

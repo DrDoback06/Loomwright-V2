@@ -23,6 +23,19 @@ export function Toasts() {
               {t.action.label}
             </button>
           )}
+          {t.actions?.map((a) => (
+            <button
+              key={a.label}
+              type="button"
+              className="lw-toast__action"
+              onClick={() => {
+                void a.run();
+                dismiss(t.id);
+              }}
+            >
+              {a.label}
+            </button>
+          ))}
           <button
             type="button"
             className="lw-toast__x"

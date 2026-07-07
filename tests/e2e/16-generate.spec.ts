@@ -461,4 +461,92 @@ test.describe('generation: JSON round-trip, create-anything dialog', () => {
     await expect(page.getByText('Generation undone.')).toBeVisible();
     await expect(page.getByText('No chapters yet.')).toBeVisible();
   });
+
+  test('a 🔒 locked field is kept through Reroll all', async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Cast');
+    await page.getByRole('button', { name: '+ Create character' }).click();
+    const drawer = page.getByRole('dialog', { name: 'New Character' });
+    await drawer.getByRole('button', { name: 'Identity' }).click();
+
+    // Give Role a value, then lock it.
+    await drawer.getByRole('button', { name: 'Reroll Role in story' }).click();
+    const roleGroup = page.getByRole('radiogroup', { name: 'Role in story' });
+    const lockedRole = (await roleGroup.locator('[aria-checked="true"]').first().textContent())?.trim();
+    expect(lockedRole).toBeTruthy();
+    await drawer.getByRole('button', { name: 'Lock Role in story', exact: true }).click();
+    // Locking disables that field's own dice…
+    await expect(drawer.getByRole('button', { name: 'Reroll Role in story' })).toBeDisabled();
+
+    // …and Reroll all leaves it untouched while replacing everything else.
+    await drawer.getByRole('button', { name: 'Reroll all' }).click();
+    await expect(roleGroup.locator('[aria-checked="true"]').first()).toHaveText(lockedRole!);
+  });
+
+  test('generation history re-stages a past roll', async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Cast');
+    await page.getByRole('button', { name: /Generate character/ }).click();
+    let dialog = page.getByTestId('create-anything');
+    await dialog.getByRole('tab', { name: 'Random' }).click();
+    await dialog.getByRole('button', { name: '🎲 Roll it' }).click();
+    // A single entity opens the drawer; close it (the roll is now in history).
+    const drawer = page.getByRole('dialog', { name: 'New Character' });
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole('button', { name: 'Cancel' }).click();
+
+    // Reopen the dialog — the history panel lists the roll; re-stage it.
+    await page.getByRole('button', { name: /Generate character/ }).click();
+    dialog = page.getByTestId('create-anything');
+    const history = dialog.getByTestId('generation-history');
+    await expect(history).toBeVisible();
+    await history.locator('summary').click();
+    await history.getByRole('button', { name: 'Re-stage' }).first().click();
+
+    // Re-staged as a ghost with the global bar.
+    await expect(page.getByTestId('staged-bar')).toBeVisible();
+  });
+
+  test('a duplicate-named staged draft shows an "updates existing" badge', async ({ page }) => {
+    await bootWithProject(page);
+    // Seed a quest, then paste a questline that reuses its title.
+    await openNav(page, 'Quests');
+    await page.getByRole('button', { name: '+ Create quest' }).click();
+    const qdrawer = page.getByRole('dialog', { name: 'New Quest' });
+    await qdrawer.getByLabel('Title *').fill('The Long Road');
+    await qdrawer.getByRole('button', { name: 'Create quest' }).click();
+    await expect(qdrawer).toBeHidden();
+
+    await page.getByRole('button', { name: /Generate quest/ }).click();
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByRole('tab', { name: 'Paste JSON' }).click();
+    await dialog.getByLabel('Pasted JSON').fill(
+      JSON.stringify({
+        kind: 'questline',
+        quests: [{ title: 'The Long Road' }, { title: 'Pay the Debt' }],
+        chain: [{ from: 'The Long Road', to: 'Pay the Debt' }],
+      })
+    );
+    await dialog.getByRole('button', { name: 'Stage it' }).click();
+
+    // The reused quest stages as a ghost carrying the duplicate-guard badge.
+    await expect(page.getByTestId('staged-bar')).toBeVisible();
+    await expect(page.getByTestId('staged-updates-badge')).toBeVisible();
+    await expect(page.getByTestId('staged-updates-badge')).toHaveText(/updates existing/);
+  });
+
+  test('accepting a generated board offers "Save board as template"', async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Tangle');
+    await page.getByRole('button', { name: '✨ Generate board…' }).first().click();
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByLabel('How many').fill('5');
+    await dialog.getByRole('button', { name: '🎲 Roll it' }).click();
+    await expect(page.getByTestId('staged-bar')).toBeVisible();
+    await page.getByTestId('staged-bar').getByRole('button', { name: 'Accept all' }).click();
+
+    // The accept toast offers a save-as-template action beside Undo.
+    await page.locator('.lw-toast__action', { hasText: 'Save board as template' }).click();
+    await expect(page.getByText(/stamp it from the Tangle sidebar/)).toBeVisible();
+  });
 });

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { getEntityConfig } from '@/domain/entity-configs';
 import { applyBundle } from '@/services/generate/apply';
@@ -10,7 +11,10 @@ import { AiTab } from './AiTab';
 import { needsStaging, type GenerationBundle } from '@/services/generate/types';
 import { routeForBundle, runRandomGeneration } from '@/services/generate/staging';
 import { THEMES } from '@/services/generate/random/packs/lexicon';
+import { bundleOf, listGenerations, recordGeneration } from '@/db/repos/generations';
+import type { GenerationRecord } from '@/db/types';
 import { undoAuditEntry } from '@/db/repos/undo';
+import { templateActionFor } from './saveAsTemplate';
 import { useEditorStore } from '@/stores/editor';
 import { useGenerationStore, type GenerationDialogTarget } from '@/stores/generation';
 import { useProjectStore } from '@/stores/project';
@@ -58,9 +62,18 @@ export function CreateAnythingDialog() {
     if (target.entityType) openCreate(target.entityType);
   };
 
+  const stageAndRoute = (bundle: GenerationBundle) => {
+    stage(bundle);
+    const { route, codexType } = routeForBundle(bundle);
+    if (codexType) setCodexType(codexType);
+    setRoute(route);
+  };
+
   /** Route a parsed bundle: one plain entity → prefilled drawer (Save =
-   * accept); anything bigger → staged ghost preview in its home surface. */
+   * accept); anything bigger → staged ghost preview in its home surface.
+   * Every delivered bundle also lands in the per-project history. */
   const deliver = (bundle: GenerationBundle) => {
+    void recordGeneration(bundle);
     if (!needsStaging(bundle) && bundle.entities.length === 1) {
       const draft = bundle.entities[0];
       closeDialog();
@@ -74,10 +87,13 @@ export function CreateAnythingDialog() {
       }
       return;
     }
-    stage(bundle);
-    const { route, codexType } = routeForBundle(bundle);
-    if (codexType) setCodexType(codexType);
-    setRoute(route);
+    stageAndRoute(bundle);
+  };
+
+  /** Re-stage a bundle straight from history (no re-recording). */
+  const reStage = (bundle: GenerationBundle) => {
+    stageAndRoute(bundle);
+    closeDialog();
   };
 
   return (
@@ -171,15 +187,68 @@ export function CreateAnythingDialog() {
             onCancel={closeDialog}
           />
         )}
+
+        <GenerationHistory projectId={projectId} onReStage={reStage} />
       </div>
     </div>
   );
 }
 
-/** Apply an entity bundle and toast one Undo for the lot. */
+/** The last few generations for this project — re-stage one, or copy its
+ * seed to reproduce it exactly. Empty (and hidden) until the first roll. */
+function GenerationHistory({
+  projectId,
+  onReStage,
+}: {
+  projectId: string;
+  onReStage: (bundle: GenerationBundle) => void;
+}) {
+  const records = useLiveQuery(() => listGenerations(projectId), [projectId], [] as GenerationRecord[]);
+  if (!records.length) return null;
+  return (
+    <details className="lw-genhistory" data-testid="generation-history">
+      <summary>Recent generations ({records.length})</summary>
+      <ul className="lw-genhistory__list">
+        {records.map((r) => (
+          <li key={r.id} className="lw-genhistory__item">
+            <span className="lw-genhistory__title">
+              {r.title}
+              <span className="lw-genhistory__meta">
+                {' · '}
+                {r.mode}
+                {r.seed !== undefined ? ` · seed ${r.seed}` : ''}
+              </span>
+            </span>
+            <span className="lw-chips__add">
+              <button type="button" className="lw-btn" onClick={() => onReStage(bundleOf(r))}>
+                Re-stage
+              </button>
+              {r.seed !== undefined ? (
+                <button
+                  type="button"
+                  className="lw-btn"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(String(r.seed));
+                    toast('Seed copied.', { kind: 'success' });
+                  }}
+                >
+                  Copy seed
+                </button>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/** Apply an entity bundle and toast one Undo (plus an optional save-as-
+ * template) for the lot. */
 async function acceptEntityBundle(bundle: GenerationBundle, onDone: () => void) {
   const result = await applyBundle(bundle);
   const total = result.created.length + result.updated.length;
+  const templateAction = templateActionFor(bundle, result);
   onDone();
   toast(`${total} ${total === 1 ? 'entry' : 'entries'} added.`, {
     kind: 'success',
@@ -190,6 +259,7 @@ async function acceptEntityBundle(bundle: GenerationBundle, onDone: () => void) 
         toast('Generation undone.', { kind: 'success' });
       },
     },
+    actions: templateAction ? [templateAction] : undefined,
   });
 }
 

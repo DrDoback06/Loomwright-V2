@@ -5,6 +5,7 @@ import { bundleTitle } from '@/services/generate/types';
 import { undoAuditEntry } from '@/db/repos/undo';
 import { useGenerationStore } from '@/stores/generation';
 import { toast } from '@/stores/toasts';
+import { templateActionFor } from './saveAsTemplate';
 
 /** Floating Accept / Reroll / Discard bar shown whenever a bundle is
  * staged — global, so nothing can get stuck even on surfaces that don't
@@ -22,6 +23,7 @@ export function StagedBundleBar() {
     try {
       const result = await applyBundle(staged);
       const title = bundleTitle(staged);
+      const templateAction = templateActionFor(staged, result);
       discard();
       toast(`${title} created.`, {
         kind: 'success',
@@ -32,6 +34,7 @@ export function StagedBundleBar() {
             toast('Generation undone.', { kind: 'success' });
           },
         },
+        actions: templateAction ? [templateAction] : undefined,
       });
     } finally {
       setBusy(false);

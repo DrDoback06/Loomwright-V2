@@ -230,6 +230,22 @@ export interface BoardTemplate {
 
 export type Template = EntityTemplate | BoardTemplate;
 
+/** A stored snapshot of a past generation (Random / AI / Paste), so the
+ * dialog can re-stage it or copy its seed. `bundle` is a GenerationBundle
+ * snapshot (typed `unknown` here to keep db/types free of a service
+ * import); the generations repo casts it back on the way out. Capped at
+ * ~25 newest per project. */
+export interface GenerationRecord {
+  id: string;
+  projectId: string;
+  title: string;
+  mode: 'random' | 'ai' | 'paste';
+  kind: string;
+  seed?: number;
+  bundle: unknown;
+  createdAt: number;
+}
+
 /** Encrypted API-key rows + the non-extractable root CryptoKey
  * ('__root__'). Key material NEVER appears in exports, search, or audit. */
 export interface KeyRow {

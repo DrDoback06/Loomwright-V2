@@ -14,6 +14,7 @@ import {
 import { entitySpec, generableFields, wireExample } from '@/services/generate/spec';
 import { entityToWireJson } from '@/services/generate/serialize';
 import { applyBundle } from '@/services/generate/apply';
+import { bundleOf, listGenerations, recordGeneration } from '@/db/repos/generations';
 import { buildGenerationPrompt, parseWireBundle } from '@/services/generate/wire';
 import {
   generateRandomBundle,
@@ -724,6 +725,40 @@ describe('generate/deep packs coherence', () => {
     expect(draft.fields.kind).toBeTruthy();
     expect((draft.fields.goals as string[]).length).toBeGreaterThan(1);
     expect((draft.fields.methods as string[]).length).toBeGreaterThan(1);
+  });
+});
+
+describe('generate/history', () => {
+  beforeEach(async () => {
+    await Promise.all(db.tables.map((t) => t.clear()));
+  });
+
+  it('records generations newest-first and caps at 25 per project', async () => {
+    for (let i = 0; i < 30; i++) {
+      const bundle = generateRandomBundle(
+        { kind: 'entity', entityType: 'cast', theme: 'grimdark' },
+        { projectId: 'p1', known: [] },
+        i
+      );
+      bundle.createdAt = 1000 + i; // deterministic ordering for the test
+      await recordGeneration(bundle);
+    }
+    // A second project's history is independent.
+    const other = generateRandomBundle(
+      { kind: 'entity', entityType: 'items', theme: 'grimdark' },
+      { projectId: 'p2', known: [] },
+      99
+    );
+    await recordGeneration(other);
+
+    const list = await listGenerations('p1');
+    expect(list).toHaveLength(25); // trimmed to the newest 25
+    expect(list[0].createdAt).toBe(1029); // newest first
+    expect(list[list.length - 1].createdAt).toBe(1005); // oldest kept
+    expect(list[0].seed).toBe(29);
+    // The stored bundle round-trips for re-staging.
+    expect(bundleOf(list[0]).entities[0].type).toBe('cast');
+    expect(await listGenerations('p2')).toHaveLength(1);
   });
 });
 

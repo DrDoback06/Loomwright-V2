@@ -223,7 +223,15 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
                     ✨
                   </span>
                   <span className="lw-rostercard__text">
-                    <span className="lw-rostercard__name">{draft.name}</span>
+                    <span className="lw-rostercard__name">
+                      {draft.name}
+                      {draft.existingEntityId ? (
+                        <em className="lw-rostercard__badge" data-testid="staged-updates-badge">
+                          {' '}
+                          updates existing
+                        </em>
+                      ) : null}
+                    </span>
                     {draft.summary ? (
                       <span className="lw-rostercard__sub">{draft.summary}</span>
                     ) : null}

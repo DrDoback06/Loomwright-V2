@@ -369,3 +369,13 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Chapter accept → manuscript paragraphs | summary + beats (or drafted prose) become ordered paragraphs; one Undo | `16-generate.spec.ts` + unit `generate/apply` |
 | AI tab: Draft prose for each beat | Opt-in — the reply carries one prose paragraph per beat | unit `generate.spec.ts` (chapter prompt gating) |
 | Paste JSON tab: chapter round-trip | Copy chapter prompt → paste `{beats,prose}` reply → stages a chapter | unit `generate.spec.ts` (chapter parse) |
+
+## Generation: polish — history, locks, templates, badges (G8)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Dialog: Recent generations → Re-stage | Re-stages a stored past bundle (Dexie v7 `generations`, capped 25) | `16-generate.spec.ts` + unit `generate/history` |
+| Dialog: Recent generations → Copy seed | Copies the bundle's RNG seed to the clipboard | (clipboard action; same panel as Re-stage) |
+| Editor drawer: 🔒 field lock | Locks a field — its dice, Reroll all, and Fill empty all skip it | `16-generate.spec.ts` |
+| Accept toast: Save as template / Save board as template | Saves a single accepted entity or new board as a reusable template | `16-generate.spec.ts` (board) + `templates` unit |
+| Staged roster ghost: "updates existing" badge | Duplicate-name drafts flagged before accept (merge, not a dupe row) | `16-generate.spec.ts` |

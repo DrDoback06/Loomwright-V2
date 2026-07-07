@@ -65,6 +65,9 @@ export function EntityEditorDrawer() {
   const [loadedFor, setLoadedFor] = useState<string>('');
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
+  // Field ids the author has 🔒 pinned — "Reroll all" / "Fill empty" and the
+  // per-field dice all leave these alone.
+  const [locked, setLocked] = useState<Set<string>>(() => new Set());
 
   const config = target ? getEntityConfig(target.type) : undefined;
   const meta = target ? ENTITY_TYPE_META[target.type] : undefined;
@@ -87,6 +90,7 @@ export function EntityEditorDrawer() {
       if (!cancelled) {
         setLoadedFor(targetKey);
         setActiveSection(config?.sections[0]?.id ?? '');
+        setLocked(new Set());
       }
     })();
     return () => {
@@ -131,8 +135,17 @@ export function EntityEditorDrawer() {
 
   const generation = target.mode === 'create' ? target.generation : undefined;
 
+  const toggleLock = (id: string) =>
+    setLocked((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   /** Per-field dice: fresh themed content for just this field. */
   const rollOne = async (field: FieldDef) => {
+    if (locked.has(field.id)) return;
     const known = await loadKnownEntities(projectId);
     const value = rollField(target.type, field.id, {
       projectId,
@@ -156,9 +169,10 @@ export function EntityEditorDrawer() {
       theme: generation?.theme,
       hint: generation?.hint,
     });
+    for (const id of locked) delete rolled[id];
     const count = Object.keys(rolled).length;
     if (!count) {
-      toast('Every field already has something — nothing to fill.', { kind: 'info' });
+      toast('Every unlocked field already has something — nothing to fill.', { kind: 'info' });
       return;
     }
     setForm((f) => ({ ...f, ...rolled }));
@@ -174,7 +188,13 @@ export function EntityEditorDrawer() {
     );
     const draft = bundle.entities[0];
     if (!draft) return;
-    setForm({ aliases: [], tags: [], ...draftToInitialForm(draft) });
+    const fresh = { aliases: [], tags: [], ...draftToInitialForm(draft) };
+    // Locked fields keep their current values through a full reroll.
+    setForm((f) => {
+      const kept: Record<string, unknown> = {};
+      for (const id of locked) if (id in f) kept[id] = f[id];
+      return { ...fresh, ...kept };
+    });
   };
 
   /** Paste entity JSON (from Copy as JSON, an external AI, or by hand):
@@ -295,15 +315,32 @@ export function EntityEditorDrawer() {
                     {target.mode === 'create' &&
                     ROLLABLE_KINDS.has(field.kind) &&
                     !TOP_LEVEL_FIELDS.has(field.id) ? (
-                      <button
-                        type="button"
-                        className="lw-iconbtn lw-dice"
-                        aria-label={`Reroll ${field.label}`}
-                        title={`Reroll ${field.label}`}
-                        onClick={() => void rollOne(field)}
-                      >
-                        🎲
-                      </button>
+                      <span className="lw-field__dicerow">
+                        <button
+                          type="button"
+                          className="lw-iconbtn lw-dice"
+                          aria-label={`Reroll ${field.label}`}
+                          title={`Reroll ${field.label}`}
+                          disabled={locked.has(field.id)}
+                          onClick={() => void rollOne(field)}
+                        >
+                          🎲
+                        </button>
+                        <button
+                          type="button"
+                          className={locked.has(field.id) ? 'lw-iconbtn lw-lock lw-lock--on' : 'lw-iconbtn lw-lock'}
+                          aria-label={`${locked.has(field.id) ? 'Unlock' : 'Lock'} ${field.label}`}
+                          aria-pressed={locked.has(field.id)}
+                          title={
+                            locked.has(field.id)
+                              ? 'Locked — kept through rerolls'
+                              : 'Lock this field against rerolls'
+                          }
+                          onClick={() => toggleLock(field.id)}
+                        >
+                          {locked.has(field.id) ? '🔒' : '🔓'}
+                        </button>
+                      </span>
                     ) : null}
                   </span>
                   <FieldInput
