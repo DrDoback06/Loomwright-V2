@@ -181,10 +181,11 @@ export async function applyBundle(bundle: ApplyInput): Promise<ApplyResult> {
         if (!before) continue;
         const fields = { ...before.fields };
         for (const patch of patches) {
+          // Remap so a patch can reference a draft created in the same
+          // delta (e.g. a freshly-created skill linked onto a character).
+          const after = remapRefs(patch.after, idMap);
           fields[patch.field] =
-            patch.mode === 'append'
-              ? appendFieldValue(fields[patch.field], patch.after)
-              : patch.after;
+            patch.mode === 'append' ? appendFieldValue(fields[patch.field], after) : after;
         }
         await db.entities.put({ ...before, fields, updatedAt: now });
         record.patchedFields.push({ id: entityId, before });
