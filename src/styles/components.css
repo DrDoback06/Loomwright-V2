@@ -2558,6 +2558,17 @@ select.lw-input {
   font-style: italic;
 }
 
+.lw-genpreview__chapter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+/* Staged-chapter preview sits between the Writer's Room strip and body. */
+.lw-wroom > .lw-genpreview {
+  margin: var(--sp-3);
+}
+
 .lw-genpreview__warnings summary {
   cursor: pointer;
   font-size: var(--fs-2xs);

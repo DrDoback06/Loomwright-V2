@@ -358,3 +358,14 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Tangle: ✨ Add generated cards… | Merges generated ghost cards onto the ACTIVE board | `16-generate.spec.ts` |
 | Tangle: staged board ghosts / note + Fit to view | Dashed staged cards, drag-to-taste, framed on arrival | `16-generate.spec.ts` |
 | Paste JSON tab: include cast / locations / tree checkboxes | Gate which project context folds into the copied prompt | unit `generate.spec.ts` (prompt-option gating) |
+
+## Generation: chapters (G7)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Writer's Room: ✨ Generate chapter… (chapter strip) | Opens the dialog pre-targeted to a chapter | `16-generate.spec.ts` |
+| Random tab: chapter (how-many-beats) | Offline scaffold — premise + ordered beat outline | `16-generate.spec.ts` + unit `generate.spec.ts` |
+| Writer's Room: staged chapter preview | Beat list shown before accept; Accept via the global bar | `16-generate.spec.ts` |
+| Chapter accept → manuscript paragraphs | summary + beats (or drafted prose) become ordered paragraphs; one Undo | `16-generate.spec.ts` + unit `generate/apply` |
+| AI tab: Draft prose for each beat | Opt-in — the reply carries one prose paragraph per beat | unit `generate.spec.ts` (chapter prompt gating) |
+| Paste JSON tab: chapter round-trip | Copy chapter prompt → paste `{beats,prose}` reply → stages a chapter | unit `generate.spec.ts` (chapter parse) |

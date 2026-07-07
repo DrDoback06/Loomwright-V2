@@ -19,6 +19,7 @@ import { runDeepExtraction } from '@/services/ai/deep-extraction';
 import { getAiSettings, resolveProvider } from '@/services/ai/settings';
 import { useProjectStore } from '@/stores/project';
 import { useFocusStore } from '@/stores/focus';
+import { useGenerationStore } from '@/stores/generation';
 import { useUiStore } from '@/stores/ui';
 import { toast } from '@/stores/toasts';
 import { UniqueParagraphId, countWords, paragraphsFromDoc } from './paragraph-id';
@@ -33,6 +34,8 @@ export function WritersRoom() {
   const setCodexType = useUiStore((s) => s.setCodexType);
   const pendingChapterId = useUiStore((s) => s.pendingChapterId);
   const setFocus = useFocusStore((s) => s.setFocus);
+  const openGenerate = useGenerationStore((s) => s.openDialog);
+  const stagedChapters = useGenerationStore((s) => s.staged?.chapters) ?? [];
   const chapters = useLiveQuery(
     async () => (projectId ? listChapters(projectId) : ([] as Chapter[])),
     [projectId],
@@ -308,7 +311,34 @@ export function WritersRoom() {
         <button type="button" className="lw-chaptertab lw-chaptertab--new" onClick={addChapter}>
           + New chapter
         </button>
+        <button
+          type="button"
+          className="lw-chaptertab lw-chaptertab--new"
+          onClick={() => openGenerate({ kind: 'chapter' })}
+        >
+          ✨ Generate chapter…
+        </button>
       </div>
+
+      {stagedChapters.length > 0 && (
+        <div className="lw-card lw-genpreview" data-testid="staged-chapter-preview">
+          <p className="lw-fieldnote">
+            <span aria-hidden>✨</span> Staged chapter{stagedChapters.length > 1 ? 's' : ''} — review
+            the beats, then Accept from the bar below (paragraphs you overwrite as you write).
+          </p>
+          {stagedChapters.map((c) => (
+            <div key={c.localId} className="lw-genpreview__chapter">
+              <strong>{c.title}</strong>
+              {c.summary ? <p className="lw-genpreview__sub">{c.summary}</p> : null}
+              <ol className="lw-genpreview__list">
+                {(c.prose?.length ? c.prose : c.beats).map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ol>
+            </div>
+          ))}
+        </div>
+      )}
 
       {activeChapter && editor ? (
         <div className="lw-wroom__body">

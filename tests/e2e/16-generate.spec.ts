@@ -432,4 +432,33 @@ test.describe('generation: JSON round-trip, create-anything dialog', () => {
     await expect(page.getByTestId('staged-bar')).toBeHidden();
     await expect(page.locator('.lw-graph__node--staged')).toHaveCount(0);
   });
+
+  test("generated chapter stages beats and accepts into the Writer's Room", async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, "Writer's Room");
+
+    await page.getByRole('button', { name: '✨ Generate chapter…' }).click();
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByLabel('How many beats').fill('6');
+    await dialog.getByRole('button', { name: '🎲 Roll it' }).click();
+
+    // The chapter stages: a global bar plus a beat preview in the room.
+    await expect(page.getByTestId('staged-bar')).toBeVisible();
+    const preview = page.getByTestId('staged-chapter-preview');
+    await expect(preview).toBeVisible();
+    const firstBeat = (await preview.locator('ol li').first().innerText()).trim();
+    expect(firstBeat.length).toBeGreaterThan(0);
+
+    await page.getByTestId('staged-bar').getByRole('button', { name: 'Accept all' }).click();
+    await expect(page.getByTestId('staged-bar')).toBeHidden();
+
+    // The accepted chapter opens with its beats as manuscript paragraphs.
+    await expect(page.locator('.lw-manuscript')).toContainText(firstBeat);
+
+    // One Undo removes the whole chapter (scope to the toast — the editor
+    // toolbar has its own Undo button in the Writer's Room).
+    await page.locator('.lw-toast__action', { hasText: 'Undo' }).click();
+    await expect(page.getByText('Generation undone.')).toBeVisible();
+    await expect(page.getByText('No chapters yet.')).toBeVisible();
+  });
 });

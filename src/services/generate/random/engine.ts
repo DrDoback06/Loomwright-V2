@@ -9,6 +9,7 @@ import { createRng, randomSeed, type Rng } from './rng';
 import { generateDraftFor, matchArchetype, resolveTheme, type Archetype } from './packs';
 import { rollGenericField, type GenCtx } from './packs/generic';
 import { generateSkillDraft, skillNameFor, skillsPack, treeNameFor } from './packs/skills';
+import { abstractTitle, cap, personName, placeName, pools } from './packs/lexicon';
 import { generateBranchTopology, generateTreeTopology, type TreeTopology } from './topology';
 
 export interface RandomCtx {
@@ -73,11 +74,91 @@ export function generateRandomBundle(
       buildTangleBoard(rng, bundle, genCtx);
       break;
     }
-    default:
-      // Chapter generation registers its builder in its milestone.
+    case 'chapter': {
+      buildChapter(rng, bundle, genCtx);
       break;
+    }
   }
   return bundle;
+}
+
+/** A chapter scaffold: a one-line premise and an ordered beat outline woven
+ * from the theme lexicon and whatever cast/locations the request carries.
+ * Beats land as paragraphs the author overwrites; AI/paste modes can add
+ * `prose` per beat on top. */
+function buildChapter(rng: Rng, bundle: GenerationBundle, ctx: GenCtx): void {
+  const p = pools(ctx.theme);
+  const refs = bundle.request.contextRefs ?? [];
+  const castNames = refs.filter((r) => r.type === 'cast').map((r) => r.name);
+  const placeNames = refs.filter((r) => r.type === 'locations').map((r) => r.name);
+  const knownCast = ctx.known.filter((k) => k.type === 'cast').map((k) => k.name);
+  const knownPlaces = ctx.known.filter((k) => k.type === 'locations').map((k) => k.name);
+
+  const who = () => {
+    const pool = castNames.length ? castNames : knownCast;
+    return pool.length ? rng.pick(pool) : personName(rng, ctx.theme);
+  };
+  const where = () => {
+    const pool = placeNames.length ? placeNames : knownPlaces;
+    return pool.length ? rng.pick(pool) : placeName(rng, ctx.theme);
+  };
+  const noun = () => rng.pick(p.nouns);
+  const adj = () => rng.pick(p.adjectives);
+
+  const title = ctx.hint ? cap(ctx.hint.trim().slice(0, 60)) : abstractTitle(rng, ctx.theme);
+  const summary = `${who()} must reckon with the ${adj()} ${noun()} at ${where()} — and what it costs.`;
+
+  // A three-act skeleton: always an opening and a close, the middle filled
+  // to the requested beat count from inciting → rising → turn → cost → climax.
+  const opening = [
+    `${where()} at ${rng.pick(['dawn', 'dusk', 'the dead of night', 'the turning of the tide'])}: ${who()} arrives, uneasy.`,
+    `The chapter opens on ${where()}, where the ${noun()} is not what it seems.`,
+  ];
+  const middle: string[][] = [
+    [
+      `${who()} discovers the ${adj()} ${noun()} — and cannot un-know it.`,
+      `Word reaches ${who()}: the ${noun()} has changed hands overnight.`,
+    ],
+    [
+      `${who()} and ${who()} clash over what to do about the ${noun()}.`,
+      `An old debt surfaces, and ${who()} is forced to pick a side.`,
+      `The only road onward runs through ${where()} — and it is watched.`,
+    ],
+    [
+      `At ${where()}, the truth of the ${noun()} overturns everything they believed.`,
+      `${who()} learns who truly holds the ${noun()}, and why.`,
+    ],
+    [
+      `The plan fails, and ${who()} pays for it in ${adj()} coin.`,
+      `${who()} is betrayed at the worst possible moment.`,
+    ],
+    [
+      `${who()} confronts the ${adj()} ${noun()} head-on at ${where()}.`,
+      `Everything converges on ${where()}; there is no more running.`,
+    ],
+  ];
+  const closing = [
+    `The dust settles, but the ${noun()} leaves ${who()} changed.`,
+    `A last image — ${where()}, quiet now — and the promise of what comes next.`,
+  ];
+
+  const target = Math.max(5, Math.min(bundle.request.count ?? 6, 9));
+  const beats: string[] = [rng.pick(opening)];
+  for (const group of middle) {
+    if (beats.length >= target - 1) break;
+    beats.push(rng.pick(group));
+  }
+  // Top up from the rising-action group (index 1 has the most variety).
+  while (beats.length < target - 1) beats.push(rng.pick(middle[1]));
+  beats.push(rng.pick(closing));
+
+  bundle.chapters.push({
+    localId: newId(),
+    title,
+    summary,
+    beats,
+    linkedEntityLocalIds: [],
+  });
 }
 
 const BOND_TYPES = ['family', 'ally', 'enemy', 'lover', 'rival', 'mentor', 'debt', 'oath'];

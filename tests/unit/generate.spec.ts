@@ -586,6 +586,27 @@ describe('generate/random engine', () => {
     expect(bundle.entities).toHaveLength(5);
   });
 
+  it('chapter kind produces one scaffold chapter with a premise and beats', () => {
+    const bundle = generateRandomBundle(
+      { kind: 'chapter', theme: 'high-fantasy', hint: 'the heist', count: 6 },
+      ctx,
+      12
+    );
+    expect(bundle.chapters).toHaveLength(1);
+    expect(bundle.entities).toHaveLength(0);
+    const ch = bundle.chapters[0];
+    expect(ch.title.length).toBeGreaterThan(2);
+    expect(ch.summary.length).toBeGreaterThan(10);
+    expect(ch.beats.length).toBeGreaterThanOrEqual(5);
+    expect(ch.beats.length).toBeLessThanOrEqual(9);
+    expect(ch.beats.every((b) => b.trim().length > 0)).toBe(true);
+    // The requested beat count is honoured within the 5–9 band.
+    expect(ch.beats).toHaveLength(6);
+    // Deterministic per seed.
+    const again = generateRandomBundle(bundle.request, ctx, 12);
+    expect(again.chapters[0].beats).toEqual(ch.beats);
+  });
+
   it('rollField (forced) always produces a valid option for pills', () => {
     for (let seed = 1; seed <= 10; seed++) {
       const value = rollField('cast', 'role', { ...ctx }, seed);
@@ -915,6 +936,46 @@ describe('generate/wire tree + questline payloads', () => {
       { text: 'case the vault', status: 'pending' },
       { text: 'go in', status: 'pending' },
     ]);
+  });
+
+  it('parses a chapter payload into a scaffold or prose chapter draft', () => {
+    const reply = JSON.stringify({
+      loomwright: 'loomwright-generation-v1',
+      kind: 'chapter',
+      title: 'The Bitten Court',
+      summary: 'Poison politics come to a head.',
+      beats: ['Arrival at the court', 'The tasting goes wrong', 'A name is named'],
+      prose: [],
+    });
+    const result = parseWireBundle(reply, { kind: 'chapter' }, ctx, 'ai');
+    if (!('bundle' in result)) throw new Error(result.error);
+    expect(result.bundle.chapters).toHaveLength(1);
+    expect(result.bundle.entities).toHaveLength(0);
+    const ch = result.bundle.chapters[0];
+    expect(ch.title).toBe('The Bitten Court');
+    expect(ch.beats).toHaveLength(3);
+    expect(ch.prose).toBeUndefined();
+
+    const withProse = parseWireBundle(
+      JSON.stringify({ kind: 'chapter', title: 'X', summary: 'y', beats: ['b1'], prose: ['A full paragraph.'] }),
+      { kind: 'chapter' },
+      ctx,
+      'ai'
+    );
+    if (!('bundle' in withProse)) throw new Error(withProse.error);
+    expect(withProse.bundle.chapters[0].prose).toEqual(['A full paragraph.']);
+  });
+
+  it('chapter prompts carry the beat schema and gate prose on request', () => {
+    const scaffold = buildGenerationPrompt({ kind: 'chapter', count: 6 }, ctx);
+    expect(scaffold).toContain('CHAPTER');
+    expect(scaffold).toContain('"beats"');
+    expect(scaffold).toContain('Leave `prose` empty');
+    const withProse = buildGenerationPrompt(
+      { kind: 'chapter', count: 6, options: { includeProse: true } },
+      ctx
+    );
+    expect(withProse).toContain('one prose paragraph per beat');
   });
 
   it('kind-aware prompts include tree schema and adjacency context', () => {

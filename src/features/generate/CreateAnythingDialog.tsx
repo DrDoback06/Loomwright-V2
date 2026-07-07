@@ -45,9 +45,12 @@ export function CreateAnythingDialog() {
       : 'skill tree branch'
     : target.kind === 'tangle'
       ? 'tangle board'
-      : (config?.displayName ?? meta?.label ?? 'anything');
-  // Trees/boards have no manual path here — the surfaces build by hand.
-  const noManual = isTreeKind || target.kind === 'tangle';
+      : target.kind === 'chapter'
+        ? 'chapter'
+        : (config?.displayName ?? meta?.label ?? 'anything');
+  // Trees/boards/chapters have no manual path here — those surfaces build
+  // by hand (the Writer's Room for chapters).
+  const noManual = isTreeKind || target.kind === 'tangle' || target.kind === 'chapter';
   const activeTab: TabId = noManual && tab === 'manual' ? 'random' : tab;
 
   const openManual = () => {
@@ -236,13 +239,14 @@ function RandomTab({
   onCancel: () => void;
 }) {
   const isTreeKind = target.kind === 'skilltree' || target.kind === 'skilltree-branch';
-  const isFixedKind = isTreeKind || target.kind === 'tangle';
+  const isChapter = target.kind === 'chapter';
+  const isFixedKind = isTreeKind || target.kind === 'tangle' || isChapter;
   const canChain = target.entityType === 'quests';
   const canPair = target.entityType === 'relationships';
   const [theme, setTheme] = useState('any');
   const [hint, setHint] = useState('');
   const [count, setCount] = useState(
-    isTreeKind ? (target.kind === 'skilltree' ? 12 : 5) : target.kind === 'tangle' ? 8 : 1
+    isTreeKind ? (target.kind === 'skilltree' ? 12 : 5) : target.kind === 'tangle' ? 8 : isChapter ? 6 : 1
   );
   const [branches, setBranches] = useState(3);
   const [chain, setChain] = useState(false);
@@ -293,7 +297,9 @@ function RandomTab({
       <p className="lw-fieldnote">
         {isTreeKind
           ? 'Themed, offline, instant — the tree stages as ghost nodes on the canvas for you to inspect, drag, and accept.'
-          : 'Themed, offline, instant. A single roll lands in the editor — reroll any field with its dice, then save when it sings. Batches preview here first.'}
+          : isChapter
+            ? 'Themed, offline, instant — a chapter scaffold (premise + beat outline) stages for review, then accepts into the Writer’s Room as paragraphs you overwrite.'
+            : 'Themed, offline, instant. A single roll lands in the editor — reroll any field with its dice, then save when it sings. Batches preview here first.'}
       </p>
       <div className="lw-genopts">
         <label className="lw-field__label" htmlFor="gen-theme">
@@ -325,7 +331,7 @@ function RandomTab({
           onChange={(e) => setHint(e.target.value)}
         />
         <label className="lw-field__label" htmlFor="gen-count">
-          {isTreeKind ? 'How many skills' : 'How many'}
+          {isTreeKind ? 'How many skills' : isChapter ? 'How many beats' : 'How many'}
         </label>
         <input
           id="gen-count"
@@ -431,7 +437,7 @@ function PasteTab({
   });
 
   const requestOf = () => ({
-    kind: isTreeKind ? target.kind : ('entity' as const),
+    kind: isTreeKind || target.kind === 'chapter' ? target.kind : ('entity' as const),
     entityType,
     targetGraphId: target.targetGraphId,
   });
@@ -461,7 +467,8 @@ function PasteTab({
     if (
       (result.bundle.entities.length === 1 && !needsStaging(result.bundle)) ||
       result.bundle.graphs.length ||
-      result.bundle.links.length
+      result.bundle.links.length ||
+      result.bundle.chapters.length
     ) {
       onDeliver(result.bundle);
       return;

@@ -29,10 +29,13 @@ export function AiTab({
   onCancel: () => void;
 }) {
   const isTreeKind = target.kind === 'skilltree' || target.kind === 'skilltree-branch';
+  const isChapter = target.kind === 'chapter';
+  const isFixedKind = isTreeKind || target.kind === 'tangle' || isChapter;
   const [aiReady, setAiReady] = useState<boolean | null>(null);
   const [ask, setAsk] = useState('');
   const [theme, setTheme] = useState('any');
-  const [count, setCount] = useState(isTreeKind ? 12 : 1);
+  const [count, setCount] = useState(isTreeKind ? 12 : isChapter ? 6 : 1);
+  const [draftProse, setDraftProse] = useState(true);
   const [confirming, setConfirming] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [rawReply, setRawReply] = useState('');
@@ -44,11 +47,12 @@ export function AiTab({
   }, [projectId]);
 
   const requestOf = (): GenerationRequest => ({
-    kind: isTreeKind ? target.kind : count > 1 ? 'entity-batch' : target.kind,
+    kind: isFixedKind ? target.kind : count > 1 ? 'entity-batch' : target.kind,
     entityType: target.entityType,
     theme: theme === 'any' ? undefined : theme,
     hint: ask.trim() || undefined,
     count,
+    options: isChapter ? { includeProse: draftProse } : undefined,
     targetGraphId: target.targetGraphId,
     contextRefs: target.contextRefs,
   });
@@ -139,7 +143,9 @@ export function AiTab({
           placeholder={
             isTreeKind
               ? 'e.g. "a poison-themed skill tree for my assassin — 12 skills, 3 branches"'
-              : 'e.g. "a disgraced court physician hiding a royal secret"'
+              : isChapter
+                ? 'e.g. "the heist goes wrong and Vex is taken by the harbour watch"'
+                : 'e.g. "a disgraced court physician hiding a royal secret"'
           }
           value={ask}
           onChange={(e) => setAsk(e.target.value)}
@@ -156,7 +162,7 @@ export function AiTab({
           ))}
         </select>
         <label className="lw-field__label" htmlFor="ai-count">
-          {isTreeKind ? 'How many skills' : 'How many'}
+          {isTreeKind ? 'How many skills' : isChapter ? 'How many beats' : 'How many'}
         </label>
         <input
           id="ai-count"
@@ -169,6 +175,16 @@ export function AiTab({
             setCount(Math.max(1, Math.min(isTreeKind ? 40 : 24, Number(e.target.value) || 1)))
           }
         />
+        {isChapter && (
+          <label className="lw-toggle">
+            <input
+              type="checkbox"
+              checked={draftProse}
+              onChange={(e) => setDraftProse(e.target.checked)}
+            />
+            <span>Draft prose for each beat (otherwise just the beat outline)</span>
+          </label>
+        )}
       </div>
       {confirming ? (
         <PrivacyConfirm

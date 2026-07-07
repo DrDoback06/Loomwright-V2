@@ -7,6 +7,7 @@ import { coerceEntityDraft, str, strList, type CoerceContext } from './coerce';
 import { entitySpec, promptFieldLines, wireExample } from './spec';
 import { layoutTree } from './layout';
 import type {
+  BundleChapterDraft,
   BundleEntityDraft,
   BundleGraphDraft,
   GenerationBundle,
@@ -194,6 +195,44 @@ export function buildGenerationPrompt(
       }
       break;
     }
+    case 'chapter': {
+      const beatCount = Math.max(5, request.count ?? 6);
+      const wantsProse = Boolean(request.options?.includeProse);
+      lines.push(
+        `Create a CHAPTER ${wantsProse ? 'with drafted prose' : 'scaffold'}: a one-line premise and an ordered outline of ${beatCount} story beats${wantsProse ? ', plus one prose paragraph per beat' : ''}.`
+      );
+      lines.push(...wants, '', 'Return ONLY a single JSON object with this exact shape (no prose, no markdown fences):', '');
+      lines.push(
+        JSON.stringify(
+          {
+            loomwright: WIRE_SCHEMA_VERSION,
+            kind: 'chapter',
+            title: '<chapter title>',
+            summary: '<one-line premise>',
+            beats: ['<beat 1>', '<beat 2>'],
+            prose: wantsProse ? ['<prose paragraph for beat 1>', '<prose paragraph for beat 2>'] : [],
+          },
+          null,
+          2
+        )
+      );
+      lines.push(
+        '',
+        'Rules:',
+        ...COMMON_RULES,
+        wantsProse
+          ? '- Provide exactly one prose paragraph per beat, in order, in `prose`.'
+          : '- Leave `prose` empty; give only the beat outline.'
+      );
+      const cTypes: EntityType[] = [];
+      if (includeCast) cTypes.push('cast');
+      if (includeLocations) cTypes.push('locations');
+      const context = knownNamesBlock(ctx.known, cTypes);
+      if (context.length) {
+        lines.push('', 'Existing entries in this project (reference them by name where fitting):', ...context);
+      }
+      break;
+    }
     default: {
       const type = request.entityType;
       const spec = type ? entitySpec(type) : null;
@@ -333,6 +372,9 @@ export function parseWireBundle(
     }
     if (Array.isArray(obj.quests) && (obj.chain !== undefined || obj.events !== undefined)) {
       return parseQuestlinePayload(obj, request, ctx, mode);
+    }
+    if (Array.isArray(obj.beats) || str(obj.kind, 40)?.toLowerCase() === 'chapter') {
+      return parseChapterPayload(obj, request, ctx, mode);
     }
   }
 
@@ -513,6 +555,45 @@ function parseTreePayload(
       chapters: [],
       links: [],
       warnings,
+      createdAt: Date.now(),
+    },
+  };
+}
+
+/** Chapter payload → one chapter draft (scaffold, or with drafted prose).
+ * apply.ts turns summary + prose|beats into ordered manuscript paragraphs. */
+function parseChapterPayload(
+  obj: Record<string, unknown>,
+  request: GenerationRequest,
+  ctx: WireContext,
+  mode: GenerationMode
+): ParsedWire | WireError {
+  const title = str(obj.title ?? obj.name, 120) ?? 'Untitled chapter';
+  const summary = str(obj.summary, 2000) ?? '';
+  const beats = strList(obj.beats, 40, 800);
+  const prose = strList(obj.prose, 40, 4000);
+  if (!beats.length && !prose.length && !summary) {
+    return { error: 'The JSON parsed, but no chapter summary, beats, or prose were found.' };
+  }
+  const chapter: BundleChapterDraft = {
+    localId: newId(),
+    title,
+    summary,
+    beats,
+    prose: prose.length ? prose : undefined,
+    linkedEntityLocalIds: [],
+  };
+  return {
+    bundle: {
+      id: newId(),
+      projectId: ctx.projectId,
+      request,
+      mode,
+      entities: [],
+      graphs: [],
+      chapters: [chapter],
+      links: [],
+      warnings: [],
       createdAt: Date.now(),
     },
   };
