@@ -1,6 +1,6 @@
 # HANDOFF — App-Wide "Create Anything" Generation System
 
-**Branch:** `claude/entity-creation-generation-vafhf4` · **Status:** G1–G3 complete & tested; G4/G5 mostly done; G6 half-done; G7/G8 not started.
+**Branch:** `claude/entity-creation-generation-vafhf4` · **Status:** G1–G3 complete & tested; G4/G5 mostly done; G6 half-done; G7/G8 not started; **X1–X6 (Extraction 2.0, §10) spec'd, not started — comes after G8.**
 **For:** one agent/session continuing sequentially. Read this file top to bottom before touching code. The approved plan lives in the repo owner's session notes; this document supersedes it as the source of truth for remaining work.
 
 ---
@@ -101,6 +101,9 @@ The engine builders and dialog toggles already exist and are committed. Missing:
 ### Step 5 — final sweep
 Full e2e suite, update `docs/rebuild/SURFACE_CHECKLIST.md` (G1–G3 sections exist; add G4–G8), a manual hero-flow check (see §7), final commit + push.
 
+### Step 6 — Extraction 2.0 (the next milestone family)
+After G8 ships, start §10. It is the user's core product vision — read it in full.
+
 ## 6. Non-negotiable repo conventions
 
 - **"No dead buttons"**: every rendered control must genuinely work AND have a row in `docs/rebuild/SURFACE_CHECKLIST.md` naming the spec that proves it (`README.md` + `docs/rebuild/ARCHITECTURE.md` are the law here).
@@ -123,3 +126,68 @@ Full e2e suite, update `docs/rebuild/SURFACE_CHECKLIST.md` (G1–G3 sections exi
 ## 9. Session/task list state
 
 Task tracker at handoff: G1–G3 completed; #4 (G4) in progress — items/bestiary/factions packs remain; #5 (G5) effectively done but unverified by a post-WIP full e2e run; #6 (G6) engine done, surface UI remains; #7 (G7 chapters) and #8 (G8 polish) not started. Follow §5 order.
+
+---
+
+## 10. EXTRACTION 2.0 — Story Intelligence (next milestone family, X1–X6)
+
+### The vision (user's words, distilled)
+
+"A dungeon master's dream." The author writes a chapter — in the app, or by running our **mega-prompt** through their own LLM subscription (keeping costs on their existing plan) — pastes once, presses ONE button, and the app extracts **everything** and understands the **consequences**, across every tab:
+
+- A character learns a skill → the skill is logged as a rich entity, added to THAT character's skills, placed on (or suggested for) the right **skill tree** — and the app suggests what else the skill could grow into.
+- The party reaches a new town in a known region → the location is created **nested under the right parent** in the hierarchy.
+- An item changes hands → **current ownership** updates, history appends.
+- And the app **thinks forward**: suggested quest outcomes, story arcs, and which other characters could be involved based on the relationship web.
+
+Maximum smarts **offline with no AI keys**; AI (in-app keys or the paste round-trip) layers the genuinely creative reasoning on top.
+
+### Decisions locked with the user (do not re-litigate)
+
+| Question | Decision |
+|---|---|
+| Priority | AFTER the generation milestones (G4–G8) ship |
+| Confirmation flow | **Smart review board**: one paste → grouped relational cascades → per-group toggles → one "Accept all" → ONE Undo |
+| Offline/AI split | **Max offline** — all tracking/propagation/placement offline, plus offline suggestions powered by the content packs & relationship web; AI enriches (prose-quality expansions, novel arcs) |
+| Mega-prompt | Carries a **full world digest** (entities + key fields, location hierarchy, tree structures, ownerships, relationship web); reply schema returns **facts AND suggestions**; our engine verifies/merges |
+| Suggestions | Own lane on the review board AND a persistent per-entity **Suggestions inbox** (dossier chips); volume slider (quiet/balanced/abundant) beside the existing extraction sliders; dismiss = gone, accept = real data |
+| Conflicts/ambiguity | **Best guess + flag**: confidence-scored so Accept-all always works; conflicted items get visual flags + one-click correction pickers; contradictions show explicit before→after |
+| Own chapters | **One engine, every input** — Save & Extract in the Writer's Room produces the same board as a paste, fully offline |
+| Skill expansion depth | ALL THREE: rich skill sheet (from pack archetype) + tree placement & sibling skills + ripple effects (linked stats, class fit, synergistic items, other characters who could learn it via relationships) |
+| Paste size | **Up to a whole book**: auto-chunk (`chunkText(5000, 500)` exists), progress indicator, cross-chunk dedupe, ONE merged review board — whole-manuscript onboarding is a headline feature |
+| Remaining details | Implementer's judgement, marked as such below |
+
+### Architecture — build on what already exists
+
+New module `src/services/intelligence/`. The generation system was built to be this engine's chassis — reuse aggressively:
+
+- **`StoryDelta`** — the output currency, a superset of `GenerationBundle`: entity **creates** (BundleEntityDraft), entity **UPDATE PATCHES** (field-level, each with `before`→`after` and a confidence band), graph placements (tree node adds), hierarchy placements (`locations.parentId` sets), links, and `suggestions[]`. **Accept = an extended `applyBundle`** — the transaction + single-`generate.apply`-style audit entry + one-Undo machinery already exists in `src/services/generate/apply.ts`; extend it with replace-style field patches (ownership) alongside the current merge semantics.
+- **Propagation rules** (offline, deterministic) — a rule registry consuming the EXISTING 12 detectors' output (`src/services/extraction/detectors.ts`) plus entity semantics:
+  - `skill-learned(char, skill)` → ensure skill entity exists (rich sheet via `matchArchetype` + the skills pack), add to the character's skill links, propose tree/branch placement by matching the archetype against existing trees' `group` names, propose sibling/next-tier skills.
+  - `item-transfer(item, from, to)` → set `fields.currentOwner`, append `ownershipHistory`, conflict-flag if the recorded owner ≠ `from`.
+  - `travel(char, place)` → update `currentLocation` + `travelHistory`; NEW place → infer `parentId` from containment cues in the sentence ("a town in the Vraska region") → fuzzy match known parents (`findKnownEntityMention`) → else a flagged suggestion with a picker.
+  - relationship signals → create/update relationship entities (valence/intensity nudges shown as before→after).
+  - `quest-progress` → advance StepRows; completion → outcome suggestions.
+- **Suggestion engines** (offline): content-pack expansions (the archetype lexicons make surprisingly good offline creativity); relationship-web arc candidates (graph traversal: shared factions, rival bonds, unresolved quests touching the same cast); quest-outcome grammars (quests pack). Volume slider gates how many fire.
+- **Suggestions inbox**: new Dexie table `suggestions` (`id, projectId, [projectId+status], targetRef, kind, payload, source: 'local'|'ai'|'handoff', status: 'pending'|'accepted'|'dismissed', createdAt`). Dossiers (`EntityDetail.tsx`) render pending chips for their entity; accepting a payload-carrying suggestion stages a mini StoryDelta.
+- **World digest + mega-prompt**: `buildWorldDigest(projectId, depth)` — compact structured digest; the prompt asks for a StoryDelta-shaped JSON reply (facts + suggestions), reusing the wire conventions (names never ids — `parseWireBundle`'s coercion path in `src/services/generate/wire.ts` / `coerce.ts` is the verifier). Every external claim is confidence-checked against the offline engine before landing on the board.
+- **The board**: upgrade `src/features/review/ReviewSurface.tsx` in place (route `review` stays) — group candidates by subject entity, render cascades as connected changes ("Vex learned Venom Strike → +skill → Serpent Path ▸ Toxins → 2 sibling suggestions"), reuse confidence bands, flags with pickers, Accept-all bar mirroring `StagedBundleBar`.
+- **Whole-book intake**: chunk → per-chunk extraction → merge deltas (dedupe via known-index + the sibling-draft machinery in `coerceEntityList`) → one board. Progress UI like deep-extraction's.
+
+### Milestones
+
+| # | Milestone | Contents |
+|---|---|---|
+| **X1** | StoryDelta + applyDelta | Model, update-patch semantics in apply, `suggestions` table (next Dexie version), undo case, unit fixtures |
+| **X2** | Propagation rules | The offline rule registry fed by existing detectors; golden fixtures per rule (ownership, travel/nesting, skill-learning, relationships, quest progress) |
+| **X3** | Smart review board | ReviewSurface upgraded: grouped cascades, conflict pickers, before→after diffs, Accept all + one Undo; e2e |
+| **X4** | Suggestions | Offline generators (packs + relationship web + outcome grammars), inbox table + dossier chips + volume slider; e2e |
+| **X5** | Mega-prompt round-trip | World digest builder + depth handling, facts+suggestions reply parsing/verification, whole-book chunked intake with merged board; e2e with canned replies |
+| **X6** | One engine, every input + AI enrichment | Save & Extract produces StoryDelta; in-app AI enrichment through `complete()` with the digest prompt (privacy-guarded); polish, SURFACE_CHECKLIST, docs |
+
+### Implementer's-judgement calls (made, not user-mandated — revisit freely)
+
+- The board **upgrades ReviewSurface in place** rather than adding a parallel surface; the legacy per-candidate list remains as a "flat view" toggle during transition.
+- The paste box + copy-prompt (with a lean/standard/full-world depth selector) live on an upgraded **Handoff surface**, renamed "Import & Extract" — one home for the whole round-trip.
+- Copying the digest to the clipboard is user-initiated and needs no privacy guard; **in-app** AI calls keep the existing `PrivacyConfirm` gate. Digest targets ≤ ~8k tokens at full depth; over budget it auto-degrades (summaries → names-only) and says so in the prompt header.
+- Suggestion records cap at ~200/project (oldest dismissed first) to keep the inbox honest.
