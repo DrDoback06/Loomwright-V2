@@ -2,7 +2,7 @@ import { newId } from '@/lib/id';
 import type { BundleEntityDraft } from '../../types';
 import type { Rng } from '../rng';
 import type { Archetype, TypePack } from './index';
-import { cap, itemName, personName, pools, type ThemeId } from './lexicon';
+import { article, cap, itemName, personName, pools, type ThemeId } from './lexicon';
 import type { GenCtx } from './generic';
 
 /** Deep items pack: each archetype is one coherent kind of object — its
@@ -266,8 +266,10 @@ export function generateItemDraft(rng: Rng, arch: Archetype, ctx: GenCtx): Bundl
   const material = rng.chance(0.65) ? pickSlot(rng, arch, 'materials') : rng.pick(p.materials);
   const status = pickSlot(rng, arch, 'statuses');
 
-  const summary = `A ${adjective()} ${form()} that ${rng.chance(0.6) ? boon() : quirk()}.`;
-  const description = `A ${adjective()} ${form()} of ${material}. It ${quirk()}.${
+  const summaryAdj = adjective();
+  const descAdj = adjective();
+  const summary = `${cap(article(summaryAdj))} ${summaryAdj} ${form()} that ${rng.chance(0.6) ? boon() : quirk()}.`;
+  const description = `${cap(article(descAdj))} ${descAdj} ${form()} of ${material}. It ${quirk()}.${
     rng.chance(0.6) ? ` ${cap(bearer())} would know it anywhere by the ${noun()}.` : ''
   }`;
 

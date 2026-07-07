@@ -146,6 +146,13 @@ export function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** Indefinite article for a word — "an" before a vowel sound, else "a".
+ * A light heuristic (ignores silent-h / vowel-y edge cases), good enough
+ * for generated flavor text: "an age-worn idol", "a great cat". */
+export function article(next: string): 'a' | 'an' {
+  return /^[aeiou]/i.test(next.trim()) ? 'an' : 'a';
+}
+
 /** Pull usable flavor words from the user's hint so "sorcerer skill tree"
  * names actually mention sorcery even without a keyword match. */
 export function hintWords(hint: string): string[] {

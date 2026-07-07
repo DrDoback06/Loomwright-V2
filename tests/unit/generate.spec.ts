@@ -22,7 +22,7 @@ import {
   rollField,
 } from '@/services/generate/random/engine';
 import { createRng } from '@/services/generate/random/rng';
-import { matchArchetype } from '@/services/generate/random/packs';
+import { deepPackFor, matchArchetype } from '@/services/generate/random/packs';
 import { generateTreeTopology } from '@/services/generate/random/topology';
 import { layoutTree } from '@/services/generate/layout';
 import type { FieldSpec } from '@/services/generate/spec';
@@ -615,6 +615,94 @@ describe('generate/random engine', () => {
     const rng = createRng(1);
     expect(matchArchetype(rng, pack, 'grimdark', 'a venom blade').id).toBe('poison');
     expect(matchArchetype(rng, pack, 'grimdark', 'flame dancer').id).toBe('fire');
+  });
+});
+
+describe('generate/deep packs coherence', () => {
+  const ctx = { projectId: 'p1', known: [] as KnownEntity[] };
+  // Every type with a hand-authored pack (§4). Types without one fall back
+  // to the config-driven generic filler and are covered by the block above.
+  const DEEP_TYPES: EntityType[] = ['cast', 'skills', 'quests', 'locations', 'items', 'bestiary', 'factions'];
+
+  it('deep packs emit only valid config fields — no coercion warnings across seeds', () => {
+    for (const type of DEEP_TYPES) {
+      for (let seed = 1; seed <= 8; seed++) {
+        const draft = generateRandomBundle(
+          { kind: 'entity', entityType: type, theme: 'high-fantasy', hint: '' },
+          ctx,
+          seed
+        ).entities[0];
+        // Re-coerce with no known context so no related fields are present;
+        // any invalid pill/option or unknown field id surfaces as a warning.
+        const recoerced = coerceEntityDraft(
+          type,
+          { name: draft.name, summary: draft.summary, tags: draft.tags, fields: draft.fields },
+          { known: [], siblings: [] }
+        );
+        expect(recoerced, `${type} seed ${seed}`).not.toBeNull();
+        expect(
+          recoerced!.warnings,
+          `${type} seed ${seed}: ${recoerced!.warnings.join(' | ')}`
+        ).toHaveLength(0);
+        // A deep pack always tags its draft with the chosen archetype id.
+        expect(draft.tags.length, `${type} seed ${seed} tags`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('the archetype matcher selects the right flavor by hint keyword (G4 packs)', () => {
+    const rng = createRng(1);
+    const match = (type: EntityType, hint: string) =>
+      matchArchetype(rng, deepPackFor(type)!, 'high-fantasy', hint).id;
+    expect(match('items', 'a fine sword')).toBe('weapon');
+    expect(match('items', 'a healing potion')).toBe('consumable');
+    expect(match('bestiary', 'a shambling zombie')).toBe('undead');
+    expect(match('bestiary', 'a swarm of insects')).toBe('swarm');
+    expect(match('factions', 'the thieves guild')).toBe('thieves');
+    expect(match('factions', 'a doomsday cult')).toBe('cult');
+  });
+
+  it('deep packs are deterministic and stay on-archetype for a fixed seed', () => {
+    const req = {
+      kind: 'entity' as const,
+      entityType: 'items' as const,
+      theme: 'grimdark',
+      hint: 'a cursed haunted heirloom',
+    };
+    const a = generateRandomBundle(req, ctx, 99);
+    const b = generateRandomBundle(req, ctx, 99);
+    expect(a.entities[0].name).toBe(b.entities[0].name);
+    expect(a.entities[0].fields).toEqual(b.entities[0].fields);
+    expect(a.entities[0].tags[0]).toBe('cursed');
+    // Cursed items only ever carry a Cursed/Unique rarity from their pool.
+    expect(['Cursed', 'Unique']).toContain(a.entities[0].fields.rarity);
+  });
+
+  it('a bestiary draft fills threat, disposition, and behaviour coherently', () => {
+    const bundle = generateRandomBundle(
+      { kind: 'entity', entityType: 'bestiary', theme: 'grimdark', hint: 'apex predator' },
+      ctx,
+      3
+    );
+    const draft = bundle.entities[0];
+    expect(draft.tags[0]).toBe('apex');
+    expect(draft.fields.threatLevel).toBeTruthy();
+    expect(draft.fields.disposition).toBeTruthy();
+    expect((draft.fields.abilities as string[]).length).toBeGreaterThan(0);
+    expect((draft.fields.behaviour as string).length).toBeGreaterThan(10);
+  });
+
+  it('a faction draft fills kind, goals, and methods coherently', () => {
+    const bundle = generateRandomBundle(
+      { kind: 'entity', entityType: 'factions', theme: 'high-fantasy', hint: 'a merchant company' },
+      ctx,
+      4
+    );
+    const draft = bundle.entities[0];
+    expect(draft.tags[0]).toBe('merchant-company');
+    expect(draft.fields.kind).toBeTruthy();
+    expect((draft.fields.goals as string[]).length).toBeGreaterThan(1);
+    expect((draft.fields.methods as string[]).length).toBeGreaterThan(1);
   });
 });
 
