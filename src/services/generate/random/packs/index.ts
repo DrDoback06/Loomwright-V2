@@ -4,6 +4,8 @@ import type { Rng } from '../rng';
 import { hintWords, THEMES, type ThemeId } from './lexicon';
 import { generateGenericDraft, type GenCtx } from './generic';
 import { skillsPack } from './skills';
+import { castPack } from './cast';
+import { questsPack } from './quests';
 
 /** One coherent flavor within a pack: "poison", "sorcerer", "holy"…
  * A single archetype (plus a single rng) drives every field of a draft
@@ -80,4 +82,6 @@ export function generateDraftFor(rng: Rng, type: EntityType, ctx: GenCtx): Bundl
 // Built-in deep packs. Pack modules import only types from this file, so
 // the value import above cannot form a runtime cycle.
 registerPack(skillsPack);
+registerPack(castPack);
+registerPack(questsPack);
 DEEP_PACKS.abilities = skillsPack;

@@ -3,7 +3,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import { ENTITY_TYPE_META, type EntityRef } from '@/domain/entity-types';
 import { complete } from '@/services/ai/providers';
-import { getAiSettings, resolveProvider, saveAiSettings } from '@/services/ai/settings';
+import { getAiSettings, resolveProvider } from '@/services/ai/settings';
+import { PrivacyConfirm } from '@/features/generate/PrivacyConfirm';
 import { useFocusStore } from '@/stores/focus';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
@@ -214,39 +215,16 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
             {generating ? 'Generating…' : 'Generate with AI'}
           </button>
         )}
-        {confirming && (
-          <div className="lw-mergebox lw-card" data-testid="privacy-guard">
-            <p className="lw-mergebox__note">
-              This sends the brief (entity names, summaries, your direction) to your
-              configured provider. Continue?
-            </p>
-            <div className="lw-chips__add">
-              <button
-                type="button"
-                className="lw-btn lw-btn--primary"
-                onClick={async () => {
-                  setConfirming(false);
-                  await runGenerate();
-                }}
-              >
-                Send once
-              </button>
-              <button
-                type="button"
-                className="lw-btn"
-                onClick={async () => {
-                  if (projectId) await saveAiSettings(projectId, { privacy: 'always-allow' });
-                  setConfirming(false);
-                  await runGenerate();
-                }}
-              >
-                Always allow
-              </button>
-              <button type="button" className="lw-btn" onClick={() => setConfirming(false)}>
-                Cancel
-              </button>
-            </div>
-          </div>
+        {confirming && projectId && (
+          <PrivacyConfirm
+            projectId={projectId}
+            note="This sends the brief (entity names, summaries, your direction) to your configured provider. Continue?"
+            onRun={async () => {
+              setConfirming(false);
+              await runGenerate();
+            }}
+            onCancel={() => setConfirming(false)}
+          />
         )}
         {draft && (
           <div className="lw-compose__draft" data-testid="ai-draft">

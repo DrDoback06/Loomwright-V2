@@ -14,7 +14,7 @@ import {
 import { entitySpec, generableFields, wireExample } from '@/services/generate/spec';
 import { entityToWireJson } from '@/services/generate/serialize';
 import { applyBundle } from '@/services/generate/apply';
-import { parseWireBundle } from '@/services/generate/wire';
+import { buildGenerationPrompt, parseWireBundle } from '@/services/generate/wire';
 import {
   generateRandomBundle,
   generateSkillTreeBranchBundle,
@@ -729,5 +729,128 @@ describe('generate/skill trees', () => {
     // New nodes sit in free space right of the existing tree.
     const maxTreeX = Math.max(...tree.nodes.map((n) => n.x));
     expect(real.graphs[0].nodes.every((n) => n.x > maxTreeX)).toBe(true);
+  });
+});
+
+describe('generate/wire tree + questline payloads', () => {
+  const ctx = { projectId: 'p1', known: [] as KnownEntity[] };
+
+  const TREE_REPLY = JSON.stringify({
+    loomwright: 'loomwright-generation-v1',
+    kind: 'skilltree',
+    name: 'The Serpent Path',
+    skills: [
+      { type: 'skills', name: 'Coat Blade', summary: 'Base.', fields: { skillType: 'active' } },
+      { name: 'Venom Strike', fields: { skillType: 'active', effects: ['Poison one foe'] } },
+      { name: 'Numbing Cloud', fields: { skillType: 'triggered' } },
+    ],
+    tree: {
+      nodes: [
+        { skill: 'Coat Blade', tier: 0, branch: 'Toxins', requires: [] },
+        { skill: 'Venom Strike', tier: 1, branch: 'Toxins', requires: ['Coat Blade'] },
+        { skill: 'Numbing Cloud', tier: 1, branch: 'Clouds', requires: ['Coat Blade', 'Nonexistent'] },
+      ],
+    },
+  });
+
+  it('parses a tree payload into skills + a positioned graph draft', () => {
+    const result = parseWireBundle(TREE_REPLY, { kind: 'skilltree' }, ctx, 'ai');
+    if (!('bundle' in result)) throw new Error(result.error);
+    const { bundle } = result;
+    expect(bundle.entities).toHaveLength(3);
+    expect(bundle.graphs).toHaveLength(1);
+    const graph = bundle.graphs[0];
+    expect(graph.name).toBe('The Serpent Path');
+    expect(graph.nodes).toHaveLength(3);
+    expect(graph.edges).toHaveLength(2); // 'Nonexistent' prerequisite dropped
+    expect(bundle.warnings.some((w) => w.includes('Nonexistent'))).toBe(true);
+    // Positions computed by layout, groups from branch names.
+    for (const node of graph.nodes) {
+      expect(node.x !== 0 || node.y !== 0).toBe(true);
+    }
+    expect(graph.nodes[1].group).toBe('Toxins');
+    // Node entity refs point at the skill drafts.
+    const draftIds = new Set(bundle.entities.map((d) => d.localId));
+    expect(graph.nodes.every((n) => draftIds.has(n.entity!.id))).toBe(true);
+  });
+
+  it('parses a branch payload attaching to existing tree labels', () => {
+    const tree = {
+      id: 'tree1',
+      projectId: 'p1',
+      name: 'Old Tree',
+      nodes: [{ id: 'n-root', label: 'Old Root', x: 100, y: 100 }],
+      edges: [],
+      updatedAt: 1,
+    };
+    const reply = JSON.stringify({
+      kind: 'skilltree-branch',
+      skills: [{ name: 'Graft One' }, { name: 'Graft Two' }],
+      tree: {
+        nodes: [
+          { skill: 'Graft One', requires: ['Old Root'] },
+          { skill: 'Graft Two', requires: ['Graft One'] },
+        ],
+      },
+    });
+    const result = parseWireBundle(
+      reply,
+      { kind: 'skilltree-branch', targetGraphId: 'tree1' },
+      { ...ctx, tree },
+      'paste'
+    );
+    if (!('bundle' in result)) throw new Error(result.error);
+    const graph = result.bundle.graphs[0];
+    expect(graph.targetGraphId).toBe('tree1');
+    // The graft hangs off the real existing node id and sits beside the tree.
+    expect(graph.edges.some((e) => e.from === 'n-root')).toBe(true);
+    expect(Math.min(...graph.nodes.map((n) => n.x))).toBeGreaterThan(100);
+  });
+
+  it('parses a questline payload into linked quests + events', () => {
+    const reply = JSON.stringify({
+      kind: 'questline',
+      quests: [
+        { title: 'Steal the Ledger', fields: { steps: ['case the vault', 'go in'] } },
+        { title: 'Pay the Debt' },
+      ],
+      events: [{ title: 'The Vault Alarm' }],
+      chain: [{ from: 'Steal the Ledger', to: 'Pay the Debt' }, { from: 'Nope', to: 'Also Nope' }],
+    });
+    const result = parseWireBundle(reply, { kind: 'questline' }, ctx, 'ai');
+    if (!('bundle' in result)) throw new Error(result.error);
+    expect(result.bundle.entities.map((d) => d.type).sort()).toEqual(['events', 'quests', 'quests']);
+    expect(result.bundle.links).toHaveLength(1);
+    expect(result.bundle.warnings.some((w) => w.includes('Nope'))).toBe(true);
+    const quest = result.bundle.entities.find((d) => d.name === 'Steal the Ledger')!;
+    expect(quest.fields.steps).toEqual([
+      { text: 'case the vault', status: 'pending' },
+      { text: 'go in', status: 'pending' },
+    ]);
+  });
+
+  it('kind-aware prompts include tree schema and adjacency context', () => {
+    const tree = {
+      id: 'tree1',
+      projectId: 'p1',
+      name: 'Old Tree',
+      nodes: [
+        { id: 'a', label: 'Old Root', x: 0, y: 0 },
+        { id: 'b', label: 'Old Leaf', x: 0, y: 110 },
+      ],
+      edges: [{ id: 'e', from: 'a', to: 'b', directed: true }],
+      updatedAt: 1,
+    };
+    const prompt = buildGenerationPrompt(
+      { kind: 'skilltree-branch', count: 4, hint: 'poison', targetGraphId: 'tree1' },
+      { ...ctx, tree }
+    );
+    expect(prompt).toContain('NEW BRANCH');
+    expect(prompt).toContain('"skills"');
+    expect(prompt).toContain('Old Leaf (tier 1) requires Old Root');
+    expect(prompt).toContain('NEVER include coordinates');
+    const questPrompt = buildGenerationPrompt({ kind: 'questline', count: 3 }, ctx);
+    expect(questPrompt).toContain('QUESTLINE');
+    expect(questPrompt).toContain('"chain"');
   });
 });

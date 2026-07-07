@@ -1,9 +1,48 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { bootWithProject, createCastMember, openNav } from './helpers';
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+// AI specs mock provider HTTP with page.route — no real keys, ever.
+const FAKE_KEY = 'sk-ant-e2e-fake-generate';
+
+function mockAnthropic(page: Page, reply: string) {
+  return page.route('https://api.anthropic.com/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ content: [{ type: 'text', text: reply }] }),
+    });
+  });
+}
+
+async function configureAnthropic(page: Page) {
+  await openNav(page, 'Settings');
+  const provider = page.getByTestId('provider-anthropic');
+  await provider.getByLabel('Anthropic API key').fill(FAKE_KEY);
+  await provider.getByRole('button', { name: 'Save key' }).click();
+  await expect(provider.getByText('key saved ✓')).toBeVisible();
+}
+
+const AI_TREE_REPLY = JSON.stringify({
+  loomwright: 'loomwright-generation-v1',
+  kind: 'skilltree',
+  name: 'The Serpent Path',
+  skills: [
+    { type: 'skills', name: 'Coat Blade', summary: 'Base craft.', fields: { skillType: 'active' } },
+    { name: 'Venom Strike', summary: 'The payoff.', fields: { skillType: 'active', effects: ['Poison one foe'] } },
+    { name: 'Numbing Cloud', summary: 'Area denial.', fields: { skillType: 'triggered' } },
+  ],
+  tree: {
+    nodes: [
+      { skill: 'Coat Blade', tier: 0, branch: 'Toxins', requires: [] },
+      { skill: 'Venom Strike', tier: 1, branch: 'Toxins', requires: ['Coat Blade'] },
+      { skill: 'Numbing Cloud', tier: 1, branch: 'Clouds', requires: ['Coat Blade'] },
+    ],
+  },
+});
 
 test.describe('generation: JSON round-trip, create-anything dialog', () => {
   test('pasted single-entity JSON prefills the drawer across tabs; save creates it', async ({
@@ -254,6 +293,63 @@ test.describe('generation: JSON round-trip, create-anything dialog', () => {
     await page.getByTestId('staged-bar').getByRole('button', { name: 'Accept all' }).click();
     await expect(page.getByTestId('staged-bar')).toBeHidden();
     await expect(page.locator('.lw-roster__count')).toHaveText('3');
+  });
+
+  test('AI tab without a provider points to Settings; with one it stages a mocked tree', async ({
+    page,
+  }) => {
+    await mockAnthropic(page, AI_TREE_REPLY);
+    await bootWithProject(page);
+
+    // No provider yet → the AI tab explains and links to Settings.
+    await openNav(page, 'Skill Trees');
+    await page.getByRole('button', { name: '✨ Generate tree…' }).first().click();
+    await page.getByTestId('create-anything').getByRole('tab', { name: 'AI' }).click();
+    await expect(page.getByText(/needs a configured provider/)).toBeVisible();
+    await page.getByRole('button', { name: 'Configure AI in Settings' }).click();
+    await configureAnthropic(page);
+
+    // With a key: describe the tree → privacy guard → mocked reply stages.
+    await openNav(page, 'Skill Trees');
+    await page.getByRole('button', { name: '✨ Generate tree…' }).first().click();
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByRole('tab', { name: 'AI' }).click();
+    await dialog.getByLabel('What do you want?').fill('a poison skill tree for my assassin');
+    await dialog.getByRole('button', { name: '✨ Generate' }).click();
+    await expect(dialog.getByTestId('privacy-guard')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Send once' }).click();
+
+    await expect(page.getByTestId('staged-bar')).toBeVisible();
+    await expect(page.getByTestId('staged-bar')).toContainText('The Serpent Path');
+    await expect(page.locator('.lw-graph__node--staged')).toHaveCount(3);
+    // AI bundles don't offer Reroll (that's a random-mode affordance).
+    await expect(page.getByTestId('staged-bar').getByRole('button', { name: '🎲 Reroll' })).toBeHidden();
+
+    await page.getByTestId('staged-bar').getByRole('button', { name: 'Accept all' }).click();
+    await expect(page.locator('.lw-graph__node')).toHaveCount(3);
+    await openNav(page, 'Skills');
+    await expect(page.locator('.lw-roster__count')).toHaveText('3');
+  });
+
+  test('AI tab generates a single character straight into the drawer', async ({ page }) => {
+    await mockAnthropic(
+      page,
+      '```json\n{"type":"cast","name":"Maren Salt-Eye","summary":"Runs the night ferry.","fields":{"role":"Ally","personality":"unsentimental, loyal"}}\n```'
+    );
+    await bootWithProject(page);
+    await configureAnthropic(page);
+    await openNav(page, 'Cast');
+    await page.getByRole('button', { name: /Generate character/ }).click();
+
+    const dialog = page.getByTestId('create-anything');
+    await dialog.getByRole('tab', { name: 'AI' }).click();
+    await dialog.getByLabel('What do you want?').fill('a ferrywoman who knows too much');
+    await dialog.getByRole('button', { name: '✨ Generate' }).click();
+    await dialog.getByRole('button', { name: 'Send once' }).click();
+
+    const drawer = page.getByRole('dialog', { name: 'New Character' });
+    await expect(drawer.getByLabel('Name *')).toHaveValue('Maren Salt-Eye');
+    await expect(drawer.getByLabel('Summary')).toHaveValue('Runs the night ferry.');
   });
 
   test('the drawer paste-JSON action fills fields in place', async ({ page }) => {

@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { ENTITY_TYPE_META, type EntityType } from '@/domain/entity-types';
+import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { getEntityConfig } from '@/domain/entity-configs';
 import { applyBundle } from '@/services/generate/apply';
 import { draftToInitialForm } from '@/services/generate/coerce';
 import { loadKnownEntities } from '@/services/generate/known';
-import { buildGenerationPrompt, parseWireBundle } from '@/services/generate/wire';
+import { buildGenerationPrompt, parseWireBundle, type WireContext } from '@/services/generate/wire';
+import { db } from '@/db/schema';
+import { AiTab } from './AiTab';
 import { needsStaging, type GenerationBundle } from '@/services/generate/types';
 import { routeForBundle, runRandomGeneration } from '@/services/generate/staging';
 import { THEMES } from '@/services/generate/random/packs/lexicon';
@@ -15,7 +17,7 @@ import { useProjectStore } from '@/stores/project';
 import { useUiStore } from '@/stores/ui';
 import { toast } from '@/stores/toasts';
 
-type TabId = 'manual' | 'random' | 'paste';
+type TabId = 'manual' | 'random' | 'ai' | 'paste';
 
 /** The app-wide four-mode create flow. Opens pre-targeted (a type, a
  * tree, a board…); Manual forwards straight to the editor drawer, the
@@ -41,9 +43,12 @@ export function CreateAnythingDialog() {
     ? target.kind === 'skilltree'
       ? 'skill tree'
       : 'skill tree branch'
-    : (config?.displayName ?? meta?.label ?? 'anything');
-  // Trees have no manual/paste path here yet — the surface builds by hand.
-  const activeTab: TabId = isTreeKind ? 'random' : tab;
+    : target.kind === 'tangle'
+      ? 'tangle board'
+      : (config?.displayName ?? meta?.label ?? 'anything');
+  // Trees/boards have no manual path here — the surfaces build by hand.
+  const noManual = isTreeKind || target.kind === 'tangle';
+  const activeTab: TabId = noManual && tab === 'manual' ? 'random' : tab;
 
   const openManual = () => {
     closeDialog();
@@ -92,7 +97,7 @@ export function CreateAnythingDialog() {
           New {subject.toLowerCase()}
         </h2>
         <div className="lw-viewtoggle" role="tablist" aria-label="Creation mode">
-          {!isTreeKind && (
+          {!noManual && (
             <button
               type="button"
               role="tab"
@@ -112,17 +117,24 @@ export function CreateAnythingDialog() {
           >
             Random
           </button>
-          {!isTreeKind && (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'paste'}
-              className={activeTab === 'paste' ? 'lw-pill lw-pill--active' : 'lw-pill'}
-              onClick={() => setTab('paste')}
-            >
-              Paste JSON
-            </button>
-          )}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'ai'}
+            className={activeTab === 'ai' ? 'lw-pill lw-pill--active' : 'lw-pill'}
+            onClick={() => setTab('ai')}
+          >
+            AI
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'paste'}
+            className={activeTab === 'paste' ? 'lw-pill lw-pill--active' : 'lw-pill'}
+            onClick={() => setTab('paste')}
+          >
+            Paste JSON
+          </button>
         </div>
 
         {activeTab === 'manual' ? (
@@ -146,10 +158,12 @@ export function CreateAnythingDialog() {
             onDeliver={deliver}
             onCancel={closeDialog}
           />
+        ) : activeTab === 'ai' ? (
+          <AiTab projectId={projectId} target={target} onDeliver={deliver} onCancel={closeDialog} />
         ) : (
           <PasteTab
             projectId={projectId}
-            entityType={target.entityType}
+            target={target}
             onDeliver={deliver}
             onCancel={closeDialog}
           />
@@ -222,22 +236,29 @@ function RandomTab({
   onCancel: () => void;
 }) {
   const isTreeKind = target.kind === 'skilltree' || target.kind === 'skilltree-branch';
+  const isFixedKind = isTreeKind || target.kind === 'tangle';
   const canChain = target.entityType === 'quests';
+  const canPair = target.entityType === 'relationships';
   const [theme, setTheme] = useState('any');
   const [hint, setHint] = useState('');
-  const [count, setCount] = useState(isTreeKind ? (target.kind === 'skilltree' ? 12 : 5) : 1);
+  const [count, setCount] = useState(
+    isTreeKind ? (target.kind === 'skilltree' ? 12 : 5) : target.kind === 'tangle' ? 8 : 1
+  );
   const [branches, setBranches] = useState(3);
   const [chain, setChain] = useState(false);
+  const [pair, setPair] = useState(target.kind === 'relationship-set');
   const [parsed, setParsed] = useState<GenerationBundle | null>(null);
 
   const roll = async () => {
-    const kind = isTreeKind
+    const kind = isFixedKind
       ? target.kind
       : canChain && chain
         ? 'questline'
-        : count > 1
-          ? 'entity-batch'
-          : 'entity';
+        : canPair && pair
+          ? 'relationship-set'
+          : count > 1
+            ? 'entity-batch'
+            : 'entity';
     const result = await runRandomGeneration(
       {
         kind,
@@ -259,8 +280,8 @@ function RandomTab({
       onDeliver(result);
       return;
     }
-    if (isTreeKind || kind === 'questline') {
-      // Trees and questlines stage as ghosts in their home surface.
+    if (isFixedKind || kind === 'questline' || kind === 'relationship-set') {
+      // Compound results stage as ghosts in their home surface.
       onDeliver(result);
       return;
     }
@@ -342,6 +363,12 @@ function RandomTab({
             <span>Questline — a linked chain of quests (with events), staged in the roster</span>
           </label>
         ) : null}
+        {canPair ? (
+          <label className="lw-toggle">
+            <input type="checkbox" checked={pair} onChange={(e) => setPair(e.target.checked)} />
+            <span>A set — weave several bonds among your existing cast at once</span>
+          </label>
+        ) : null}
       </div>
       {parsed ? <EntityBundlePreview bundle={parsed} testId="random-preview" /> : null}
       <div className="lw-chips__add">
@@ -373,25 +400,35 @@ function RandomTab({
 
 function PasteTab({
   projectId,
-  entityType,
+  target,
   onDeliver,
   onCancel,
 }: {
   projectId: string;
-  entityType?: EntityType;
+  target: GenerationDialogTarget;
   onDeliver: (bundle: GenerationBundle) => void;
   onCancel: () => void;
 }) {
+  const entityType = target.entityType;
+  const isTreeKind = target.kind === 'skilltree' || target.kind === 'skilltree-branch';
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [parsed, setParsed] = useState<GenerationBundle | null>(null);
 
+  const wireContext = async (): Promise<WireContext> => ({
+    projectId,
+    known: await loadKnownEntities(projectId),
+    tree: target.targetGraphId ? await db.skillTrees.get(target.targetGraphId) : undefined,
+  });
+
+  const requestOf = () => ({
+    kind: isTreeKind ? target.kind : ('entity' as const),
+    entityType,
+    targetGraphId: target.targetGraphId,
+  });
+
   const copyPrompt = async () => {
-    const known = await loadKnownEntities(projectId);
-    const prompt = buildGenerationPrompt(
-      { kind: 'entity', entityType },
-      { projectId, known }
-    );
+    const prompt = buildGenerationPrompt(requestOf(), await wireContext());
     await navigator.clipboard.writeText(prompt);
     toast('Prompt copied — paste it into any AI, then paste the JSON reply back here.', {
       kind: 'success',
@@ -401,13 +438,18 @@ function PasteTab({
   const parse = async () => {
     setError('');
     setParsed(null);
-    const known = await loadKnownEntities(projectId);
-    const result = parseWireBundle(text, { kind: 'entity', entityType }, { projectId, known });
+    const result = parseWireBundle(text, requestOf(), await wireContext());
     if ('error' in result) {
       setError(result.error);
       return;
     }
-    if (result.bundle.entities.length === 1 && !needsStaging(result.bundle)) {
+    // Single plain entity → drawer; anything with graphs/links → staged
+    // ghosts in its home surface; plain batches preview inline here.
+    if (
+      (result.bundle.entities.length === 1 && !needsStaging(result.bundle)) ||
+      result.bundle.graphs.length ||
+      result.bundle.links.length
+    ) {
       onDeliver(result.bundle);
       return;
     }

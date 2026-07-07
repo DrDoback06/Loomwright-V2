@@ -65,12 +65,115 @@ export function generateRandomBundle(
       buildQuestline(rng, bundle, genCtx);
       break;
     }
+    case 'relationship-set': {
+      buildRelationshipSet(rng, bundle, genCtx);
+      break;
+    }
+    case 'tangle': {
+      buildTangleBoard(rng, bundle, genCtx);
+      break;
+    }
     default:
-      // Remaining compound kinds (tangle, chapter) register their
-      // builders in their own milestones.
+      // Chapter generation registers its builder in its milestone.
       break;
   }
   return bundle;
+}
+
+const BOND_TYPES = ['family', 'ally', 'enemy', 'lover', 'rival', 'mentor', 'debt', 'oath'];
+const VALENCES = ['positive', 'negative', 'mixed', 'cold', 'heated', 'quiet'];
+const DIRECTIONALITIES = ['mutual', 'one-way', 'conflicted'];
+
+/** Relationships among EXISTING cast: unique pairs from the request's
+ * context refs (or the whole cast), each fully fielded. */
+function buildRelationshipSet(rng: Rng, bundle: GenerationBundle, ctx: GenCtx): void {
+  const fromRefs = (bundle.request.contextRefs ?? []).filter((r) => r.type === 'cast');
+  const pool = fromRefs.length >= 2 ? fromRefs : ctx.known.filter((k) => k.type === 'cast');
+  if (pool.length < 2) {
+    bundle.warnings.push('Need at least two characters to weave relationships between.');
+    return;
+  }
+  const pairs: [typeof pool[number], typeof pool[number]][] = [];
+  for (let i = 0; i < pool.length; i++) {
+    for (let j = i + 1; j < pool.length; j++) pairs.push([pool[i], pool[j]]);
+  }
+  const count = Math.max(1, Math.min(bundle.request.count ?? 3, pairs.length, 12));
+  for (const [a, b] of rng.shuffle(pairs).slice(0, count)) {
+    const [from, to] = rng.chance(0.5) ? [a, b] : [b, a];
+    const bondType = rng.pick(BOND_TYPES);
+    const valence = rng.pick(VALENCES);
+    bundle.entities.push({
+      localId: newId(),
+      type: 'relationships',
+      name: `${from.name} → ${to.name}`,
+      aliases: [],
+      summary: `A ${valence} ${bondType} bond — ${rng.pick([
+        'older than either admits',
+        'newer than it looks',
+        'held together by necessity',
+        'one secret away from breaking',
+        'the talk of everyone around them',
+      ])}.`,
+      tags: [bondType],
+      fields: {
+        from: { id: from.id, type: 'cast', name: from.name },
+        to: { id: to.id, type: 'cast', name: to.name },
+        bondType,
+        valence,
+        directionality: rng.pick(DIRECTIONALITIES),
+        intensity: String(rng.int(20, 95)),
+      },
+    });
+  }
+}
+
+const THREAD_LABELS = ['leads to', 'because of', 'conflicts with', 'hides', 'mirrors', 'owes'];
+
+/** A story corkboard: bound cards for context entities plus themed note
+ * cards, joined by labelled threads. */
+function buildTangleBoard(rng: Rng, bundle: GenerationBundle, ctx: GenCtx): void {
+  const refs = (bundle.request.contextRefs ?? []).slice(0, 6);
+  const noteCount = Math.max(2, Math.min((bundle.request.count ?? 6) - refs.length, 10));
+  const nodes: GraphNode[] = [];
+  const place = (i: number, total: number) => {
+    const angle = (i / Math.max(total, 1)) * Math.PI * 2;
+    const radius = 170 + (i % 2) * 70;
+    return {
+      x: Math.round(380 + Math.cos(angle) * radius),
+      y: Math.round(300 + Math.sin(angle) * radius * 0.7),
+    };
+  };
+  const total = refs.length + noteCount;
+  refs.forEach((ref, i) => {
+    nodes.push({ id: newId(), label: ref.name, entity: ref, ...place(i, total) });
+  });
+  for (let i = 0; i < noteCount; i++) {
+    const draft = generateDraftFor(rng, 'lore', ctx);
+    nodes.push({
+      id: newId(),
+      label: draft.summary.slice(0, 60) || draft.name,
+      ...place(refs.length + i, total),
+    });
+  }
+  const edges: GraphEdge[] = [];
+  for (let i = 1; i < nodes.length; i++) {
+    const from = nodes[rng.int(0, i - 1)];
+    edges.push({
+      id: newId(),
+      from: from.id,
+      to: nodes[i].id,
+      label: rng.pick(THREAD_LABELS),
+      directed: rng.chance(0.7),
+    });
+  }
+  bundle.graphs.push({
+    localId: newId(),
+    kind: 'tangle',
+    targetGraphId: bundle.request.targetGraphId,
+    name: `${ctx.hint ? ctx.hint.slice(0, 40) : 'Tangle'} board`,
+    nodes,
+    edges,
+  });
 }
 
 /** A chain of linked quests (leads-to) with occasional attendant events,
