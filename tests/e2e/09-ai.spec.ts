@@ -113,7 +113,7 @@ test.describe('AI layer (mocked providers)', () => {
     await bootWithProject(page);
     await createCastMember(page, { name: 'Aelinor' });
 
-    await openNav(page, 'AI Handoff');
+    await openNav(page, 'Import & Extract');
     await page.getByRole('button', { name: 'Build pack' }).click();
     const pack = page.getByLabel('Handoff pack');
     await expect(pack).toContainText('Known cast: Aelinor');
@@ -122,7 +122,7 @@ test.describe('AI layer (mocked providers)', () => {
       .getByLabel('AI reply')
       .fill('Sure — {"locations":[{"name":"Vraska Pass","kind":"pass","summary":"A cold road."}]}');
     await page.getByRole('button', { name: 'Import to review queue' }).click();
-    await expect(page.getByText('1 candidate added to the review queue.')).toBeVisible();
+    await expect(page.getByText(/Imported 1 finding/)).toBeVisible();
 
     await openNav(page, 'Review');
     await expect(page.locator('.lw-qcard', { hasText: 'Vraska Pass' })).toBeVisible();
@@ -134,6 +134,32 @@ test.describe('AI layer (mocked providers)', () => {
       .click();
     await openNav(page, 'Locations');
     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
+  });
+
+  test('whole-book offline intake chunks a manuscript into review findings', async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Import & Extract');
+
+    // A long manuscript with a recurring new character → chunked, scanned.
+    const text = 'The guards watched Maren cross the bridge. Everyone feared Maren that winter. '.repeat(90);
+    await page.getByLabel('Manuscript text').fill(text);
+    await page.getByRole('button', { name: 'Extract offline' }).click();
+    await expect(page.getByText(/from \d+ chunks?/)).toBeVisible();
+
+    // The findings land in Review.
+    await page.locator('.lw-toast__action', { hasText: 'Review' }).click();
+    await expect(page.getByTestId('surface-review')).toBeVisible();
+    await expect(page.locator('.lw-qcard', { hasText: 'Maren' }).first()).toBeVisible();
+  });
+
+  test('the mega-prompt shows a one-time privacy notice before copying', async ({ page }) => {
+    await bootWithProject(page);
+    await openNav(page, 'Import & Extract');
+    // Depth is adjustable; the first copy surfaces the one-time notice.
+    await page.getByRole('radio', { name: 'Full' }).click();
+    await page.getByRole('button', { name: 'Copy mega-prompt' }).click();
+    await expect(page.getByTestId('mega-notice')).toBeVisible();
+    await expect(page.getByTestId('mega-notice')).toContainText(/goes wherever you paste/);
   });
 
   test('local-only mode hides every AI entry point', async ({ page }) => {

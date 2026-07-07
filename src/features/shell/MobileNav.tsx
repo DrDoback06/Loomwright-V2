@@ -16,7 +16,7 @@ const MORE_ENTRIES: { route: RouteId; label: string; glyph: string }[] = [
   { route: 'speed-reader', label: 'Speed Reader', glyph: '⚡' },
   { route: 'templates', label: 'Templates', glyph: '⧉' },
   { route: 'review', label: 'Review', glyph: '☑' },
-  { route: 'handoff', label: 'AI Handoff', glyph: '⇄' },
+  { route: 'handoff', label: 'Import & Extract', glyph: '⇄' },
   { route: 'settings', label: 'Settings', glyph: '⚙' },
   { route: 'trash', label: 'Trash', glyph: '♺' },
 ];

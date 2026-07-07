@@ -25,7 +25,7 @@ export const NAV_ENTRIES: NavEntry[] = [
   { route: 'speed-reader', label: 'Speed Reader', glyph: '⚡', group: 'tools' },
   { route: 'templates', label: 'Templates', glyph: '⧉', group: 'tools' },
   { route: 'review', label: 'Review', glyph: '☑', group: 'utilities' },
-  { route: 'handoff', label: 'AI Handoff', glyph: '⇄', group: 'utilities' },
+  { route: 'handoff', label: 'Import & Extract', glyph: '⇄', group: 'utilities' },
   { route: 'settings', label: 'Settings', glyph: '⚙', group: 'utilities' },
   { route: 'trash', label: 'Trash', glyph: '♺', group: 'utilities' },
 ];

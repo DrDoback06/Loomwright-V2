@@ -11,6 +11,9 @@ import {
 } from '@/db/repos/suggestions';
 import { applyDelta } from '@/services/intelligence/apply';
 import { generateWorldSuggestions } from '@/services/intelligence/suggest';
+import { buildWorldDigest } from '@/services/intelligence/digest';
+import { extractWholeText } from '@/services/intelligence/intake';
+import { buildMegaPrompt, importMegaResponse } from '@/services/intelligence/megaprompt';
 import { emptyDelta, type StoryDelta, type SuggestionDraft } from '@/services/intelligence/types';
 import type { Entity, EntityStatus } from '@/db/types';
 import type { EntityType } from '@/domain/entity-types';
@@ -187,5 +190,81 @@ describe('intelligence/world suggestions', () => {
     const all = generateWorldSuggestions({ projectId: 'p1', entities: withSibling }, 'abundant');
     // No suggestion re-creates the existing "Venom Strike II".
     expect(all.some((s) => s.payload?.entities[0]?.name === 'Venom Strike II')).toBe(false);
+  });
+});
+
+describe('intelligence/world digest', () => {
+  it('renders id-free sections and deepens with depth', () => {
+    const rows: Entity[] = [
+      ent('cast', 'Aelinor', { role: 'Queen', currentLocation: { id: 'loc1', type: 'locations', name: 'Vraska' } }),
+      ent('locations', 'Vraska Town', { parentId: { id: 'loc0', type: 'locations', name: 'Vraska' } }),
+      ent('items', 'Bone Amulet', { currentOwner: { id: 'cst1', type: 'cast', name: 'Aelinor' } }),
+      ent('relationships', 'Aelinor → Brann', {
+        from: { id: 'cst1', type: 'cast', name: 'Aelinor' },
+        to: { id: 'cst2', type: 'cast', name: 'Brann' },
+        bondType: 'rivalry',
+      }),
+    ];
+    const lean = buildWorldDigest(rows, 'lean');
+    expect(lean).toContain('Aelinor');
+    expect(lean).not.toContain('role: Queen');
+
+    const std = buildWorldDigest(rows, 'standard');
+    expect(std).toContain('role: Queen');
+    expect(std).toContain('held by Aelinor');
+    expect(std).toContain('inside Vraska');
+
+    const full = buildWorldDigest(rows, 'full');
+    expect(full).toContain('Aelinor → Brann');
+    // Never leaks internal ids.
+    expect(full).not.toContain('loc1');
+    expect(full).not.toContain('cst1');
+  });
+});
+
+describe('intelligence/whole-book intake', () => {
+  beforeEach(async () => {
+    await Promise.all(db.tables.map((t) => t.clear()));
+  });
+
+  it('chunks a long text, dedupes across chunks, and queues candidates with progress', async () => {
+    const known = [{ id: 'c1', type: 'cast' as const, name: 'Aelinor', aliases: [] }];
+    // Maren appears in varied mid-sentence contexts so NER discovers her.
+    const text = 'The guards watched Maren cross the bridge. Everyone feared Maren that winter. '.repeat(90); // > 5000 chars → many chunks
+    const progress: number[] = [];
+    const result = await extractWholeText('p1', text, known, (p) => progress.push(p.chunk));
+
+    expect(result.chunks).toBeGreaterThan(1);
+    expect(progress.length).toBe(result.chunks);
+    expect(result.added).toBeGreaterThan(0);
+    const pending = await db.candidates.where('[projectId+status]').equals(['p1', 'pending']).toArray();
+    // "Maren" appears in every chunk but is queued once (deduped).
+    expect(pending.filter((c) => c.name.toLowerCase().includes('maren'))).toHaveLength(1);
+  });
+});
+
+describe('intelligence/mega-prompt round-trip', () => {
+  beforeEach(async () => {
+    await Promise.all(db.tables.map((t) => t.clear())); 
+  });
+
+  it('builds a digest+schema prompt and imports facts + suggestions from a reply', async () => {
+    const rows: Entity[] = [ent('cast', 'Aelinor'), ent('skills', 'Venom Strike')];
+    const prompt = buildMegaPrompt({ projectName: 'The Hollow Crown', entities: rows, depth: 'standard' });
+    expect(prompt).toContain('World digest');
+    expect(prompt).toContain('suggestions');
+
+    const known = [{ id: rows[0].id, type: 'cast' as const, name: 'Aelinor', aliases: [] }];
+    const reply = JSON.stringify({
+      locations: [{ name: 'Vraska Pass', kind: 'pass', summary: 'A cold road.' }],
+      suggestions: [{ kind: 'arc', title: 'Aelinor faces her exile', detail: 'A reckoning at the border.', about: 'Aelinor' }],
+    });
+    const result = await importMegaResponse('p1', reply, known, rows);
+    if ('error' in result) throw new Error(result.error);
+    expect(result.facts).toBeGreaterThan(0);
+    expect(result.suggestions).toBe(1);
+    // The suggestion targets Aelinor's dossier inbox.
+    const sug = await db.suggestions.where('projectId').equals('p1').toArray();
+    expect(sug[0].targetId).toBe(rows[0].id);
   });
 });

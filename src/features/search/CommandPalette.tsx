@@ -74,7 +74,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: 'reader', title: 'Go to Speed Reader', subtitle: 'RSVP read-back', run: () => go('speed-reader') },
       { id: 'templates', title: 'Go to Templates', subtitle: 'Reusable starters', run: () => go('templates') },
       { id: 'review', title: 'Go to Review', subtitle: 'Extraction queue', run: () => go('review') },
-      { id: 'handoff', title: 'Go to AI Handoff', subtitle: 'External-AI workflow', run: () => go('handoff') },
+      { id: 'handoff', title: 'Go to Import & Extract', subtitle: 'Whole-book intake + external-AI mega-prompt', run: () => go('handoff') },
       { id: 'settings', title: 'Go to Settings', subtitle: 'AI, privacy, extraction', run: () => go('settings') },
       { id: 'trash', title: 'Go to Trash', subtitle: 'Restore deleted things', run: () => go('trash') },
       // Create anything, from anywhere: one manual + one generate command

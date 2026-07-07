@@ -23,7 +23,7 @@ const OTHER_SURFACES = [
   { label: 'Speed Reader', testId: 'surface-speed-reader', heading: null },
   { label: 'Templates', testId: 'surface-templates', heading: null },
   { label: 'Review', testId: 'surface-review', heading: null },
-  { label: 'AI Handoff', testId: 'surface-handoff', heading: null },
+  { label: 'Import & Extract', testId: 'surface-handoff', heading: null },
   { label: 'Settings', testId: 'surface-settings', heading: null },
   { label: 'Trash', testId: 'surface-trash', heading: null },
 ] as const;

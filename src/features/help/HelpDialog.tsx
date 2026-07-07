@@ -68,10 +68,10 @@ const HELP: Record<RouteId, HelpEntry> = {
     ],
   },
   handoff: {
-    title: 'AI Handoff',
+    title: 'Import & Extract',
     points: [
-      'Build pack copies a prompt containing your known world + chapter text for ANY external AI (ChatGPT, Claude, a local model).',
-      'Paste its reply back and the suggestions land in Review — the fully-offline AI path.',
+      'Paste a whole chapter or book and Extract offline — it chunks the text, scans every chunk, and drops findings into Review. No AI, no keys.',
+      'Or copy the mega-prompt (your world digest + a facts-and-suggestions schema) into ANY external AI, paste the reply back, and it lands in Review + the dossier inboxes.',
     ],
   },
   settings: {
