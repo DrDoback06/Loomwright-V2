@@ -13,6 +13,8 @@ import type { Entity, ReviewCandidate } from '@/db/types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { applyDelta } from '@/services/intelligence/apply';
 import { propagate, type PropagateContext } from '@/services/intelligence/propagate';
+import { generateWorldSuggestions, type SuggestionVolume } from '@/services/intelligence/suggest';
+import { saveSuggestions } from '@/db/repos/suggestions';
 import { useProjectStore } from '@/stores/project';
 import { useUiStore } from '@/stores/ui';
 import { useFocusStore } from '@/stores/focus';
@@ -93,6 +95,7 @@ export function ReviewSurface() {
       const delta = propagate(included, ctx);
       const result = await applyDelta(delta);
       await markCandidatesAccepted(includedIds, result.created);
+      if (delta.suggestions.length) await saveSuggestions(projectId, delta.suggestions);
       const facts = delta.entities.length + delta.patches.length + delta.links.length;
       toast(`Applied ${facts} change${facts === 1 ? '' : 's'} across ${new Set(included.map((c) => c.id)).size} findings.`, {
         kind: 'success',
@@ -112,6 +115,27 @@ export function ReviewSurface() {
 
   const dismissGroup = async (g: (typeof groups)[number]) => {
     for (const id of g.candidateIds) await denyCandidate(id);
+  };
+
+  /** Run the offline world-suggestion generators (relationship arcs, quest
+   * outcomes, skill siblings) and drop them into per-entity dossier inboxes. */
+  const suggestThreads = async () => {
+    setBusy(true);
+    try {
+      const settings = await db.settings.get(`${projectId}:extraction`);
+      const volume =
+        ((settings?.value as { suggestionVolume?: SuggestionVolume })?.suggestionVolume) ?? 'balanced';
+      const drafts = generateWorldSuggestions({ projectId, entities: rows }, volume);
+      const saved = await saveSuggestions(projectId, drafts);
+      toast(
+        saved.length
+          ? `${saved.length} suggestion${saved.length === 1 ? '' : 's'} added — see the ✨ inbox on each dossier.`
+          : 'No new suggestions right now — write more, or raise the volume in Settings ▸ Extraction.',
+        { kind: saved.length ? 'success' : 'info' }
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   // Flat-view accept (per-candidate, legacy path — merge-only).
@@ -144,6 +168,15 @@ export function ReviewSurface() {
             until you accept.
           </p>
         </div>
+        <button
+          type="button"
+          className="lw-btn"
+          disabled={busy}
+          title="Offline story suggestions — relationship arcs, quest outcomes, skill siblings"
+          onClick={() => void suggestThreads()}
+        >
+          ✨ Suggest threads
+        </button>
         <div className="lw-viewtoggle" role="radiogroup" aria-label="Review view">
           <button
             type="button"

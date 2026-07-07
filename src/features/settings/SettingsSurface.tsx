@@ -44,6 +44,16 @@ export function SettingsSurface() {
     {} as Record<string, number>
   );
 
+  const suggestionVolume = useLiveQuery(
+    async () => {
+      if (!projectId) return 'balanced';
+      const row = await db.settings.get(`${projectId}:extraction`);
+      return (row?.value as { suggestionVolume?: string })?.suggestionVolume ?? 'balanced';
+    },
+    [projectId],
+    'balanced' as string
+  );
+
   if (!projectId || !ai) return null;
 
   const patchAi = async (patch: Partial<AiSettings>) => {
@@ -70,6 +80,15 @@ export function SettingsSurface() {
         ...current,
         detectorConfidence: { ...(current.detectorConfidence ?? {}), [id]: value },
       },
+    });
+  };
+
+  const setSuggestionVolume = async (volume: string) => {
+    const row = await db.settings.get(`${projectId}:extraction`);
+    const current = (row?.value as Record<string, unknown>) ?? {};
+    await db.settings.put({
+      key: `${projectId}:extraction`,
+      value: { ...current, suggestionVolume: volume },
     });
   };
 
@@ -294,6 +313,26 @@ export function SettingsSurface() {
               </label>
             );
           })}
+        </div>
+
+        <h3 className="lw-atlas__subhead">Story suggestions</h3>
+        <p className="lw-fieldnote">
+          How many forward-looking suggestions Story Intelligence surfaces — relationship arcs,
+          quest outcomes, and skill siblings — in each dossier&apos;s ✨ inbox.
+        </p>
+        <div className="lw-viewtoggle" role="radiogroup" aria-label="Suggestion volume">
+          {(['quiet', 'balanced', 'abundant'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="radio"
+              aria-checked={suggestionVolume === v}
+              className={suggestionVolume === v ? 'lw-pill lw-pill--active' : 'lw-pill'}
+              onClick={() => void setSuggestionVolume(v)}
+            >
+              {v[0].toUpperCase() + v.slice(1)}
+            </button>
+          ))}
         </div>
       </section>
     </div>

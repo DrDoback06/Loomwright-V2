@@ -380,7 +380,7 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Accept toast: Save as template / Save board as template | Saves a single accepted entity or new board as a reusable template | `16-generate.spec.ts` (board) + `templates` unit |
 | Staged roster ghost: "updates existing" badge | Duplicate-name drafts flagged before accept (merge, not a dupe row) | `16-generate.spec.ts` |
 
-## Story Intelligence — Extraction 2.0 (X1–X3)
+## Story Intelligence — Extraction 2.0 (X1–X4)
 
 | Control | Action | Spec |
 | --- | --- | --- |
@@ -392,3 +392,6 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Review board: per-group include checkbox | Toggle a cascade in/out of the accept set | `04-extraction-review.spec.ts` |
 | Review board: Accept all selected | Applies the selected findings as one StoryDelta with one Undo | `04-extraction-review.spec.ts` |
 | Review board: Dismiss group | Denies every candidate in a cascade | (denyCandidate path; flat-view deny tested) |
+| Review board: ✨ Suggest threads | Runs offline world generators → per-entity dossier inboxes | `04-extraction-review.spec.ts` + unit `intelligence` |
+| Dossier: ✨ Suggestions inbox (Accept / Dismiss) | Accept applies the suggestion's payload delta (one Undo) as real data | `04-extraction-review.spec.ts` |
+| Settings ▸ Extraction: story-suggestion volume | quiet / balanced / abundant caps how many suggestions fire | unit `intelligence` (volume cap) |

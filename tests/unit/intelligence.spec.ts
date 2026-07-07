@@ -10,7 +10,17 @@ import {
   saveSuggestions,
 } from '@/db/repos/suggestions';
 import { applyDelta } from '@/services/intelligence/apply';
+import { generateWorldSuggestions } from '@/services/intelligence/suggest';
 import { emptyDelta, type StoryDelta, type SuggestionDraft } from '@/services/intelligence/types';
+import type { Entity, EntityStatus } from '@/db/types';
+import type { EntityType } from '@/domain/entity-types';
+
+function ent(type: EntityType, name: string, fields: Record<string, unknown> = {}): Entity {
+  return {
+    id: `${type}:${name}`, projectId: 'p1', type, name, aliases: [], summary: '',
+    status: 'active' as EntityStatus, tags: [], fields, createdAt: 0, updatedAt: 0,
+  };
+}
 
 function delta(over: Partial<StoryDelta>): StoryDelta {
   return { ...emptyDelta('d1', 'p1', 'local', 1), ...over };
@@ -137,5 +147,45 @@ describe('intelligence/suggestions inbox', () => {
     expect(await listSuggestions('p1', 'accepted')).toHaveLength(1);
     // Dossier chips only surface pending suggestions.
     expect(await listSuggestionsFor('p1', 'c1')).toHaveLength(0);
+  });
+});
+
+describe('intelligence/world suggestions', () => {
+  const rows: Entity[] = [
+    ent('skills', 'Venom Strike', { skillType: 'active' }),
+    ent('quests', 'The Long Road', { status: 'active' }),
+    ent('cast', 'Aelinor'),
+    ent('cast', 'Brann'),
+    ent('relationships', 'Aelinor → Brann', {
+      from: { id: 'cast:Aelinor', type: 'cast', name: 'Aelinor' },
+      to: { id: 'cast:Brann', type: 'cast', name: 'Brann' },
+      bondType: 'rivalry',
+    }),
+  ];
+
+  it('generates skill siblings, quest outcomes, and relationship arcs — each with a payload', () => {
+    const all = generateWorldSuggestions({ projectId: 'p1', entities: rows }, 'abundant');
+    expect(all.some((s) => s.kind === 'skill-sibling')).toBe(true);
+    expect(all.some((s) => s.kind === 'quest-outcome')).toBe(true);
+    expect(all.some((s) => s.kind === 'arc')).toBe(true);
+    // Every suggestion is concrete — it carries a ready-to-apply delta.
+    expect(all.every((s) => (s.payload?.entities.length ?? 0) > 0)).toBe(true);
+    // The skill sibling creates "<name> II".
+    const sibling = all.find((s) => s.kind === 'skill-sibling')!;
+    expect(sibling.payload?.entities[0].name).toBe('Venom Strike II');
+  });
+
+  it('the volume setting caps how many fire', () => {
+    const many = Array.from({ length: 20 }, (_, i) => ent('skills', `Skill ${i}`));
+    expect(generateWorldSuggestions({ projectId: 'p1', entities: many }, 'quiet').length).toBeLessThanOrEqual(3);
+    expect(generateWorldSuggestions({ projectId: 'p1', entities: many }, 'balanced').length).toBeLessThanOrEqual(8);
+    expect(generateWorldSuggestions({ projectId: 'p1', entities: many }, 'abundant').length).toBeLessThanOrEqual(20);
+  });
+
+  it("doesn't re-suggest a sibling that already exists", () => {
+    const withSibling = [...rows, ent('skills', 'Venom Strike II')];
+    const all = generateWorldSuggestions({ projectId: 'p1', entities: withSibling }, 'abundant');
+    // No suggestion re-creates the existing "Venom Strike II".
+    expect(all.some((s) => s.payload?.entities[0]?.name === 'Venom Strike II')).toBe(false);
   });
 });

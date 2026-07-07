@@ -12,6 +12,11 @@ import { saveEntityTemplate } from '@/services/templates';
 import { entityWireString } from '@/services/generate/serialize';
 import { buildGenerationPrompt } from '@/services/generate/wire';
 import { loadKnownEntities } from '@/services/generate/known';
+import { dismissSuggestion, listSuggestionsFor, markSuggestionAccepted } from '@/db/repos/suggestions';
+import { applyDelta } from '@/services/intelligence/apply';
+import type { StoryDelta } from '@/services/intelligence/types';
+import { undoAuditEntry } from '@/db/repos/undo';
+import type { Suggestion } from '@/db/types';
 import { ENTITY_TYPE_META, type EntityRef } from '@/domain/entity-types';
 
 interface EntityDetailProps {
@@ -139,6 +144,8 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
           )}
         </div>
       </header>
+
+      <SuggestionInbox projectId={entity.projectId} entityId={entity.id} />
 
       {merging && (
         <div className="lw-card lw-mergebox" data-testid="merge-picker">
@@ -331,4 +338,63 @@ function initials(name: string): string {
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? '')
     .join('');
+}
+
+/** Per-entity Suggestions inbox: forward-looking, ready-to-accept ideas from
+ * Story Intelligence. Accept applies the suggestion's payload delta (one
+ * Undo) and turns it into real data; Dismiss makes it gone. */
+function SuggestionInbox({ projectId, entityId }: { projectId: string; entityId: string }) {
+  const suggestions = useLiveQuery(
+    async () => listSuggestionsFor(projectId, entityId),
+    [projectId, entityId],
+    [] as Suggestion[]
+  );
+  if (!suggestions.length) return null;
+
+  const accept = async (s: Suggestion) => {
+    const payload = s.payload as StoryDelta | undefined;
+    if (payload && (payload.entities?.length || payload.patches?.length)) {
+      const result = await applyDelta({ ...payload, projectId });
+      await markSuggestionAccepted(s.id);
+      toast(`Accepted “${s.title}”.`, {
+        kind: 'success',
+        action: {
+          label: 'Undo',
+          run: async () => {
+            await undoAuditEntry(result.auditId);
+            toast('Suggestion reverted.', { kind: 'success' });
+          },
+        },
+      });
+    } else {
+      await markSuggestionAccepted(s.id);
+      toast(`Kept “${s.title}”.`, { kind: 'success' });
+    }
+  };
+
+  return (
+    <section className="lw-card lw-suginbox" data-testid="suggestion-inbox">
+      <h3 className="lw-suginbox__title">
+        <span aria-hidden>✨</span> Suggestions ({suggestions.length})
+      </h3>
+      <ul className="lw-suginbox__list">
+        {suggestions.map((s) => (
+          <li key={s.id} className="lw-suginbox__item" data-testid="suggestion-chip">
+            <div className="lw-suginbox__text">
+              <strong>{s.title}</strong>
+              {s.detail ? <p className="lw-fieldnote">{s.detail}</p> : null}
+            </div>
+            <div className="lw-chips__add">
+              <button type="button" className="lw-btn lw-btn--primary" onClick={() => void accept(s)}>
+                Accept
+              </button>
+              <button type="button" className="lw-btn" onClick={() => void dismissSuggestion(s.id)}>
+                Dismiss
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }

@@ -180,4 +180,35 @@ test.describe('extraction + review loop', () => {
     await page.locator('.lw-toast__action', { hasText: 'Undo' }).click();
     await expect(page.getByText(/back in the queue/)).toBeVisible();
   });
+
+  test('offline suggestions land in the dossier inbox and accept into real data', async ({ page }) => {
+    await bootWithProject(page);
+
+    // A skill exists → the world generators can propose a sibling.
+    await openNav(page, 'Skills');
+    await page.getByRole('button', { name: '+ Create skill' }).click();
+    const drawer = page.getByRole('dialog', { name: 'New Skill' });
+    await drawer.getByLabel('Name *').fill('Venom Strike');
+    await drawer.getByRole('button', { name: 'Create skill' }).click();
+    await expect(drawer).toBeHidden();
+
+    // Generate suggestions from the review board.
+    await openNav(page, /Review/);
+    await page.getByRole('button', { name: '✨ Suggest threads' }).click();
+    await expect(page.getByText(/suggestion.*added/)).toBeVisible();
+
+    // The skill's dossier now shows the ✨ inbox with a chip.
+    await openNav(page, 'Skills');
+    await page.getByRole('button', { name: /Venom Strike/ }).click();
+    const inbox = page.getByTestId('suggestion-inbox');
+    await expect(inbox).toBeVisible();
+    await expect(inbox.getByTestId('suggestion-chip').first()).toBeVisible();
+
+    // Accept → the sibling becomes a real skill (persisted through reload).
+    await inbox.getByRole('button', { name: 'Accept' }).first().click();
+    await expect(page.getByText(/Accepted/)).toBeVisible();
+    await page.reload();
+    await openNav(page, 'Skills');
+    await expect(page.getByRole('button', { name: /Venom Strike II/ })).toBeVisible();
+  });
 });
