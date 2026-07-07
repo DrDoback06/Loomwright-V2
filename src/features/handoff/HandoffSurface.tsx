@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import { getProject } from '@/db/repos/projects';
 import { listChapters } from '@/db/repos/chapters';
 import type { Chapter, Entity } from '@/db/types';
 import { buildHandoffPack } from '@/services/ai/handoff';
+import { complete } from '@/services/ai/providers';
+import { getAiSettings, resolveProvider } from '@/services/ai/settings';
 import type { KnownEntity } from '@/services/extraction/known-index';
 import { extractWholeText, type IntakeProgress } from '@/services/intelligence/intake';
 import { buildMegaPrompt, importMegaResponse } from '@/services/intelligence/megaprompt';
 import type { DigestDepth } from '@/services/intelligence/digest';
+import { PrivacyConfirm } from '@/features/generate/PrivacyConfirm';
 import { useProjectStore } from '@/stores/project';
 import { useUiStore } from '@/stores/ui';
 import { toast } from '@/stores/toasts';
@@ -44,6 +47,13 @@ export function HandoffSurface() {
   const [progress, setProgress] = useState<IntakeProgress | null>(null);
   const [depth, setDepth] = useState<DigestDepth>('standard');
   const [showNotice, setShowNotice] = useState(false);
+  const [aiReady, setAiReady] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (projectId) void resolveProvider(projectId).then((c) => setAiReady(!!c));
+  }, [projectId]);
 
   if (!projectId) return null;
 
@@ -62,6 +72,47 @@ export function HandoffSurface() {
         ? { kind: 'success', action: { label: 'Review', run: () => setRoute('review') } }
         : { kind: 'info' }
     );
+  };
+
+  const runEnrich = async () => {
+    setConfirming(false);
+    setEnriching(true);
+    try {
+      const config = await resolveProvider(projectId);
+      if (!config) return;
+      const rows = await loadRows(projectId);
+      const project = await getProject(projectId);
+      const mega = buildMegaPrompt({ projectName: project?.name ?? 'Project', entities: rows, depth });
+      const reply = await complete(config, {
+        system: 'You are a story-intelligence assistant inside a worldbuilding app. Return ONLY the requested JSON object — no prose, no fences.',
+        prompt: `${mega}\n${bookText}`,
+        maxTokens: 4000,
+      });
+      const result = await importMegaResponse(projectId, reply, toKnown(rows), rows);
+      if ('error' in result) {
+        toast(result.error, { kind: 'error' });
+        return;
+      }
+      setBookText('');
+      toast(`AI enrichment: ${result.facts} finding${result.facts === 1 ? '' : 's'}, ${result.suggestions} suggestion${result.suggestions === 1 ? '' : 's'}.`, {
+        kind: 'success',
+        action: { label: 'Review', run: () => setRoute('review') },
+      });
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'The AI call failed.', { kind: 'error' });
+    } finally {
+      setEnriching(false);
+    }
+  };
+
+  const enrichWithAI = async () => {
+    if (!bookText.trim()) return;
+    const settings = await getAiSettings(projectId);
+    if (settings.privacy === 'ask') {
+      setConfirming(true);
+      return;
+    }
+    await runEnrich();
   };
 
   const doCopyMega = async () => {
@@ -135,17 +186,36 @@ export function HandoffSurface() {
           <button
             type="button"
             className="lw-btn lw-btn--primary"
-            disabled={!bookText.trim() || !!progress}
+            disabled={!bookText.trim() || !!progress || enriching}
             onClick={() => void extractOffline()}
           >
             {progress ? `Scanning ${progress.chunk}/${progress.total}…` : 'Extract offline'}
           </button>
+          {aiReady && (
+            <button
+              type="button"
+              className="lw-btn"
+              disabled={!bookText.trim() || enriching || confirming}
+              title="Send your world digest + this text to your configured AI for richer facts and suggestions"
+              onClick={() => void enrichWithAI()}
+            >
+              {enriching ? 'Enriching…' : '✨ Enrich with AI'}
+            </button>
+          )}
           {progress && (
             <span className="lw-fieldnote" data-testid="intake-progress">
               Chunk {progress.chunk} of {progress.total}
             </span>
           )}
         </div>
+        {confirming && (
+          <PrivacyConfirm
+            projectId={projectId}
+            note="This sends a digest of your world plus the pasted text to your configured AI provider. Continue?"
+            onRun={() => void runEnrich()}
+            onCancel={() => setConfirming(false)}
+          />
+        )}
       </section>
 
       <section className="lw-card" data-testid="mega-prompt">

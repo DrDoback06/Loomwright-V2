@@ -380,7 +380,7 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Accept toast: Save as template / Save board as template | Saves a single accepted entity or new board as a reusable template | `16-generate.spec.ts` (board) + `templates` unit |
 | Staged roster ghost: "updates existing" badge | Duplicate-name drafts flagged before accept (merge, not a dupe row) | `16-generate.spec.ts` |
 
-## Story Intelligence — Extraction 2.0 (X1–X5)
+## Story Intelligence — Extraction 2.0 (X1–X6)
 
 | Control | Action | Spec |
 | --- | --- | --- |
@@ -400,3 +400,5 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Import & Extract: Copy mega-prompt (one-time notice) | Digest + facts-and-suggestions schema; first copy shows a privacy notice | `09-ai.spec.ts` (notice) + unit `intelligence/mega-prompt` |
 | Import & Extract: Import reply | Facts → Review queue; suggestions → dossier inboxes | `09-ai.spec.ts` + unit `intelligence/mega-prompt` |
 | Import & Extract: Build pack / Copy pack | Single-chapter external-AI pack (kept from AI Handoff) | `09-ai.spec.ts` |
+| Import & Extract: ✨ Enrich with AI (in-app) | Sends the mega-prompt via the configured provider (privacy-guarded); facts → Review, suggestions → inboxes | `09-ai.spec.ts` (mocked) |
+| One engine, every input | Chapter Save & Extract, whole-book paste, mega-prompt reply, and in-app AI all feed the same review board → applyDelta → one Undo | (covered across `04`/`09` review + board specs) |

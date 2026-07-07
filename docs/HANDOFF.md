@@ -1,6 +1,6 @@
 # HANDOFF — App-Wide "Create Anything" Generation System
 
-**Branch:** `claude/app-completion-handoff-7wabte` (continues `claude/entity-creation-generation-vafhf4`) · **Status:** **G1–G8 COMPLETE & tested** (full suite green: lint · tsc · build · vitest · Playwright desktop+mobile). **X1–X6 (Extraction 2.0, §10) spec'd, not started — the current work.**
+**Branch:** `claude/app-completion-handoff-7wabte` (continues `claude/entity-creation-generation-vafhf4`) · **Status:** **G1–G8 AND X1–X6 (Extraction 2.0) COMPLETE & tested** (full suite green: lint · tsc · build · vitest · Playwright desktop+mobile — last run 150 e2e passed / 124 unit). The app-wide generation system and the Story Intelligence engine both shipped.
 **For:** one agent/session continuing sequentially. Read this file top to bottom before touching code. The approved plan lives in the repo owner's session notes; this document supersedes it as the source of truth for remaining work.
 
 > **Completion log (branch `claude/app-completion-handoff-7wabte`):**
@@ -8,7 +8,13 @@
 > - **G6** — RelationshipGraph ghost bonds; TangleSurface staged overlay ("✨ Generate board…" / "✨ Add generated cards…"); roster "✨ Generate relationships"; Paste-tab cast/location/tree context checkboxes; e2e.
 > - **G7** — `buildChapter` engine + chapter wire schema/parse; Writer's Room "✨ Generate chapter…" + staged preview; AI "Draft prose for each beat" opt-in; e2e (beats → manuscript paragraphs).
 > - **G8** — generation history (Dexie **v7** `generations` table, cap 25, dialog panel + Re-stage/Copy seed); drawer 🔒 field locks; save-accepted-as-template toast action (toast gained `actions[]`); duplicate-guard badge on staged ghosts. e2e for each.
-> - **Final sweep** — SURFACE_CHECKLIST updated (G4–G8 sections); full suite green (140 e2e passed, 105 unit).
+> - **X1** — `StoryDelta` model + `EntityFieldPatch` (replace/append); `applyBundle` extended with patch semantics (grouped, live-snapshot, undo restore); `src/services/intelligence/` (StoryDelta, applyDelta); Dexie **v8** `suggestions` table + repo. Unit fixtures.
+> - **X2** — offline propagation rules (`intelligence/propagate`): ownership/transfer (+ conflict flag), item-loss, travel, location nesting (parentId inference), relationships, quest-progress, and the offline skill-learned scan (rich pack skill + character link + tree/sibling suggestions). Golden fixtures + detector→propagate→apply pipeline test.
+> - **X3** — smart review board: `ReviewSurface` upgraded in place with a grouped-cascade **Board** view beside the kept **Flat** list; before→after diffs, ⚑ conflict flags, per-group include toggles, Accept-all → one `applyDelta` → one Undo. e2e drives the whole detector→board→undo path incl. the conflict flag.
+> - **X4** — offline suggestions engine (`intelligence/suggest`: relationship arcs, quest outcomes, skill siblings — each with a payload delta) + volume setting; per-dossier ✨ **Suggestions inbox** (Accept applies the payload, Dismiss removes); review-board "✨ Suggest threads". e2e.
+> - **X5** — **Import & Extract** surface (renamed from AI Handoff): whole-book offline chunked intake (`intelligence/intake`, progress); world digest (`intelligence/digest`, lean/standard/full) + mega-prompt (`intelligence/megaprompt`) with a one-time privacy notice; reply import routes facts → Review, suggestions → inboxes. e2e.
+> - **X6** — in-app **AI enrichment** on Import & Extract (mega-prompt via `complete()`, privacy-guarded, imports facts + suggestions); "one engine, every input" — chapter Save & Extract, whole-book paste, mega-prompt reply, and in-app AI all converge on the same review board → `applyDelta` → one Undo. e2e (mocked).
+> - **Verification** — every milestone committed + pushed after `npm run lint` + `npx tsc --noEmit` + `npm run build` + `npx vitest run` + full Playwright (desktop + mobile) green.
 
 ---
 
@@ -132,9 +138,9 @@ After G8 ships, start §10. It is the user's core product vision — read it in 
 
 ## 9. Session/task list state
 
-**G1–G8 are COMPLETE and verified** on branch `claude/app-completion-handoff-7wabte` (committed + pushed per milestone). The generation system is done: all 16 types generate offline (7 with deep packs), skill trees / tangle boards / relationship sets / questlines / chapters all stage-and-accept with one-Undo, the JSON round-trip and in-app AI paths work, and G8's history/locks/templates/badges polish shipped. Full suite green.
+**G1–G8 AND X1–X6 are COMPLETE and verified** on branch `claude/app-completion-handoff-7wabte` (committed + pushed per milestone). The generation system is done (all 16 types generate offline, 7 with deep packs; skill trees / tangle boards / relationship sets / questlines / chapters stage-and-accept with one Undo; JSON round-trip + in-app AI). Story Intelligence (Extraction 2.0) is done: the offline propagation engine turns extraction into consequences (ownership, travel, nesting, relationships, quests, skill-learning), the smart grouped-cascade review board accepts a whole delta as one Undo with conflict flags, the offline suggestions engine feeds per-dossier inboxes, and the Import & Extract surface onboards a whole book offline or via a world-digest mega-prompt (external AI or in-app). Full suite green.
 
-**Current work: Extraction 2.0 (§10, milestones X1–X6).** Start at X1 and follow the milestone table in §10 in order.
+**No open milestones remain in this document.** Candidate follow-ups (out of scope here): the "restore lost functionality" family in §8 (bespoke per-type workspaces, richer dossiers, Project Intelligence store, Settings sections); flipping the review board's default view from Flat → Board once any remaining flat-view-dependent flows migrate; deepening AI enrichment (per-beat prose, novel arcs) beyond the current facts+suggestions round-trip.
 
 ---
 

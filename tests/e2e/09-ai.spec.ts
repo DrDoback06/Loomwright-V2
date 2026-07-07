@@ -162,6 +162,28 @@ test.describe('AI layer (mocked providers)', () => {
     await expect(page.getByTestId('mega-notice')).toContainText(/goes wherever you paste/);
   });
 
+  test('in-app AI enrichment sends the mega-prompt and imports facts + suggestions', async ({ page }) => {
+    await mockAnthropic(
+      page,
+      JSON.stringify({
+        locations: [{ name: 'Vraska Pass', kind: 'pass', summary: 'A cold road.' }],
+        suggestions: [{ kind: 'arc', title: 'A reckoning at the border', detail: 'Trouble follows.', about: 'Vraska Pass' }],
+      })
+    );
+    await bootWithProject(page);
+    await configureAnthropic(page);
+
+    await openNav(page, 'Import & Extract');
+    await page.getByLabel('Manuscript text').fill('They struggled through Vraska Pass at dawn, half-frozen.');
+    await page.getByRole('button', { name: '✨ Enrich with AI' }).click();
+    // Privacy guard → send once (mocked provider, no real key).
+    await page.getByRole('button', { name: 'Send once' }).click();
+    await expect(page.getByText(/AI enrichment:/)).toBeVisible();
+
+    await page.locator('.lw-toast__action', { hasText: 'Review' }).click();
+    await expect(page.locator('.lw-qcard', { hasText: 'Vraska Pass' }).first()).toBeVisible();
+  });
+
   test('local-only mode hides every AI entry point', async ({ page }) => {
     await bootWithProject(page);
     await configureAnthropic(page);
