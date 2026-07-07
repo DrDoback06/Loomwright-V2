@@ -78,6 +78,31 @@ export interface BundleLinkDraft {
   kind: string;
 }
 
+/** A field-level update to an EXISTING entity — the Story Intelligence
+ * currency that a plain generation bundle never carries. `replace`
+ * overwrites (current owner, current location); `append` adds to an array
+ * or newline-joined string field (ownership history, travel log). The live
+ * value is snapshotted at apply time so one Undo restores it exactly;
+ * before/after here drive the review board's diff. */
+export interface EntityFieldPatch {
+  entityId: string;
+  entityType: EntityType;
+  entityName: string;
+  /** A key inside entity.fields. */
+  field: string;
+  mode: 'replace' | 'append';
+  /** The recorded value the delta believed it was changing (for the diff). */
+  before: unknown;
+  /** replace: the new value; append: the item(s) to add. */
+  after: unknown;
+  /** 0..1 — drives review ordering and best-guess flags. */
+  confidence: number;
+  /** Human-readable why, e.g. "Vex handed the amulet to Mara (ch. 3)". */
+  reason: string;
+  /** Set when the recorded state contradicts the delta (owner ≠ giver). */
+  conflict?: boolean;
+}
+
 /** The single output currency of Random / AI / Paste generation. Staged
  * in memory (stores/generation) and written to Dexie only on accept. */
 export interface GenerationBundle {
@@ -96,8 +121,13 @@ export interface GenerationBundle {
   createdAt: number;
 }
 
-/** One-line description of what a bundle contains, for bars and toasts. */
-export function bundleTitle(bundle: GenerationBundle): string {
+/** One-line description of what a bundle (or story delta) contains, for
+ * bars and toasts. Structural — anything with these arrays qualifies. */
+export function bundleTitle(
+  bundle: Pick<GenerationBundle, 'entities' | 'graphs' | 'chapters' | 'links'> & {
+    patches?: EntityFieldPatch[];
+  }
+): string {
   const named =
     bundle.graphs[0]?.name || bundle.chapters[0]?.title || bundle.entities[0]?.name || 'Untitled';
   const parts: string[] = [];
@@ -112,7 +142,8 @@ export function bundleTitle(bundle: GenerationBundle): string {
   }
   if (bundle.chapters.length) parts.push(`${bundle.chapters.length} chapter${bundle.chapters.length === 1 ? '' : 's'}`);
   if (bundle.links.length) parts.push(`${bundle.links.length} link${bundle.links.length === 1 ? '' : 's'}`);
-  return `${named} — ${parts.join(', ')}`;
+  if (bundle.patches?.length) parts.push(`${bundle.patches.length} update${bundle.patches.length === 1 ? '' : 's'}`);
+  return parts.length ? `${named} — ${parts.join(', ')}` : named;
 }
 
 /** True when the bundle needs staged in-surface preview (anything beyond

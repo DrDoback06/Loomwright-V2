@@ -66,6 +66,10 @@ export async function undoAuditEntry(entryId: string): Promise<boolean> {
           for (const patched of record.patchedEntities) {
             await db.entities.put(patched.before);
           }
+          // Story-delta field patches: restore the pre-patch snapshots.
+          for (const patched of record.patchedFields ?? []) {
+            await db.entities.put(patched.before);
+          }
           for (const graph of record.graphs) {
             const table = graph.kind === 'skilltree' ? db.skillTrees : db.tangleBoards;
             await table.delete(graph.id);

@@ -4,7 +4,27 @@ import { remapRefs } from '@/lib/remap';
 import { logAudit } from '@/db/repos/audit';
 import type { Chapter, Entity, Link, SkillTree, TangleBoard } from '@/db/types';
 import type { EntityRef } from '@/domain/entity-types';
-import { bundleTitle, type BundleChapterDraft, type GenerationBundle } from './types';
+import {
+  bundleTitle,
+  type BundleChapterDraft,
+  type BundleEntityDraft,
+  type BundleGraphDraft,
+  type BundleLinkDraft,
+  type EntityFieldPatch,
+} from './types';
+
+/** The structural input to applyBundle: a GenerationBundle or a Story
+ * Intelligence StoryDelta both satisfy it. `patches` (field-level updates
+ * to existing entities) is the only delta-specific extra. */
+export interface ApplyInput {
+  id: string;
+  projectId: string;
+  entities: BundleEntityDraft[];
+  graphs: BundleGraphDraft[];
+  chapters: BundleChapterDraft[];
+  links: BundleLinkDraft[];
+  patches?: EntityFieldPatch[];
+}
 
 /** Everything one accept created/patched — stored on the audit entry so
  * the whole bundle reverts as a single unit. */
@@ -12,10 +32,26 @@ export interface GenerateApplyRecord {
   label: string;
   entityIds: string[];
   patchedEntities: { id: string; before: Entity }[];
+  /** Full pre-patch snapshots of entities changed by field patches. */
+  patchedFields: { id: string; before: Entity }[];
   graphs: { id: string; kind: 'skilltree' | 'tangle' }[];
   patchedGraphs: { id: string; kind: 'skilltree' | 'tangle'; before: SkillTree | TangleBoard }[];
   chapterIds: string[];
   linkIds: string[];
+}
+
+/** Append semantics for `append`-mode patches: push onto an array field,
+ * or newline-join a text field (ownership/travel history). */
+export function appendFieldValue(current: unknown, item: unknown): unknown {
+  const additions = Array.isArray(item) ? item : [item];
+  if (Array.isArray(current)) return [...current, ...additions];
+  if (current === undefined || current === null || current === '') {
+    return Array.isArray(item) ? item : item;
+  }
+  if (typeof current === 'string') {
+    return [current, ...additions.map((a) => String(a))].join('\n');
+  }
+  return item;
 }
 
 export interface ApplyResult {
@@ -58,7 +94,7 @@ function chapterDoc(draft: BundleChapterDraft): {
 /** Write a staged bundle to Dexie in one transaction: fresh ids for every
  * draft, cross-refs remapped, duplicate-matched drafts merged into their
  * existing rows, and ONE reversible audit entry covering it all. */
-export async function applyBundle(bundle: GenerationBundle): Promise<ApplyResult> {
+export async function applyBundle(bundle: ApplyInput): Promise<ApplyResult> {
   const now = Date.now();
   const { projectId } = bundle;
 
@@ -78,6 +114,7 @@ export async function applyBundle(bundle: GenerationBundle): Promise<ApplyResult
     label: bundleTitle(bundle),
     entityIds: [],
     patchedEntities: [],
+    patchedFields: [],
     graphs: [],
     patchedGraphs: [],
     chapterIds: [],
@@ -128,6 +165,30 @@ export async function applyBundle(bundle: GenerationBundle): Promise<ApplyResult
           record.entityIds.push(id);
           created.push({ id, type: draft.type, name: draft.name });
         }
+      }
+
+      // Field patches — replace/append updates to EXISTING entities
+      // (ownership handed over, current location moved, history appended).
+      // Snapshot each touched entity once so one Undo restores it exactly.
+      const patchesByEntity = new Map<string, EntityFieldPatch[]>();
+      for (const patch of bundle.patches ?? []) {
+        const list = patchesByEntity.get(patch.entityId);
+        if (list) list.push(patch);
+        else patchesByEntity.set(patch.entityId, [patch]);
+      }
+      for (const [entityId, patches] of patchesByEntity) {
+        const before = await db.entities.get(entityId);
+        if (!before) continue;
+        const fields = { ...before.fields };
+        for (const patch of patches) {
+          fields[patch.field] =
+            patch.mode === 'append'
+              ? appendFieldValue(fields[patch.field], patch.after)
+              : patch.after;
+        }
+        await db.entities.put({ ...before, fields, updatedAt: now });
+        record.patchedFields.push({ id: entityId, before });
+        updated.push({ id: before.id, type: before.type, name: before.name });
       }
 
       // Graph docs — new trees/boards, or nodes+edges appended to a target.

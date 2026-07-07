@@ -246,6 +246,28 @@ export interface GenerationRecord {
   createdAt: number;
 }
 
+/** A forward-thinking suggestion from Story Intelligence — a finished,
+ * ready-to-accept artifact (a sibling skill, a story arc, a quest outcome).
+ * Lives in the per-entity Suggestions inbox and the review board's own
+ * lane. `payload` (a StoryDelta/entity-draft snapshot, typed `unknown` to
+ * keep db/types service-free) is staged/applied when accepted. Capped at
+ * ~200 newest per project (dismissed evicted first). */
+export interface Suggestion {
+  id: string;
+  projectId: string;
+  /** The entity this is about — its dossier renders a pending chip. */
+  targetRef?: EntityRef;
+  /** Flattened targetRef.id for indexed per-entity queries. */
+  targetId?: string;
+  kind: string;
+  title: string;
+  detail?: string;
+  payload?: unknown;
+  source: 'local' | 'ai' | 'handoff';
+  status: 'pending' | 'accepted' | 'dismissed';
+  createdAt: number;
+}
+
 /** Encrypted API-key rows + the non-extractable root CryptoKey
  * ('__root__'). Key material NEVER appears in exports, search, or audit. */
 export interface KeyRow {

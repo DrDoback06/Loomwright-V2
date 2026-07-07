@@ -16,6 +16,7 @@ import type {
   Project,
   ReviewCandidate,
   SettingsRow,
+  Suggestion,
   TrashRow,
   UiStateRow,
 } from './types';
@@ -43,6 +44,7 @@ export class LoomwrightDB extends Dexie {
   randomTables!: EntityTable<RandomTable, 'id'>;
   templates!: EntityTable<Template, 'id'>;
   generations!: EntityTable<GenerationRecord, 'id'>;
+  suggestions!: EntityTable<Suggestion, 'id'>;
 
   constructor() {
     super('loomwright');
@@ -80,6 +82,9 @@ export class LoomwrightDB extends Dexie {
     });
     this.version(7).stores({
       generations: 'id, projectId, [projectId+createdAt]',
+    });
+    this.version(8).stores({
+      suggestions: 'id, projectId, [projectId+status], [projectId+targetId], createdAt',
     });
   }
 }
