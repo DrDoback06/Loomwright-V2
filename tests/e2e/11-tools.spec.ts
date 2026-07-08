@@ -110,7 +110,9 @@ test.describe('tools: random tables, speed reader, templates', () => {
     await expect(starter).toContainText('Knight-errant');
     await starter.getByRole('button', { name: 'Use' }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByLabel('Description')).toHaveValue(/Heavy harness/);
+    // exact: the field's per-field 🎲/🔒 controls are labelled "Reroll Description" /
+    // "Lock Description", which a substring getByLabel would also match.
+    await expect(dialog.getByLabel('Description', { exact: true })).toHaveValue(/Heavy harness/);
     await dialog.getByLabel('Name *').fill('Ser Adalyn');
     await dialog.getByRole('button', { name: 'Create class' }).click();
     await expect(dialog).toBeHidden();

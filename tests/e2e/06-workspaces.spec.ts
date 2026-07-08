@@ -43,7 +43,8 @@ test.describe('document workspaces', () => {
       const dialog = page.getByRole('dialog');
       await dialog.getByLabel('Title *').fill(title);
       await dialog.getByRole('button', { name: 'When + where' }).click();
-      await dialog.getByLabel('Chapter / Date / Time').fill(when);
+      // exact: the field's 🎲/🔒 controls are labelled "Reroll/Lock Chapter / Date / Time".
+      await dialog.getByLabel('Chapter / Date / Time', { exact: true }).fill(when);
       await dialog.getByRole('button', { name: 'Create event' }).click();
       await expect(dialog).toBeHidden();
     }
