@@ -1,6 +1,6 @@
 # HANDOFF — App-Wide "Create Anything" Generation System
 
-**Branch:** `claude/app-completion-handoff-7wabte` (continues `claude/entity-creation-generation-vafhf4`) · **Status:** **G1–G8 AND X1–X6 (Extraction 2.0) COMPLETE & tested** (full suite green: lint · tsc · build · vitest · Playwright desktop+mobile — last run 150 e2e passed / 124 unit). The app-wide generation system and the Story Intelligence engine both shipped.
+**Branch:** `claude/app-completion-handoff-7wabte` (continues `claude/entity-creation-generation-vafhf4`) · **Status:** **G1–G8 AND X1–X6 (Extraction 2.0) COMPLETE & tested** (full suite green: lint · tsc · build · vitest · Playwright desktop+mobile — last run **154 e2e passed / 127 unit**). The app-wide generation system and the Story Intelligence engine both shipped.
 **For:** one agent/session continuing sequentially. Read this file top to bottom before touching code. The approved plan lives in the repo owner's session notes; this document supersedes it as the source of truth for remaining work.
 
 > **Completion log (branch `claude/app-completion-handoff-7wabte`):**
@@ -14,6 +14,7 @@
 > - **X4** — offline suggestions engine (`intelligence/suggest`: relationship arcs, quest outcomes, skill siblings — each with a payload delta) + volume setting; per-dossier ✨ **Suggestions inbox** (Accept applies the payload, Dismiss removes); review-board "✨ Suggest threads". e2e.
 > - **X5** — **Import & Extract** surface (renamed from AI Handoff): whole-book offline chunked intake (`intelligence/intake`, progress); world digest (`intelligence/digest`, lean/standard/full) + mega-prompt (`intelligence/megaprompt`) with a one-time privacy notice; reply import routes facts → Review, suggestions → inboxes. e2e.
 > - **X6** — in-app **AI enrichment** on Import & Extract (mega-prompt via `complete()`, privacy-guarded, imports facts + suggestions); "one engine, every input" — chapter Save & Extract, whole-book paste, mega-prompt reply, and in-app AI all converge on the same review board → `applyDelta` → one Undo. e2e (mocked).
+> - **X-review** — adversarial code-review pass over the Story Intelligence engine caught 7 real correctness bugs the milestone tests missed (empty-field append seeding, pronoun-giver false ownership conflict, quest status casing, cross-chunk change/quote union, mega-prompt `about` matching, suggestion skip-states, merge/alias folding). All fixed with regression tests (`intelligence.spec.ts`, `propagation.spec.ts`). Also fixed two pre-existing e2e strict-mode collisions where `getByLabel('<optional field>')` matched the field's new 🎲/🔒 controls (labelled "Reroll/Lock <field>") — tests now use exact matching.
 > - **Verification** — every milestone committed + pushed after `npm run lint` + `npx tsc --noEmit` + `npm run build` + `npx vitest run` + full Playwright (desktop + mobile) green.
 
 ---

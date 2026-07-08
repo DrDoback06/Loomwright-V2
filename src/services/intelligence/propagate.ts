@@ -40,7 +40,10 @@ const itemTransferRule: Rule = (c, ctx, delta) => {
   if (!item) return;
   const receiver = c.suggestedChanges?.currentOwner as EntityRef | undefined;
   if (!receiver?.id) return;
-  const giver = refById(ctx, c.relatedEntityIds?.[0]);
+  // relatedEntityIds is [giver?, receiver?].filter(Boolean) — when the giver
+  // is a pronoun the array collapses to just the receiver, so pick the giver
+  // as the related id that ISN'T the receiver (undefined if none is known).
+  const giver = refById(ctx, (c.relatedEntityIds ?? []).find((id) => id !== receiver.id));
   const recordedOwner = item.fields.currentOwner as EntityRef | undefined;
   const conflict = Boolean(recordedOwner?.id && giver?.id && recordedOwner.id !== giver.id);
   delta.patches.push({
@@ -127,13 +130,14 @@ const questProgressRule: Rule = (c, ctx, delta) => {
     delta.patches.push({
       entityId: existing.id, entityType: 'quests', entityName: existing.name,
       field: 'status', mode: 'replace',
-      before: existing.fields.status ?? null, after: 'active',
+      // 'Active' verbatim — the quests config status pill is capitalized.
+      before: existing.fields.status ?? null, after: 'Active',
       confidence: c.confidence, reason: `${existing.name} is underway.`,
     });
   } else {
     delta.entities.push({
       localId: newId(), type: 'quests', name: c.name, aliases: [], summary: c.summary ?? '',
-      tags: [], fields: { status: 'active' },
+      tags: [], fields: { status: 'Active' },
     });
   }
   delta.suggestions.push({
@@ -182,6 +186,18 @@ const genericRule: Rule = (c, ctx, delta) => {
   }
   const entity = entityById(ctx, c.existingEntityId ?? undefined);
   if (!entity) return;
+  // A 'merge' candidate is a discovered surface form (nickname) of an
+  // existing entity — fold its name in as an alias. applyBundle's merge
+  // path (existingEntityId set) unions aliases into the row.
+  if (c.suggestedAction === 'merge') {
+    if (c.name && c.name.toLowerCase() !== entity.name.toLowerCase()) {
+      delta.entities.push({
+        localId: newId(), type: c.entityType, name: entity.name, aliases: [c.name],
+        summary: '', tags: [], fields: {}, existingEntityId: entity.id,
+      });
+    }
+    return;
+  }
   const spec = entitySpec(c.entityType);
   const validFields = new Set(spec ? generableFields(spec).map((f) => f.id) : []);
   for (const [key, value] of Object.entries(c.suggestedChanges ?? {})) {

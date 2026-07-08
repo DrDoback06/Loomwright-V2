@@ -67,7 +67,7 @@ function parseSuggestionDrafts(reply: string, entities: Entity[]): SuggestionDra
   for (const raw of obj.suggestions as WireSuggestion[]) {
     const title = typeof raw?.title === 'string' ? raw.title.trim() : '';
     if (!title) continue;
-    const aboutName = typeof raw.about === 'string' ? raw.about.toLowerCase() : '';
+    const aboutName = typeof raw.about === 'string' ? raw.about.trim().toLowerCase() : '';
     const about = aboutName ? entities.find((e) => e.name.toLowerCase() === aboutName) : undefined;
     drafts.push({
       targetRef: about ? { id: about.id, type: about.type, name: about.name } : undefined,

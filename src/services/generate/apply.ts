@@ -46,7 +46,9 @@ export function appendFieldValue(current: unknown, item: unknown): unknown {
   const additions = Array.isArray(item) ? item : [item];
   if (Array.isArray(current)) return [...current, ...additions];
   if (current === undefined || current === null || current === '') {
-    return Array.isArray(item) ? item : item;
+    // Empty field: an array-typed append (EntityRefs, etc.) seeds a
+    // one-element array; a lone string append seeds a text field.
+    return typeof item === 'string' ? item : additions;
   }
   if (typeof current === 'string') {
     return [current, ...additions.map((a) => String(a))].join('\n');

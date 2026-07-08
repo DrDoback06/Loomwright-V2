@@ -118,6 +118,21 @@ describe('intelligence/applyDelta + undo', () => {
     const restored = (await db.entities.get(vex.id))!;
     expect(restored.fields.skills).toHaveLength(1);
   });
+
+  it('two appends onto an EMPTY array field build a proper two-element array', async () => {
+    const kael = await createEntity({ projectId: 'p1', type: 'cast', name: 'Kael' }); // no skills field
+    const d = delta({
+      patches: [
+        { entityId: kael.id, entityType: 'cast', entityName: 'Kael', field: 'skills', mode: 'append', before: undefined, after: { id: 's1', type: 'skills', name: 'Firebolt' }, confidence: 0.7, reason: '' },
+        { entityId: kael.id, entityType: 'cast', entityName: 'Kael', field: 'skills', mode: 'append', before: undefined, after: { id: 's2', type: 'skills', name: 'Frostbite' }, confidence: 0.7, reason: '' },
+      ],
+    });
+    await applyDelta(d);
+    const patched = (await db.entities.get(kael.id))!;
+    expect(Array.isArray(patched.fields.skills)).toBe(true);
+    expect((patched.fields.skills as unknown[])).toHaveLength(2); // neither element lost
+    expect((patched.fields.skills as { name: string }[]).map((s) => s.name)).toEqual(['Firebolt', 'Frostbite']);
+  });
 });
 
 describe('intelligence/suggestions inbox', () => {

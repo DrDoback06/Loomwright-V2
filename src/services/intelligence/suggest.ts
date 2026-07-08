@@ -51,7 +51,7 @@ function relationshipArcs(ctx: SuggestContext): SuggestionDraft[] {
         payload: payloadCreating(
           ctx.projectId,
           entityDraft('events', `The ${from.name}–${to.name} Reckoning`, `${from.name} and ${to.name} finally settle their ${bond}.`, {
-            eventType: 'named-event',
+            eventType: 'Conflict',
           })
         ),
       });
@@ -65,8 +65,9 @@ function relationshipArcs(ctx: SuggestContext): SuggestionDraft[] {
 function questOutcomes(ctx: SuggestContext): SuggestionDraft[] {
   const out: SuggestionDraft[] = [];
   for (const quest of ctx.entities.filter((e) => e.type === 'quests')) {
+    // status is lowercased; the config pills are 'Completed'/'Failed'/'Abandoned'.
     const status = String(quest.fields.status ?? '').toLowerCase();
-    if (status === 'complete' || status === 'failed' || status === 'abandoned') continue;
+    if (status === 'completed' || status === 'failed' || status === 'abandoned') continue;
     out.push({
       targetRef: ref(quest),
       kind: 'quest-outcome',
@@ -77,7 +78,7 @@ function questOutcomes(ctx: SuggestContext): SuggestionDraft[] {
       payload: payloadCreating(
         ctx.projectId,
         entityDraft('events', `The Resolution of ${quest.name}`, `${quest.name} is resolved — but the cost lingers.`, {
-          eventType: 'named-event',
+          eventType: 'Reveal',
         })
       ),
     });

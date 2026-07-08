@@ -54,6 +54,31 @@ describe('intelligence/propagate — offline rules', () => {
     expect(delta.warnings.some((w) => w.includes('flagged'))).toBe(true);
   });
 
+  it('item-transfer with a pronoun giver (only the receiver known) flags NO false conflict', () => {
+    // The giver was a pronoun ("he handed it to Mara"), so relatedEntityIds
+    // collapsed to just the receiver after .filter(Boolean). The recorded
+    // owner differs from the receiver — but that is NOT a conflict, because
+    // the giver is unknown. Regression: the giver must not resolve to the
+    // receiver and manufacture a false conflict.
+    const ctx = ctxFrom([
+      { id: 'recv', type: 'cast', name: 'Mara' },
+      { id: 'wrong', type: 'cast', name: 'Someone Else' },
+      { id: 'amulet', type: 'items', name: 'Bone Amulet', fields: { currentOwner: { id: 'wrong', type: 'cast', name: 'Someone Else' } } },
+    ]);
+    const delta = propagate(
+      [cand({
+        entityType: 'items', name: 'Bone Amulet', existingEntityId: 'amulet', detector: 'itemTransfer',
+        suggestedChanges: { currentOwner: { id: 'recv', type: 'cast', name: 'Mara' } },
+        relatedEntityIds: ['recv'],
+      })],
+      ctx
+    );
+    const owner = delta.patches.find((p) => p.field === 'currentOwner')!;
+    expect(owner.after).toEqual({ id: 'recv', type: 'cast', name: 'Mara' });
+    expect(owner.conflict).toBeFalsy(); // giver unknown → nothing to contradict
+    expect(delta.warnings).toHaveLength(0);
+  });
+
   it('item-loss sets status to destroyed', () => {
     const ctx = ctxFrom([{ id: 'blade', type: 'items', name: 'Old Blade', fields: { status: 'carried' } }]);
     const delta = propagate(
@@ -130,7 +155,7 @@ describe('intelligence/propagate — offline rules', () => {
       [cand({ entityType: 'quests', name: 'The Hunt for the Bone Auger', suggestedAction: 'create', matchType: 'new', detector: 'questProgression' })],
       ctx
     );
-    expect(delta.entities.find((e) => e.type === 'quests')?.fields.status).toBe('active');
+    expect(delta.entities.find((e) => e.type === 'quests')?.fields.status).toBe('Active');
     expect(delta.suggestions.some((s) => s.kind === 'quest-outcome')).toBe(true);
   });
 
@@ -200,5 +225,27 @@ describe('intelligence/propagate — detector → propagate → apply pipeline',
     const patched = (await db.entities.get(amulet.id))!;
     expect((patched.fields.currentOwner as { name: string }).name).toBe('Mara');
     expect(String(patched.fields.ownershipHistory)).toContain('Mara');
+  });
+
+  it('a merge candidate folds the discovered surface form into the existing entity as an alias', async () => {
+    const vex = await createEntity({ projectId: 'p1', type: 'cast', name: 'Vex' });
+    const rows = await db.entities.where('projectId').equals('p1').toArray();
+    const ctx: PropagateContext = {
+      projectId: 'p1',
+      known: rows.map((e) => ({ id: e.id, type: e.type, name: e.name })),
+      entities: rows.map((e) => ({ id: e.id, type: e.type, name: e.name, fields: e.fields })),
+    };
+    const delta = propagate(
+      [cand({ entityType: 'cast', name: 'the Serpent', existingEntityId: vex.id, suggestedAction: 'merge', matchType: 'fuzzy' })],
+      ctx
+    );
+    // The delta carries a merge draft (existingEntityId set) whose alias is the surface form.
+    const draft = delta.entities.find((e) => e.existingEntityId === vex.id)!;
+    expect(draft.aliases).toEqual(['the Serpent']);
+
+    await applyDelta(delta);
+    const merged = (await db.entities.get(vex.id))!;
+    expect(merged.aliases).toContain('the Serpent'); // alias unioned onto the real row
+    expect(merged.name).toBe('Vex'); // canonical name unchanged
   });
 });

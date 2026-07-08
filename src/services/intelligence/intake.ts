@@ -37,7 +37,19 @@ export async function extractWholeText(
     for (const c of candidates) {
       const key = `${c.entityType}|${c.name.toLowerCase()}|${c.suggestedAction}|${c.existingEntityId ?? ''}`;
       const prior = merged.get(key);
-      if (!prior || c.confidence > prior.confidence) merged.set(key, c);
+      if (!prior) {
+        merged.set(key, c);
+      } else {
+        // Keep the higher-confidence candidate but UNION suggestedChanges and
+        // quotes, so e.g. a travel change from one chunk and a faction change
+        // from another both survive rather than one clobbering the other.
+        const base = c.confidence > prior.confidence ? c : prior;
+        merged.set(key, {
+          ...base,
+          suggestedChanges: { ...(prior.suggestedChanges ?? {}), ...(c.suggestedChanges ?? {}) },
+          sourceQuotes: [...new Set([...(prior.sourceQuotes ?? []), ...(c.sourceQuotes ?? [])])].slice(0, 3),
+        });
+      }
     }
     // Let the event loop breathe so a progress indicator can update.
     await Promise.resolve();
