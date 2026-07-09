@@ -52,15 +52,25 @@ display/seed wiring, not a rebuild.
   still aren't read (see Area 2 entry above). → **Writers Room polish (Area 8)**.
 
 ## From Area 4 — visual tabs
-- **Relationships** — done (see the Area 1 entry above).
-- **Timeline / Skill Trees / Atlas / Tangle live rendering** — these workspaces
-  still paint module-level demo constants (`TL_EVENTS`, `SKILL_TREES`,
-  `ATLAS_*`) on first render when the live store is empty. Same treatment as
-  Relationships: read `EntityService`/`ReviewService`, honest empty states. →
-  **remaining Area 4 passes** (one workspace per pass).
+See `AREA_4_VISUAL_TABS_PROGRESS.md` for the running status + the pattern to
+follow for the remaining workspaces.
+- **Relationships** — **DONE** (see the Area 1 entry above; `relationships.jsx`,
+  `tests/e2e/21-relationships-live.spec.js`).
+- **Timeline** — **DONE.** `timeline.jsx` now folds live "timeline" + "events"
+  entities into one ordered beat list (Backstory / The Story eras), resolves
+  live cast avatars + location names, live filter chips, and a review tab over
+  pending "timeline"/"events" candidates with a working Accept. Covered by
+  `tests/e2e/22-timeline-live.spec.js`.
+- **Skill Trees / Atlas / Tangle live rendering** — still paint module-level
+  demo constants (`SKILL_TREES`, `ATLAS_*`, tangle sample) on first render when
+  the live store is empty. Same treatment: read `EntityService`/`ReviewService`,
+  honest empty states. → **remaining Area 4 passes** (one workspace per pass).
 - **Relationship History timeline** — the History mode groups edges by the
   chapter they were discovered in; a per-edge change log (trust/type deltas over
   chapters) needs a stored change trail, deferred to an extraction-quality pass.
+- **Timeline chronological ordering** — beats currently order by chapter (with
+  backstory first). True chronological ordering by in-world date needs a parsed
+  date model (dateLabel / absoluteDate are free text today). Deferred.
 
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).

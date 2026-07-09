@@ -1,83 +1,30 @@
 // =====================================================================
-// timeline.jsx — Timeline workspace.
+// timeline.jsx — Timeline workspace (LIVE).
 //
 // Modes: book / chronological / character / location / quest / faction
-//        / relationship / item / review
+//        / review
 //
 // Default orientation: vertical (compact); horizontal when panel
 // expanded — driven by `panel.expanded`.
+//
+// Area 4 (visual tabs): the timeline now reads the live project store.
+// Beats come from BOTH persisted entity types that represent story
+// moments — "timeline" entities (dateLabel / absoluteDate / characters /
+// isMilestone) and "events" entities (chapter / participants / location /
+// eventType) — folded into one ordered list. Cast / locations / quests /
+// factions for cards + filter chips come from EntityService; the review
+// tab reads pending "timeline" + "events" candidates from ReviewService.
+// No demo data; honest empty states.
 // =====================================================================
 
-const { useState: _tl_us, useMemo: _tl_um, useCallback: _tl_uc } = React;
+const { useState: _tl_us, useMemo: _tl_um, useCallback: _tl_uc, useEffect: _tl_ue } = React;
 
 // ---------------------------------------------------------------------
-// Demo events — book order + chronological order with deltas.
+// Static vocab — eras (derived buckets) + mode tabs.
 // ---------------------------------------------------------------------
 const TL_ERAS = [
-  { id: "pre", label: "Before the Story", color: "#76684c", from: -200, to: 0 },
-  { id: "ch", label: "The Hollow Crown",   color: "#3e6db5", from: 0,   to: 60 },
-  { id: "after", label: "After",          color: "#9a8c6e", from: 60,  to: 100 },
-];
-
-const TL_EVENTS = [
-  { id: "e1", label: "Treaty of Brittlewood", chapter: null, era: "pre",
-    date: "Year 738 of Hess", dateType: "exact", confidence: "high", canon: "hard",
-    entities: ["brec","saren"], locationId: "tg", quest: null,
-    summary: "Treaty signed; broken in the same season. Brec broke Saren's brother's nose.",
-    flashback: false, source: "Ch. 5 · p. 134" },
-  { id: "e2", label: "Auger's first walk",  chapter: null, era: "pre",
-    date: "Year 740, approx.", dateType: "approx", confidence: "uncertain", canon: "soft",
-    entities: ["auger","aelinor"], locationId: "ac", quest: null,
-    summary: "The Auger walks the cliffs while Aelinor is being born.",
-    flashback: false, source: "Ch. 6 · p. 184" },
-
-  { id: "e3", label: "Pale Reach arrival",  chapter: 1, era: "ch",
-    date: "Day 1",  dateType: "exact", confidence: "high", canon: "hard",
-    entities: ["aelinor","brec"], locationId: "pr", quest: null,
-    summary: "Aelinor enters the Reach with the Auger Stone case.",
-    flashback: false, source: "Ch. 1 · p. 12" },
-  { id: "e4", label: "Brec's letter",       chapter: 1, era: "ch",
-    date: "Three nights prior", dateType: "approx", confidence: "strong", canon: "hard",
-    entities: ["brec","aelinor"], locationId: "wd", quest: null,
-    summary: "Brec's letter summons Aelinor.",
-    flashback: true, source: "Ch. 1 · p. 20" },
-  { id: "e5", label: "Salt Watch night",    chapter: 2, era: "ch",
-    date: "Day 4",  dateType: "exact", confidence: "high", canon: "hard",
-    entities: ["aelinor"], locationId: "sw", quest: null,
-    summary: "Aelinor stops at the watchtower.",
-    flashback: false, source: "Ch. 2 · p. 41" },
-  { id: "e6", label: "Saren's bargain",     chapter: 3, era: "ch",
-    date: "Day 7",  dateType: "exact", confidence: "high", canon: "hard",
-    entities: ["saren","aelinor"], locationId: "gc-gard", quest: "q2",
-    summary: "Saren and Aelinor strike a quiet bargain in the gardens.",
-    flashback: false, source: "Ch. 3 · p. 80" },
-  { id: "e7", label: "Auger Wake",          chapter: 6, era: "ch",
-    date: "Day 18",  dateType: "exact", confidence: "high", canon: "hard",
-    entities: ["aelinor","brec"], locationId: "ac", quest: "q1",
-    summary: "Wraith attack on the cliffs.",
-    flashback: false, source: "Ch. 6 · p. 184" },
-  { id: "e8", label: "Glass Audience",      chapter: 7, era: "ch",
-    date: "Day 22", dateType: "exact", confidence: "high", canon: "hard",
-    entities: ["aelinor","saren","mara"], locationId: "gc-throne", quest: "q2",
-    summary: "Audience before the Glass Throne.",
-    flashback: false, source: "Ch. 7 · p. 211" },
-  { id: "e9", label: "Vraska Crossing (date conflict)", chapter: 4, era: "ch",
-    date: "Day 11 or 13?", dateType: "conflict", confidence: "uncertain", canon: "soft",
-    entities: ["aelinor","saren"], locationId: "vp", quest: "q2",
-    summary: "Vraska crossing — Ch. 2 implies Day 11, Ch. 4 implies Day 13.",
-    flashback: false, source: "Ch. 4 vs Ch. 2" },
-  { id: "e10", label: "Hess fleet sets out", chapter: 9, era: "ch",
-    date: "Future — unset", dateType: "future", confidence: "weak", canon: "soft",
-    entities: ["saren"], locationId: "hh", quest: null,
-    summary: "Reserved future event.",
-    flashback: false, source: "Outline" },
-];
-
-const TL_REVIEW = [
-  { id: "tq1", lvl: "strong",    title: "New event candidate: Pale Reach Arrival", action: "Add to timeline?", excerpt: "…the light over Pale Reach was the colour of cooled tin when she came through the gate.", cite: "Ch. 1 · p. 12" },
-  { id: "tq2", lvl: "uncertain", title: "Vraska Crossing date contradicts Ch. 2",   action: "Resolve contradiction", excerpt: "Ch. 2 implies the crossing was on Day 11.", cite: "Ch. 4 vs Ch. 2" },
-  { id: "tq3", lvl: "weak",      title: "Flashback detected: Brec's letter",         action: "Mark as flashback?", excerpt: "Brec wrote the letter three nights before the chapter opens.", cite: "Ch. 1 · p. 20" },
-  { id: "tq4", lvl: "strong",    title: "Missing timestamp: Auger Wake",             action: "Set exact date?",    excerpt: "Likely Day 18 based on travel from Salt Watch.", cite: "Ch. 6" },
+  { id: "backstory", label: "Backstory",  color: "#76684c" },
+  { id: "story",     label: "The Story",  color: "#3e6db5" },
 ];
 
 const TL_MODES = [
@@ -90,17 +37,166 @@ const TL_MODES = [
   { id: "review",        label: "Review",        icon: "bell"   },
 ];
 
-const _tlCastById = () => Object.fromEntries((window.ATLAS_CAST || []).map((c) => [c.id, c]));
-const _tlLocById  = () => Object.fromEntries((window.ATLAS_LOCATIONS || []).map((l) => [l.id, l]));
+// ---------------------------------------------------------------------
+// Live-store adapters
+// ---------------------------------------------------------------------
+const _TL_PALETTE = [
+  "#7a6aa3", "#a8553f", "#5d6d4e", "#b78a52", "#6b6f7a", "#8a6b58",
+  "#3e6db5", "#b86a82", "#c98a2c", "#3d3a78", "#4f7d6a", "#9a5b7a",
+];
+const _tlColor = (id) => {
+  const s = String(id || "");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return _TL_PALETTE[h % _TL_PALETTE.length];
+};
+const _tlInitials = (name) => {
+  if (!name) return "?";
+  const parts = String(name).trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || "") + (parts[1]?.[0] || parts[0]?.[1] || "")).toUpperCase() || "?";
+};
+
+// Read a field from either the flat entity or its nested `data.*`.
+const _tlPick = (e, ...keys) => {
+  if (!e) return undefined;
+  const d = e.data || {};
+  for (const k of keys) {
+    if (d[k] != null && d[k] !== "") return d[k];
+    if (e[k] != null && e[k] !== "") return e[k];
+  }
+  return undefined;
+};
+
+// Related-multi → array of ids (tolerates ["id"] or [{id,name,type}]).
+const _tlIds = (raw) => {
+  if (raw == null) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  return arr.map((v) => (typeof v === "string" ? v : (v && v.id) || null)).filter(Boolean);
+};
+
+// Resolve a chapter reference (id / "Ch. 3" / number) to a chapter number.
+const _tlChapterNum = (val, chapterNumById) => {
+  if (val == null || val === "") return null;
+  if (typeof val === "number") return val;
+  if (chapterNumById[val] != null) return chapterNumById[val];
+  const m = String(val).match(/\d+/);
+  return m ? Number(m[0]) : null;
+};
+
+// Map one persisted timeline/event entity → the card shape the views expect.
+const _tlLiveEvent = (e, chapterNumById) => {
+  if (!e) return null;
+  const chapter = _tlChapterNum(_tlPick(e, "chapter", "chapterId", "chapterNum"), chapterNumById);
+  const dateLabel = _tlPick(e, "dateLabel", "absoluteDate", "timelinePosition", "date");
+  const track = String(_tlPick(e, "track") || "").toLowerCase();
+  const flashback = _tlPick(e, "flashback") === true || track === "flashback"
+    || String(_tlPick(e, "eventType") || "").toLowerCase() === "flashback";
+
+  const entities = _tlIds(_tlPick(e, "characters", "participants", "entities"));
+  const locations = _tlIds(_tlPick(e, "locations", "location"));
+  const quests = _tlIds(_tlPick(e, "quests", "quest"));
+  const factions = _tlIds(_tlPick(e, "factions", "faction"));
+
+  const dateType = _tlPick(e, "dateType")
+    || (/\bapprox|~|circa|around/i.test(String(dateLabel || "")) ? "approx"
+      : /\bor\b|\?/.test(String(dateLabel || "")) ? "conflict"
+      : "exact");
+
+  return {
+    id: e.id,
+    label: e.name || e.title || _tlPick(e, "title") || "Untitled event",
+    entityType: e.type || "timeline",
+    chapter,
+    era: chapter != null ? "story" : "backstory",
+    date: dateLabel || (chapter != null ? ("Ch. " + chapter) : "Undated"),
+    dateType,
+    confidence: _tlPick(e, "confidence") || "high",
+    canon: _tlPick(e, "canon") || "hard",
+    entities,
+    locationId: locations[0] || null,
+    quest: quests[0] || null,
+    factions,
+    summary: e.summary || _tlPick(e, "summary", "body") || "",
+    flashback,
+    isMilestone: _tlPick(e, "isMilestone") === true,
+    source: chapter != null ? ("Ch. " + chapter) : (dateLabel || ""),
+    _entity: e,
+  };
+};
+
+const _tlSortKey = (ev) => (ev.chapter != null ? ev.chapter : (ev.era === "backstory" ? -1000 : 9999));
+
+// Build the whole live data bundle once per render pass.
+const buildTimelineData = () => {
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  const ES = B && B.EntityService;
+
+  const chapterNumById = {};
+  try {
+    const state = (B && B.ManuscriptChapterService && B.ManuscriptChapterService.loadSync()) || {};
+    (state.chapters || []).filter((c) => !c.reserved).forEach((c, i) => {
+      chapterNumById[c.id] = c.num || (i + 1);
+    });
+  } catch (_e) {}
+
+  const mapEnt = (e) => ({
+    id: e.id,
+    name: e.name || (e.data && e.data.name) || "Unnamed",
+    color: _tlColor(e.id),
+    initials: e.glyphChar || _tlInitials(e.name),
+    type: e.type,
+  });
+  const cast = ((ES && ES.listSync("cast")) || []).map(mapEnt);
+  const locations = ((ES && ES.listSync("locations")) || []).map(mapEnt);
+  const quests = ((ES && ES.listSync("quests")) || []).map(mapEnt);
+  const factions = ((ES && ES.listSync("factions")) || []).map(mapEnt);
+  const castById = Object.fromEntries(cast.map((c) => [c.id, c]));
+  const locById = Object.fromEntries(locations.map((l) => [l.id, l]));
+
+  // Timeline beats come from both "timeline" and "events" entities.
+  const rawTimeline = (ES && ES.listSync("timeline")) || [];
+  const rawEvents = (ES && ES.listSync("events")) || [];
+  const events = [...rawTimeline, ...rawEvents]
+    .filter((e) => e && e.status !== "deleted")
+    .map((e) => _tlLiveEvent(e, chapterNumById))
+    .filter(Boolean);
+
+  // Which eras actually contain events (empty eras are hidden anyway).
+  const eras = TL_ERAS.filter((era) => events.some((e) => e.era === era.id));
+
+  // Pending review candidates for timeline + event types.
+  const rawReview = [
+    ...((B && B.ReviewService && B.ReviewService.listSync("timeline")) || []),
+    ...((B && B.ReviewService && B.ReviewService.listSync("events")) || []),
+  ];
+  const review = rawReview
+    .filter((q) => q.status === "pending")
+    .map((q) => {
+      const conf = typeof q.confidence === "number" ? q.confidence
+        : typeof q.value === "number" ? q.value / 100 : 0.55;
+      const pct = Math.round(conf * 100);
+      const lvl = pct >= 80 ? "strong" : pct >= 60 ? "uncertain" : "weak";
+      const chNum = _tlChapterNum(q.chapterId, chapterNumById);
+      return {
+        id: q.id,
+        lvl,
+        title: q.name || "Event candidate",
+        action: q.action || "Add to timeline?",
+        excerpt: q.sourceQuote || (q.payload && q.payload.context) || q.summary || "",
+        cite: chNum != null ? ("Ch. " + chNum) : (q.cite || ""),
+      };
+    });
+
+  return { events, eras, cast, locations, quests, factions, castById, locById, review, chapterNumById };
+};
 
 // ---------------------------------------------------------------------
 // Single event card
 // ---------------------------------------------------------------------
-const TLEventCard = ({ event, orientation, onClick, selected }) => {
-  const cast = _tlCastById();
-  const locs = _tlLocById();
-  const loc = locs[event.locationId];
-  const era = TL_ERAS.find((e) => e.id === event.era) || TL_ERAS[1];
+const TLEventCard = ({ event, data, orientation, onClick, selected }) => {
+  const { castById, locById, eras } = data;
+  const loc = event.locationId ? locById[event.locationId] : null;
+  const era = eras.find((e) => e.id === event.era) || TL_ERAS[1];
   return (
     <button className={"tl-card" + (selected ? " is-on" : "") + (event.flashback ? " is-flashback" : "")}
             data-orientation={orientation}
@@ -111,7 +207,7 @@ const TLEventCard = ({ event, orientation, onClick, selected }) => {
         {event.chapter != null && <span className="tl-card__chapter">Ch. {event.chapter}</span>}
         {event.dateType === "approx"   && <span className="tl-card__pill" title="Approximate date">~</span>}
         {event.dateType === "conflict" && <span className="tl-card__pill tl-card__pill--warn">!</span>}
-        {event.dateType === "future"   && <span className="tl-card__pill">→</span>}
+        {event.isMilestone && <span className="tl-card__pill" title="Milestone">★</span>}
         {event.flashback && <span className="tl-card__pill tl-card__pill--fb">FB</span>}
       </div>
       <div className="tl-card__title">{event.label}</div>
@@ -119,7 +215,7 @@ const TLEventCard = ({ event, orientation, onClick, selected }) => {
       <div className="tl-card__foot">
         <span className="tl-card__cast">
           {event.entities.slice(0, 3).map((cid) => {
-            const c = cast[cid];
+            const c = castById[cid];
             if (!c) return null;
             return (
               <span key={cid} className="tl-card__avatar" style={{ "--c": c.color }}>{c.initials}</span>
@@ -127,7 +223,7 @@ const TLEventCard = ({ event, orientation, onClick, selected }) => {
           })}
         </span>
         {loc && <span className="tl-card__loc">{loc.name}</span>}
-        <span className="tl-card__src">{event.source}</span>
+        {event.source && <span className="tl-card__src">{event.source}</span>}
       </div>
     </button>
   );
@@ -136,9 +232,9 @@ const TLEventCard = ({ event, orientation, onClick, selected }) => {
 // ---------------------------------------------------------------------
 // Vertical timeline (compact)
 // ---------------------------------------------------------------------
-const TLVerticalView = ({ events, onClick, selectedId }) => (
+const TLVerticalView = ({ events, data, onClick, selectedId }) => (
   <div className="tl-vert">
-    {TL_ERAS.map((era) => {
+    {data.eras.map((era) => {
       const es = events.filter((e) => e.era === era.id);
       if (es.length === 0) return null;
       return (
@@ -154,7 +250,7 @@ const TLVerticalView = ({ events, onClick, selectedId }) => (
                 <div className="tl-vert__rail">
                   <span className="tl-vert__pip"/>
                 </div>
-                <TLEventCard event={e} orientation="vert" onClick={onClick} selected={e.id === selectedId}/>
+                <TLEventCard event={e} data={data} orientation="vert" onClick={onClick} selected={e.id === selectedId}/>
               </div>
             ))}
           </div>
@@ -167,11 +263,11 @@ const TLVerticalView = ({ events, onClick, selectedId }) => (
 // ---------------------------------------------------------------------
 // Horizontal timeline (expanded)
 // ---------------------------------------------------------------------
-const TLHorizontalView = ({ events, onClick, selectedId }) => (
+const TLHorizontalView = ({ events, data, onClick, selectedId }) => (
   <div className="tl-horz">
     <div className="tl-horz__line"/>
     <div className="tl-horz__rows">
-      {TL_ERAS.map((era) => {
+      {data.eras.map((era) => {
         const es = events.filter((e) => e.era === era.id);
         if (es.length === 0) return null;
         return (
@@ -181,10 +277,10 @@ const TLHorizontalView = ({ events, onClick, selectedId }) => (
               <span className="tl-horz__era-n">{es.length}</span>
             </div>
             <div className="tl-horz__track">
-              {es.map((e, i) => (
+              {es.map((e) => (
                 <div key={e.id} className="tl-horz__item">
                   <div className="tl-horz__pip" style={{ background: era.color }}/>
-                  <TLEventCard event={e} orientation="horz" onClick={onClick} selected={e.id === selectedId}/>
+                  <TLEventCard event={e} data={data} orientation="horz" onClick={onClick} selected={e.id === selectedId}/>
                 </div>
               ))}
             </div>
@@ -198,52 +294,75 @@ const TLHorizontalView = ({ events, onClick, selectedId }) => (
 // ---------------------------------------------------------------------
 // Inspector (right column when expanded)
 // ---------------------------------------------------------------------
-const TLInspector = ({ event, onClose }) => {
+const _tlOpenEditor = (event) =>
+  window.dispatchEvent(new CustomEvent("lw:open-entity-editor", {
+    detail: { type: event.entityType || "timeline", initial: { id: event.id }, mode: "full" },
+  }));
+
+const TLInspector = ({ event, data, onClose }) => {
   if (!event) return null;
-  const cast = _tlCastById();
-  const locs = _tlLocById();
-  const loc = locs[event.locationId];
+  const { castById, locById } = data;
+  const loc = event.locationId ? locById[event.locationId] : null;
+
+  const toggleFlashback = async () => {
+    const B = window.LoomwrightBackend;
+    if (!B || !event._entity) return;
+    const nextData = { ...(event._entity.data || {}), flashback: !event.flashback };
+    await B.EntityService.update(event.entityType || "timeline", event.id, { data: nextData });
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+  };
+  const openSource = () => {
+    if (event.chapter == null) return;
+    const cid = Object.entries(data.chapterNumById).find(([, n]) => n === event.chapter)?.[0];
+    if (cid) window.dispatchEvent(new CustomEvent("lw:set-active-chapter", { detail: { chapterId: cid } }));
+  };
+
   return (
     <div className="tl-insp">
       <div className="tl-insp__head">
         <span className="tl-insp__date">{event.date}</span>
-        {event.chapter && <span className="tl-insp__ch">Ch. {event.chapter}</span>}
+        {event.chapter != null && <span className="tl-insp__ch">Ch. {event.chapter}</span>}
         <button className="tl-insp__x" onClick={onClose}><Icon name="close" size={11}/></button>
       </div>
       <div className="tl-insp__title">{event.label}</div>
-      <p className="tl-insp__sum">{event.summary}</p>
+      {event.summary && <p className="tl-insp__sum">{event.summary}</p>}
       <div className="tl-insp__rows">
         <TLRow k="Confidence" v={event.confidence}/>
         <TLRow k="Canon"      v={event.canon}/>
         <TLRow k="Date type"  v={event.dateType}/>
         {loc && <TLRow k="Location" v={loc.name}/>}
-        {event.quest && <TLRow k="Quest" v={event.quest}/>}
+        {event.isMilestone && <TLRow k="Milestone" v="yes"/>}
       </div>
-      <div className="tl-insp__sec">
-        <div className="tl-insp__sech">Cast involved</div>
-        <div className="tl-insp__chips">
-          {event.entities.map((cid) => {
-            const c = cast[cid];
-            if (!c) return null;
-            return (
-              <button key={cid} className="tl-insp__chip" style={{ "--c": c.color }}>
-                <span className="tl-insp__chip-avatar">{c.initials}</span>
-                <span>{c.name}</span>
-              </button>
-            );
-          })}
+      {event.entities.length > 0 && (
+        <div className="tl-insp__sec">
+          <div className="tl-insp__sech">Cast involved</div>
+          <div className="tl-insp__chips">
+            {event.entities.map((cid) => {
+              const c = castById[cid];
+              if (!c) return null;
+              return (
+                <button key={cid} className="tl-insp__chip" style={{ "--c": c.color }}
+                        onClick={() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "cast" } }))}>
+                  <span className="tl-insp__chip-avatar">{c.initials}</span>
+                  <span>{c.name}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
-      <div className="tl-insp__sec">
-        <div className="tl-insp__sech">Source</div>
-        <div className="tl-insp__source">{event.source}</div>
-      </div>
+      )}
+      {event.source && (
+        <div className="tl-insp__sec">
+          <div className="tl-insp__sech">Source</div>
+          <div className="tl-insp__source">{event.source}</div>
+        </div>
+      )}
       <div className="tl-insp__actions">
-        <button data-callback="onEditTimelineEvent">Edit event</button>
-        <button data-callback="onSetTimelineDate">Set date</button>
-        <button data-callback="onMarkTimelineFlashback">{event.flashback ? "Clear flashback" : "Mark flashback"}</button>
-        <button data-callback="onShowTimelineMomentOnAtlas">Show on Atlas</button>
-        <button data-callback="onOpenTimelineSource">Open source</button>
+        <button onClick={() => _tlOpenEditor(event)}>Edit event</button>
+        <button onClick={() => _tlOpenEditor(event)}>Set date</button>
+        <button onClick={toggleFlashback}>{event.flashback ? "Clear flashback" : "Mark flashback"}</button>
+        <button onClick={() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "atlas" } }))}>Show on Atlas</button>
+        {event.chapter != null && <button onClick={openSource}>Open source</button>}
       </div>
     </div>
   );
@@ -260,13 +379,17 @@ const TLRow = ({ k, v }) => (
 // ---------------------------------------------------------------------
 // Filter chips
 // ---------------------------------------------------------------------
-const TLFilters = ({ filters, onToggleFilter }) => {
+const TLFilters = ({ filters, onToggleFilter, data }) => {
   const groups = [
-    { k: "character", items: (window.ATLAS_CAST || []).slice(0, 6) },
-    { k: "location",  items: (window.ATLAS_LOCATIONS || []).filter((l) => l.type === "city" || l.type === "region").slice(0, 6) },
-    { k: "quest",     items: (window.ATLAS_QUESTS || []).filter((q) => q.type === "quests") },
-    { k: "faction",   items: (window.ATLAS_FACTIONS || []) },
-  ];
+    { k: "character", items: data.cast.slice(0, 8) },
+    { k: "location",  items: data.locations.slice(0, 8) },
+    { k: "quest",     items: data.quests.slice(0, 8) },
+    { k: "faction",   items: data.factions.slice(0, 8) },
+  ].filter((g) => g.items.length);
+
+  if (!groups.length) {
+    return <div className="tl-filt"><span className="tl-filt__lbl" style={{ opacity: 0.7 }}>No cast, locations, quests, or factions to filter by yet.</span></div>;
+  }
   return (
     <div className="tl-filt">
       {groups.map((g) => (
@@ -280,7 +403,7 @@ const TLFilters = ({ filters, onToggleFilter }) => {
                 onClick={() => onToggleFilter(g.k, it.id)}
                 style={{ "--c": it.color || "#76684c" }}>
                 <span className="tl-filt__chip-sw"/>
-                <span>{it.name || it.label}</span>
+                <span>{it.name}</span>
               </button>
             );
           })}
@@ -293,25 +416,64 @@ const TLFilters = ({ filters, onToggleFilter }) => {
 // ---------------------------------------------------------------------
 // Review view (queue)
 // ---------------------------------------------------------------------
-const TLReviewView = () => (
-  <div className="tl-review">
-    {TL_REVIEW.map((r) => (
-      <div key={r.id} className={"tl-review__card tl-review__card--" + r.lvl}>
-        <div className="tl-review__head">
-          <ConfidenceBadge level={r.lvl}/>
-          <span className="tl-review__title">{r.title}</span>
-        </div>
-        <p className="tl-review__quote">"{r.excerpt}"</p>
-        <div className="tl-review__meta">{r.cite}</div>
-        <div className="tl-review__pill">{r.action}</div>
-        <div className="tl-review__actions">
-          <button data-callback="onAcceptTimelineQueueItem">Accept</button>
-          <button data-callback="onEditTimelineQueueItem">Edit</button>
-          <button data-callback="onMergeTimelineQueueItem">Merge</button>
-          <button data-callback="onDenyTimelineQueueItem">Deny</button>
+const _tlQueueDispatch = (name, id) =>
+  window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name, detail: { id } } }));
+
+const TLReviewView = ({ data }) => {
+  const items = data.review;
+  if (!items.length) {
+    return (
+      <div className="tl-review">
+        <div className="tl-empty" style={{ padding: 24, textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-md)", color: "var(--ink-2)", marginBottom: 6 }}>Nothing to review</div>
+          <div style={{ fontSize: "var(--fs-sm)", color: "var(--ink-3)" }}>Event candidates found during extraction will surface here.</div>
         </div>
       </div>
-    ))}
+    );
+  }
+  return (
+    <div className="tl-review">
+      {items.map((r) => (
+        <div key={r.id} className={"tl-review__card tl-review__card--" + r.lvl}>
+          <div className="tl-review__head">
+            <ConfidenceBadge level={r.lvl}/>
+            <span className="tl-review__title">{r.title}</span>
+          </div>
+          {r.excerpt && <p className="tl-review__quote">"{r.excerpt}"</p>}
+          {r.cite && <div className="tl-review__meta">{r.cite}</div>}
+          <div className="tl-review__pill">{r.action}</div>
+          <div className="tl-review__actions">
+            <button onClick={() => _tlQueueDispatch("onAcceptTimelineQueueItem", r.id)}>Accept</button>
+            <button onClick={() => _tlQueueDispatch("onEditTimelineQueueItem", r.id)}>Edit</button>
+            <button onClick={() => _tlQueueDispatch("onMergeTimelineQueueItem", r.id)}>Merge</button>
+            <button onClick={() => _tlQueueDispatch("onDenyTimelineQueueItem", r.id)}>Deny</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Full-panel empty state — no beats and nothing to review.
+// ---------------------------------------------------------------------
+const TLEmpty = ({ expanded }) => (
+  <div className="tl" data-ui="TimelinePanelBody" data-orientation={expanded ? "horizontal" : "vertical"}>
+    <div className="tl-bar">
+      <div className="tl-bar__modes"/>
+      <button className="tl-bar__add" data-callback="onCreateTimelineEvent">
+        <Icon name="plus" size={11}/>
+        <span>Add event</span>
+      </button>
+    </div>
+    <div className="tl-empty" style={{ margin: "48px auto", maxWidth: 460, textAlign: "center" }}>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-lg)", color: "var(--ink-2)", marginBottom: 8 }}>No timeline yet</div>
+      <div style={{ fontSize: "var(--fs-sm)", color: "var(--ink-3)", lineHeight: 1.55 }}>
+        The timeline pins the moments of your story. Add an event — or run
+        extraction over the manuscript — and its beats will appear here in
+        book and chronological order.
+      </div>
+    </div>
   </div>
 );
 
@@ -319,9 +481,20 @@ const TLReviewView = () => (
 // TimelinePanelBody — main entry
 // ---------------------------------------------------------------------
 const TimelinePanelBody = ({ panel, onSelectEntity }) => {
+  const [storeVersion, setStoreVersion] = _tl_us(0);
+  _tl_ue(() => {
+    const bump = () => setStoreVersion((v) => v + 1);
+    const evs = ["lw:entity-store-updated", "lw:manuscript-chapters-updated",
+      "lw:review-queue-updated", "lw:occurrences-updated", "lw:backend-ready"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+
+  const data = _tl_um(() => buildTimelineData(), [storeVersion]);
+
   const [mode, setMode] = _tl_us("book");
   const [filters, setFilters] = _tl_us({ character: [], location: [], quest: [], faction: [] });
-  const [selectedId, setSelectedId] = _tl_us("e7");
+  const [selectedId, setSelectedId] = _tl_us(null);
   const [showFilters, setShowFilters] = _tl_us(false);
 
   const onToggleFilter = _tl_uc((k, id) => {
@@ -333,21 +506,28 @@ const TimelinePanelBody = ({ panel, onSelectEntity }) => {
     });
   }, []);
 
-  // Filtered events
+  // Filtered + sorted events.
   const events = _tl_um(() => {
-    let list = TL_EVENTS;
+    let list = data.events;
     if (filters.character.length) list = list.filter((e) => e.entities.some((c) => filters.character.includes(c)));
-    if (filters.location.length)  list = list.filter((e) => filters.location.includes(e.locationId));
-    if (filters.quest.length)     list = list.filter((e) => filters.quest.includes(e.quest));
-    // Sort by mode
-    if (mode === "book") {
-      return [...list].sort((a, b) => (a.chapter || 99) - (b.chapter || 99));
-    }
-    return list;
-  }, [mode, filters]);
+    if (filters.location.length)  list = list.filter((e) => e.locationId && filters.location.includes(e.locationId));
+    if (filters.quest.length)     list = list.filter((e) => e.quest && filters.quest.includes(e.quest));
+    if (filters.faction.length)   list = list.filter((e) => e.factions.some((f) => filters.faction.includes(f)));
+    // Book + the entity-facet modes order by chapter; chronological groups
+    // backstory first, then by chapter.
+    return [...list].sort((a, b) => _tlSortKey(a) - _tlSortKey(b));
+  }, [data.events, mode, filters]);
 
-  const selected = TL_EVENTS.find((e) => e.id === selectedId);
+  // Keep the selection valid as the live store changes.
+  _tl_ue(() => {
+    setSelectedId((prev) => (prev && data.events.some((e) => e.id === prev)) ? prev
+      : (data.events[0]?.id || null));
+  }, [data.events]);
+
+  const selected = data.events.find((e) => e.id === selectedId);
   const expanded = panel?.expanded;
+
+  if (!data.events.length && !data.review.length) return <TLEmpty expanded={expanded}/>;
 
   return (
     <div className="tl" data-ui="TimelinePanelBody" data-orientation={expanded ? "horizontal" : "vertical"}>
@@ -355,10 +535,10 @@ const TimelinePanelBody = ({ panel, onSelectEntity }) => {
         <div className="tl-bar__modes">
           {TL_MODES.map((m) => (
             <button key={m.id} className={"tl-bar__mode" + (mode === m.id ? " is-on" : "")}
-                    onClick={() => setMode(m.id)} data-callback="onSetTimelineMode" data-mode={m.id}>
+                    onClick={() => setMode(m.id)} data-mode={m.id}>
               <Icon name={m.icon} size={10}/>
               <span>{m.label}</span>
-              {m.id === "review" && <span className="tl-bar__q">{TL_REVIEW.length}</span>}
+              {m.id === "review" && data.review.length > 0 && <span className="tl-bar__q">{data.review.length}</span>}
             </button>
           ))}
         </div>
@@ -373,28 +553,32 @@ const TimelinePanelBody = ({ panel, onSelectEntity }) => {
         </button>
       </div>
 
-      {showFilters && <TLFilters filters={filters} onToggleFilter={onToggleFilter}/>}
+      {showFilters && <TLFilters filters={filters} onToggleFilter={onToggleFilter} data={data}/>}
 
       <div className="tl-grid" data-mode={expanded ? "split" : "stack"}>
         <div className="tl-stage">
           {mode === "review" ? (
-            <TLReviewView/>
+            <TLReviewView data={data}/>
+          ) : events.length === 0 ? (
+            <div className="tl-empty" style={{ padding: 24, textAlign: "center", color: "var(--ink-3)" }}>
+              No events match the current filters.
+            </div>
           ) : expanded ? (
-            <TLHorizontalView events={events} onClick={(e) => setSelectedId(e.id)} selectedId={selectedId}/>
+            <TLHorizontalView events={events} data={data} onClick={(e) => setSelectedId(e.id)} selectedId={selectedId}/>
           ) : (
-            <TLVerticalView events={events} onClick={(e) => setSelectedId(e.id)} selectedId={selectedId}/>
+            <TLVerticalView events={events} data={data} onClick={(e) => setSelectedId(e.id)} selectedId={selectedId}/>
           )}
         </div>
-        {expanded && mode !== "review" && (
+        {expanded && mode !== "review" && selected && (
           <div className="tl-rail">
-            <TLInspector event={selected} onClose={() => setSelectedId(null)}/>
+            <TLInspector event={selected} data={data} onClose={() => setSelectedId(null)}/>
           </div>
         )}
       </div>
 
       {!expanded && mode !== "review" && selected && (
         <div className="tl-drawer">
-          <TLInspector event={selected} onClose={() => setSelectedId(null)}/>
+          <TLInspector event={selected} data={data} onClose={() => setSelectedId(null)}/>
         </div>
       )}
     </div>
@@ -402,6 +586,6 @@ const TimelinePanelBody = ({ panel, onSelectEntity }) => {
 };
 
 Object.assign(window, {
-  TL_EVENTS, TL_ERAS, TL_REVIEW, TL_MODES,
+  TL_ERAS, TL_MODES, buildTimelineData,
   TimelinePanelBody, TLVerticalView, TLHorizontalView, TLInspector, TLEventCard, TLReviewView, TLFilters,
 });
