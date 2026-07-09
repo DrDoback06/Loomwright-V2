@@ -5,9 +5,14 @@ owning area later. Each notes WHERE the data already lands so the later work is
 display/seed wiring, not a rebuild.
 
 ## From Area 1 — Extraction
-- **Relationships tab live rendering** — accepted relationship candidates now
-  persist with `fromId`/`toId`/`type` in `data`, but the Relationships tab
-  (`relationships.jsx`) still renders demo data. → **Area 4 (visual tabs)**.
+- ~~**Relationships tab live rendering**~~ — **DONE in Area 4.** The
+  Relationships panel (`relationships.jsx`) now renders live: it resolves
+  persisted `relationships` entities (both the extraction shape
+  `{fromId,toId,relationshipType}` and the editor shape
+  `{from,to,bondType,intensity,valence}`) into graph edges + compare meters,
+  drives the character bar from live cast, derives change history from the
+  audit log, and feeds pending candidates into the Review tab. See
+  `AREA_4_RELATIONSHIPS_AUDIT.md`.
 - **Skill-tree assignment selector on skill candidates** — discovered skills
   land as entities; assigning them to a tree needs the skill-tree system. →
   **Skill Trees (Area 4/7)**.
@@ -17,6 +22,18 @@ display/seed wiring, not a rebuild.
   **Area 3 (Cast dossier)**.
 - **Two-pass relationship extraction** (richer relationship records). → later
   extraction-quality pass.
+
+## From Area 4 — Relationships (visual tab)
+- **Unify the two relationship `data` shapes** — the Relationships reader
+  tolerates both the extraction shape (`fromId`/`toId`/`relationshipType`) and
+  the entity-editor shape (`from`/`to`/`bondType`/`intensity`/`valence`). A later
+  pass could make both writers emit one canonical shape so meters/type aren't
+  inferred. → extraction-quality / editor polish.
+- **Explicit per-relationship change tracking** — the History/Recent-changes
+  view derives from the coarse audit log (create/update/accept/deny). Richer
+  trust/type/secret deltas across chapters need dedicated change records. → later.
+- **Shared-places / travel line between two characters** — Compare → "Show shared
+  places" opens the Atlas today; drawing the shared-location line is Atlas work.
 
 ## From Area 2 — Onboarding
 - **Genre RPG entity templates** — seed example classes/races/abilities from the
