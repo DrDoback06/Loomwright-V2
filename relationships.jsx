@@ -1,5 +1,5 @@
 // =====================================================================
-// relationships.jsx — Relationships workspace.
+// relationships.jsx — Relationships workspace (LIVE).
 //
 // Modes:
 //   single        — focus character → top relationships, hopes, fears,
@@ -10,14 +10,19 @@
 //   conflict      — heat map of conflicts.
 //   review        — queue cards.
 //
-// Demo data uses the existing ATLAS_CAST (Aelinor, Saren, Brec, Mara,
-// Auger, Dav) so the relationship graph feels populated.
+// Area 4 (visual tabs): every mode now reads the live project store —
+// cast come from EntityService("cast"), edges from
+// EntityService("relationships"), the review queue from
+// ReviewService("relationships"). No demo data; honest empty states.
+// Two persisted shapes are tolerated: extraction-accepted relationships
+// (data.fromId / data.toId / data.relationshipType) and editor-saved
+// relationships (from / to / bondType / intensity / valence).
 // =====================================================================
 
-const { useState: _re_us, useMemo: _re_um, useCallback: _re_uc, useRef: _re_ur } = React;
+const { useState: _re_us, useMemo: _re_um, useCallback: _re_uc, useEffect: _re_ue } = React;
 
 // ---------------------------------------------------------------------
-// Demo data — relationships, evidence, change events, review queue.
+// Static vocab — relationship types + mode tabs.
 // ---------------------------------------------------------------------
 const REL_TYPES = {
   friend:  { id: "friend",  label: "Friend",  color: "#5d6d4e" },
@@ -30,59 +35,6 @@ const REL_TYPES = {
   unknown: { id: "unknown", label: "Unknown", color: "#76684c" },
 };
 
-const RELATIONSHIPS = [
-  { id: "re1", a: "aelinor", b: "saren",   type: "rival",   strength: 78, trust: 22, conflict: 81, secret: false, summary: "Court-rival turned conditional ally after the Glass Audience.", chapters: [3, 4, 7] },
-  { id: "re2", a: "aelinor", b: "brec",    type: "friend",  strength: 86, trust: 90, conflict: 14, secret: false, summary: "Old friend; Brec swore service to House Vey when Aelinor was a child.", chapters: [1, 2, 7] },
-  { id: "re3", a: "aelinor", b: "auger",   type: "mentor",  strength: 64, trust: 55, conflict: 30, secret: true,  summary: "The Auger may have foreseen Aelinor's path. Hidden from her until Ch. 6.", chapters: [3, 6] },
-  { id: "re4", a: "aelinor", b: "mara",    type: "family",  strength: 41, trust: 28, conflict: 60, secret: false, summary: "Mara is a Hess cousin twice removed; barely speaks to her.", chapters: [4, 7] },
-  { id: "re5", a: "saren",   b: "mara",    type: "lover",   strength: 88, trust: 70, conflict: 24, secret: true,  summary: "Long affair, hidden from court for political reasons.", chapters: [3, 6, 7] },
-  { id: "re6", a: "saren",   b: "brec",    type: "enemy",   strength: 70, trust: 8,  conflict: 90, secret: false, summary: "Brec broke Saren's brother's nose at Treaty of Brittlewood. Saren has not forgotten.", chapters: [5, 7] },
-  { id: "re7", a: "brec",    b: "dav",     type: "mentor",  strength: 72, trust: 80, conflict: 10, secret: false, summary: "Brec trained Dav for the watch.", chapters: [2, 5, 7] },
-  { id: "re8", a: "auger",   b: "mara",    type: "enemy",   strength: 55, trust: 5,  conflict: 70, secret: true,  summary: "Mara distrusts the Auger's prophecies. The Auger has reciprocated.", chapters: [6, 7] },
-];
-
-const REL_EVIDENCE = [
-  { id: "ev1", rel: "re1", chapter: 7, quote: "…Saren bowed, but not low, and Aelinor did not bow back…", strength: "strong" },
-  { id: "ev2", rel: "re2", chapter: 1, quote: "Brec set down the cup so gently it might have been a bird.", strength: "strong" },
-  { id: "ev3", rel: "re3", chapter: 6, quote: "The Auger had walked the cliff three times before Aelinor was born, knowing where she would stand.", strength: "uncertain" },
-  { id: "ev4", rel: "re5", chapter: 6, quote: "Mara did not say goodbye, only put her hand on the back of Saren's neck a moment too long.", strength: "high" },
-  { id: "ev5", rel: "re6", chapter: 5, quote: "Saren's voice when he said 'Captain' had no captain in it at all.", strength: "strong" },
-];
-
-const REL_CHANGES = [
-  { id: "rc1", rel: "re1", chapter: 7, kind: "type",     from: "enemy",   to: "rival",   note: "Glass Audience produced a brittle truce.", date: "2 days ago" },
-  { id: "rc2", rel: "re2", chapter: 7, kind: "trust",    from: 78,        to: 90,        note: "Brec broke ranks to ride out with Aelinor.",    date: "2 days ago" },
-  { id: "rc3", rel: "re3", chapter: 6, kind: "secret",   from: true,      to: false,     note: "Aelinor learned the Auger had been watching her since the cliffs.", date: "5 days ago" },
-  { id: "rc4", rel: "re6", chapter: 5, kind: "conflict", from: 60,        to: 90,        note: "Brittlewood incident escalated.",               date: "1 week ago" },
-  { id: "rc5", rel: "re5", chapter: 6, kind: "new",      from: null,      to: "lover",   note: "Affair confirmed in the harbour chapter.",     date: "5 days ago" },
-];
-
-const REL_REVIEW = [
-  { id: "rq1", lvl: "strong",    title: "Auger → Mara (mistrust)",    action: "Promote to enemy?", excerpt: "…the Auger and Mara had not spoken in two years…",       cite: "Ch. 7 · p. 218" },
-  { id: "rq2", lvl: "uncertain", title: "Dav loves Captain Brec?",     action: "New rel candidate", excerpt: "…Dav stood when Brec entered the room, every time.",   cite: "Ch. 5 · p. 134" },
-  { id: "rq3", lvl: "weak",      title: "Aelinor ↔ The Glass Throne",  action: "Faction rel",       excerpt: "…the throne owed her something, but she could not name it…", cite: "Ch. 7 · p. 211" },
-  { id: "rq4", lvl: "strong",    title: "Saren ↔ Brec — escalation",   action: "Update strength",   excerpt: "Saren's voice when he said 'Captain' had no captain in it at all.", cite: "Ch. 5 · p. 138" },
-];
-
-const REL_HOPES_FEARS = {
-  aelinor: { hopes: ["Find the Stone before Hess does", "Keep Brec alive", "Find what the Auger knew"],
-             fears: ["Becoming her mother", "Being right about the wraiths", "Saren breaking word"] },
-  saren:   { hopes: ["Restore the Glass Throne", "Mara, openly"],
-             fears: ["Court learning about Mara", "Brec coming back"] },
-  brec:    { hopes: ["Keep the Reach standing", "Train Dav"],
-             fears: ["Outliving Aelinor", "What the wraiths actually are"] },
-  mara:    { hopes: ["Saren — alive, hers, sometime"],
-             fears: ["The Auger seeing her plainly"] },
-  auger:   { hopes: ["Aelinor reaches the Stone in time"],
-             fears: ["Mara"] },
-  dav:     { hopes: ["Be more like Brec"], fears: ["Being seen wanting that"] },
-};
-
-// ---------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------
-const _castById = () => Object.fromEntries((window.ATLAS_CAST || []).map((c) => [c.id, c]));
-
 const REL_MODES = [
   { id: "single",   label: "Single",      icon: "user" },
   { id: "compare",  label: "Compare 2",   icon: "link" },
@@ -91,6 +43,237 @@ const REL_MODES = [
   { id: "conflict", label: "Conflict",    icon: "warn" },
   { id: "review",   label: "Review",      icon: "bell" },
 ];
+
+// ---------------------------------------------------------------------
+// Live-store adapters
+// ---------------------------------------------------------------------
+const _REL_PALETTE = [
+  "#7a6aa3", "#a8553f", "#5d6d4e", "#b78a52", "#6b6f7a", "#8a6b58",
+  "#3e6db5", "#b86a82", "#c98a2c", "#3d3a78", "#4f7d6a", "#9a5b7a",
+];
+const _relColor = (id) => {
+  const s = String(id || "");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return _REL_PALETTE[h % _REL_PALETTE.length];
+};
+
+const _relInitials = (name) => {
+  if (!name) return "?";
+  const parts = String(name).trim().split(/\s+/).filter(Boolean);
+  const a = parts[0]?.[0] || "";
+  const b = parts[1]?.[0] || parts[0]?.[1] || "";
+  return (a + b).toUpperCase() || "?";
+};
+
+const _relRole = (raw) => {
+  const r = String(raw || "").toLowerCase();
+  if (["protagonist", "hero", "pov", "central"].includes(r)) return "protagonist";
+  if (["antagonist", "villain"].includes(r)) return "antagonist";
+  if (!r) return "minor";
+  if (["minor", "walk-on", "background"].includes(r)) return "minor";
+  return "supporting";
+};
+
+// Read a field from either the flat entity or its nested `data.*`, trying
+// each candidate key in order. Tolerates all persisted relationship shapes.
+const _relPick = (e, ...keys) => {
+  if (!e) return undefined;
+  const d = e.data || {};
+  for (const k of keys) {
+    if (d[k] != null && d[k] !== "") return d[k];
+    if (e[k] != null && e[k] !== "") return e[k];
+  }
+  return undefined;
+};
+
+// A related-picker value can be a bare id, or `{ id, name, type }`.
+const _relIdOf = (v) => (typeof v === "string" ? v : (v && v.id) || null);
+
+// Map any stored bond/verb word onto one of REL_TYPES.
+const _REL_TYPE_ALIASES = {
+  friend: "friend", friends: "friend", ally: "friend", allies: "friend",
+  befriend: "friend", befriends: "friend", "loyal-to": "friend", sworn: "friend",
+  enemy: "enemy", enemies: "enemy", hates: "enemy", hate: "enemy", fights: "enemy",
+  kills: "enemy", betrays: "enemy", opposes: "enemy",
+  family: "family", father: "family", mother: "family", brother: "family",
+  sister: "family", son: "family", daughter: "family", parent: "family",
+  cousin: "family", married: "family", wife: "family", husband: "family", oath: "family",
+  lover: "lover", lovers: "lover", loves: "lover", love: "lover", kisses: "lover",
+  rival: "rival", rivals: "rival", competes: "rival", debt: "rival",
+  mentor: "mentor", mentors: "mentor", trains: "mentor", teaches: "mentor",
+  masters: "mentor", serves: "mentor", "ward-of": "mentor",
+  faction: "faction",
+  stranger: "unknown", other: "unknown", unknown: "unknown",
+};
+const _normRelType = (raw) => {
+  const k = String(raw || "").toLowerCase().replace(/[^a-z-]/g, "");
+  if (REL_TYPES[k]) return k;
+  return _REL_TYPE_ALIASES[k] || "unknown";
+};
+
+const _REL_TYPE_METERS = {
+  friend:  { strength: 72, trust: 82, conflict: 16 },
+  enemy:   { strength: 66, trust: 10, conflict: 84 },
+  family:  { strength: 70, trust: 64, conflict: 32 },
+  lover:   { strength: 84, trust: 72, conflict: 26 },
+  rival:   { strength: 62, trust: 34, conflict: 68 },
+  mentor:  { strength: 68, trust: 76, conflict: 20 },
+  faction: { strength: 55, trust: 45, conflict: 40 },
+  unknown: { strength: 40, trust: 40, conflict: 30 },
+};
+
+const _REL_VALENCE_ADJ = {
+  positive: { trust: 15, conflict: -15 },
+  negative: { trust: -15, conflict: 20 },
+  mixed:    {},
+  cold:     { trust: -10, conflict: 5 },
+  heated:   { conflict: 20 },
+  quiet:    { conflict: -10 },
+};
+
+const _relClamp = (n) => Math.max(0, Math.min(100, Math.round(n)));
+
+// Build the live cast index [{ id, name, initials, color, role, goals, fears }].
+const _relLiveCast = () => {
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  const list = (B && B.EntityService && B.EntityService.listSync("cast")) || [];
+  return list.map((e) => {
+    const d = e.data || {};
+    return {
+      id: e.id,
+      name: e.name || d.name || "Unnamed",
+      initials: e.glyphChar || _relInitials(e.name || d.name),
+      color: _relColor(e.id),
+      role: _relRole(d.role || e.role),
+      goals: Array.isArray(d.goals) ? d.goals : [],
+      fears: Array.isArray(d.fears) ? d.fears : [],
+    };
+  });
+};
+
+// Map one persisted relationship entity → the graph shape the views expect.
+// Returns null when either endpoint can't be resolved to a known cast id.
+const _relLiveEdge = (e, castById, chapterNumById) => {
+  if (!e) return null;
+  const a = _relIdOf(_relPick(e, "fromId", "from", "a", "character1"));
+  const b = _relIdOf(_relPick(e, "toId", "to", "b", "character2"));
+  if (!a || !b || a === b) return null;
+  if (!castById[a] || !castById[b]) return null;
+
+  const type = _normRelType(_relPick(e, "relationshipType", "bondType", "type", "kind"));
+  const base = _REL_TYPE_METERS[type] || _REL_TYPE_METERS.unknown;
+
+  const rawStrength = Number(_relPick(e, "strength", "intensity"));
+  const strength = Number.isFinite(rawStrength) ? _relClamp(rawStrength) : base.strength;
+
+  const rawTrust = Number(_relPick(e, "trust"));
+  const rawConflict = Number(_relPick(e, "conflict"));
+  const valence = String(_relPick(e, "valence") || "").toLowerCase();
+  const adj = _REL_VALENCE_ADJ[valence] || {};
+  const trust = Number.isFinite(rawTrust) ? _relClamp(rawTrust) : _relClamp(base.trust + (adj.trust || 0));
+  const conflict = Number.isFinite(rawConflict) ? _relClamp(rawConflict) : _relClamp(base.conflict + (adj.conflict || 0));
+
+  const secret = _relPick(e, "secret") === true || valence === "cold";
+  const summary = e.summary || _relPick(e, "summary") || _relPick(e, "relationshipNotes")
+    || `${castById[a].name} · ${castById[b].name}`;
+
+  // Chapters: explicit list wins; else a single stored chapter ref mapped
+  // to its number; else none (the views degrade honestly).
+  let chapters = _relPick(e, "chapters");
+  if (Array.isArray(chapters)) {
+    chapters = chapters.map((c) => (typeof c === "number" ? c : chapterNumById[c] || c)).filter((n) => n != null);
+  } else {
+    const single = _relPick(e, "chapter", "chapterId");
+    const num = typeof single === "number" ? single : chapterNumById[single];
+    chapters = num != null ? [num] : [];
+  }
+
+  return {
+    id: e.id, a, b, type, strength, trust, conflict, secret, summary, chapters,
+    _entity: e,
+  };
+};
+
+// Flatten a live edge back into an editor-friendly initial payload, mapping
+// the resolved endpoints onto the editor's `from` / `to` related pickers and
+// `bondType` so an existing relationship prefills regardless of how it was
+// originally persisted (extraction data.* vs editor flat fields).
+const _relEditInitial = (edge, castById) => {
+  const e = (edge && edge._entity) || {};
+  const a = castById[edge.a], b = castById[edge.b];
+  return {
+    ...(e.data || {}),
+    ...e,
+    id: edge.id,
+    from: a ? { id: a.id, name: a.name, type: "cast" } : undefined,
+    to: b ? { id: b.id, name: b.name, type: "cast" } : undefined,
+    bondType: edge.type,
+    summary: edge.summary,
+  };
+};
+
+// Evidence rows from an edge's stored evidence (string or array).
+const _relLiveEvidence = (edge) => {
+  if (!edge || !edge._entity) return [];
+  const raw = _relPick(edge._entity, "evidence", "sourceQuote", "sourceQuotes");
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  return arr
+    .map((v, i) => {
+      if (!v) return null;
+      if (typeof v === "string") return { id: edge.id + "-ev" + i, rel: edge.id, chapter: null, quote: v };
+      return { id: edge.id + "-ev" + i, rel: edge.id, chapter: v.chapter ?? null, quote: v.quote || v.text || "" };
+    })
+    .filter((x) => x && x.quote);
+};
+
+// Build the whole live data bundle once per render pass.
+const buildRelData = () => {
+  const B = (typeof window !== "undefined") && window.LoomwrightBackend;
+  const cast = _relLiveCast();
+  const castById = Object.fromEntries(cast.map((c) => [c.id, c]));
+
+  const chapterNumById = {};
+  try {
+    const state = (B && B.ManuscriptChapterService && B.ManuscriptChapterService.loadSync()) || {};
+    (state.chapters || []).filter((c) => !c.reserved).forEach((c, i) => {
+      chapterNumById[c.id] = c.num || (i + 1);
+    });
+  } catch (_e) {}
+
+  const rawRels = (B && B.EntityService && B.EntityService.listSync("relationships")) || [];
+  const relationships = rawRels
+    .filter((e) => e && e.status !== "deleted")
+    .map((e) => _relLiveEdge(e, castById, chapterNumById))
+    .filter(Boolean);
+
+  // Pending review candidates for relationships.
+  const queue = (B && B.ReviewService && B.ReviewService.listSync("relationships")) || [];
+  const review = queue
+    .filter((q) => q.status === "pending")
+    .map((q) => {
+      const conf = typeof q.confidence === "number" ? q.confidence
+        : typeof q.value === "number" ? q.value / 100 : 0.55;
+      const pct = Math.round(conf * 100);
+      const lvl = pct >= 80 ? "strong" : pct >= 60 ? "uncertain" : "weak";
+      const changes = q.suggestedChanges || {};
+      const fromName = castById[_relIdOf(changes.fromId || changes.from)]?.name;
+      const toName = castById[_relIdOf(changes.toId || changes.to)]?.name;
+      const title = (fromName && toName) ? `${fromName} → ${toName}` : (q.name || "Relationship candidate");
+      const chNum = chapterNumById[q.chapterId];
+      return {
+        id: q.id,
+        lvl,
+        title,
+        action: changes.relationshipType ? `New ${_normRelType(changes.relationshipType)} bond` : (q.action || "New rel candidate"),
+        excerpt: q.sourceQuote || (q.payload && q.payload.context) || q.context || q.summary || "",
+        cite: chNum ? ("Ch. " + chNum) : (q.cite || ""),
+      };
+    });
+
+  return { cast, castById, relationships, review };
+};
 
 // ---------------------------------------------------------------------
 // Meter — small bar that shows strength / trust / conflict.
@@ -108,21 +291,34 @@ const RelMeter = ({ k, v, tone = "neutral" }) => (
 // ---------------------------------------------------------------------
 // RelAvatar
 // ---------------------------------------------------------------------
-const RelAvatar = ({ cast, size = 28 }) => (
-  <span className="rel-avatar" style={{ "--c": cast.color, width: size, height: size, fontSize: size * 0.32 }}>
-    {cast.initials}
-  </span>
+const RelAvatar = ({ cast, size = 28 }) => {
+  if (!cast) return <span className="rel-avatar" style={{ width: size, height: size }}/>;
+  return (
+    <span className="rel-avatar" style={{ "--c": cast.color, width: size, height: size, fontSize: size * 0.32 }}>
+      {cast.initials}
+    </span>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Small empty-state block used across modes.
+// ---------------------------------------------------------------------
+const RelModeEmpty = ({ title, body }) => (
+  <div className="rel-empty rel-empty--lg" style={{ margin: 24, textAlign: "center" }}>
+    <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-md)", color: "var(--ink-2)", marginBottom: 6 }}>{title}</div>
+    <div style={{ fontSize: "var(--fs-sm)", color: "var(--ink-3)" }}>{body}</div>
+  </div>
 );
 
 // ---------------------------------------------------------------------
 // Single character view
 // ---------------------------------------------------------------------
-const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
-  const cast = _castById();
-  const c = cast[characterId];
+const RelSingleView = ({ data, characterId, onSelectCharacter, onCompare }) => {
+  const { castById } = data;
+  const c = castById[characterId];
   if (!c) return <div style={{ padding: 16, color: "var(--ink-3)" }}>Pick a character to begin.</div>;
 
-  const rels = RELATIONSHIPS.filter((r) => r.a === characterId || r.b === characterId);
+  const rels = data.relationships.filter((r) => r.a === characterId || r.b === characterId);
   const groups = {};
   for (const r of rels) {
     const k = r.type;
@@ -130,7 +326,8 @@ const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
     groups[k].push(r);
   }
 
-  const hf = REL_HOPES_FEARS[characterId] || { hopes: [], fears: [] };
+  const hopes = c.goals || [];
+  const fears = c.fears || [];
 
   return (
     <div className="rel-single">
@@ -147,86 +344,62 @@ const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
         </div>
       </div>
 
-      <div className="rel-grid">
-        {Object.entries(groups).map(([type, items]) => {
-          const t = REL_TYPES[type];
-          return (
-            <div key={type} className="rel-group" style={{ "--c": t.color }}>
-              <div className="rel-group__head">
-                <span className="rel-group__dot"/>
-                <span>{t.label}s</span>
-                <span className="rel-group__n">{items.length}</span>
-              </div>
-              {items.map((r) => {
-                const other = cast[r.a === characterId ? r.b : r.a];
-                return (
-                  <button key={r.id} className="rel-card" onClick={() => onCompare(characterId, other.id)}>
-                    <RelAvatar cast={other}/>
-                    <div className="rel-card__main">
-                      <div className="rel-card__name">
-                        {other.name}
-                        {r.secret && <span className="rel-card__secret" title="Secret">⬛</span>}
+      {rels.length === 0 ? (
+        <RelModeEmpty
+          title={`No relationships tracked for ${c.name} yet`}
+          body="Run extraction over the manuscript, or add a relationship from the Entity Editor, and it will appear here."/>
+      ) : (
+        <div className="rel-grid">
+          {Object.entries(groups).map(([type, items]) => {
+            const t = REL_TYPES[type] || REL_TYPES.unknown;
+            return (
+              <div key={type} className="rel-group" style={{ "--c": t.color }}>
+                <div className="rel-group__head">
+                  <span className="rel-group__dot"/>
+                  <span>{t.label}s</span>
+                  <span className="rel-group__n">{items.length}</span>
+                </div>
+                {items.map((r) => {
+                  const other = castById[r.a === characterId ? r.b : r.a];
+                  if (!other) return null;
+                  return (
+                    <button key={r.id} className="rel-card" onClick={() => onCompare(characterId, other.id)}>
+                      <RelAvatar cast={other}/>
+                      <div className="rel-card__main">
+                        <div className="rel-card__name">
+                          {other.name}
+                          {r.secret && <span className="rel-card__secret" title="Secret">⬛</span>}
+                        </div>
+                        <div className="rel-card__sum">{r.summary}</div>
+                        {r.chapters.length > 0 && <div className="rel-card__chapters">Ch. {r.chapters.join(", ")}</div>}
                       </div>
-                      <div className="rel-card__sum">{r.summary}</div>
-                      <div className="rel-card__chapters">Ch. {r.chapters.join(", ")}</div>
-                    </div>
-                    <div className="rel-card__meters">
-                      <span className="rel-card__meter" title="Strength" style={{ "--w": r.strength + "%", "--c": t.color }}/>
-                      <span className="rel-card__meter rel-card__meter--trust" title="Trust" style={{ "--w": r.trust + "%" }}/>
-                      <span className="rel-card__meter rel-card__meter--conflict" title="Conflict" style={{ "--w": r.conflict + "%" }}/>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
+                      <div className="rel-card__meters">
+                        <span className="rel-card__meter" title="Strength" style={{ "--w": r.strength + "%", "--c": t.color }}/>
+                        <span className="rel-card__meter rel-card__meter--trust" title="Trust" style={{ "--w": r.trust + "%" }}/>
+                        <span className="rel-card__meter rel-card__meter--conflict" title="Conflict" style={{ "--w": r.conflict + "%" }}/>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="rel-twocol">
         <div className="rel-section">
           <div className="rel-section__head">Hopes</div>
-          <ul className="rel-bullets">{hf.hopes.map((h, i) => <li key={i}>{h}</li>)}</ul>
+          {hopes.length
+            ? <ul className="rel-bullets">{hopes.map((h, i) => <li key={i}>{h}</li>)}</ul>
+            : <div className="rel-empty">No goals recorded — add them in the character's dossier.</div>}
         </div>
         <div className="rel-section">
           <div className="rel-section__head">Fears</div>
-          <ul className="rel-bullets">{hf.fears.map((h, i) => <li key={i}>{h}</li>)}</ul>
+          {fears.length
+            ? <ul className="rel-bullets">{fears.map((h, i) => <li key={i}>{h}</li>)}</ul>
+            : <div className="rel-empty">No fears recorded — add them in the character's dossier.</div>}
         </div>
-      </div>
-
-      <div className="rel-section">
-        <div className="rel-section__head">
-          Recent relationship changes
-          <span style={{ flex: 1 }}/>
-          <button className="rel-section__more" data-callback="onOpenRelationshipTimeline">All changes →</button>
-        </div>
-        {REL_CHANGES.filter((rc) => {
-          const rel = RELATIONSHIPS.find((r) => r.id === rc.rel);
-          return rel && (rel.a === characterId || rel.b === characterId);
-        }).slice(0, 4).map((rc) => {
-          const rel = RELATIONSHIPS.find((r) => r.id === rc.rel);
-          if (!rel) return null;
-          const other = cast[rel.a === characterId ? rel.b : rel.a];
-          if (!other) return null;
-          return (
-            <div key={rc.id} className="rel-change">
-              <div className="rel-change__head">
-                <RelAvatar cast={other} size={20}/>
-                <span className="rel-change__who">{other.name}</span>
-                <span className="rel-change__kind">{rc.kind}</span>
-                <span className="rel-change__date">{rc.date}</span>
-              </div>
-              <div className="rel-change__note">{rc.note}</div>
-              <div className="rel-change__delta">
-                {rc.kind === "new"   && <span>+ new relationship: <b>{rc.to}</b></span>}
-                {rc.kind === "type"  && <span>{rc.from} → <b>{rc.to}</b></span>}
-                {rc.kind === "trust" && <span>trust {rc.from} → <b>{rc.to}</b></span>}
-                {rc.kind === "conflict" && <span>conflict {rc.from} → <b>{rc.to}</b></span>}
-                {rc.kind === "secret" && <span>secret: {String(rc.from)} → <b>{String(rc.to)}</b></span>}
-              </div>
-            </div>
-          );
-        })}
       </div>
     </div>
   );
@@ -235,16 +408,15 @@ const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
 // ---------------------------------------------------------------------
 // Compare view (2 characters)
 // ---------------------------------------------------------------------
-const RelCompareView = ({ aId, bId, onSelectCharacter }) => {
-  const cast = _castById();
-  const a = cast[aId], b = cast[bId];
+const RelCompareView = ({ data, aId, bId, onSelectCharacter }) => {
+  const { castById } = data;
+  const a = castById[aId], b = castById[bId];
   if (!a || !b) return <div style={{ padding: 16 }}>Pick two characters.</div>;
 
-  const rel = RELATIONSHIPS.find((r) =>
+  const rel = data.relationships.find((r) =>
     (r.a === aId && r.b === bId) || (r.a === bId && r.b === aId));
-  const evidence = REL_EVIDENCE.filter((e) => rel && e.rel === rel.id);
-  const changes = REL_CHANGES.filter((c) => rel && c.rel === rel.id);
-  const t = rel ? REL_TYPES[rel.type] : REL_TYPES.unknown;
+  const evidence = rel ? _relLiveEvidence(rel) : [];
+  const t = rel ? (REL_TYPES[rel.type] || REL_TYPES.unknown) : REL_TYPES.unknown;
 
   return (
     <div className="rel-compare">
@@ -280,40 +452,39 @@ const RelCompareView = ({ aId, bId, onSelectCharacter }) => {
               <div className="rel-section__head">Evidence</div>
               {evidence.map((e) => (
                 <div key={e.id} className="rel-quote">
-                  <div className="rel-quote__cite">Ch. {e.chapter}</div>
+                  {e.chapter != null && <div className="rel-quote__cite">Ch. {e.chapter}</div>}
                   <p>"{e.quote}"</p>
                 </div>
               ))}
               {evidence.length === 0 && <div className="rel-empty">No source evidence yet.</div>}
-              <button className="rel-add" data-callback="onAddRelationshipEvidence">+ Add evidence</button>
+              <button className="rel-add" onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "relationships", initial: _relEditInitial(rel, castById), mode: "full" } }))}>+ Add evidence</button>
             </div>
             <div className="rel-section">
-              <div className="rel-section__head">Timeline of changes</div>
-              {changes.map((c) => (
-                <div key={c.id} className="rel-change">
-                  <div className="rel-change__head">
-                    <span className="rel-change__kind">{c.kind}</span>
-                    <span style={{ flex: 1 }}/>
-                    <span className="rel-change__date">Ch. {c.chapter}</span>
-                  </div>
-                  <div className="rel-change__note">{c.note}</div>
+              <div className="rel-section__head">Details</div>
+              <div className="rel-change">
+                <div className="rel-change__head">
+                  <span className="rel-change__kind">{t.label}</span>
+                  <span style={{ flex: 1 }}/>
+                  {rel.chapters.length > 0 && <span className="rel-change__date">Ch. {rel.chapters.join(", ")}</span>}
                 </div>
-              ))}
-              {changes.length === 0 && <div className="rel-empty">No tracked changes yet.</div>}
+                <div className="rel-change__note">{rel.summary}</div>
+                <div className="rel-change__delta">
+                  <span>strength <b>{rel.strength}</b> · trust <b>{rel.trust}</b> · conflict <b>{rel.conflict}</b></span>
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="rel-compare__actions">
-            <button data-callback="onChangeRelationshipType">Change type</button>
-            <button data-callback="onCreateEventFromRelationship">Create event</button>
-            <button data-callback="onOpenAtlasForSharedLocations">Show shared places</button>
-            <button data-callback="onOpenCharacterDossier">Open both dossiers</button>
+            <button onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "relationships", initial: _relEditInitial(rel, castById), mode: "full" } }))}>Edit relationship</button>
+            <button onClick={() => onSelectCharacter(aId)}>Open {a.name.split(" ")[0]}</button>
+            <button onClick={() => onSelectCharacter(bId)}>Open {b.name.split(" ")[0]}</button>
           </div>
         </>
       ) : (
         <div className="rel-empty rel-empty--lg">
           No tracked relationship between {a.name} and {b.name} yet.
-          <button data-callback="onCreateRelationship" className="rel-add">+ Create</button>
+          <button className="rel-add" onClick={() => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "relationships", initial: { from: { id: a.id, name: a.name, type: "cast" }, to: { id: b.id, name: b.name, type: "cast" } }, mode: "full" } }))}>+ Create</button>
         </div>
       )}
     </div>
@@ -321,20 +492,32 @@ const RelCompareView = ({ aId, bId, onSelectCharacter }) => {
 };
 
 // ---------------------------------------------------------------------
-// Network graph view — force-style layout (precomputed positions).
+// Network graph view — deterministic circular layout over live cast.
 // ---------------------------------------------------------------------
-const RelNetworkView = ({ onSelectCharacter, onCompare }) => {
-  const cast = _castById();
-  // Pre-computed circular layout — keeps the SVG deterministic
-  const positions = {
-    aelinor: { x: 50, y: 30 },
-    saren:   { x: 78, y: 50 },
-    brec:    { x: 30, y: 52 },
-    mara:    { x: 72, y: 78 },
-    auger:   { x: 22, y: 78 },
-    dav:     { x: 50, y: 86 },
-  };
+const RelNetworkView = ({ data, onSelectCharacter, onCompare }) => {
+  const { castById, relationships } = data;
+
+  // Nodes = every cast member that participates in at least one edge.
+  const ids = [];
+  const seen = new Set();
+  for (const r of relationships) {
+    for (const id of [r.a, r.b]) {
+      if (!seen.has(id) && castById[id]) { seen.add(id); ids.push(id); }
+    }
+  }
+
+  if (ids.length === 0) {
+    return <RelModeEmpty title="No relationship network yet"
+      body="Once two characters share a tracked relationship, the graph draws them here."/>;
+  }
+
   const W = 800, H = 540;
+  const cx = 50, cy = 50, radius = ids.length <= 1 ? 0 : 34;
+  const positions = {};
+  ids.forEach((id, i) => {
+    const ang = (i / ids.length) * 2 * Math.PI - Math.PI / 2;
+    positions[id] = { x: cx + radius * Math.cos(ang), y: cy + radius * Math.sin(ang) };
+  });
 
   return (
     <div className="rel-net">
@@ -351,10 +534,10 @@ const RelNetworkView = ({ onSelectCharacter, onCompare }) => {
                 stroke="rgba(74,56,28,0.15)" strokeWidth="0.6" strokeDasharray="2 5"/>
 
         {/* Edges */}
-        {RELATIONSHIPS.map((r) => {
+        {relationships.map((r) => {
           const pa = positions[r.a], pb = positions[r.b];
           if (!pa || !pb) return null;
-          const t = REL_TYPES[r.type];
+          const t = REL_TYPES[r.type] || REL_TYPES.unknown;
           const sw = 0.5 + (r.strength / 100) * 3;
           const op = 0.35 + (r.strength / 100) * 0.4;
           return (
@@ -376,8 +559,9 @@ const RelNetworkView = ({ onSelectCharacter, onCompare }) => {
         })}
 
         {/* Nodes */}
-        {Object.entries(positions).map(([id, p]) => {
-          const c = cast[id];
+        {ids.map((id) => {
+          const p = positions[id];
+          const c = castById[id];
           if (!c) return null;
           const x = (p.x / 100) * W, y = (p.y / 100) * H;
           return (
@@ -402,7 +586,7 @@ const RelNetworkView = ({ onSelectCharacter, onCompare }) => {
       </svg>
 
       <div className="rel-net__legend">
-        {Object.values(REL_TYPES).filter((t) => RELATIONSHIPS.some((r) => r.type === t.id)).map((t) => (
+        {Object.values(REL_TYPES).filter((t) => relationships.some((r) => r.type === t.id)).map((t) => (
           <span key={t.id} className="rel-net__chip">
             <span className="rel-net__chip-sw" style={{ background: t.color }}/>
             {t.label}
@@ -419,41 +603,45 @@ const RelNetworkView = ({ onSelectCharacter, onCompare }) => {
 };
 
 // ---------------------------------------------------------------------
-// Timeline (relationship changes across chapters)
+// Timeline (relationships grouped by the chapter they first appear in)
 // ---------------------------------------------------------------------
-const RelTimelineView = () => {
-  const cast = _castById();
+const RelTimelineView = ({ data }) => {
+  const { castById, relationships } = data;
+  const placed = relationships.filter((r) => r.chapters.length > 0);
+
+  if (placed.length === 0) {
+    return <RelModeEmpty title="No chapter-anchored relationships yet"
+      body="Relationships discovered during extraction carry the chapter they were found in. Run extraction to populate this history."/>;
+  }
+
   const grouped = {};
-  for (const c of REL_CHANGES) {
-    grouped[c.chapter] = grouped[c.chapter] || [];
-    grouped[c.chapter].push(c);
+  for (const r of placed) {
+    const ch = Math.min(...r.chapters);
+    grouped[ch] = grouped[ch] || [];
+    grouped[ch].push(r);
   }
   return (
     <div className="rel-tl">
-      {Object.entries(grouped).sort((a, b) => Number(a[0]) - Number(b[0])).map(([ch, changes]) => (
+      {Object.entries(grouped).sort((a, b) => Number(a[0]) - Number(b[0])).map(([ch, rels]) => (
         <div key={ch} className="rel-tl__chapter">
           <div className="rel-tl__chap-head">Ch. {ch}</div>
           <div className="rel-tl__list">
-            {changes.map((c) => {
-              const rel = RELATIONSHIPS.find((r) => r.id === c.rel);
-              if (!rel) return null;
-              const a = cast[rel.a], b = cast[rel.b];
+            {rels.map((r) => {
+              const a = castById[r.a], b = castById[r.b];
+              if (!a || !b) return null;
+              const t = REL_TYPES[r.type] || REL_TYPES.unknown;
               return (
-                <div key={c.id} className="rel-tl__card">
+                <div key={r.id} className="rel-tl__card">
                   <div className="rel-tl__heads">
                     <RelAvatar cast={a} size={20}/>
                     <Icon name="link" size={11}/>
                     <RelAvatar cast={b} size={20}/>
                     <span className="rel-tl__rel">{a.name} ↔ {b.name}</span>
-                    <span className="rel-tl__kind">{c.kind}</span>
+                    <span className="rel-tl__kind">{t.label}</span>
                   </div>
-                  <div className="rel-tl__note">{c.note}</div>
+                  <div className="rel-tl__note">{r.summary}</div>
                   <div className="rel-tl__delta">
-                    {c.kind === "new"   && <span>+ new <b>{c.to}</b> relationship</span>}
-                    {c.kind === "type"  && <span>{c.from} → <b>{c.to}</b></span>}
-                    {c.kind === "trust" && <span>trust {c.from} → <b>{c.to}</b></span>}
-                    {c.kind === "conflict" && <span>conflict {c.from} → <b>{c.to}</b></span>}
-                    {c.kind === "secret" && <span>secret revealed</span>}
+                    <span>strength <b>{r.strength}</b> · conflict <b>{r.conflict}</b></span>
                   </div>
                 </div>
               );
@@ -468,14 +656,15 @@ const RelTimelineView = () => {
 // ---------------------------------------------------------------------
 // Conflict heat view
 // ---------------------------------------------------------------------
-const RelConflictView = ({ onCompare }) => {
-  const cast = _castById();
-  const conflicts = RELATIONSHIPS.filter((r) => r.conflict > 40).sort((a, b) => b.conflict - a.conflict);
+const RelConflictView = ({ data, onCompare }) => {
+  const { castById, relationships } = data;
+  const conflicts = relationships.filter((r) => r.conflict > 40).sort((a, b) => b.conflict - a.conflict);
   return (
     <div className="rel-conflict">
       {conflicts.map((r) => {
-        const a = cast[r.a], b = cast[r.b];
-        const t = REL_TYPES[r.type];
+        const a = castById[r.a], b = castById[r.b];
+        if (!a || !b) return null;
+        const t = REL_TYPES[r.type] || REL_TYPES.unknown;
         return (
           <button key={r.id} className="rel-conflict__row" onClick={() => onCompare(r.a, r.b)}
                   style={{ "--c": t.color }}>
@@ -498,27 +687,57 @@ const RelConflictView = ({ onCompare }) => {
 };
 
 // ---------------------------------------------------------------------
-// Review queue
+// Review queue — live pending relationship candidates.
 // ---------------------------------------------------------------------
-const RelReviewView = () => (
-  <div className="rel-review">
-    {REL_REVIEW.map((r) => (
-      <div key={r.id} className={"rel-review__card rel-review__card--" + r.lvl}>
-        <div className="rel-review__head">
-          <ConfidenceBadge level={r.lvl}/>
-          <span className="rel-review__title">{r.title}</span>
-        </div>
-        <p className="rel-review__quote">"{r.excerpt}"</p>
-        <div className="rel-review__meta">{r.cite}</div>
-        <div className="rel-review__pill">{r.action}</div>
-        <div className="rel-review__actions">
-          <button data-callback="onAcceptRelationshipQueueItem">Accept</button>
-          <button data-callback="onEditRelationshipQueueItem">Edit</button>
-          <button data-callback="onMergeRelationshipQueueItem">Merge</button>
-          <button data-callback="onDenyRelationshipQueueItem">Deny</button>
-        </div>
+const _relQueueDispatch = (name, id) =>
+  window.dispatchEvent(new CustomEvent("lw:dispatch-callback", { detail: { name, detail: { id } } }));
+
+const RelReviewView = ({ data }) => {
+  const items = data.review;
+  if (!items.length) {
+    return (
+      <div className="rel-empty rel-empty--lg" style={{ margin: 24, textAlign: "center" }}>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-md)", color: "var(--ink-2)", marginBottom: 6 }}>Nothing to review</div>
+        <div style={{ fontSize: "var(--fs-sm)", color: "var(--ink-3)" }}>Relationship candidates found during extraction will surface here.</div>
       </div>
-    ))}
+    );
+  }
+  return (
+    <div className="rel-review">
+      {items.map((r) => (
+        <div key={r.id} className={"rel-review__card rel-review__card--" + r.lvl}>
+          <div className="rel-review__head">
+            <ConfidenceBadge level={r.lvl}/>
+            <span className="rel-review__title">{r.title}</span>
+          </div>
+          {r.excerpt && <p className="rel-review__quote">"{r.excerpt}"</p>}
+          {r.cite && <div className="rel-review__meta">{r.cite}</div>}
+          <div className="rel-review__pill">{r.action}</div>
+          <div className="rel-review__actions">
+            <button onClick={() => _relQueueDispatch("onAcceptRelationshipQueueItem", r.id)}>Accept</button>
+            <button onClick={() => _relQueueDispatch("onEditRelationshipQueueItem", r.id)}>Edit</button>
+            <button onClick={() => _relQueueDispatch("onMergeRelationshipQueueItem", r.id)}>Merge</button>
+            <button onClick={() => _relQueueDispatch("onDenyRelationshipQueueItem", r.id)}>Deny</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Full-panel empty state — no cast at all.
+// ---------------------------------------------------------------------
+const RelEmpty = () => (
+  <div className="rel" data-ui="RelationshipsPanelBody">
+    <div className="rel-empty rel-empty--lg" style={{ margin: "48px auto", maxWidth: 460, textAlign: "center" }}>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-lg)", color: "var(--ink-2)", marginBottom: 8 }}>No cast yet</div>
+      <div style={{ fontSize: "var(--fs-sm)", color: "var(--ink-3)", lineHeight: 1.55 }}>
+        Relationships map the bonds between your characters. Add people to your
+        cast — or run extraction over the manuscript — and their relationships
+        will appear here.
+      </div>
+    </div>
   </div>
 );
 
@@ -526,16 +745,38 @@ const RelReviewView = () => (
 // RelationshipsPanelBody — entry point
 // ---------------------------------------------------------------------
 const RelationshipsPanelBody = ({ panel }) => {
+  // Re-derive live data on every relevant store mutation.
+  const [storeVersion, setStoreVersion] = _re_us(0);
+  _re_ue(() => {
+    const bump = () => setStoreVersion((v) => v + 1);
+    const evs = ["lw:entity-store-updated", "lw:manuscript-chapters-updated",
+      "lw:review-queue-updated", "lw:occurrences-updated", "lw:backend-ready"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+
+  const data = _re_um(() => buildRelData(), [storeVersion]);
+  const { cast } = data;
+
   const [mode, setMode] = _re_us("single");
-  const [characterId, setCharacterId] = _re_us("aelinor");
-  const [compareWith, setCompareWith] = _re_us("saren");
+  const [characterId, setCharacterId] = _re_us(null);
+  const [compareWith, setCompareWith] = _re_us(null);
+
+  // Keep the current selection valid as the live cast changes.
+  _re_ue(() => {
+    if (!cast.length) return;
+    setCharacterId((prev) => (prev && data.castById[prev]) ? prev
+      : (cast.find((c) => c.role === "protagonist")?.id || cast[0].id));
+    setCompareWith((prev) => (prev && data.castById[prev]) ? prev
+      : (cast[1]?.id || cast[0].id));
+  }, [cast, data.castById]);
 
   const onCompare = _re_uc((a, b) => {
     setCharacterId(a); setCompareWith(b); setMode("compare");
   }, []);
   const onSelectCharacter = _re_uc((id) => { setCharacterId(id); setMode("single"); }, []);
 
-  const cast = (window.ATLAS_CAST || []);
+  if (!cast.length) return <RelEmpty/>;
 
   return (
     <div className="rel" data-ui="RelationshipsPanelBody">
@@ -543,10 +784,10 @@ const RelationshipsPanelBody = ({ panel }) => {
         <div className="rel-bar__modes">
           {REL_MODES.map((m) => (
             <button key={m.id} className={"rel-bar__mode" + (mode === m.id ? " is-on" : "")}
-                    onClick={() => setMode(m.id)} data-callback="onSetRelationshipMode" data-mode={m.id}>
+                    onClick={() => setMode(m.id)} data-mode={m.id}>
               <Icon name={m.icon} size={10}/>
               <span>{m.label}</span>
-              {m.id === "review" && <span className="rel-bar__q">{REL_REVIEW.length}</span>}
+              {m.id === "review" && data.review.length > 0 && <span className="rel-bar__q">{data.review.length}</span>}
             </button>
           ))}
         </div>
@@ -565,19 +806,19 @@ const RelationshipsPanelBody = ({ panel }) => {
       </div>
 
       <div className="rel-body">
-        {mode === "single"   && <RelSingleView characterId={characterId} onSelectCharacter={onSelectCharacter} onCompare={onCompare}/>}
-        {mode === "compare"  && <RelCompareView aId={characterId} bId={compareWith} onSelectCharacter={onSelectCharacter}/>}
-        {mode === "network"  && <RelNetworkView onSelectCharacter={onSelectCharacter} onCompare={onCompare}/>}
-        {mode === "timeline" && <RelTimelineView/>}
-        {mode === "conflict" && <RelConflictView onCompare={onCompare}/>}
-        {mode === "review"   && <RelReviewView/>}
+        {mode === "single"   && <RelSingleView data={data} characterId={characterId} onSelectCharacter={onSelectCharacter} onCompare={onCompare}/>}
+        {mode === "compare"  && <RelCompareView data={data} aId={characterId} bId={compareWith} onSelectCharacter={onSelectCharacter}/>}
+        {mode === "network"  && <RelNetworkView data={data} onSelectCharacter={onSelectCharacter} onCompare={onCompare}/>}
+        {mode === "timeline" && <RelTimelineView data={data}/>}
+        {mode === "conflict" && <RelConflictView data={data} onCompare={onCompare}/>}
+        {mode === "review"   && <RelReviewView data={data}/>}
       </div>
     </div>
   );
 };
 
 Object.assign(window, {
-  RELATIONSHIPS, REL_EVIDENCE, REL_CHANGES, REL_REVIEW, REL_TYPES, REL_MODES,
+  REL_TYPES, REL_MODES, buildRelData,
   RelationshipsPanelBody, RelSingleView, RelCompareView, RelNetworkView,
   RelTimelineView, RelConflictView, RelReviewView,
 });
