@@ -44,9 +44,9 @@ display/seed wiring, not a rebuild.
   of → **Area 6 (adaptive wheel)**.
 - **Wheel "Tag" action** — currently a placeholder notice; real tagging lands
   with the entity tabs/dossier. → **Area 7/8**.
-- **Deep (BYOK) model picker on the wheel** — Deep actions route through the
-  existing cost tier today; a per-action model chooser is the AI Writer model
-  picker. → **Area 5 (AI Writer)**.
+- ~~**Deep (BYOK) model picker on the wheel**~~ — ✅ **Done in Area 5.** The
+  "Deep · AI" wheel slots now advertise the resolved `deepExtraction` model
+  (sublabel + tooltip); the model is chosen in Settings → AI routing.
 - **Apply remaining `workspace.*` prefs** — `workspace.mobileCompact`,
   `editorWidth`, and `font` are now read by the Writer's Room;
   margins/panelStack/chapterRail still aren't (see Area 2 entry above). →

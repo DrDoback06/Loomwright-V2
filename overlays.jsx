@@ -575,7 +575,7 @@ const AdaptiveWheelHost = ({
               aria-disabled={s.disabled || undefined}
               aria-pressed={isActive || undefined}
               tabIndex={s.disabled ? -1 : 0}
-              title={s.disabled ? s.reason : s.lbl}
+              title={s.disabled ? s.reason : (s.title || s.lbl)}
             >
               <span className="wheel__slot__pill">
                 {isBusy
@@ -589,6 +589,7 @@ const AdaptiveWheelHost = ({
                 {s.disabled && <span className="wheel__slot__lock" aria-hidden><Icon name="lock" size={9}/></span>}
               </span>
               <span className="wheel__slot__lbl">{s.lbl}</span>
+              {s.sub && <span className="wheel__slot__sub" data-testid={"wheel-sub-" + s.id}>{s.sub}</span>}
             </button>
           );
         })}

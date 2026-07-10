@@ -74,4 +74,26 @@ test.describe("T24. AI routing — per-task model picker", () => {
     expect(resolved.providerId).toBe("openai");
     expect(resolved.model).toBe("gpt-4o-mini");
   });
+
+  test("the wheel's Deep · AI slot advertises the resolved model", async ({ page }) => {
+    await openFreshApp(page);
+    await page.evaluate(async () => {
+      await window.LoomwrightBackend.KeysService.saveProvider("openai", {
+        enabled: true, providerType: "openai", label: "OpenAI", apiKey: "sk-test-xxxxxxxx", defaultModel: "gpt-4o-mini",
+      });
+      // Pin deep extraction to a specific model.
+      await window.LoomwrightBackend.AIRoutingService.save({
+        mode: "balanced", tier: "normal", defaultProviderId: "openai",
+        taskRoutes: { deepExtraction: { providerId: "openai", model: "gpt-4o" } },
+      });
+    });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-route", { detail: { routeId: "writers-room" } })));
+    await page.waitForTimeout(250);
+    // Open the wheel over the manuscript (chapter context).
+    await page.locator("[data-testid='wr-manuscript-body']").first().dispatchEvent("contextmenu");
+    await expect(page.locator("[data-testid='adaptive-wheel']")).toBeVisible({ timeout: 4000 });
+    // The Deep slot shows the pinned model as its sublabel.
+    const sub = page.locator("[data-testid='wheel-sub-extract-chapter-deep']");
+    await expect(sub).toHaveText("gpt-4o");
+  });
 });

@@ -26,9 +26,8 @@ Manual: Settings → AI routing → scroll to "Per-task model routing" → set
 "Writing / drafting" to a provider + model → it persists and drives which
 model the AI Writer uses for that task.
 
+| **Deep · AI wheel slots advertise the model** | `deepWheelModelLabel()` resolves `deepExtraction`'s route; the "Deep · AI" wheel slots (selection + chapter) show the model as a sublabel + tooltip, so the user sees which model a Deep call uses. Change it in Settings → AI routing. | e2e `24` (+ `19` no regression) |
+
 ## Deferred from Area 5 (tracked in DEFERRED_BACKLOG.md)
-- **Per-action Deep (BYOK) model chooser on the wheel** — Deep wheel actions
-  route through the writing task route today; a per-call model chooser is a
-  follow-up.
 - **Deeper AI style critique** of the voice sample beyond the local metrics —
   needs a live AI call flow.

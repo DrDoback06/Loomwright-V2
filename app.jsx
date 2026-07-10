@@ -6,19 +6,37 @@ const { useState: _us_a, useEffect: _ue_a, useCallback: _uc_a, useRef: _ur_a, us
 
 // Adaptive-wheel slots by context. The wheel is the standard surface for AI +
 // extraction actions; AI actions pair Standard (free/local) with Deep (BYOK).
+// Resolve which model a "Deep · AI" wheel action will actually use, so the
+// slot can advertise it (title/sub). Reads the per-task routing the user
+// configures in Settings → AI routing; null when no provider is set up (the
+// downstream flow then shows a configure-provider notice).
+function deepWheelModelLabel() {
+  try {
+    const route = window.LoomwrightBackend?.AIRoutingService?.resolveRoute?.("deepExtraction");
+    if (!route) return null;
+    return route.model || route.providerId || null;
+  } catch (_e) { return null; }
+}
+
 function wheelSlotsForContext(ctx, queueCount) {
   const kind = (ctx && ctx.kind) || "default";
   const review = { id: "review", icon: "bell", lbl: "Review", queue: queueCount || 0 };
+  const deepModel = deepWheelModelLabel();
+  const deepSlot = (id) => ({
+    id, icon: "bolt", lbl: "Deep · AI",
+    title: deepModel ? ("Deep · AI — " + deepModel) : "Deep · AI (configure a provider in Settings → AI)",
+    sub: deepModel || null,
+  });
   if (kind === "selection") return [
     { id: "extract-standard", icon: "sparkle", lbl: "Extract" },
-    { id: "extract-deep", icon: "bolt", lbl: "Deep · AI" },
+    deepSlot("extract-deep"),
     { id: "create", icon: "plus", lbl: "New entity" },
     { id: "copy", icon: "paper", lbl: "Copy" },
     review,
   ];
   if (kind === "chapter") return [
     { id: "extract-chapter-standard", icon: "sparkle", lbl: "Extract chapter" },
-    { id: "extract-chapter-deep", icon: "bolt", lbl: "Deep · AI" },
+    deepSlot("extract-chapter-deep"),
     { id: "open-wizard", icon: "stack", lbl: "Wizard" },
     { id: "create", icon: "plus", lbl: "Create" },
     review,
