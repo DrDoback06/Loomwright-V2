@@ -5,6 +5,14 @@
 
 const { useState: _wrUS, useEffect: _wrUE, useRef: _wrUR, useCallback: _wrUC, useMemo: _wrUM } = React;
 
+// Editor font choices (workspace.font pref) → a font stack that prefers the
+// chosen face and falls back to the app serif when it isn't installed.
+const _WR_FONT_STACKS = {
+  "Source Serif 4":     '"Source Serif 4", var(--font-serif)',
+  "EB Garamond":        '"EB Garamond", var(--font-serif)',
+  "Cormorant Garamond": '"Cormorant Garamond", var(--font-serif)',
+};
+
 // ---------------------------------------------------------------------
 // Demo data — Claude Code replaces these with real backend data.
 // ---------------------------------------------------------------------
@@ -1232,6 +1240,27 @@ const WritersRoomScreen = ({
   const rightMarginVisible = !L.rightMarginCollapsed && (L.writingLayoutMode === "full" || L.writingLayoutMode === "review");
   const [typewriter, setTypewriter] = _wrUS(false);
 
+  // Workspace layout prefs (editor page width + font) — persisted to the
+  // `workspace` settings section by onboarding and the Editor settings, and
+  // applied live here. Refreshes when the settings change (reopening
+  // onboarding, or the Editor → Page controls).
+  const _wrWorkspacePrefs = () => { try { return window.LoomwrightBackend?.SettingsService?.getSectionSync?.("workspace", {}) || {}; } catch (_e) { return {}; } };
+  const [wsPrefs, setWsPrefs] = _wrUS(_wrWorkspacePrefs);
+  _wrUE(() => {
+    const apply = () => setWsPrefs(_wrWorkspacePrefs());
+    apply();
+    window.addEventListener("lw:settings-saved", apply);
+    window.addEventListener("lw:settings-updated", apply);
+    window.addEventListener("lw:backend-ready", apply);
+    return () => {
+      window.removeEventListener("lw:settings-saved", apply);
+      window.removeEventListener("lw:settings-updated", apply);
+      window.removeEventListener("lw:backend-ready", apply);
+    };
+  }, []);
+  const editorWidthPx = (typeof wsPrefs.editorWidth === "number" && wsPrefs.editorWidth >= 480 && wsPrefs.editorWidth <= 1200) ? wsPrefs.editorWidth : null;
+  const editorFont = wsPrefs.font ? (_WR_FONT_STACKS[wsPrefs.font] || ('"' + String(wsPrefs.font).replace(/"/g, "") + '", var(--font-serif)')) : null;
+
   // Mobile / compact layout — side margins become bottom-sheet drawers and the
   // toolbar wraps. Driven by viewport width OR the onboarding `workspace.mobileCompact` pref.
   const _wrCompactPref = () => { try { return !!window.LoomwrightBackend?.SettingsService?.getSectionSync?.("workspace", {})?.mobileCompact; } catch (_e) { return false; } };
@@ -1788,6 +1817,8 @@ const WritersRoomScreen = ({
       style={{
         "--wr-left-w":  (leftMarginVisible  ? L.leftMarginWidth  : 0) + "px",
         "--wr-right-w": (rightMarginVisible ? L.rightMarginWidth : 0) + "px",
+        ...(editorWidthPx ? { "--wr-editor-width": editorWidthPx + "px" } : null),
+        ...(editorFont ? { "--wr-editor-font": editorFont } : null),
       }}
     >
       {focusMode && (

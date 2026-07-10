@@ -299,6 +299,32 @@ const SetEditor = () => {
   );
 };
 
+// Page layout — editor column width + font. Persisted to the `workspace`
+// settings section (shared with onboarding) and applied live by the
+// Writer's Room via the --wr-editor-width / --wr-editor-font CSS vars.
+const SetPageLayout = () => {
+  const [s, setS] = useLWSettingState("workspace", {});
+  const up = (k, v) => setS({ ...s, [k]: v });
+  const width = (typeof s.editorWidth === "number" && s.editorWidth >= 480) ? s.editorWidth : 720;
+  const font = s.font || "";
+  return (
+    <SetGroupCard title="Page" hint="How the manuscript page looks while you write. Applies live in the Writer's Room.">
+      <SetRow label="Editor width">
+        <SetSlider value={width} onChange={(v) => up("editorWidth", v)} min={560} max={1040} step={20} unit="px"/>
+      </SetRow>
+      <SetRow label="Editor font">
+        <SetSegmented value={font} onChange={(v) => up("font", v)}
+          options={[
+            { id: "", label: "Default" },
+            { id: "Source Serif 4", label: "Source Serif" },
+            { id: "EB Garamond", label: "Garamond" },
+            { id: "Cormorant Garamond", label: "Cormorant" },
+          ]}/>
+      </SetRow>
+    </SetGroupCard>
+  );
+};
+
 // =====================================================================
 // AUTHORS
 // =====================================================================
@@ -806,7 +832,7 @@ const RichSettingsSection = ({ sectionId, onRequest }) => {
   switch (sectionId) {
     case "project":    return <SetProject/>;
     case "brand":      return <SetBrand/>;
-    case "editor":     return <SetEditor/>;
+    case "editor":     return <React.Fragment><SetEditor/><SetPageLayout/></React.Fragment>;
     case "authors":    return <SetAuthors/>;
     case "ai":         return <SetAIProviders/>;
     case "ai-routing": return <SetAIRouting/>;

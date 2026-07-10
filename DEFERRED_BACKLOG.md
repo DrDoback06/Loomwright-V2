@@ -74,6 +74,15 @@ display/seed wiring, not a rebuild.
 - **Reference tag editor + upload preview** — Upload/Paste save real refs; a
   richer tag/preview surface is deferred.
 
+## From Area 7 — Writer's Room layout prefs (tracked in AREA_7_WRITERS_ROOM_PREFS_AUDIT.md)
+- **`workspace.margins` + `panelStack`** — editor width + font are applied live
+  now; margins are already governed by the Editor `marginsDefault` + layout
+  modes, and `panelStack` is a docking concern owned by the layout system.
+  Folding the onboarding prefs into those without regressing interactive
+  controls is a separate layout pass.
+- **`themeIntensity` / `chapterRail` position** — smaller cosmetic prefs for a
+  later Writer's Room polish pass.
+
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).
 - **AI Writer model picker UI** (routing already supports per-task models).

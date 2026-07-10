@@ -301,14 +301,14 @@
 }
 .wr-canvas {
   position: relative;
-  width: min(720px, 100%);
+  width: min(var(--wr-editor-width, 720px), 100%);
   margin: 0 auto;
   background: var(--bg-paper);
   border: 1px solid var(--line-2);
   border-radius: var(--r-5);
   box-shadow: var(--shadow-2);
   padding: var(--sp-13) var(--sp-14) var(--sp-13);
-  font-family: var(--font-serif);
+  font-family: var(--wr-editor-font, var(--font-serif));
   font-size: var(--fs-lg);
   line-height: 1.7;
   color: var(--ink-1);
@@ -503,7 +503,7 @@
 .wr-canvas__body.wr-body--editable {
   min-height: 320px;
   outline: none;
-  font-family: var(--font-serif);
+  font-family: var(--wr-editor-font, var(--font-serif));
   font-size: var(--fs-lg, 17px);
   line-height: 1.85;
   color: var(--ink-1);
