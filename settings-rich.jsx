@@ -567,6 +567,78 @@ const SetAIRouting = () => {
   );
 };
 
+// Per-task AI model picker. The routing backend (AIRoutingService.taskRoutes)
+// + the onSetAITaskRoute callback are already wired; this is the UI to drive
+// them. Leaving a task on "Default" uses the default provider.
+const AI_TASK_ROUTES = [
+  ["writingDraft", "Draft prose"],
+  ["rewritePassage", "Rewrite passage"],
+  ["continueWriting", "Continue writing"],
+  ["quickExtraction", "Quick extraction"],
+  ["deepExtraction", "Deep extraction"],
+  ["projectIntelligence", "Project intelligence"],
+  ["referenceSummary", "Summarise reference"],
+  ["continuityCheck", "Continuity check"],
+  ["skillTreeGeneration", "Skill-tree generation"],
+  ["aiHandoffAssist", "Handoff assist"],
+];
+const SetTaskRouting = () => {
+  const _B = () => (typeof window !== "undefined") && window.LoomwrightBackend;
+  const load = () => { const B = _B(); return (B && B.AIRoutingService) ? B.AIRoutingService.loadSync() : { taskRoutes: {} }; };
+  const [routing, setRouting] = _set_us(load);
+  _set_ue(() => {
+    const refresh = () => setRouting(load());
+    window.addEventListener("lw:ai-routing-updated", refresh);
+    window.addEventListener("lw:backend-ready", refresh);
+    return () => { window.removeEventListener("lw:ai-routing-updated", refresh); window.removeEventListener("lw:backend-ready", refresh); };
+  }, []);
+  const providers = (() => { try { return Object.values(_B().KeysService.loadAllProviderSettingsSync() || {}); } catch (_) { return []; } })();
+  const usable = providers.filter((p) => p && p.enabled !== false);
+  const taskRoutes = routing.taskRoutes || {};
+  const modelsFor = (pid) => {
+    const p = usable.find((x) => x.id === pid);
+    if (!p) return [];
+    const list = Array.isArray(p.availableModels) ? p.availableModels.slice() : [];
+    if (p.defaultModel && !list.includes(p.defaultModel)) list.unshift(p.defaultModel);
+    return list;
+  };
+  const setRoute = (task, providerId, model) => {
+    if (typeof window.LoomwrightDispatchCallback === "function") {
+      window.LoomwrightDispatchCallback("onSetAITaskRoute", { detail: { task, providerId: providerId || undefined, model: model || undefined } });
+    }
+  };
+  return (
+    <SetGroupCard title="Per-task AI model" hint="Send specific tasks to a chosen provider + model. Anything left on “Default” uses your default provider and tier.">
+      {usable.length === 0 && (
+        <div className="set-note set-note--info">Add an AI provider under <b>AI providers</b> to route individual tasks. Until then every task uses your default.</div>
+      )}
+      {AI_TASK_ROUTES.map(([task, label]) => {
+        const r = taskRoutes[task] || {};
+        const models = modelsFor(r.providerId);
+        return (
+          <SetRow key={task} label={label}>
+            <div className="set-row__inline">
+              <select className="set-input set-input--small" data-testid={"tr-prov-" + task}
+                      value={r.providerId || ""} onChange={(e) => setRoute(task, e.target.value, "")}>
+                <option value="">Default</option>
+                {usable.map((p) => <option key={p.id} value={p.id}>{p.label || p.id}</option>)}
+              </select>
+              {r.providerId && (
+                <>
+                  <input className="set-input set-input--small" data-testid={"tr-model-" + task}
+                         list={"tr-models-" + task} placeholder="model (blank = provider default)"
+                         value={r.model || ""} onChange={(e) => setRoute(task, r.providerId, e.target.value)}/>
+                  {models.length > 0 && <datalist id={"tr-models-" + task}>{models.map((m) => <option key={m} value={m}/>)}</datalist>}
+                </>
+              )}
+            </div>
+          </SetRow>
+        );
+      })}
+    </SetGroupCard>
+  );
+};
+
 // =====================================================================
 // PRIVACY
 // =====================================================================
@@ -835,7 +907,7 @@ const RichSettingsSection = ({ sectionId, onRequest }) => {
     case "editor":     return <React.Fragment><SetEditor/><SetPageLayout/></React.Fragment>;
     case "authors":    return <SetAuthors/>;
     case "ai":         return <SetAIProviders/>;
-    case "ai-routing": return <SetAIRouting/>;
+    case "ai-routing": return <React.Fragment><SetAIRouting/><SetTaskRouting/></React.Fragment>;
     case "privacy":    return <SetPrivacy/>;
     case "extraction": return <SetExtraction/>;
     case "review":     return <SetReview/>;

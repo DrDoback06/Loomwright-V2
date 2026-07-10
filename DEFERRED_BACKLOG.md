@@ -89,8 +89,14 @@ display/seed wiring, not a rebuild.
   dedicated full-screen editor with tier rings / marquee-select is optional
   later polish, not required for a working visual tree.
 
+## From Area 9 — Per-task AI model picker (tracked in AREA_9_AI_TASK_ROUTING_AUDIT.md)
+- **Unify the two routing stores** — the picker writes the real
+  `AIRoutingService` store; the older `SetAIRouting` "mode" card writes a
+  separate settings section. Merging them is a pre-existing cleanup.
+
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).
-- **AI Writer model picker UI** (routing already supports per-task models).
+- **AI Writer model picker UI** — ✅ **DONE in Area 9** (per-task provider +
+  model picker under Settings → AI routing).
 - **Offline grammar/spell/thesaurus** in the Writer's Room (Word-like). →
   **Writers Room polish**.
