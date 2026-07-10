@@ -149,6 +149,30 @@ const CompositionOverlay = ({
   const length = settings.length || "Medium (400–800)";
   const tone = settings.tone || "Match manuscript voice";
 
+  // Generated-draft state. The registry runs the real AI call and dispatches
+  // lw:composition-draft-generated with the text; we surface it here so the
+  // author can read it and choose to insert it. `generating` drives the button
+  // spinner between the generating/generated (or failed) events.
+  const [draft, setDraft] = _co_us(() => (typeof window !== "undefined" && window.__LW_LAST_GENERATED_DRAFT__) || "");
+  const [generating, setGenerating] = _co_us(false);
+  _co_ue(() => {
+    const onGen = (e) => { setDraft((e && e.detail && e.detail.text) || ""); setGenerating(false); };
+    const onStart = () => setGenerating(true);
+    const onFail = () => setGenerating(false);
+    window.addEventListener("lw:composition-draft-generated", onGen);
+    window.addEventListener("lw:composition-draft-generating", onStart);
+    window.addEventListener("lw:composition-draft-failed", onFail);
+    return () => {
+      window.removeEventListener("lw:composition-draft-generated", onGen);
+      window.removeEventListener("lw:composition-draft-generating", onStart);
+      window.removeEventListener("lw:composition-draft-failed", onFail);
+    };
+  }, []);
+  const insertDraft = () => {
+    if (!draft) { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Generate a draft first." } })); return; }
+    window.dispatchEvent(new CustomEvent("lw:composition-insert-draft", { detail: { text: draft } }));
+  };
+
   // ---- Drag the overlay by header ----
   const onHeadDown = (e) => {
     if (e.button !== 0) return;
@@ -424,12 +448,28 @@ const CompositionOverlay = ({
           </div>
         </div>
 
+        {/* Generated draft — shown once the AI call returns. */}
+        {(draft || generating) && (
+          <div className="co-preview co-draft" data-ui="CompositionDraft">
+            <div className="co-preview__head">
+              <Icon name="sparkle" size={10}/>
+              Generated draft
+              {generating
+                ? <span className="ee-ai-badge" style={{ marginLeft: "auto" }}>generating…</span>
+                : <button type="button" className="ee-btn ee-btn--ghost ee-btn--xs" style={{ marginLeft: "auto" }} onClick={() => { setDraft(""); try { window.__LW_LAST_GENERATED_DRAFT__ = ""; } catch (_) {} }} title="Discard this draft">Clear</button>}
+            </div>
+            {generating && !draft
+              ? <div className="co-draft__wait" style={{ color: "var(--ink-3)", fontStyle: "italic", padding: "6px 0" }}>Contacting your AI provider…</div>
+              : <pre className="co-draft__text" data-testid="co-draft-text" style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-serif)", margin: 0, maxHeight: 220, overflowY: "auto" }}>{draft}</pre>}
+          </div>
+        )}
+
         {/* Preview */}
         <div className="co-preview">
           <div className="co-preview__head">
             <Icon name="paper" size={10}/>
             Prompt summary
-            <span className="ee-ai-badge" style={{ marginLeft: "auto" }}><Icon name="sparkle" size={9}/> simulated</span>
+            <span className="ee-ai-badge" style={{ marginLeft: "auto" }}><Icon name="sparkle" size={9}/> preview</span>
           </div>
           <pre className="co-preview__summary" style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-serif)", margin: 0 }}>{buildPrompt()}</pre>
           {droppedEntities.length === 0 && (
@@ -453,8 +493,8 @@ const CompositionOverlay = ({
 
       {/* Footer */}
       <div className="co-foot">
-        <button type="button" className="ee-btn ee-btn--primary" onClick={onGenerateDraft} disabled={droppedEntities.length === 0} data-callback="onGenerateCompositionDraft">
-          <Icon name="sparkle" size={11}/> Generate draft
+        <button type="button" className="ee-btn ee-btn--primary" onClick={() => { setGenerating(true); onGenerateDraft && onGenerateDraft(); }} disabled={droppedEntities.length === 0 || generating} data-callback="onGenerateCompositionDraft">
+          <Icon name="sparkle" size={11}/> {generating ? "Generating…" : (draft ? "Regenerate" : "Generate draft")}
         </button>
         {typeof AIHandoffButton !== "undefined" && (
           <AIHandoffButton
@@ -479,7 +519,7 @@ const CompositionOverlay = ({
             }}
           />
         )}
-        <button type="button" className="ee-btn ee-btn--accent" onClick={onInsertDraft} data-callback="onInsertCompositionDraft" title="Insert generated draft below cursor">
+        <button type="button" className="ee-btn ee-btn--accent" onClick={insertDraft} disabled={!draft} title={draft ? "Insert generated draft into the current chapter" : "Generate a draft first"}>
           <Icon name="plus" size={11}/> Insert as draft
         </button>
         <button type="button" className="ee-btn ee-btn--outline" onClick={onCreateChapter} data-callback="onCreateChapterFromComposition" title="Create a new chapter from this composition">

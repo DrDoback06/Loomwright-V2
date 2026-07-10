@@ -16,9 +16,26 @@ display/seed wiring, not a rebuild.
   tab: real per-event date-type/canon/era authoring (currently defaulted or
   heuristic) and quest-name resolution in the inspector → later timeline-depth
   pass.
-- **Skill Trees tab** — still renders demo data; discovered skills land as
-  entities but assigning them to a tree needs the skill-tree system. → next
-  Area 4 item.
+- **Skill Trees tab** — the panel (`SkillTreeLiveManager`) is already live-backed
+  by `SkillTreeService` + `EntityService("skills")`. Remaining: the visual
+  constellation canvas and a skill-candidate → tree assignment selector → later
+  skill-tree-depth pass.
+
+## Area 5 — AI Writer (in progress)
+- **Per-task model picker** — ✅ **DONE.** Settings → AI routing & cost →
+  *Per-task model routing* (`SetTaskRouting`); persists to
+  `AIRoutingService.taskRoutes`. See the Cross-cutting entry below.
+- **Composition draft generation** — ✅ **DONE.** The generate/insert loop is
+  fully wired: the registry resolves `writingDraft`, builds bounded context,
+  passes the privacy guard, calls `AIService.complete`, and dispatches
+  `lw:composition-draft-generated`. The overlay now **surfaces that draft**
+  (with a generating/failed state driven by registry events) and **Insert**
+  splices the real generated text into the current chapter via
+  `lw:composition-insert-draft`. The AI call itself is BYOK/provider-gated.
+  Deferred: streaming token display, and an inline diff when inserting into
+  existing prose → later AI-Writer-depth pass.
+- **Deeper AI style critique** of the voice sample beyond the local metrics
+  (implemented) still open. → AI Writer depth.
 
 ## From Area 1 — Extraction
 - **Relationships tab live rendering** — ✅ **DONE (Area 4).** The Relationships

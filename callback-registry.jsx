@@ -764,12 +764,16 @@
 
     // —— Composition / AI generate ——
     if (name === "onGenerateCompositionDraft" || name === "onGenerateDraft") {
+      // Terminal signal so the overlay's "Generating…" state always resolves,
+      // even when generation is blocked before the call runs.
+      const failGen = (msg) => { if (msg) notify(msg); window.dispatchEvent(new CustomEvent("lw:composition-draft-failed", { detail: { message: msg || "" } })); };
+      window.dispatchEvent(new CustomEvent("lw:composition-draft-generating"));
       const route = await requireProviderOrNotice("composition draft generation", "writingDraft");
-      if (!route) return;
+      if (!route) { window.dispatchEvent(new CustomEvent("lw:composition-draft-failed", { detail: { message: "No provider" } })); return; }
       const comp = CompositionService.loadSync({});
       const selectedEntityIds = (comp.entities || []).map((e) => e.id).filter(Boolean);
       const built = B().AIContextBuilder.build({ task: "writingDraft", selectedEntityIds, includeReferences: true, includeProjectIntelligence: true });
-      if (!aiPrivacyGuard({ task: "writingDraft", providerId: route.providerId, model: route.model, context: built })) return;
+      if (!aiPrivacyGuard({ task: "writingDraft", providerId: route.providerId, model: route.model, context: built })) { window.dispatchEvent(new CustomEvent("lw:composition-draft-failed", { detail: { message: "Blocked by privacy guard" } })); return; }
       const instructions = comp.instructions || "Write a draft scene from the selected entities.";
       try {
         const text = await AIService.complete({
@@ -782,7 +786,7 @@
         window.dispatchEvent(new CustomEvent("lw:composition-draft-generated", { detail: { text } }));
         B().AuditService?.log?.({ action: "ai.writingDraft", label: "Generated composition draft", source: "AIService", metadata: { providerId: route.providerId, model: route.model, status: "ok" }, reversible: false });
         notify("Draft generated.");
-      } catch (e) { notify(e.message); }
+      } catch (e) { failGen(e.message); }
       return;
     }
     if (name === "onInsertCompositionDraft" || name === "onInsertDraft") {
