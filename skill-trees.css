@@ -840,6 +840,8 @@
 .stm-btn.is-on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-deep); }
 .stm-btn.is-arming { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
 .stm-btn--danger:hover { background: color-mix(in srgb, #a84a3a 18%, var(--bg-paper)); border-color: #a84a3a; color: #a84a3a; }
+.stm-select { padding: 3px 6px; border: 1px solid var(--line-2); border-radius: var(--r-2); background: var(--bg-paper); color: var(--ink-2); font-size: 11px; cursor: pointer; max-width: 180px; }
+.stm-select:hover { background: var(--bg-paper-2); color: var(--ink-1); }
 .stm__edges { margin-top: 8px; }
 .stm__edge { font-size: 11px; color: var(--ink-2); font-family: var(--font-mono); padding: 2px 0; }
 .stm__assign { margin-top: 8px; }

@@ -784,6 +784,11 @@ const SkillTreeLiveManager = () => {
   const nodes = tree ? (tree.nodeIds || []).map((id) => ({ id, name: skillName(id), unlocked: !!((tree.layout || {})[id] || {}).unlocked })) : [];
   const cast = (() => { try { return B().EntityService.listSync("cast") || []; } catch (_e) { return []; } })();
   const classes = (() => { try { return B().EntityService.listSync("classes") || []; } catch (_e) { return []; } })();
+  // Discovered/existing skill entities (e.g. from extraction) that aren't yet
+  // a node in this tree — so accepted skill candidates can be dropped in
+  // rather than only ever creating a brand-new skill.
+  const allSkills = (() => { try { return B().EntityService.listSync("skills") || []; } catch (_e) { return []; } })();
+  const availableSkills = tree ? allSkills.filter((s) => !(tree.nodeIds || []).includes(s.id)) : [];
 
   const createTree = async () => { const s = B() && B().SkillTreeService; if (!s) return; const t = await s.addTree({ name: "New skill tree" }); if (t && t.id) setSelId(t.id); };
   const removeTree = async () => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.removeTree(tree.id); setSelId(null); };
@@ -792,6 +797,11 @@ const SkillTreeLiveManager = () => {
     const ES = B() && B().EntityService, s = B() && B().SkillTreeService; if (!ES || !s) return;
     const skill = await ES.save("skills", { name: "New skill" }, { status: "active" });
     await s.addNode(tree.id, skill.id, { x: 20 + (nodes.length * 13) % 60, y: 30 + (nodes.length * 7) % 40 });
+  };
+  const addExistingNode = async (skillId) => {
+    if (!tree || !skillId) return;
+    const s = B() && B().SkillTreeService; if (!s) return;
+    await s.addNode(tree.id, skillId, { x: 20 + (nodes.length * 13) % 60, y: 30 + (nodes.length * 7) % 40 });
   };
   const renameNode = async (id, name) => { const ES = B() && B().EntityService; if (!ES) return; await ES.update("skills", id, { name: (name || "").trim() || "Untitled skill" }); refresh(); };
   const toggleLock = async (id) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.setNodeUnlocked(tree.id, id, !((tree.layout || {})[id] || {}).unlocked); };
@@ -827,6 +837,17 @@ const SkillTreeLiveManager = () => {
           <div className="stm__detail-head">
             <span className="stm__detail-name">{tree.name}</span>
             <button type="button" className="stm-btn" data-testid="st-add-node" onClick={addNode}><Icon name="plus" size={10}/> Add node</button>
+            {availableSkills.length > 0 && (
+              <select className="stm-select" data-testid="st-add-existing"
+                      value=""
+                      onChange={(e) => { const v = e.target.value; if (v) addExistingNode(v); e.target.value = ""; }}
+                      title="Add an existing (e.g. discovered) skill to this tree">
+                <option value="">+ Add discovered skill…</option>
+                {availableSkills.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name || "Untitled skill"}</option>
+                ))}
+              </select>
+            )}
             <button type="button" className="stm-btn stm-btn--danger" data-testid="st-remove-tree" onClick={removeTree} title="Delete this tree">Delete tree</button>
           </div>
 

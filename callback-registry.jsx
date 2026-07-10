@@ -45,6 +45,10 @@
   function resolveCtx(el, detail) {
     const scope = el?.closest?.("[data-entity-id],[data-panel-kind],[data-ui]") || el;
     const last = window.__LW_LAST_SELECTION__ || {};
+    // Fold a DOM data-id (e.g. a review-queue row id) into detail.id so
+    // data-callback-only buttons (no React onClick) can identify their row.
+    const domId = el?.getAttribute?.("data-id");
+    if (domId && (!detail || detail.id == null)) detail = { ...(detail || {}), id: domId };
     const entityId = el?.getAttribute("data-entity-id")
       || scope?.getAttribute("data-entity-id")
       || detail?.entityId

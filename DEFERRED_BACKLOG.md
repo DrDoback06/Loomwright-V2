@@ -5,12 +5,13 @@ owning area later. Each notes WHERE the data already lands so the later work is
 display/seed wiring, not a rebuild.
 
 ## From Area 1 — Extraction
-- **Relationships tab live rendering** — accepted relationship candidates now
-  persist with `fromId`/`toId`/`type` in `data`, but the Relationships tab
-  (`relationships.jsx`) still renders demo data. → **Area 4 (visual tabs)**.
-- **Skill-tree assignment selector on skill candidates** — discovered skills
-  land as entities; assigning them to a tree needs the skill-tree system. →
-  **Skill Trees (Area 4/7)**.
+- ~~**Relationships tab live rendering**~~ — ✅ **Done in Area 4.** The
+  Relationships tab now builds a live model (`buildLiveRelModel`) from
+  `relationships` entities + cast related-multi fields and graphs it; demo
+  data is fallback-only. See `AREA_4_VISUAL_TABS_AUDIT.md`.
+- ~~**Skill-tree assignment selector on skill candidates**~~ — ✅ **Done in
+  Area 4.** `SkillTreeLiveManager` now has an "Add discovered skill" picker
+  listing `skills` entities not yet in the tree.
 - **Travel/location display** — `cast.data.location` is set on accept; showing
   it in the Cast dossier + an Atlas travel line. → **Area 3 (Cast) / Atlas**.
 - **Source-quote provenance shown in dossiers** (the occurrence carries it). →
@@ -45,6 +46,15 @@ display/seed wiring, not a rebuild.
 - **Apply remaining `workspace.*` prefs** — `workspace.mobileCompact` now drives
   the Writer's Room mobile/compact layout; editorWidth/font/margins/panelStack
   still aren't read (see Area 2 entry above). → **Writers Room polish (Area 8)**.
+
+## From Area 4 — Visual tabs
+- **Numeric relationship meters + change tracking** — live relationship
+  records carry no strength/trust/conflict values or change history; the tab
+  renders type-shaped default meters and the Timeline view shows an empty
+  state. → **relationship-quality pass**.
+- **Visual constellation canvas** for skill trees (drag-and-drop node
+  layout). The live manager (create/connect/assign/lock) is complete. →
+  **Skill Trees polish**.
 
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).
