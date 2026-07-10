@@ -1,5 +1,6 @@
 // =====================================================================
-// impact-review-receipt-rules.jsx — occurrence-aware acceptance receipts.
+// impact-review-receipt-rules.jsx — occurrence-aware acceptance receipts
+// plus the display-shape bridge required by the existing review cards.
 //
 // The base ImpactReviewService captures entity mutations. Extraction accept
 // can also rebind manuscript occurrences from a candidate to the accepted
@@ -22,6 +23,7 @@
   const originalAccept = service.acceptWithReceipt.bind(service);
   const originalSafety = service.receiptSafety.bind(service);
   const originalRevert = service.revertAcceptance.bind(service);
+  const originalGetItemSync = service.getItemSync.bind(service);
 
   function occurrenceId(row, index) {
     return row?.occurrenceId || row?.id || `${row?.chapterId || "chapter"}:${row?.startOffset ?? index}:${row?.candidateId || row?.entityId || "mention"}`;
@@ -58,6 +60,45 @@
     window.dispatchEvent(new CustomEvent("lw:occurrence-store-updated", { detail: { occurrences: restored } }));
     window.dispatchEvent(new CustomEvent("lw:occurrences-updated", { detail: { occurrences: restored } }));
   }
+
+  function enrichReviewCardShape(raw) {
+    if (!raw) return null;
+    let card = {};
+    try {
+      if (typeof candidateToCardItem === "function") card = candidateToCardItem(raw) || {};
+    } catch (_) {}
+    return {
+      ...raw,
+      ...card,
+      id: raw.id || card.id,
+      entityType: raw.entityType || raw.type || card.entityType || card.type,
+      status: raw.status || card.status || "pending",
+      suggestedChanges: raw.suggestedChanges,
+      relatedEntityIds: raw.relatedEntityIds,
+      previousState: raw.previousState,
+      existingEntityId: raw.existingEntityId,
+      targetEntityId: raw.targetEntityId,
+      candidateId: raw.candidateId,
+      payload: raw.payload,
+      decision: raw.decision,
+      scenarioIds: raw.scenarioIds,
+      impactReceipt: raw.impactReceipt,
+      sourceQuote: raw.sourceQuote || card.sourceQuote || card.mention,
+      sourceQuotes: raw.sourceQuotes,
+      chapterId: raw.chapterId,
+      paragraphId: raw.paragraphId,
+      matchType: raw.matchType,
+      __rawReviewItem: raw,
+    };
+  }
+
+  // ReviewQueueCard expects candidateToCardItem(raw), while Impact Review needs
+  // the untouched fields used for impact and reversion. Return both shapes in
+  // one object so the original renderer and every original action stay intact.
+  service.getItemSync = function getEnrichedImpactReviewItem(id) {
+    return enrichReviewCardShape(originalGetItemSync(id));
+  };
+  service.enrichCardItem = enrichReviewCardShape;
 
   service.acceptWithReceipt = async function occurrenceAwareAccept(itemOrId, acceptFn) {
     const item = typeof itemOrId === "string" ? service.getItemSync(itemOrId) : itemOrId;
