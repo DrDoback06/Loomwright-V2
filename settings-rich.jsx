@@ -541,6 +541,119 @@ const SetAIRouting = () => {
   );
 };
 
+// ---------------------------------------------------------------------
+// Per-task model routing — assign a provider + model to each AI task.
+// Writes to AIRoutingService.taskRoutes, which resolveRoute() already
+// honours (falling back to the default provider when a task is left on
+// "Default"). Curated model shortlists per provider type; "Custom…"
+// reveals a free-text field for anything not listed.
+// ---------------------------------------------------------------------
+const SET_AI_TASK_LABELS = [
+  ["writingDraft",        "Writing / drafting"],
+  ["continueWriting",     "Continue writing"],
+  ["rewritePassage",      "Rewrite passage"],
+  ["quickExtraction",     "Quick extraction"],
+  ["deepExtraction",      "Deep extraction"],
+  ["projectIntelligence", "Project intelligence"],
+  ["referenceSummary",    "Reference summaries"],
+  ["continuityCheck",     "Continuity check"],
+  ["skillTreeGeneration", "Skill-tree generation"],
+  ["aiHandoffAssist",     "AI handoff assist"],
+];
+
+const SET_AI_MODEL_CATALOGUE = {
+  anthropic:  ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001", "claude-fable-5"],
+  openai:     ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-5"],
+  gemini:     ["gemini-2.5-flash", "gemini-2.5-pro"],
+  openrouter: ["anthropic/claude-haiku-4-5", "anthropic/claude-sonnet-5", "openai/gpt-4o", "google/gemini-2.5-flash"],
+  ollama:     ["llama3.1:8b-instruct", "qwen2.5:14b-instruct", "mistral-nemo"],
+  mistral:    ["mistral-large-latest", "mistral-small-latest"],
+  cohere:     ["command-r-plus", "command-r"],
+  groq:       ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+  custom:     [],
+};
+
+const CUSTOM_MODEL = "__custom__";
+
+const SetAITaskRouting = () => {
+  const AR = () => window.LoomwrightBackend?.AIRoutingService;
+  const KS = () => window.LoomwrightBackend?.KeysService;
+  const [routes, setRoutes] = _set_us(() => ({ ...(AR()?.loadSync?.()?.taskRoutes || {}) }));
+  const [tick, setTick] = _set_us(0);
+  _set_ue(() => {
+    const bump = () => setTick((t) => t + 1);
+    ["lw:ai-routing-updated", "lw:settings-saved", "lw:backend-ready"].forEach((e) => window.addEventListener(e, bump));
+    return () => ["lw:ai-routing-updated", "lw:settings-saved", "lw:backend-ready"].forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+
+  // Providers the user has actually configured (enabled + keyed or local).
+  const allProviders = KS()?.loadAllProviderSettingsSync?.() || {};
+  const usable = Object.values(allProviders).filter((p) => p && p.enabled !== false && (p.hasKey || p.providerType === "ollama"));
+  const providerType = (id) => (allProviders[id]?.providerType) || id;
+  const providerLabel = (p) => p.label || p.name || p.id;
+
+  const persist = (task, route) => {
+    const next = { ...routes };
+    if (!route.providerId) delete next[task]; else next[task] = route;
+    setRoutes(next);
+    // Save the single task delta (AIRoutingService merges taskRoutes).
+    AR()?.save?.({ taskRoutes: { [task]: route.providerId ? route : { providerId: "", model: "" } } });
+  };
+
+  const providerOptions = [{ value: "", label: "Default provider" }, ...usable.map((p) => ({ value: p.id, label: providerLabel(p) }))];
+
+  if (!usable.length) {
+    return (
+      <SetGroupCard title="Per-task model routing" hint="Pin a specific provider + model to each AI task.">
+        <div className="set-note set-note--info">Add and enable at least one AI provider above to route individual tasks. Until then every task uses your default provider.</div>
+      </SetGroupCard>
+    );
+  }
+
+  return (
+    <SetGroupCard title="Per-task model routing" hint="Pin a specific provider + model to each AI task. Left on “Default” a task uses your default provider and cost tier.">
+      {SET_AI_TASK_LABELS.map(([task, label]) => {
+        const route = routes[task] || { providerId: "", model: "" };
+        const type = route.providerId ? providerType(route.providerId) : null;
+        const catalogue = (type && SET_AI_MODEL_CATALOGUE[type]) || [];
+        const cfgDefault = route.providerId ? (allProviders[route.providerId]?.defaultModel || allProviders[route.providerId]?.model) : "";
+        // Model dropdown options = catalogue ∪ provider default, plus Custom…
+        const modelSet = [];
+        const seen = new Set();
+        for (const m of [cfgDefault, ...catalogue]) { if (m && !seen.has(m)) { seen.add(m); modelSet.push(m); } }
+        const isCustomModel = route.model && !seen.has(route.model);
+        const modelOptions = [
+          { value: "", label: cfgDefault ? `Provider default (${cfgDefault})` : "Provider default" },
+          ...modelSet.map((m) => ({ value: m, label: m })),
+          { value: CUSTOM_MODEL, label: "Custom…" },
+        ];
+        const modelSelectValue = isCustomModel ? CUSTOM_MODEL : (route.model || "");
+        return (
+          <div key={task} className="set-airoute">
+            <div className="set-airoute__label">{label}</div>
+            <div className="set-airoute__controls">
+              <SetSelect
+                value={route.providerId || ""}
+                onChange={(v) => persist(task, { providerId: v, model: "" })}
+                options={providerOptions}/>
+              {route.providerId && (
+                <SetSelect
+                  value={modelSelectValue}
+                  onChange={(v) => persist(task, { providerId: route.providerId, model: v === CUSTOM_MODEL ? (route.model || "") : v })}
+                  options={modelOptions}/>
+              )}
+              {route.providerId && (isCustomModel || modelSelectValue === CUSTOM_MODEL) && (
+                <SetInput mono value={route.model} placeholder="model-id"
+                  onChange={(v) => persist(task, { providerId: route.providerId, model: v })}/>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </SetGroupCard>
+  );
+};
+
 // =====================================================================
 // PRIVACY
 // =====================================================================
@@ -809,7 +922,7 @@ const RichSettingsSection = ({ sectionId, onRequest }) => {
     case "editor":     return <SetEditor/>;
     case "authors":    return <SetAuthors/>;
     case "ai":         return <SetAIProviders/>;
-    case "ai-routing": return <SetAIRouting/>;
+    case "ai-routing": return <><SetAIRouting/><SetAITaskRouting/></>;
     case "privacy":    return <SetPrivacy/>;
     case "extraction": return <SetExtraction/>;
     case "review":     return <SetReview/>;

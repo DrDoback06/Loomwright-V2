@@ -100,6 +100,29 @@ select.set-input {
   padding-right: 28px;
 }
 
+/* ----- Per-task AI routing rows ----- */
+.set-airoute {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-1);
+}
+.set-airoute:last-child { border-bottom: none; }
+.set-airoute__label {
+  flex: 0 0 40%;
+  font-size: var(--fs-sm);
+  color: var(--ink-1);
+  font-weight: 500;
+}
+.set-airoute__controls {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.set-airoute__controls > * { flex: 1; min-width: 0; }
+
 /* ----- Toggle ----- */
 .set-toggle {
   display: flex;

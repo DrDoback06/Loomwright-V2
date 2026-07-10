@@ -61,8 +61,16 @@ display/seed wiring, not a rebuild.
   layout). The live manager (create/connect/assign/lock) is complete. →
   **Skill Trees polish**.
 
+## From Area 5 — AI Writer
+- ~~**AI Writer / per-task model picker UI**~~ — ✅ **Done.** Settings → AI
+  routing now renders a provider + model picker per AI task
+  (`SetAITaskRouting`), persisted to `AIRoutingService.taskRoutes` which
+  `resolveRoute` already honours. Curated model shortlists per provider +
+  free-text custom. See `AREA_5_AI_WRITER_AUDIT.md`.
+- **Deeper AI style critique** of the voice sample beyond the local metrics. →
+  still open (needs a live AI call flow).
+
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).
-- **AI Writer model picker UI** (routing already supports per-task models).
 - **Offline grammar/spell/thesaurus** in the Writer's Room (Word-like). →
   **Writers Room polish**.
