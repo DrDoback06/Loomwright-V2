@@ -1260,6 +1260,31 @@ const WritersRoomScreen = ({
   const showLeftMargin  = isMobile ? (mobileDrawer === "left")  : leftMarginVisible;
   const showRightMargin = isMobile ? (mobileDrawer === "right") : rightMarginVisible;
 
+  // Editor width + font from the persisted onboarding `workspace` prefs. Purely
+  // visual; sets CSS vars the .wr-canvas consumes. Refreshes on settings save.
+  const _WR_FONT_STACKS = {
+    "Source Serif 4": '"Source Serif 4", var(--font-serif)',
+    "EB Garamond": '"EB Garamond", Garamond, var(--font-serif)',
+    "Cormorant Garamond": '"Cormorant Garamond", Garamond, var(--font-serif)',
+  };
+  const _wrLayoutPrefs = () => {
+    try {
+      const w = window.LoomwrightBackend?.SettingsService?.getSectionSync?.("workspace", {}) || {};
+      const width = Number(w.editorWidth);
+      return {
+        editorWidth: (width >= 480 && width <= 1200) ? width : null,
+        fontStack: (w.font && _WR_FONT_STACKS[w.font]) || null,
+      };
+    } catch (_e) { return { editorWidth: null, fontStack: null }; }
+  };
+  const [layoutPrefs, setLayoutPrefs] = _wrUS(_wrLayoutPrefs);
+  _wrUE(() => {
+    const apply = () => setLayoutPrefs(_wrLayoutPrefs());
+    apply();
+    ["lw:settings-saved", "lw:settings-updated", "lw:backend-ready"].forEach((e) => window.addEventListener(e, apply));
+    return () => ["lw:settings-saved", "lw:settings-updated", "lw:backend-ready"].forEach((e) => window.removeEventListener(e, apply));
+  }, []);
+
   // Margins state
   const [noteFilter, setNoteFilter] = _wrUS("open");
   const [extFilter, setExtFilter] = _wrUS("all");
@@ -1788,6 +1813,8 @@ const WritersRoomScreen = ({
       style={{
         "--wr-left-w":  (leftMarginVisible  ? L.leftMarginWidth  : 0) + "px",
         "--wr-right-w": (rightMarginVisible ? L.rightMarginWidth : 0) + "px",
+        ...(layoutPrefs.editorWidth ? { "--wr-editor-w": layoutPrefs.editorWidth + "px" } : {}),
+        ...(layoutPrefs.fontStack ? { "--wr-editor-font": layoutPrefs.fontStack } : {}),
       }}
     >
       {focusMode && (

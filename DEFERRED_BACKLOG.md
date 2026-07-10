@@ -26,9 +26,11 @@ display/seed wiring, not a rebuild.
 - **"Import existing project"** — the Welcome "import" start option has no
   file-import flow in onboarding; wire it to `ProjectArchiveService.applyImport`.
   → onboarding follow-up / Project I/O.
-- **Apply workspace.* layout prefs** — editorWidth/font/margins/panelStack etc.
-  are now persisted to the `workspace` settings section, but the Writer's Room
-  doesn't yet read them (startTab IS used for routing). → **Writers Room polish**.
+- **Apply workspace.* layout prefs** — the Writer's Room now reads
+  `workspace.editorWidth` + `workspace.font` (CSS vars on `.wr-canvas`) in
+  addition to startTab (routing) and mobileCompact. Still deferred:
+  `margins`/`panelStack`/`chapterRail` (these interact with the runtime
+  layout-mode system). → **Writers Room polish**.
 - **Deeper AI style critique** of the voice sample beyond the local metrics
   (which are implemented). → **AI Writer area**.
 
@@ -43,9 +45,10 @@ display/seed wiring, not a rebuild.
 - **Deep (BYOK) model picker on the wheel** — Deep actions route through the
   existing cost tier today; a per-action model chooser is the AI Writer model
   picker. → **Area 5 (AI Writer)**.
-- **Apply remaining `workspace.*` prefs** — `workspace.mobileCompact` now drives
-  the Writer's Room mobile/compact layout; editorWidth/font/margins/panelStack
-  still aren't read (see Area 2 entry above). → **Writers Room polish (Area 8)**.
+- **Apply remaining `workspace.*` prefs** — `workspace.mobileCompact`,
+  `editorWidth`, and `font` are now read by the Writer's Room;
+  margins/panelStack/chapterRail still aren't (see Area 2 entry above). →
+  **Writers Room polish (Area 8)**.
 
 ## From Area 4 — Visual tabs
 - **Numeric relationship meters + change tracking** — live relationship
