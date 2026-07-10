@@ -56,6 +56,15 @@ display/seed wiring, not a rebuild.
 - **Character ↔ faction edges** — the `faction` relationship type exists but
   awaits the Factions live pass.
 
+## From Area 5 — Timeline (tracked in AREA_5_TIMELINE_AUDIT.md)
+- **Atlas "show on map"** (`onShowTimelineMomentOnAtlas`) — still a notice;
+  lands with the Atlas focus area.
+- **Date-conflict detection** — cross-chapter date reconciliation (the demo's
+  Ch.2-vs-Ch.4 flag) is an extraction-quality follow-up.
+- **Relationship / item timeline lanes** — the mode bar keeps character /
+  location / quest / faction filters; dedicated per-relationship and per-item
+  lanes await those live passes.
+
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).
 - **AI Writer model picker UI** (routing already supports per-task models).
