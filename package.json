@@ -12,9 +12,9 @@
     "build:static-legacy": "node scripts/build-static.js",
     "check:build": "node scripts/check-production-build.js",
     "preview": "vite preview --host 0.0.0.0 --outDir dist",
-    "test:smoke": "node scripts/smoke-services.js && node scripts/smoke-story-intelligence.js",
+    "test:smoke": "node scripts/smoke-services.js && node scripts/smoke-story-intelligence-refined.js",
     "test:smoke:core": "node scripts/smoke-services.js",
-    "test:smoke:intelligence": "node scripts/smoke-story-intelligence.js",
+    "test:smoke:intelligence": "node scripts/smoke-story-intelligence-refined.js",
     "test:e2e": "playwright test",
     "test:e2e:preview": "playwright test --config playwright.preview.config.js",
     "test:e2e:headed": "playwright test --headed"
