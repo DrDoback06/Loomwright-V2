@@ -1,6 +1,6 @@
 // =====================================================================
-// impact-review-receipt-rules.jsx — occurrence-aware acceptance receipts
-// plus the display-shape bridge required by the existing review cards.
+// impact-review-receipt-rules.jsx — occurrence-aware acceptance receipts,
+// review-card compatibility, receipt-surface persistence, and display polish.
 //
 // The base ImpactReviewService captures entity mutations. Extraction accept
 // can also rebind manuscript occurrences from a candidate to the accepted
@@ -24,6 +24,8 @@
   const originalSafety = service.receiptSafety.bind(service);
   const originalRevert = service.revertAcceptance.bind(service);
   const originalGetItemSync = service.getItemSync.bind(service);
+  const originalAnalyse = service.analyse.bind(service);
+  const originalDecoratePanel = backend.EntityService.decoratePanel.bind(backend.EntityService);
 
   function occurrenceId(row, index) {
     return row?.occurrenceId || row?.id || `${row?.chapterId || "chapter"}:${row?.startOffset ?? index}:${row?.candidateId || row?.entityId || "mention"}`;
@@ -92,6 +94,15 @@
     };
   }
 
+  function sentenceFieldLabel(key) {
+    const spaced = String(key || "field")
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .replace(/[_-]+/g, " ")
+      .trim()
+      .toLowerCase();
+    return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : "Field";
+  }
+
   // ReviewQueueCard expects candidateToCardItem(raw), while Impact Review needs
   // the untouched fields used for impact and reversion. Return both shapes in
   // one object so the original renderer and every original action stay intact.
@@ -99,6 +110,21 @@
     return enrichReviewCardShape(originalGetItemSync(id));
   };
   service.enrichCardItem = enrichReviewCardShape;
+
+  // Preserve a stable machine field key for tests/integrations while providing
+  // sentence-style labels such as “Current owner” in the visible comparison.
+  service.analyse = function analyseWithDisplayLabels(itemOrId) {
+    const analysis = originalAnalyse(itemOrId);
+    if (!analysis) return analysis;
+    return {
+      ...analysis,
+      changes: (analysis.changes || []).map((change) => ({
+        ...change,
+        fieldKey: change.fieldKey || change.key,
+        key: sentenceFieldLabel(change.key),
+      })),
+    };
+  };
 
   service.acceptWithReceipt = async function occurrenceAwareAccept(itemOrId, acceptFn) {
     const item = typeof itemOrId === "string" ? service.getItemSync(itemOrId) : itemOrId;
@@ -151,6 +177,25 @@
     const updated = await originalRevert(item, { ...opts, force: true });
     await restoreOccurrences(receipt?.changedOccurrences || []);
     return updated;
+  };
+
+  // The original panel only mounts EntityReviewQueue while pending reviewItems
+  // exist. Once Accept resolves the final card, that would also remove the new
+  // receipt history. Add resolved receipt rows only as a mount signal; keep the
+  // original queueCount/subtitle untouched so receipts never masquerade as
+  // pending work. ImpactEntityReviewQueue separately filters active cards and
+  // renders these rows only inside ReceiptHistory.
+  backend.EntityService.decoratePanel = function decoratePanelWithReceiptHistory(panel) {
+    const decorated = originalDecoratePanel(panel);
+    if (!panel?.entityType || !decorated) return decorated;
+    const entityType = backend.EntityService.normaliseType(panel.entityType);
+    const visible = Array.isArray(decorated.reviewItems) ? decorated.reviewItems : [];
+    const visibleIds = new Set(visible.map((item) => item.id));
+    const receipts = service.listAllReviewSync()
+      .filter((item) => backend.EntityService.normaliseType(item.entityType || item.type) === entityType)
+      .filter((item) => item.impactReceipt && !visibleIds.has(item.id));
+    if (!receipts.length) return decorated;
+    return { ...decorated, reviewItems: [...visible, ...receipts] };
   };
 
   service.diffOccurrences = diffOccurrences;
