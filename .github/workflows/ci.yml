@@ -55,7 +55,12 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run rendered UI acceptance suite
+      - name: Run story intelligence acceptance tests
+        run: npx playwright test tests/e2e/21-story-intelligence.spec.js tests/e2e/22-product-defaults.spec.js
+        env:
+          CI: true
+
+      - name: Run full rendered UI regression suite
         run: npm run test:e2e
         env:
           CI: true
