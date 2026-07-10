@@ -400,7 +400,10 @@ const liveCastToDossier = (entity, ctx = {}) => {
   // Identity / faction / location lookups via the entity index.
   const faction = _resolveRelatedList(d.faction, entityIndex)[0] || null;
   const home    = _resolveRelatedList(d.homeLocation, entityIndex)[0] || null;
-  const cur     = _resolveRelatedList(d.currentLocation, entityIndex)[0] || null;
+  // `data.location` is set by the extraction travel pass (actor → place); it
+  // stands in as the current location when no explicit currentLocation exists.
+  const travelLoc = _resolveRelatedList(d.location, entityIndex)[0] || null;
+  const cur     = _resolveRelatedList(d.currentLocation, entityIndex)[0] || travelLoc || null;
   const aliasList = Array.isArray(d.aliases) ? d.aliases.map((a) => typeof a === "string" ? a : (a && (a.name || a.label || a.id))).filter(Boolean) : [];
 
   // Traits — strengths(+) ∪ flaws(–) ∪ distinguishing marks ∪ tags.
@@ -484,7 +487,7 @@ const liveCastToDossier = (entity, ctx = {}) => {
   // Related-tab links: locations → Atlas, timeline events → Timeline.
   const relatedAtlas = [];
   const pushLoc = (loc) => { if (loc && loc.id && !relatedAtlas.some((r) => r.id === loc.id)) relatedAtlas.push({ id: loc.id, label: loc.name }); };
-  pushLoc(home); pushLoc(cur);
+  pushLoc(home); pushLoc(cur); pushLoc(travelLoc);
   for (const loc of _resolveRelatedList(d.travelHistory, entityIndex)) pushLoc(loc);
   const relatedTimeline = _resolveRelatedList(d.timelineEvents, entityIndex).map((e) => ({ id: e.id, label: e.name }));
 

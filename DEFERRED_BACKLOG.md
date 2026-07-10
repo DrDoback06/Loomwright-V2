@@ -12,8 +12,10 @@ display/seed wiring, not a rebuild.
 - ~~**Skill-tree assignment selector on skill candidates**~~ — ✅ **Done in
   Area 4.** `SkillTreeLiveManager` now has an "Add discovered skill" picker
   listing `skills` entities not yet in the tree.
-- **Travel/location display** — `cast.data.location` is set on accept; showing
-  it in the Cast dossier + an Atlas travel line. → **Area 3 (Cast) / Atlas**.
+- ~~**Travel/location display**~~ — ✅ **Done.** `cast.data.location` (set by
+  the extraction travel pass) now resolves in the Cast dossier as the
+  "Currently" location + an Atlas-linked place. The animated Atlas travel line
+  itself remains → **Atlas polish**.
 - **Source-quote provenance shown in dossiers** (the occurrence carries it). →
   **Area 3 (Cast dossier)**.
 - **Two-pass relationship extraction** (richer relationship records). → later
