@@ -174,6 +174,19 @@ const _relFindCastByName = (name, castList) => {
 const _REL_FIELD_KINDS = ["family", "lovers", "allies", "mentors", "rivals", "enemies"];
 const _REL_ROLE_RANK = { protagonist: 0, antagonist: 1, supporting: 2, minor: 3 };
 
+// Right-click / long-press a relationship that is backed by a real
+// `relationships` entity → open the adaptive wheel with its entity context
+// (Open / Edit / Merge / Review). Picker-derived pairs have no entity, so the
+// wheel stays inert for them.
+const _relOpenWheel = (rel, clientX, clientY) => {
+  const ent = rel && rel._relEntity;
+  if (!ent || !ent.id) return false;
+  window.dispatchEvent(new CustomEvent("lw:open-entity-wheel", {
+    detail: { x: clientX, y: clientY, entityId: ent.id, entityType: "relationships", label: rel.summary || ent.name || "Relationship" },
+  }));
+  return true;
+};
+
 // Build the full live dataset. `B` defaults to window.LoomwrightBackend but
 // is injectable for tests. Returns null when there is no live cast to render.
 const buildLiveRelDataset = (B) => {
@@ -449,7 +462,9 @@ const RelSingleView = ({ characterId, data, onSelectCharacter, onCompare }) => {
               {items.map((r) => {
                 const other = cast[r.a === characterId ? r.b : r.a];
                 return (
-                  <button key={r.id} className="rel-card" onClick={() => onCompare(characterId, other.id)}>
+                  <button key={r.id} className="rel-card" data-rel-id={r.id}
+                          onClick={() => onCompare(characterId, other.id)}
+                          onContextMenu={(e) => { if (_relOpenWheel(r, e.clientX, e.clientY)) e.preventDefault(); }}>
                     <RelAvatar cast={other}/>
                     <div className="rel-card__main">
                       <div className="rel-card__name">
@@ -762,7 +777,8 @@ const RelConflictView = ({ data, onCompare }) => {
         const a = cast[r.a], b = cast[r.b];
         const t = REL_TYPES[r.type];
         return (
-          <button key={r.id} className="rel-conflict__row" onClick={() => onCompare(r.a, r.b)}
+          <button key={r.id} className="rel-conflict__row" data-rel-id={r.id} onClick={() => onCompare(r.a, r.b)}
+                  onContextMenu={(e) => { if (_relOpenWheel(r, e.clientX, e.clientY)) e.preventDefault(); }}
                   style={{ "--c": t.color }}>
             <RelAvatar cast={a} size={28}/>
             <span className="rel-conflict__between">vs</span>

@@ -55,4 +55,36 @@ test.describe("T25. Adaptive wheel — entity-tab nodes", () => {
     expect(opened.type).toBe("events");
     expect(opened.initial && opened.initial.id).toBe(ev.id);
   });
+
+  test("right-clicking a relationship backed by a real entity opens the wheel", async ({ page }) => {
+    await openFreshApp(page);
+    // Two cast + a standalone relationship entity between them (has _relEntity).
+    const rowan = await saveEntity(page, "cast", { name: "Rowan Vale", data: { role: "protagonist" } }, { status: "active" });
+    const kessa = await saveEntity(page, "cast", { name: "Kessa Dune", data: { role: "antagonist" } }, { status: "active" });
+    const rel = await saveEntity(page, "relationships", {
+      name: "Rowan Vale → Kessa Dune",
+      summary: "Kessa broke faith at the ridge.",
+      data: { fromId: rowan.id, toId: kessa.id, relationshipType: "betrayed" },
+    }, { status: "active" });
+
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "relationships" } })));
+    const body = page.locator("[data-ui='RelationshipsPanelBody']");
+    await expect(body).toBeVisible({ timeout: 5000 });
+
+    await page.evaluate(() => {
+      window.__editorOpen = null;
+      window.addEventListener("lw:open-entity-editor", (e) => { window.__editorOpen = e.detail; });
+    });
+
+    // The single view shows Rowan's relationship card; right-click arms the wheel.
+    await body.locator(".rel-card").first().click({ button: "right" });
+    const wheel = page.locator("[data-testid='adaptive-wheel']");
+    await expect(wheel).toBeVisible({ timeout: 5000 });
+    await wheel.locator("[data-testid='wheel-edit-entity']").click();
+
+    const opened = await page.evaluate(() => window.__editorOpen);
+    expect(opened).toBeTruthy();
+    expect(opened.type).toBe("relationships");
+    expect(opened.initial && opened.initial.id).toBe(rel.id);
+  });
 });

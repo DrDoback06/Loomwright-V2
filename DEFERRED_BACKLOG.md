@@ -85,9 +85,10 @@ display/seed wiring, not a rebuild.
   + Deep (BYOK) actions. **Area 6 progress:** a reusable `lw:open-entity-wheel`
   mechanism now lets entity-tab nodes open the wheel with entity context
   (Open / Edit / Merge / Review resolve against the real entity). **Timeline
-  event cards** are wired (right-click / long-press, live cards only). Remaining:
-  relationship cards, Atlas map nodes, and generic-framework tab rows → adopt the
-  same `lw:open-entity-wheel` dispatch. → **Area 6 (adaptive wheel)**.
+  event cards** (right-click / long-press) and **relationship cards backed by a
+  real `relationships` entity** (single + conflict views) are wired. Remaining:
+  Atlas map nodes and generic-framework tab rows → adopt the same
+  `lw:open-entity-wheel` dispatch. → **Area 6 (adaptive wheel)**.
 - **Wheel "Tag" action** — currently a placeholder notice; real tagging lands
   with the entity tabs/dossier. → **Area 7/8**.
 - **Deep (BYOK) model picker on the wheel** — Deep actions route through the
