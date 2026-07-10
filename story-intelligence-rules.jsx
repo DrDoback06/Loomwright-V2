@@ -18,7 +18,7 @@
     const ids = new Set(rows.map((r) => r.id));
     const profiles = service.buildProfiles(snapshot);
     for (const profile of profiles) {
-      if (profile.mentionCount < 1 || profile.completeness >= 60) continue;
+      if (profile.mentionCount < 1 || profile.completeness > 60) continue;
       const id = `intel-thin-${profile.entity.id}`;
       if (ids.has(id)) continue;
       rows.push({
