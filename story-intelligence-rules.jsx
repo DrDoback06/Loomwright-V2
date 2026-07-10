@@ -38,9 +38,23 @@
     return rows;
   }
 
+  function enrichChapterGuidance(rows, snapshot) {
+    const byId = new Map((snapshot?.chapters || []).map((chapter) => [chapter.id, chapter]));
+    return rows.map((row) => {
+      if (row.actionType !== "extract-chapter" || !row.chapterId) return row;
+      const chapter = byId.get(row.chapterId);
+      if (!chapter?.title) return row;
+      return {
+        ...row,
+        title: `Chapter ${chapter.number} · ${chapter.title} has no tracked entities yet`,
+      };
+    });
+  }
+
   service.buildSuggestions = function refinedBuildSuggestions(opts = {}) {
     const snapshot = opts.snapshot || service.buildSnapshot();
     let rows = originalBuildSuggestions({ ...opts, snapshot, limit: Math.max(opts.limit || 36, 80) });
+    rows = enrichChapterGuidance(rows, snapshot);
 
     // A blank project should feel intentionally blank. Idea Forge remains
     // available in the UI, but Loomwright must not invent a missing-style task
