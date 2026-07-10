@@ -1439,6 +1439,40 @@ async function main() {
     }
   }
 
+  // --- Area 4: Timeline tab renders the LIVE event store ---
+  {
+    let loaded = false;
+    try { loadJsxService(win, "timeline.jsx"); loaded = true; } catch (e) { log("[tl] timeline.jsx loads", false, String(e.message)); }
+    if (loaded) {
+      log("[tl] buildLiveTimelineDataset exposed", typeof win.buildLiveTimelineDataset === "function");
+
+      // A real chapter + cast + location, and an event entity that references
+      // the cast (participants) and location, plus an occurrence so the event
+      // is anchored to chapter 2.
+      await B.ManuscriptChapterService.save({ chapters: [{ id: "ch-tl", num: 2, title: "Chapter 2" }], activeChapterId: "ch-tl" });
+      const hero = await B.EntityService.save("cast", { name: "Tomas Reed" }, { status: "active" });
+      const keep = await B.EntityService.save("locations", { name: "The Keep", data: { type: "city" } }, { status: "active" });
+      const ev = await B.EntityService.save("events", {
+        name: "The Keep Falls",
+        summary: "The outer wall was breached at dawn.",
+        data: { eventType: "Battle", participants: [{ id: hero.id, name: hero.name, type: "cast" }], location: { id: keep.id, name: keep.name, type: "locations" } },
+      }, { status: "active" });
+      await B.OccurrenceService.save({ entityId: ev.id, entityType: "events", exactText: "The Keep Falls", chapterId: "ch-tl", startOffset: 0, endOffset: 14 });
+
+      const tds = win.buildLiveTimelineDataset(B);
+      log("[tl] dataset is live (real events present)", !!tds && tds.live === true);
+      const evRec = tds && tds.events.find((e) => e.id === ev.id);
+      log("[tl] accepted event appears on the timeline", !!evRec && evRec.label === "The Keep Falls");
+      log("[tl] event anchored to its occurrence chapter", !!evRec && evRec.chapter === 2 && evRec.era === "ch");
+      log("[tl] participants resolve to live cast", !!evRec && evRec.entities.includes(hero.id));
+      log("[tl] location resolves to a live location", !!evRec && evRec.locationId === keep.id && tds.locs[keep.id].name === "The Keep");
+
+      await B.ReviewService.add({ id: "rq-ev-smoke", entityType: "events", name: "The Long Night", confidence: 0.72, sourceQuote: "The dark came early and stayed.", chapterId: "ch-tl", suggestedAction: "create", status: "pending" });
+      const tds2 = win.buildLiveTimelineDataset(B);
+      log("[tl] pending event candidate shows in review", !!tds2 && tds2.review.some((r) => r.id === "rq-ev-smoke" && r.lvl === "uncertain"));
+    }
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

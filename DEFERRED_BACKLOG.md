@@ -4,6 +4,22 @@ Items intentionally deferred from completed areas, to be covered in their
 owning area later. Each notes WHERE the data already lands so the later work is
 display/seed wiring, not a rebuild.
 
+## Area 4 — Visual tabs (in progress)
+- **Relationships tab** — ✅ **DONE.** See the Area 1 entry below.
+- **Timeline tab** — ✅ **DONE.** `timeline.jsx` now projects real `events`
+  entities via `buildLiveTimelineDataset`: label/summary from the entity,
+  participants resolved to live cast avatars, location resolved to live
+  locations, per-event chapter derived from occurrences (drives era + sort),
+  and review mode listing live event candidates (Accept/Deny wired to the real
+  queue). Filter chips source from the live store when a real project exists.
+  Demo constants remain a fallback for an empty project. Deferred within the
+  tab: real per-event date-type/canon/era authoring (currently defaulted or
+  heuristic) and quest-name resolution in the inspector → later timeline-depth
+  pass.
+- **Skill Trees tab** — still renders demo data; discovered skills land as
+  entities but assigning them to a tree needs the skill-tree system. → next
+  Area 4 item.
+
 ## From Area 1 — Extraction
 - **Relationships tab live rendering** — ✅ **DONE (Area 4).** The Relationships
   tab (`relationships.jsx`) now renders the live entity store: cast + graph come
