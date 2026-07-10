@@ -831,6 +831,8 @@
 .stm__detail--empty { color: var(--ink-4); font-style: italic; display: flex; align-items: center; }
 .stm__detail-head { display: flex; align-items: center; gap: 8px; }
 .stm__detail-name { font-size: 14px; font-weight: 600; color: var(--ink-1); flex: 1; }
+.stm__canvas { position: relative; width: 100%; height: 300px; margin: 6px 0 10px; border: 1px solid var(--line-2); border-radius: var(--r-3, 6px); background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent-soft, #f0e6cf) 40%, var(--bg-paper)) 0%, var(--bg-paper) 70%); overflow: hidden; touch-action: none; }
+.stm__canvas-hint { position: absolute; left: 8px; bottom: 6px; font-size: 10px; color: var(--ink-4); font-style: italic; pointer-events: none; }
 .stm__nodes { display: flex; flex-direction: column; gap: 4px; }
 .stm-node { display: flex; align-items: center; gap: 6px; padding: 4px; border: 1px solid var(--line-2); border-left: 3px solid var(--c, var(--line-3)); border-radius: var(--r-2); background: var(--bg-paper); }
 .stm-node__name { flex: 1; min-width: 0; border: 1px solid transparent; background: transparent; font-size: 12px; color: var(--ink-1); padding: 3px 5px; border-radius: var(--r-2); font-family: var(--font-sans); }

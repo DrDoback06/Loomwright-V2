@@ -83,6 +83,12 @@ display/seed wiring, not a rebuild.
 - **`themeIntensity` / `chapterRail` position** — smaller cosmetic prefs for a
   later Writer's Room polish pass.
 
+## From Area 8 — Skill Tree canvas (tracked in AREA_8_SKILL_TREE_CANVAS_AUDIT.md)
+- **Skill-tree visual canvas** — ✅ **DONE.** The constellation canvas is now
+  live and draggable (positions/edges persist via SkillTreeService). A
+  dedicated full-screen editor with tier rings / marquee-select is optional
+  later polish, not required for a working visual tree.
+
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).
 - **AI Writer model picker UI** (routing already supports per-task models).

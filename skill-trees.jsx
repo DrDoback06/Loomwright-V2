@@ -762,6 +762,118 @@ const SkillTreeNodeRow = ({ node, connectArmed, onRename, onToggleLock, onConnec
 // and rename all persist and survive reload. The visual constellation
 // canvas remains future scope (see notice in SkillsPanelBody).
 // ---------------------------------------------------------------------
+// ---------------------------------------------------------------------
+// SkillTreeConstellation — LIVE, draggable visual canvas. Nodes are the
+// tree's skill entities positioned by tree.layout[id].{x,y} (0–100), edges
+// from tree.edges. Dragging a node repositions it and persists the new
+// position via SkillTreeService.updateNodePosition on drop. Clicking a node
+// selects it (or completes a pending connection when one is armed).
+// ---------------------------------------------------------------------
+const _stClamp = (v) => Math.max(3, Math.min(97, v));
+const SkillTreeConstellation = ({ tree, skillName, selectedId, connectFrom, onNodeClick, onMoveNode }) => {
+  const W = 1000, H = 640;
+  const svgRef = React.useRef(null);
+  const layout = tree.layout || {};
+  const nodeIds = tree.nodeIds || [];
+  const [drag, setDrag] = React.useState(null); // { id, moved }
+  const [pos, setPos] = React.useState({});       // id -> {x,y} live override while dragging
+  const posOf = (id) => (pos[id]) || layout[id] || { x: 50, y: 50 };
+
+  // Clear the live override once persisted layout catches up (post-drop refresh).
+  React.useEffect(() => { if (!drag) setPos({}); }, [tree.updatedAt]); // eslint-disable-line
+
+  const pointFromEvent = (e) => {
+    const rect = svgRef.current.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return { x: _stClamp(((e.clientX - rect.left) / rect.width) * 100), y: _stClamp(((e.clientY - rect.top) / rect.height) * 100) };
+  };
+  const onDown = (id, e) => {
+    e.preventDefault();
+    try { svgRef.current.setPointerCapture(e.pointerId); } catch (_) {}
+    setDrag({ id, pid: e.pointerId, moved: false });
+  };
+  const onMove = (e) => {
+    if (!drag) return;
+    const p = pointFromEvent(e);
+    if (!p) return;
+    setPos((prev) => ({ ...prev, [drag.id]: p }));
+    if (!drag.moved) setDrag((d) => d && { ...d, moved: true });
+  };
+  const onUp = (e) => {
+    if (!drag) return;
+    try { svgRef.current.releasePointerCapture(drag.pid); } catch (_) {}
+    const moved = drag.moved;
+    const id = drag.id;
+    const p = pos[id];
+    setDrag(null);
+    if (moved && p) onMoveNode(id, p);            // drag → persist new position
+    else onNodeClick(id);                          // tap → select / connect
+  };
+
+  return (
+    <div className="stm__canvas" data-testid="st-constellation">
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="stc__svg" preserveAspectRatio="xMidYMid meet"
+           onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+           style={{ touchAction: "none" }}>
+        <defs>
+          <pattern id="stm-grain" patternUnits="userSpaceOnUse" width="4" height="4">
+            <circle cx="2" cy="2" r="0.4" fill="rgba(120,96,60,0.12)"/>
+          </pattern>
+        </defs>
+        <rect x="0" y="0" width={W} height={H} fill="url(#stm-grain)" opacity="0.6"/>
+        {[0, 1, 2].map((i) => (
+          <circle key={i} cx={W / 2} cy={H / 2} r={110 + i * 90} fill="none"
+                  stroke="rgba(74,56,28,0.16)" strokeWidth="0.6" strokeDasharray={i === 0 ? "2 5" : "1 4"}/>
+        ))}
+
+        {/* Edges */}
+        <g>
+          {(tree.edges || []).map((edge, i) => {
+            const a = posOf(edge.from), b = posOf(edge.to);
+            if (!a || !b) return null;
+            const x1 = (a.x / 100) * W, y1 = (a.y / 100) * H;
+            const x2 = (b.x / 100) * W, y2 = (b.y / 100) * H;
+            const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - 14;
+            return <path key={i} d={`M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`}
+                         fill="none" stroke="#3a2c12" strokeOpacity="0.5" strokeWidth="1.2"/>;
+          })}
+        </g>
+
+        {/* Nodes */}
+        <g>
+          {nodeIds.map((id) => {
+            const p = posOf(id);
+            const x = (p.x / 100) * W, y = (p.y / 100) * H;
+            const unlocked = !!((layout[id] || {}).unlocked);
+            const isSel = id === selectedId;
+            const isArmed = id === connectFrom;
+            const r = 15;
+            return (
+              <g key={id} transform={`translate(${x}, ${y})`}
+                 data-testid={"st-star-" + id}
+                 onPointerDown={(e) => onDown(id, e)}
+                 style={{ cursor: drag && drag.id === id ? "grabbing" : "grab" }}>
+                {(isSel || isArmed) && <circle r={r + 10} fill="var(--accent, #9a7b3a)" opacity="0.12"/>}
+                {isArmed && <circle r={r + 6} fill="none" stroke="#c98a2c" strokeWidth="1.5" strokeDasharray="2 3"/>}
+                <circle r={r + 2} fill="rgba(255,248,230,0.96)" stroke="var(--accent-deep, #7a5c2a)" strokeWidth="0.8"/>
+                <circle r={r} fill={unlocked ? "var(--accent, #9a7b3a)" : "rgba(255,248,230,0.96)"}
+                              stroke="var(--accent-deep, #7a5c2a)" strokeWidth={unlocked ? 0 : 1.5}/>
+                {unlocked && <circle r={r * 0.5} fill="#fff" opacity="0.5"/>}
+                <text textAnchor="middle" dominantBaseline="central" fontFamily="var(--font-display)"
+                      fontWeight="700" fontSize="13" fill={unlocked ? "#fff" : "var(--accent-deep, #7a5c2a)"}
+                      style={{ pointerEvents: "none" }}>{unlocked ? "★" : "☆"}</text>
+                <text y={r + 16} textAnchor="middle" fontFamily="var(--font-display)" fontWeight="600"
+                      fontSize="13" fill="#2a2218" style={{ pointerEvents: "none" }}>{skillName(id)}</text>
+              </g>
+            );
+          })}
+        </g>
+      </svg>
+      <div className="stm__canvas-hint">Drag stars to arrange · tap a star to {connectFrom ? "connect" : "select"}</div>
+    </div>
+  );
+};
+
 const SkillTreeLiveManager = () => {
   const B = () => window.LoomwrightBackend;
   const read = () => (B() && B().SkillTreeService ? (B().SkillTreeService.loadSync().trees || []) : []);
@@ -805,6 +917,9 @@ const SkillTreeLiveManager = () => {
   };
   const assignCast = async (cid) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.assignCast(tree.id, cid); };
   const assignClass = async (clid) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.assignClass(tree.id, clid); };
+  const moveNode = async (id, p) => { const s = B() && B().SkillTreeService; if (!s || !tree) return; await s.updateNodePosition(tree.id, id, p); };
+  const [selNode, setSelNode] = React.useState(null);
+  const nodeClick = (id) => { if (connectFrom) { connect(id); } else { setSelNode((cur) => cur === id ? null : id); } };
 
   return (
     <div className="stm" data-ui="SkillTreeLiveManager">
@@ -829,6 +944,11 @@ const SkillTreeLiveManager = () => {
             <button type="button" className="stm-btn" data-testid="st-add-node" onClick={addNode}><Icon name="plus" size={10}/> Add node</button>
             <button type="button" className="stm-btn stm-btn--danger" data-testid="st-remove-tree" onClick={removeTree} title="Delete this tree">Delete tree</button>
           </div>
+
+          {nodes.length > 0 && (
+            <SkillTreeConstellation tree={tree} skillName={skillName} selectedId={selNode}
+              connectFrom={connectFrom} onNodeClick={nodeClick} onMoveNode={moveNode}/>
+          )}
 
           <div className="stm__sech">Nodes ({nodes.length})</div>
           <div className="stm__nodes">
@@ -895,7 +1015,7 @@ const SkillsPanelBody = ({ panel }) => {
           <div className="ste-future" data-ui="SkillTreeCanvasFuture">
             <Icon name="tree" size={28}/>
             <h2>Visual constellation canvas</h2>
-            <p>The drag-and-drop constellation canvas is a planned enhancement. For now, create and edit skill trees, nodes, connections, lock state, and cast/class assignments in the panel — every change persists and survives reload.</p>
+            <p>The constellation canvas is now in the panel: drag the stars to arrange each tree, tap a star to select it, and use a node's “Connect” button to link nodes. Every position, connection, lock state, and cast/class assignment persists and survives reload.</p>
             <button type="button" className="stm__add" data-callback="onExitSkillTreeEditor" onClick={() => setShowCanvasNote(false)}>Back to skills</button>
           </div>
         </div>
