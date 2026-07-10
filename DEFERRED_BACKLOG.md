@@ -80,11 +80,14 @@ display/seed wiring, not a rebuild.
   (which are implemented). → **AI Writer area**.
 
 ## From the pre-Area-3 fixes pass — adaptive wheel
-- **Full cross-app wheel context-awareness** — the wheel is now context-aware
-  over the manuscript (selection / chapter / entity-span) and exposes Standard
-  (free/local) + Deep (BYOK) AI/extraction actions. Extending contexts to map
-  nodes, relationship nodes, timeline events, and every tab's items is the rest
-  of → **Area 6 (adaptive wheel)**.
+- **Full cross-app wheel context-awareness** — the wheel is context-aware over
+  the manuscript (selection / chapter / entity-span) with Standard (free/local)
+  + Deep (BYOK) actions. **Area 6 progress:** a reusable `lw:open-entity-wheel`
+  mechanism now lets entity-tab nodes open the wheel with entity context
+  (Open / Edit / Merge / Review resolve against the real entity). **Timeline
+  event cards** are wired (right-click / long-press, live cards only). Remaining:
+  relationship cards, Atlas map nodes, and generic-framework tab rows → adopt the
+  same `lw:open-entity-wheel` dispatch. → **Area 6 (adaptive wheel)**.
 - **Wheel "Tag" action** — currently a placeholder notice; real tagging lands
   with the entity tabs/dossier. → **Area 7/8**.
 - **Deep (BYOK) model picker on the wheel** — Deep actions route through the

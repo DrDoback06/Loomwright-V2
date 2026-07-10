@@ -8,7 +8,7 @@
 // expanded — driven by `panel.expanded`.
 // =====================================================================
 
-const { useState: _tl_us, useMemo: _tl_um, useCallback: _tl_uc } = React;
+const { useState: _tl_us, useMemo: _tl_um, useCallback: _tl_uc, useRef: _tl_ur } = React;
 
 // ---------------------------------------------------------------------
 // Demo events — book order + chronological order with deltas.
@@ -232,10 +232,29 @@ const buildDemoTimelineDataset = () => ({
 const TLEventCard = ({ event, orientation, onClick, selected, cast = {}, locs = {} }) => {
   const loc = locs[event.locationId];
   const era = TL_ERAS.find((e) => e.id === event.era) || TL_ERAS[1];
+  // Right-click / long-press opens the adaptive wheel with this event's entity
+  // context (live cards only — demo cards have no backing entity).
+  const openWheel = (clientX, clientY) => {
+    if (!event._entity) return;
+    window.dispatchEvent(new CustomEvent("lw:open-entity-wheel", {
+      detail: { x: clientX, y: clientY, entityId: event.id, entityType: "events", label: event.label },
+    }));
+  };
+  const lp = _tl_ur({ timer: null, x: 0, y: 0 });
   return (
     <button className={"tl-card" + (selected ? " is-on" : "") + (event.flashback ? " is-flashback" : "")}
             data-orientation={orientation}
+            data-event-id={event.id}
             onClick={() => onClick && onClick(event)}
+            onContextMenu={(e) => { if (!event._entity) return; e.preventDefault(); openWheel(e.clientX, e.clientY); }}
+            onPointerDown={(e) => {
+              if (e.pointerType === "mouse" || !event._entity) return;
+              lp.current.x = e.clientX; lp.current.y = e.clientY;
+              if (lp.current.timer) clearTimeout(lp.current.timer);
+              lp.current.timer = setTimeout(() => { lp.current.timer = null; openWheel(lp.current.x, lp.current.y); }, 500);
+            }}
+            onPointerUp={() => { if (lp.current.timer) { clearTimeout(lp.current.timer); lp.current.timer = null; } }}
+            onPointerLeave={() => { if (lp.current.timer) { clearTimeout(lp.current.timer); lp.current.timer = null; } }}
             style={{ "--c": era.color }}>
       <div className="tl-card__head">
         <span className="tl-card__date">{event.date}</span>

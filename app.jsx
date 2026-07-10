@@ -1093,6 +1093,24 @@ const AppShell = () => {
     }
   }, [onOpenPanel, openEntityEditor, onSelectEntity, routeId]);
 
+  // Entity-tab nodes (relationship cards, timeline events, map nodes, …) open
+  // the adaptive wheel with entity context by dispatching lw:open-entity-wheel.
+  // Reuses the same "entity" context as manuscript entity spans, so the
+  // Open/Edit/Merge/Review actions already resolve.
+  _ue_a(() => {
+    const onEntityWheel = (e) => {
+      const d = (e && e.detail) || {};
+      if (!d.entityId) return;
+      onOpenAdaptiveWheel({
+        x: d.x || 0, y: d.y || 0,
+        contextLabel: d.label || "Entity",
+        context: { kind: "entity", entityId: d.entityId, entityType: d.entityType, label: d.label },
+      });
+    };
+    window.addEventListener("lw:open-entity-wheel", onEntityWheel);
+    return () => window.removeEventListener("lw:open-entity-wheel", onEntityWheel);
+  }, [onOpenAdaptiveWheel]);
+
   // Global keyboard
   _ue_a(() => {
     const onKey = (e) => {
