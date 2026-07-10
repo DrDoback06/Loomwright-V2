@@ -309,6 +309,11 @@
       if (Array.isArray(row.relatedEntityIds) && row.relatedEntityIds.length) {
         fields.data = { ...(fields.data || {}), relatedEntityIds: row.relatedEntityIds };
       }
+      // Keep the source quote as provenance on the new entity so dossiers /
+      // the Relationships evidence view can cite where it came from.
+      if (row.sourceQuote && !(fields.data && fields.data.sourceQuote)) {
+        fields.data = { ...(fields.data || {}), sourceQuote: row.sourceQuote };
+      }
       saved = await B().EntityService.save(row.entityType || "references", fields, { status: "active" });
     }
     // Backfill any pending occurrences that were recorded against this

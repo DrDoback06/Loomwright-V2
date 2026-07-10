@@ -157,6 +157,17 @@ function loadService(win, relPath) {
   vm.runInNewContext(stripJsx(code), win, { filename: relPath });
 }
 
+// Load a JSX module into the sandbox by transpiling it first. Used for the
+// few pure adapters that live inside otherwise-React files (their view
+// components are defined but never invoked at load time). Requires a minimal
+// React shim on `win` so the module's top-level `const {…} = React` succeeds.
+function loadJsxService(win, relPath) {
+  const babel = require("@babel/standalone");
+  const src = fs.readFileSync(path.join(ROOT, relPath), "utf8");
+  const { code } = babel.transform(src, { presets: ["react"], filename: relPath });
+  vm.runInNewContext(code, win, { filename: relPath });
+}
+
 // ---------------- Run smoke checks ----------------
 
 async function main() {
@@ -1375,6 +1386,56 @@ async function main() {
       log("[fixA] strips ```json fence before parse", okFenced);
       log("[fixA] strips bare ``` fence before parse", okBare);
       log("[fixA] leaves unfenced JSON intact", okPlain);
+    }
+  }
+
+  // --- Area 4: Relationships tab renders the LIVE entity store ---
+  {
+    // Minimal React shim so relationships.jsx loads (view components are
+    // defined, never called here). Then exercise the pure dataset adapter.
+    win.React = win.React || {
+      useState: (v) => [typeof v === "function" ? v() : v, () => {}],
+      useMemo: (f) => f(),
+      useCallback: (f) => f,
+      useRef: () => ({ current: null }),
+      useEffect: () => {},
+      createElement: () => null,
+      Fragment: "fragment",
+    };
+    let loaded = false;
+    try { loadJsxService(win, "relationships.jsx"); loaded = true; } catch (e) { log("[rel] relationships.jsx loads", false, String(e.message)); }
+    if (loaded) {
+      log("[rel] buildLiveRelDataset exposed", typeof win.buildLiveRelDataset === "function");
+
+      // Seed two cast + accept a relationship candidate between them.
+      const aeR = await B.EntityService.save("cast", { name: "Rowan Vale", data: { role: "protagonist", goals: ["Reach the summit"], fears: ["The deep"] } }, { status: "active" });
+      const brR = await B.EntityService.save("cast", { name: "Kessa Dune", data: { role: "antagonist" } }, { status: "active" });
+      // A standalone relationship entity carrying structured fromId/toId + a
+      // persisted source quote (provenance) — mirrors an accepted candidate.
+      await B.EntityService.save("relationships", {
+        name: "Rowan Vale → Kessa Dune",
+        data: { fromId: aeR.id, toId: brR.id, relationshipType: "betrayed", sourceQuote: "Rowan turned, and Kessa was already gone." },
+      }, { status: "active" });
+      // A real chapter in the manifest + occurrences for both characters so
+      // the pair shares chapter 1 (drives the live chapter list).
+      await B.ManuscriptChapterService.save({ chapters: [{ id: "ch-rel", num: 1, title: "Chapter 1" }], activeChapterId: "ch-rel" });
+      await B.OccurrenceService.save({ entityId: aeR.id, entityType: "cast", exactText: "Rowan", chapterId: "ch-rel", startOffset: 0, endOffset: 5 });
+      await B.OccurrenceService.save({ entityId: brR.id, entityType: "cast", exactText: "Kessa", chapterId: "ch-rel", startOffset: 6, endOffset: 11 });
+
+      const ds = win.buildLiveRelDataset(B);
+      log("[rel] dataset is live (real cast present)", !!ds && ds.live === true);
+      const relRec = ds && ds.rels.find((r) => (r.a === aeR.id && r.b === brR.id) || (r.a === brR.id && r.b === aeR.id));
+      log("[rel] accepted relationship appears in the live graph", !!relRec);
+      log("[rel] verb 'betrayed' maps to the enemy type", !!relRec && relRec.type === "enemy");
+      log("[rel] shared chapter derived from occurrences", !!relRec && relRec.chapters.length >= 1);
+      log("[rel] source quote surfaces as live evidence", !!ds && ds.evidence.some((e) => relRec && e.rel === relRec.id && /Kessa was already gone/.test(e.quote)));
+      log("[rel] hopes/fears read from cast goals+fears", !!ds && !!ds.hopesFears[aeR.id] && ds.hopesFears[aeR.id].hopes.includes("Reach the summit"));
+      log("[rel] both seeded cast appear in the cast list", !!ds && ds.castList.some((c) => c.id === aeR.id) && ds.castList.some((c) => c.id === brR.id));
+
+      // Live review queue projection.
+      await B.ReviewService.add({ id: "rq-rel-smoke", entityType: "relationships", name: "Rowan ↔ Mira", confidence: 0.8, sourceQuote: "Mira watched Rowan from the doorway.", chapterId: "ch-rel", suggestedAction: "create", status: "pending" });
+      const ds2 = win.buildLiveRelDataset(B);
+      log("[rel] pending relationship candidate shows in review", !!ds2 && ds2.review.some((r) => r.id === "rq-rel-smoke" && r.lvl === "strong"));
     }
   }
 

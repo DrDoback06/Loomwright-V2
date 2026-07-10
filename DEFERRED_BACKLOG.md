@@ -5,18 +5,33 @@ owning area later. Each notes WHERE the data already lands so the later work is
 display/seed wiring, not a rebuild.
 
 ## From Area 1 — Extraction
-- **Relationships tab live rendering** — accepted relationship candidates now
-  persist with `fromId`/`toId`/`type` in `data`, but the Relationships tab
-  (`relationships.jsx`) still renders demo data. → **Area 4 (visual tabs)**.
+- **Relationships tab live rendering** — ✅ **DONE (Area 4).** The Relationships
+  tab (`relationships.jsx`) now renders the live entity store: cast + graph come
+  from real `cast` entities, and relationships are derived from three live
+  sources — the cast editor's relationship pickers (family/lovers/allies/…), the
+  legacy inline `relationships` array, and standalone `relationships` entities
+  accepted from extraction (`data.fromId`/`toId`/`relationshipType`). Verbs map
+  to the eight type buckets, chapters are derived from shared occurrences, review
+  mode lists live relationship candidates (Accept/Deny wired to the real queue),
+  and hopes/fears read from `cast.data.goals`/`fears`. The demo constants remain
+  a fallback for an empty project. Adapter: `buildLiveRelDataset`.
 - **Skill-tree assignment selector on skill candidates** — discovered skills
   land as entities; assigning them to a tree needs the skill-tree system. →
   **Skill Trees (Area 4/7)**.
 - **Travel/location display** — `cast.data.location` is set on accept; showing
   it in the Cast dossier + an Atlas travel line. → **Area 3 (Cast) / Atlas**.
-- **Source-quote provenance shown in dossiers** (the occurrence carries it). →
+- **Source-quote provenance shown in dossiers** — accepted candidates now
+  persist `data.sourceQuote` (callback-registry `acceptQueueItem` +
+  `autoApplyCandidate`), and the Relationships compare view cites it as
+  evidence. Surfacing the same quote in the **Cast dossier** is still open. →
   **Area 3 (Cast dossier)**.
 - **Two-pass relationship extraction** (richer relationship records). → later
   extraction-quality pass.
+- **Live relationship meters / change-history** — strength/trust/conflict are
+  currently keyed off the relationship type (the persisted record carries no
+  meters), and History shows a derived "new relationship" event per pair. Real
+  per-relationship meters + tracked change deltas are a later relationship-depth
+  pass. → **Area 4/7 (relationship depth)**.
 
 ## From Area 2 — Onboarding
 - **Genre RPG entity templates** — seed example classes/races/abilities from the

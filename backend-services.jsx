@@ -3362,6 +3362,7 @@
       if (ri.suggestedChanges && ri.suggestedChanges.aliases) fields.aliases = ri.suggestedChanges.aliases;
       if (ri.suggestedChanges && Object.keys(ri.suggestedChanges).length) fields.data = { ...(fields.data || {}), ...ri.suggestedChanges };
       if (Array.isArray(ri.relatedEntityIds) && ri.relatedEntityIds.length) fields.data = { ...(fields.data || {}), relatedEntityIds: ri.relatedEntityIds };
+      if (ri.sourceQuote && !(fields.data && fields.data.sourceQuote)) fields.data = { ...(fields.data || {}), sourceQuote: ri.sourceQuote };
       return EntityService.save(type, fields, { status: "active" });
     }
     return null;

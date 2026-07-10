@@ -14,7 +14,7 @@
 // Auger, Dav) so the relationship graph feels populated.
 // =====================================================================
 
-const { useState: _re_us, useMemo: _re_um, useCallback: _re_uc, useRef: _re_ur } = React;
+const { useState: _re_us, useMemo: _re_um, useCallback: _re_uc, useRef: _re_ur, useEffect: _re_ue } = React;
 
 // ---------------------------------------------------------------------
 // Demo data — relationships, evidence, change events, review queue.
@@ -83,6 +83,288 @@ const REL_HOPES_FEARS = {
 // ---------------------------------------------------------------------
 const _castById = () => Object.fromEntries((window.ATLAS_CAST || []).map((c) => [c.id, c]));
 
+// =====================================================================
+// Live data adapters — project the real entity store into the shapes the
+// relationship views consume. Relationships are derived from three live
+// sources: the cast editor's relationship pickers (family/lovers/allies/…),
+// the legacy inline `relationships` array on a cast row, and standalone
+// `relationships` entities accepted from extraction (data.fromId/toId/type).
+// When the live cast store is empty we return null so the panel falls back
+// to the demo constants above. All functions here are pure (no Date/random)
+// so they can be unit-tested at the Node level.
+// =====================================================================
+
+// Deterministic per-character colour — the live cast entity carries no
+// colour of its own, so hash the id into a parchment-friendly palette.
+const _REL_PALETTE = [
+  "#7a6aa3", "#a8553f", "#5d6d4e", "#b78a52", "#6b6f7a", "#8a6b58",
+  "#3e6db5", "#b86a82", "#4b8a6f", "#9c6a3c", "#6d5aa0", "#417a86",
+];
+const _relHash = (s) => {
+  let h = 0;
+  const str = String(s || "");
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return Math.abs(h);
+};
+const _relColorFor = (id) => _REL_PALETTE[_relHash(id) % _REL_PALETTE.length];
+
+const _relInitials = (name) => {
+  if (!name) return "?";
+  const parts = String(name).trim().split(/\s+/).filter(Boolean);
+  const a = parts[0]?.[0] || "";
+  const b = parts[1]?.[0] || parts[0]?.[1] || "";
+  return (a + b).toUpperCase() || "?";
+};
+
+// Map any relationship "kind" (cast picker field id, legacy cast rel kind,
+// or an extraction verb) to one of the eight REL_TYPES buckets.
+const _REL_KIND_TO_TYPE = {
+  friend: "friend", enemy: "enemy", family: "family", lover: "lover",
+  rival: "rival", mentor: "mentor", faction: "faction", unknown: "unknown",
+  // editor picker field ids (plural)
+  friends: "friend", enemies: "enemy", lovers: "lover", rivals: "rival",
+  mentors: "mentor", allies: "friend", ally: "friend", factions: "faction",
+  // legacy cast.relationships kinds
+  "loyal-to": "friend", "sworn-to": "friend", "ward-of": "mentor",
+  sister: "family", brother: "family", "sister-in-law": "family",
+  "brother-in-law": "family", parent: "family", child: "family",
+  cousin: "family", spouse: "lover", partner: "lover", betrothed: "lover",
+  // extraction verbs (RELATIONSHIP_VERBS, spaces dashed)
+  kissed: "lover", embraced: "lover", saved: "friend", comforted: "friend",
+  forgave: "friend", trusted: "friend", "whispered-to": "friend",
+  confronted: "rival", struck: "enemy", betrayed: "enemy",
+  abandoned: "enemy", "shouted-at": "enemy",
+};
+const _relTypeForKind = (kind) =>
+  _REL_KIND_TO_TYPE[String(kind || "").toLowerCase().trim().replace(/\s+/g, "-")] || "unknown";
+
+// Default meters per type — the persisted relationship record carries no
+// strength/trust/conflict, so the meters are keyed off the relationship type.
+const _REL_TYPE_METERS = {
+  friend:  { strength: 72, trust: 82, conflict: 14 },
+  family:  { strength: 66, trust: 60, conflict: 26 },
+  lover:   { strength: 84, trust: 74, conflict: 22 },
+  rival:   { strength: 64, trust: 34, conflict: 66 },
+  enemy:   { strength: 62, trust: 12, conflict: 82 },
+  mentor:  { strength: 68, trust: 78, conflict: 16 },
+  faction: { strength: 55, trust: 45, conflict: 35 },
+  unknown: { strength: 48, trust: 48, conflict: 20 },
+};
+const _relClamp = (n) => Math.max(0, Math.min(100, Math.round(n)));
+const _relPickId = (v) => (typeof v === "string" ? v : (v && v.id) || null);
+
+const _relToLines = (v) => {
+  if (Array.isArray(v)) return v.map((x) => (typeof x === "string" ? x : (x && (x.label || x.name)) || "")).filter(Boolean);
+  if (typeof v === "string") return v.split(/\n|;|·/).map((s) => s.trim()).filter(Boolean);
+  return [];
+};
+
+const _relNorm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const _relFindCastByName = (name, castList) => {
+  const n = _relNorm(name);
+  if (!n) return null;
+  let hit = castList.find((c) => _relNorm(c.name) === n);
+  if (hit) return hit.id;
+  hit = castList.find((c) => _relNorm(c.name).split(" ")[0] === n.split(" ")[0]);
+  if (hit) return hit.id;
+  hit = castList.find((c) => { const cn = _relNorm(c.name); return cn.includes(n) || n.includes(cn); });
+  return hit ? hit.id : null;
+};
+
+const _REL_FIELD_KINDS = ["family", "lovers", "allies", "mentors", "rivals", "enemies"];
+const _REL_ROLE_RANK = { protagonist: 0, antagonist: 1, supporting: 2, minor: 3 };
+
+// Build the full live dataset. `B` defaults to window.LoomwrightBackend but
+// is injectable for tests. Returns null when there is no live cast to render.
+const buildLiveRelDataset = (B) => {
+  B = B || (typeof window !== "undefined" && window.LoomwrightBackend);
+  if (!B || !B.EntityService || typeof B.EntityService.listSync !== "function") return null;
+  const castRows = B.EntityService.listSync("cast") || [];
+  if (!castRows.length) return null;
+
+  // ---- cast index ----
+  const castMap = {};
+  const castList = [];
+  for (const e of castRows) {
+    if (!e || !e.id) continue;
+    const name = e.name || "Unknown";
+    const c = {
+      id: e.id,
+      name,
+      initials: e.glyphChar || e.initials || _relInitials(name),
+      color: e.color || (e.data && e.data.color) || _relColorFor(e.id),
+      role: (e.data && e.data.role) || e.role || "",
+      _entity: e,
+    };
+    castMap[e.id] = c;
+    castList.push(c);
+  }
+  castList.sort((a, b) =>
+    (_REL_ROLE_RANK[_relNorm(a.role)] ?? 4) - (_REL_ROLE_RANK[_relNorm(b.role)] ?? 4)
+    || a.name.localeCompare(b.name));
+
+  // ---- chapter-num map + per-entity chapter sets from occurrences ----
+  const chapterNum = new Map();
+  try {
+    const st = (B.ManuscriptChapterService && B.ManuscriptChapterService.loadSync) ? B.ManuscriptChapterService.loadSync() : {};
+    (st.chapters || []).filter((c) => !c.reserved).forEach((c, i) => chapterNum.set(c.id, c.num || (i + 1)));
+  } catch (_) {}
+  const chaptersByEntity = new Map();
+  try {
+    const occs = (B.OccurrenceService && B.OccurrenceService.listAllSync) ? B.OccurrenceService.listAllSync() : [];
+    for (const o of occs) {
+      if (!o || !o.entityId) continue;
+      const num = chapterNum.get(o.chapterId);
+      if (num == null) continue;
+      let set = chaptersByEntity.get(o.entityId);
+      if (!set) { set = new Set(); chaptersByEntity.set(o.entityId, set); }
+      set.add(num);
+    }
+  } catch (_) {}
+  const sharedChapters = (aId, bId) => {
+    const A = chaptersByEntity.get(aId), Bs = chaptersByEntity.get(bId);
+    if (!A || !Bs) return [];
+    return [...A].filter((n) => Bs.has(n)).sort((x, y) => x - y);
+  };
+
+  // ---- collect relationship pairs from every live source ----
+  const relMap = new Map();
+  const pairKey = (a, b) => [a, b].sort().join("|");
+  const upsert = (aId, bId, kind, { summary, secret, relEntity } = {}) => {
+    if (!aId || !bId || aId === bId) return;
+    if (!castMap[aId] || !castMap[bId]) return; // only between known cast
+    const key = pairKey(aId, bId);
+    const type = _relTypeForKind(kind);
+    const prev = relMap.get(key);
+    if (prev) {
+      if (prev.type === "unknown" && type !== "unknown") prev.type = type;
+      if (!prev.summary && summary) prev.summary = summary;
+      if (secret) prev.secret = true;
+      if (relEntity && !prev._relEntity) prev._relEntity = relEntity;
+      return;
+    }
+    const [a, b] = [aId, bId].sort();
+    relMap.set(key, { id: "rel-" + key, a, b, type, secret: !!secret, summary: summary || "", _relEntity: relEntity || null });
+  };
+
+  // Source 1: cast picker fields + legacy inline relationships.
+  for (const e of castRows) {
+    const d = e.data || {};
+    for (const field of _REL_FIELD_KINDS) {
+      const raw = d[field];
+      if (!Array.isArray(raw)) continue;
+      for (const v of raw) { const otherId = _relPickId(v); if (otherId) upsert(e.id, otherId, field); }
+    }
+    const legacy = Array.isArray(e.relationships) ? e.relationships
+      : (Array.isArray(d.relationships) ? d.relationships : null);
+    if (legacy) for (const r of legacy) { const otherId = _relPickId(r); if (otherId) upsert(e.id, otherId, r && r.kind); }
+  }
+
+  // Source 2: standalone relationship entities.
+  const relRows = B.EntityService.listSync("relationships") || [];
+  for (const r of relRows) {
+    const d = r.data || {};
+    let aId = d.fromId || null, bId = d.toId || null;
+    const kind = d.relationshipType || r.subtitle || "";
+    if (!aId || !bId) {
+      const parts = String(r.name || "").split(/↔|—|→|<->|->|\s-\s/).map((s) => s.trim()).filter(Boolean);
+      if (parts.length === 2) { aId = _relFindCastByName(parts[0], castList); bId = _relFindCastByName(parts[1], castList); }
+    }
+    if (aId && bId) upsert(aId, bId, kind, { summary: r.summary || r.subtitle || "", relEntity: r });
+  }
+
+  // ---- finalise each relationship with meters + live chapters ----
+  const rels = [];
+  for (const rec of relMap.values()) {
+    const meters = _REL_TYPE_METERS[rec.type] || _REL_TYPE_METERS.unknown;
+    const chapters = sharedChapters(rec.a, rec.b);
+    const bump = Math.min(chapters.length * 3, 15);
+    rels.push({
+      id: rec.id, a: rec.a, b: rec.b, type: rec.type,
+      strength: _relClamp(meters.strength + bump), trust: meters.trust, conflict: meters.conflict,
+      secret: rec.secret,
+      summary: rec.summary || `${castMap[rec.a].name} & ${castMap[rec.b].name} — ${(REL_TYPES[rec.type] || REL_TYPES.unknown).label}.`,
+      chapters, _relEntity: rec._relEntity,
+    });
+  }
+  rels.sort((a, b) => b.strength - a.strength);
+
+  // ---- evidence (persisted source quote on the relationship entity) ----
+  const evidence = [];
+  for (const r of rels) {
+    const d = (r._relEntity && r._relEntity.data) || {};
+    const quote = d.sourceQuote || d.quote || null;
+    if (quote) evidence.push({ id: "ev-" + r.id, rel: r.id, chapter: r.chapters[0] || null, quote, strength: "strong" });
+  }
+
+  // ---- changes: a live "new relationship" event at its first shared chapter ----
+  const changes = [];
+  for (const r of rels) {
+    if (!r.chapters.length) continue;
+    changes.push({
+      id: "chg-" + r.id, rel: r.id, chapter: r.chapters[0], kind: "new",
+      from: null, to: (REL_TYPES[r.type] || REL_TYPES.unknown).label, note: r.summary, date: "",
+    });
+  }
+
+  // ---- hopes / fears from cast data (goals/fears chips) ----
+  const hopesFears = {};
+  for (const c of castList) {
+    const d = c._entity.data || {};
+    const hopes = _relToLines(d.goals || d.hopes);
+    const fears = _relToLines(d.fears);
+    if (hopes.length || fears.length) hopesFears[c.id] = { hopes, fears };
+  }
+
+  // ---- review queue: live relationship candidates ----
+  const review = [];
+  try {
+    const q = (B.ReviewService && B.ReviewService.listSync) ? B.ReviewService.listSync("relationships") : [];
+    for (const item of q) {
+      if (item.status && item.status !== "pending" && item.status !== "auto-added") continue;
+      const pct = Math.round((item.confidence || 0) * 100);
+      const lvl = item.level || (pct >= 90 ? "high" : pct >= 75 ? "strong" : pct >= 50 ? "uncertain" : "weak");
+      const num = chapterNum.get(item.chapterId);
+      review.push({
+        id: item.id, lvl,
+        title: item.name || "Relationship candidate",
+        action: item.suggestedAction === "update" ? "Update relationship" : "New rel candidate",
+        excerpt: item.sourceQuote || item.summary || "",
+        cite: num != null ? ("Ch. " + num) : "",
+        _item: item,
+      });
+    }
+  } catch (_) {}
+
+  return { live: true, castMap, castList, rels, evidence, changes, hopesFears, review };
+};
+
+// Demo dataset — wraps the existing constants so the views share one shape.
+const buildDemoRelDataset = () => {
+  const castMap = _castById();
+  const castList = (window.ATLAS_CAST || []).map((c) => castMap[c.id]).filter(Boolean);
+  return {
+    live: false, castMap, castList,
+    rels: RELATIONSHIPS, evidence: REL_EVIDENCE, changes: REL_CHANGES,
+    hopesFears: REL_HOPES_FEARS, review: REL_REVIEW.map((r) => ({ ...r })),
+  };
+};
+
+// Circular layout for the network graph — deterministic, works for any cast
+// size (the old view hard-coded six positions).
+const _relLayout = (castList, W, H) => {
+  const n = castList.length;
+  const cx = W / 2, cy = H / 2;
+  const R = Math.min(W, H) * 0.36;
+  const pos = {};
+  castList.forEach((c, i) => {
+    if (n <= 1) { pos[c.id] = { x: cx, y: cy }; return; }
+    const ang = (-Math.PI / 2) + (i / n) * Math.PI * 2;
+    pos[c.id] = { x: cx + R * Math.cos(ang), y: cy + R * Math.sin(ang) };
+  });
+  return pos;
+};
+
 const REL_MODES = [
   { id: "single",   label: "Single",      icon: "user" },
   { id: "compare",  label: "Compare 2",   icon: "link" },
@@ -117,12 +399,12 @@ const RelAvatar = ({ cast, size = 28 }) => (
 // ---------------------------------------------------------------------
 // Single character view
 // ---------------------------------------------------------------------
-const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
-  const cast = _castById();
+const RelSingleView = ({ characterId, data, onSelectCharacter, onCompare }) => {
+  const cast = data.castMap;
   const c = cast[characterId];
   if (!c) return <div style={{ padding: 16, color: "var(--ink-3)" }}>Pick a character to begin.</div>;
 
-  const rels = RELATIONSHIPS.filter((r) => r.a === characterId || r.b === characterId);
+  const rels = data.rels.filter((r) => r.a === characterId || r.b === characterId);
   const groups = {};
   for (const r of rels) {
     const k = r.type;
@@ -130,7 +412,7 @@ const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
     groups[k].push(r);
   }
 
-  const hf = REL_HOPES_FEARS[characterId] || { hopes: [], fears: [] };
+  const hf = data.hopesFears[characterId] || { hopes: [], fears: [] };
 
   return (
     <div className="rel-single">
@@ -146,6 +428,13 @@ const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
           <span><b>{rels.filter((r) => r.conflict > 60).length}</b> high-conflict</span>
         </div>
       </div>
+
+      {rels.length === 0 && (
+        <div className="rel-empty rel-empty--lg" style={{ margin: "12px 0" }}>
+          No tracked relationships for {c.name} yet.
+          <button data-callback="onCreateRelationship" className="rel-add">+ Create</button>
+        </div>
+      )}
 
       <div className="rel-grid">
         {Object.entries(groups).map(([type, items]) => {
@@ -168,7 +457,7 @@ const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
                         {r.secret && <span className="rel-card__secret" title="Secret">⬛</span>}
                       </div>
                       <div className="rel-card__sum">{r.summary}</div>
-                      <div className="rel-card__chapters">Ch. {r.chapters.join(", ")}</div>
+                      {r.chapters.length > 0 && <div className="rel-card__chapters">Ch. {r.chapters.join(", ")}</div>}
                     </div>
                     <div className="rel-card__meters">
                       <span className="rel-card__meter" title="Strength" style={{ "--w": r.strength + "%", "--c": t.color }}/>
@@ -200,11 +489,14 @@ const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
           <span style={{ flex: 1 }}/>
           <button className="rel-section__more" data-callback="onOpenRelationshipTimeline">All changes →</button>
         </div>
-        {REL_CHANGES.filter((rc) => {
-          const rel = RELATIONSHIPS.find((r) => r.id === rc.rel);
-          return rel && (rel.a === characterId || rel.b === characterId);
-        }).slice(0, 4).map((rc) => {
-          const rel = RELATIONSHIPS.find((r) => r.id === rc.rel);
+        {(() => {
+          const rows = data.changes.filter((rc) => {
+            const rel = data.rels.find((r) => r.id === rc.rel);
+            return rel && (rel.a === characterId || rel.b === characterId);
+          }).slice(0, 4);
+          if (!rows.length) return <div className="rel-empty">No tracked changes yet.</div>;
+          return rows.map((rc) => {
+          const rel = data.rels.find((r) => r.id === rc.rel);
           if (!rel) return null;
           const other = cast[rel.a === characterId ? rel.b : rel.a];
           if (!other) return null;
@@ -226,7 +518,8 @@ const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
               </div>
             </div>
           );
-        })}
+          });
+        })()}
       </div>
     </div>
   );
@@ -235,15 +528,15 @@ const RelSingleView = ({ characterId, onSelectCharacter, onCompare }) => {
 // ---------------------------------------------------------------------
 // Compare view (2 characters)
 // ---------------------------------------------------------------------
-const RelCompareView = ({ aId, bId, onSelectCharacter }) => {
-  const cast = _castById();
+const RelCompareView = ({ aId, bId, data, onSelectCharacter }) => {
+  const cast = data.castMap;
   const a = cast[aId], b = cast[bId];
   if (!a || !b) return <div style={{ padding: 16 }}>Pick two characters.</div>;
 
-  const rel = RELATIONSHIPS.find((r) =>
+  const rel = data.rels.find((r) =>
     (r.a === aId && r.b === bId) || (r.a === bId && r.b === aId));
-  const evidence = REL_EVIDENCE.filter((e) => rel && e.rel === rel.id);
-  const changes = REL_CHANGES.filter((c) => rel && c.rel === rel.id);
+  const evidence = data.evidence.filter((e) => rel && e.rel === rel.id);
+  const changes = data.changes.filter((c) => rel && c.rel === rel.id);
   const t = rel ? REL_TYPES[rel.type] : REL_TYPES.unknown;
 
   return (
@@ -323,18 +616,11 @@ const RelCompareView = ({ aId, bId, onSelectCharacter }) => {
 // ---------------------------------------------------------------------
 // Network graph view — force-style layout (precomputed positions).
 // ---------------------------------------------------------------------
-const RelNetworkView = ({ onSelectCharacter, onCompare }) => {
-  const cast = _castById();
-  // Pre-computed circular layout — keeps the SVG deterministic
-  const positions = {
-    aelinor: { x: 50, y: 30 },
-    saren:   { x: 78, y: 50 },
-    brec:    { x: 30, y: 52 },
-    mara:    { x: 72, y: 78 },
-    auger:   { x: 22, y: 78 },
-    dav:     { x: 50, y: 86 },
-  };
+const RelNetworkView = ({ data, onSelectCharacter, onCompare }) => {
+  const cast = data.castMap;
   const W = 800, H = 540;
+  // Deterministic circular layout over whatever cast the project has.
+  const positions = _relLayout(data.castList, W, H);
 
   return (
     <div className="rel-net">
@@ -351,23 +637,22 @@ const RelNetworkView = ({ onSelectCharacter, onCompare }) => {
                 stroke="rgba(74,56,28,0.15)" strokeWidth="0.6" strokeDasharray="2 5"/>
 
         {/* Edges */}
-        {RELATIONSHIPS.map((r) => {
+        {data.rels.map((r) => {
           const pa = positions[r.a], pb = positions[r.b];
           if (!pa || !pb) return null;
-          const t = REL_TYPES[r.type];
+          const t = REL_TYPES[r.type] || REL_TYPES.unknown;
           const sw = 0.5 + (r.strength / 100) * 3;
           const op = 0.35 + (r.strength / 100) * 0.4;
           return (
             <g key={r.id}>
-              <line x1={(pa.x / 100) * W} y1={(pa.y / 100) * H}
-                    x2={(pb.x / 100) * W} y2={(pb.y / 100) * H}
+              <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
                     stroke={t.color}
                     strokeWidth={sw}
                     strokeOpacity={op}
                     strokeDasharray={r.secret ? "4 4" : "0"}/>
               {r.conflict > 60 && (
-                <circle cx={((pa.x + pb.x) / 2 / 100) * W}
-                        cy={((pa.y + pb.y) / 2 / 100) * H}
+                <circle cx={(pa.x + pb.x) / 2}
+                        cy={(pa.y + pb.y) / 2}
                         r={6 + (r.conflict / 100) * 6}
                         fill="#a8553f" opacity="0.18"/>
               )}
@@ -376,13 +661,12 @@ const RelNetworkView = ({ onSelectCharacter, onCompare }) => {
         })}
 
         {/* Nodes */}
-        {Object.entries(positions).map(([id, p]) => {
-          const c = cast[id];
-          if (!c) return null;
-          const x = (p.x / 100) * W, y = (p.y / 100) * H;
+        {data.castList.map((c) => {
+          const p = positions[c.id];
+          if (!p) return null;
           return (
-            <g key={id} transform={`translate(${x}, ${y})`}
-               onClick={() => onSelectCharacter(id)}
+            <g key={c.id} transform={`translate(${p.x}, ${p.y})`}
+               onClick={() => onSelectCharacter(c.id)}
                style={{ cursor: "pointer" }}>
               <circle r="36" fill="#fff" stroke={c.color} strokeWidth="2"/>
               <circle r="30" fill={c.color}/>
@@ -402,7 +686,7 @@ const RelNetworkView = ({ onSelectCharacter, onCompare }) => {
       </svg>
 
       <div className="rel-net__legend">
-        {Object.values(REL_TYPES).filter((t) => RELATIONSHIPS.some((r) => r.type === t.id)).map((t) => (
+        {Object.values(REL_TYPES).filter((t) => data.rels.some((r) => r.type === t.id)).map((t) => (
           <span key={t.id} className="rel-net__chip">
             <span className="rel-net__chip-sw" style={{ background: t.color }}/>
             {t.label}
@@ -421,13 +705,14 @@ const RelNetworkView = ({ onSelectCharacter, onCompare }) => {
 // ---------------------------------------------------------------------
 // Timeline (relationship changes across chapters)
 // ---------------------------------------------------------------------
-const RelTimelineView = () => {
-  const cast = _castById();
+const RelTimelineView = ({ data }) => {
+  const cast = data.castMap;
   const grouped = {};
-  for (const c of REL_CHANGES) {
+  for (const c of data.changes) {
     grouped[c.chapter] = grouped[c.chapter] || [];
     grouped[c.chapter].push(c);
   }
+  if (!data.changes.length) return <div className="rel-empty rel-empty--lg" style={{ margin: 16 }}>No tracked relationship changes yet.</div>;
   return (
     <div className="rel-tl">
       {Object.entries(grouped).sort((a, b) => Number(a[0]) - Number(b[0])).map(([ch, changes]) => (
@@ -435,7 +720,7 @@ const RelTimelineView = () => {
           <div className="rel-tl__chap-head">Ch. {ch}</div>
           <div className="rel-tl__list">
             {changes.map((c) => {
-              const rel = RELATIONSHIPS.find((r) => r.id === c.rel);
+              const rel = data.rels.find((r) => r.id === c.rel);
               if (!rel) return null;
               const a = cast[rel.a], b = cast[rel.b];
               return (
@@ -468,9 +753,9 @@ const RelTimelineView = () => {
 // ---------------------------------------------------------------------
 // Conflict heat view
 // ---------------------------------------------------------------------
-const RelConflictView = ({ onCompare }) => {
-  const cast = _castById();
-  const conflicts = RELATIONSHIPS.filter((r) => r.conflict > 40).sort((a, b) => b.conflict - a.conflict);
+const RelConflictView = ({ data, onCompare }) => {
+  const cast = data.castMap;
+  const conflicts = data.rels.filter((r) => r.conflict > 40).sort((a, b) => b.conflict - a.conflict);
   return (
     <div className="rel-conflict">
       {conflicts.map((r) => {
@@ -500,42 +785,74 @@ const RelConflictView = ({ onCompare }) => {
 // ---------------------------------------------------------------------
 // Review queue
 // ---------------------------------------------------------------------
-const RelReviewView = () => (
-  <div className="rel-review">
-    {REL_REVIEW.map((r) => (
-      <div key={r.id} className={"rel-review__card rel-review__card--" + r.lvl}>
-        <div className="rel-review__head">
-          <ConfidenceBadge level={r.lvl}/>
-          <span className="rel-review__title">{r.title}</span>
-        </div>
-        <p className="rel-review__quote">"{r.excerpt}"</p>
-        <div className="rel-review__meta">{r.cite}</div>
-        <div className="rel-review__pill">{r.action}</div>
-        <div className="rel-review__actions">
-          <button data-callback="onAcceptRelationshipQueueItem">Accept</button>
-          <button data-callback="onEditRelationshipQueueItem">Edit</button>
-          <button data-callback="onMergeRelationshipQueueItem">Merge</button>
-          <button data-callback="onDenyRelationshipQueueItem">Deny</button>
-        </div>
-      </div>
-    ))}
-  </div>
-);
+// Route a review action through the global callback bus so it lands on the
+// real ReviewService regardless of which host mounted the panel. Demo items
+// (no `_item`) fall through to the generic data-callback notice.
+const _relDispatch = (name, item) =>
+  window.LoomwrightDispatchCallback &&
+  window.LoomwrightDispatchCallback(name, { detail: item, entityId: item?.entityId, entityType: "relationships" });
+
+const RelReviewView = ({ data }) => {
+  if (!data.review.length) return <div className="rel-empty rel-empty--lg" style={{ margin: 16 }}>No relationship candidates awaiting review.</div>;
+  return (
+    <div className="rel-review">
+      {data.review.map((r) => {
+        const live = !!r._item;
+        const on = (name) => (live ? { onClick: () => _relDispatch(name, r._item) } : { "data-callback": name });
+        return (
+          <div key={r.id} className={"rel-review__card rel-review__card--" + r.lvl}>
+            <div className="rel-review__head">
+              <ConfidenceBadge level={r.lvl}/>
+              <span className="rel-review__title">{r.title}</span>
+            </div>
+            {r.excerpt && <p className="rel-review__quote">"{r.excerpt}"</p>}
+            {r.cite && <div className="rel-review__meta">{r.cite}</div>}
+            <div className="rel-review__pill">{r.action}</div>
+            <div className="rel-review__actions">
+              <button {...on("onAcceptRelationshipQueueItem")}>Accept</button>
+              <button {...on("onEditRelationshipQueueItem")}>Edit</button>
+              <button {...on("onMergeRelationshipQueueItem")}>Merge</button>
+              <button {...on("onDenyRelationshipQueueItem")}>Deny</button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 // ---------------------------------------------------------------------
 // RelationshipsPanelBody — entry point
 // ---------------------------------------------------------------------
 const RelationshipsPanelBody = ({ panel }) => {
   const [mode, setMode] = _re_us("single");
-  const [characterId, setCharacterId] = _re_us("aelinor");
-  const [compareWith, setCompareWith] = _re_us("saren");
+  const [characterId, setCharacterId] = _re_us(null);
+  const [compareWith, setCompareWith] = _re_us(null);
+
+  // Rebuild the dataset when the entity / occurrence / review / manuscript
+  // stores change, so accepted relationships appear live without a reload.
+  const [storeVersion, setStoreVersion] = _re_us(0);
+  _re_ue(() => {
+    const bump = () => setStoreVersion((v) => v + 1);
+    const evs = ["lw:entity-store-updated", "lw:review-queue-updated", "lw:occurrences-updated", "lw:manuscript-chapters-updated", "lw:backend-ready", "lw:project-imported"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+
+  const data = _re_um(() => buildLiveRelDataset() || buildDemoRelDataset(), [storeVersion]);
+  const cast = data.castList;
+
+  // Resolve the effective selection against the live cast so stale ids from a
+  // previous project don't blank the view.
+  const curChar = (characterId && data.castMap[characterId]) ? characterId
+    : (cast.find((c) => _relNorm(c.role) === "protagonist")?.id || cast[0]?.id || null);
+  const curPair = (compareWith && data.castMap[compareWith] && compareWith !== curChar) ? compareWith
+    : (cast.find((c) => c.id !== curChar)?.id || null);
 
   const onCompare = _re_uc((a, b) => {
     setCharacterId(a); setCompareWith(b); setMode("compare");
   }, []);
   const onSelectCharacter = _re_uc((id) => { setCharacterId(id); setMode("single"); }, []);
-
-  const cast = (window.ATLAS_CAST || []);
 
   return (
     <div className="rel" data-ui="RelationshipsPanelBody">
@@ -546,14 +863,14 @@ const RelationshipsPanelBody = ({ panel }) => {
                     onClick={() => setMode(m.id)} data-callback="onSetRelationshipMode" data-mode={m.id}>
               <Icon name={m.icon} size={10}/>
               <span>{m.label}</span>
-              {m.id === "review" && <span className="rel-bar__q">{REL_REVIEW.length}</span>}
+              {m.id === "review" && data.review.length > 0 && <span className="rel-bar__q">{data.review.length}</span>}
             </button>
           ))}
         </div>
         <div className="rel-bar__cast">
           {cast.map((c) => (
             <button key={c.id}
-                    className={"rel-bar__cast-b" + (characterId === c.id ? " is-on" : "") + (mode === "compare" && compareWith === c.id ? " is-pair" : "")}
+                    className={"rel-bar__cast-b" + (curChar === c.id ? " is-on" : "") + (mode === "compare" && curPair === c.id ? " is-pair" : "")}
                     onClick={() => mode === "compare" ? setCompareWith(c.id) : setCharacterId(c.id)}
                     style={{ "--c": c.color }}
                     title={c.name + (mode === "compare" ? " — pick as second" : "")}>
@@ -565,12 +882,16 @@ const RelationshipsPanelBody = ({ panel }) => {
       </div>
 
       <div className="rel-body">
-        {mode === "single"   && <RelSingleView characterId={characterId} onSelectCharacter={onSelectCharacter} onCompare={onCompare}/>}
-        {mode === "compare"  && <RelCompareView aId={characterId} bId={compareWith} onSelectCharacter={onSelectCharacter}/>}
-        {mode === "network"  && <RelNetworkView onSelectCharacter={onSelectCharacter} onCompare={onCompare}/>}
-        {mode === "timeline" && <RelTimelineView/>}
-        {mode === "conflict" && <RelConflictView onCompare={onCompare}/>}
-        {mode === "review"   && <RelReviewView/>}
+        {cast.length === 0
+          ? <div className="rel-empty rel-empty--lg" style={{ margin: 16 }}>No cast yet — create characters to map their relationships.</div>
+          : <>
+            {mode === "single"   && <RelSingleView characterId={curChar} data={data} onSelectCharacter={onSelectCharacter} onCompare={onCompare}/>}
+            {mode === "compare"  && <RelCompareView aId={curChar} bId={curPair} data={data} onSelectCharacter={onSelectCharacter}/>}
+            {mode === "network"  && <RelNetworkView data={data} onSelectCharacter={onSelectCharacter} onCompare={onCompare}/>}
+            {mode === "timeline" && <RelTimelineView data={data}/>}
+            {mode === "conflict" && <RelConflictView data={data} onCompare={onCompare}/>}
+            {mode === "review"   && <RelReviewView data={data}/>}
+          </>}
       </div>
     </div>
   );
@@ -580,4 +901,5 @@ Object.assign(window, {
   RELATIONSHIPS, REL_EVIDENCE, REL_CHANGES, REL_REVIEW, REL_TYPES, REL_MODES,
   RelationshipsPanelBody, RelSingleView, RelCompareView, RelNetworkView,
   RelTimelineView, RelConflictView, RelReviewView,
+  buildLiveRelDataset, buildDemoRelDataset,
 });
