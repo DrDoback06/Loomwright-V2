@@ -37,8 +37,17 @@ jobs:
       - name: Validate static references and callbacks
         run: npm run validate
 
-      - name: Run service smoke tests
-        run: npm run test:smoke
+      - name: Run core service smoke tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:smoke:core 2>&1 | tee smoke-core.log
+
+      - name: Run story intelligence smoke tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:smoke:intelligence 2>&1 | tee smoke-intelligence.log
 
       - name: Build production bundle
         run: npm run build
@@ -56,12 +65,14 @@ jobs:
         env:
           CI: true
 
-      - name: Upload Playwright diagnostics
+      - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-diagnostics-${{ github.run_id }}
+          name: loomwright-diagnostics-${{ github.run_id }}
           path: |
+            smoke-core.log
+            smoke-intelligence.log
             test-results/
             playwright-report/
           if-no-files-found: ignore
