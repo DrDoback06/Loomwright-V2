@@ -1,67 +1,21 @@
 // =====================================================================
-// lore-references.jsx — Lore / Canon panel + References panel.
+// lore-references.jsx — Lore / Canon panel + References panel (LIVE).
 //
 // Both panels share a card-list visual vocabulary but track different
 // objects:
 //   Lore / Canon: facts and rules the world is bound to.
 //   References:  external materials (uploads, pasted text, instructions).
+//
+// Area 6: both panels now read the live store. Canon facts come from the
+// "lore" entity collection; AI instructions from the real Project
+// Intelligence canon rules + forbidden terms (the exact strings appended
+// to every AI prompt). References come from ReferencesService (the same
+// store onboarding seeds into) — not the old demo constant, which had
+// silently become the service's fallback. All lore-* / refs-* CSS classes
+// are preserved.
 // =====================================================================
 
-const { useState: _lr_us, useMemo: _lr_um, useCallback: _lr_uc } = React;
-
-// ---------------------------------------------------------------------
-// Canon facts — sample data
-// ---------------------------------------------------------------------
-const CANON_FACTS = [
-  { id: "cf1", text: "Salt-wraiths cannot cross a circle of poured salt.",
-    scope: "world rule", hardness: "hard", confidence: "high",
-    source: "Ch. 6 · p. 184", linkedEntities: ["b-saltwraith","a-augur"],
-    contradictions: 0, included: true, lastUpdated: "2 days ago",
-    note: "Brec confirms; Auger's discipline matches." },
-  { id: "cf2", text: "House Vey's banner is never lowered.",
-    scope: "faction rule", hardness: "soft", confidence: "uncertain",
-    source: "Bk I · Ch. 4", linkedEntities: ["f-vey"], contradictions: 1,
-    included: true, lastUpdated: "5 days ago",
-    note: "Ch. 7 of Bk II shows them lowering it." },
-  { id: "cf3", text: "Glass Throne audiences last exactly three days.",
-    scope: "historical", hardness: "hard", confidence: "high",
-    source: "Bk I · Ch. 11", linkedEntities: ["f-glass","gc-throne"], contradictions: 0,
-    included: true, lastUpdated: "2 weeks ago" },
-  { id: "cf4", text: "Augur Stones are made by spiral-binding cliff-salt and bone.",
-    scope: "magic rule", hardness: "soft", confidence: "strong",
-    source: "Ch. 6 · p. 188", linkedEntities: ["i-augerstone","ao"], contradictions: 0,
-    included: true, lastUpdated: "3 days ago" },
-  { id: "cf5", text: "Hess has no winter — only a long autumn that ends abruptly.",
-    scope: "world rule", hardness: "hard", confidence: "high",
-    source: "Bk I · Author note", linkedEntities: ["hess"], contradictions: 0,
-    included: true, lastUpdated: "1 month ago" },
-  { id: "cf6", text: "Reach speech contracts on the second syllable of every word.",
-    scope: "language rule", hardness: "soft", confidence: "uncertain",
-    source: "Voice profile", linkedEntities: ["aelinor","brec"], contradictions: 0,
-    included: false, lastUpdated: "1 week ago",
-    note: "Style note; not strict — author may break it." },
-  { id: "cf7", text: "The Auger Stone, once used, cannot be used again in the same generation.",
-    scope: "magic rule", hardness: "hard", confidence: "high",
-    source: "Ch. 6 · p. 192", linkedEntities: ["i-augerstone"], contradictions: 0,
-    included: true, lastUpdated: "3 days ago" },
-];
-
-const CANON_CONTRADICTIONS = [
-  { id: "cc1", a: { factId: "cf2", source: "Bk I · Ch. 4" }, b: { source: "Bk II · Ch. 7" },
-    summary: "Banner was lowered in Ch. 7 of Bk II, contradicting Bk I's hard rule.",
-    affected: ["f-vey"],
-    suggestion: "Mark Bk II as a canonical break — banner now lowers under treaty conditions." },
-  { id: "cc2", a: { source: "Ch. 4 · p. 102", text: "Hess Tunnel rumour" }, b: { source: "Ch. 6 · p. 188", text: "Hess Tunnel rumour" },
-    summary: "Ch. 4 and Ch. 6 both reference 'the rumour of a tunnel under Hess' — but neither commits.",
-    affected: ["ht"],
-    suggestion: "Decide canon status — confirm location or remove from atlas." },
-];
-
-const CANON_AI_INSTRUCTIONS = [
-  { id: "ai1", text: "When Aelinor speaks, contract every second syllable. She does not use contractions of common verbs." },
-  { id: "ai2", text: "Never confirm the existence of the Hess Tunnel in narrator voice. Always frame as rumour." },
-  { id: "ai3", text: "Salt-wraiths do not have eyes. Never give them eyes." },
-];
+const { useState: _lr_us, useMemo: _lr_um, useCallback: _lr_uc, useEffect: _lr_ue } = React;
 
 const CANON_SCOPES = [
   { id: "all",         label: "All",            color: "#76684c" },
@@ -71,23 +25,136 @@ const CANON_SCOPES = [
   { id: "cultural",    label: "Cultural",       color: "#5d6d4e" },
   { id: "language",    label: "Language",       color: "#998f78" },
   { id: "faction",     label: "Faction",        color: "#3d3a78" },
-  { id: "ai",          label: "AI instruction", color: "#c98a2c" },
 ];
 
 // ---------------------------------------------------------------------
-// LorePanelBody
+// Live helpers
+// ---------------------------------------------------------------------
+const _lrB = () => (typeof window !== "undefined") && window.LoomwrightBackend;
+
+const _lrEntityIndex = () => {
+  const idx = new Map();
+  const B = _lrB();
+  if (!B || !B.EntityService) return idx;
+  try {
+    const all = B.EntityService.listAllSync() || {};
+    for (const byId of Object.values(all)) {
+      for (const e of Object.values(byId || {})) if (e && e.id) idx.set(e.id, e);
+    }
+  } catch (_) {}
+  return idx;
+};
+
+// Normalise a persisted lore scope string to one of the CANON_SCOPES ids.
+const _loreScope = (raw) => {
+  const s = String(raw || "").toLowerCase();
+  if (/world/.test(s)) return "world";
+  if (/magic|arcane|spell/.test(s)) return "magic";
+  if (/hist|legend|ago|era/.test(s)) return "history";
+  if (/cultur|custom|social/.test(s)) return "cultural";
+  if (/lang|speech|tongue/.test(s)) return "language";
+  if (/faction|house|order/.test(s)) return "faction";
+  return "world";
+};
+
+// ---------------------------------------------------------------------
+// buildLoreModel — live canon facts (lore entities) + AI instructions
+// (Project Intelligence canon rules + forbidden terms).
+// ---------------------------------------------------------------------
+const buildLoreModel = () => {
+  const empty = { facts: [], aiInstructions: [], contradictions: [], hasBackend: false };
+  const B = _lrB();
+  if (!B || !B.EntityService) return empty;
+  const entityIndex = _lrEntityIndex();
+
+  // Occurrences → first source cite per lore entity.
+  const firstSource = (entityId) => {
+    try {
+      const occs = B.OccurrenceService?.listByEntitySync?.(entityId) || [];
+      const o = occs[0];
+      if (o && o.chapterId) {
+        const st = B.ManuscriptChapterService?.loadSync?.() || {};
+        const ch = (st.chapters || []).find((c) => c.id === o.chapterId);
+        if (ch) return "Ch. " + (ch.num || "?");
+      }
+    } catch (_) {}
+    return "";
+  };
+
+  let loreEntities = [];
+  try { loreEntities = B.EntityService.listSync("lore") || []; } catch (_) {}
+  const facts = loreEntities.map((e) => {
+    const d = e.data || {};
+    const linked = (Array.isArray(d.relatedEntityIds) ? d.relatedEntityIds : (Array.isArray(d.linkedEntities) ? d.linkedEntities : []))
+      .map((id) => (typeof id === "string" ? id : (id && id.id)))
+      .filter(Boolean)
+      .map((id) => ({ id, name: entityIndex.get(id)?.name || id }));
+    const hardness = d.hardness === "hard" || d.canonical === true ? "hard" : "soft";
+    return {
+      id: e.id,
+      text: e.summary || d.body || e.name || "Lore fragment",
+      scope: d.scope || d.category || "world rule",
+      scopeId: _loreScope(d.scope || d.category),
+      hardness,
+      confidence: d.confidence || "strong",
+      source: d.source || firstSource(e.id) || "",
+      linkedEntities: linked,
+      included: d.includedInAI !== false,
+      note: d.note || "",
+    };
+  });
+
+  // AI instructions = the real strings appended to every AI prompt:
+  // Project Intelligence canon rules + forbidden terms.
+  const aiInstructions = [];
+  try {
+    const intel = B.ProjectIntelService?.loadSync?.() || {};
+    (Array.isArray(intel.canonRules) ? intel.canonRules : []).forEach((r, i) => {
+      if (r) aiInstructions.push({ id: "canon-" + i, text: String(r), kind: "canon" });
+    });
+    (Array.isArray(intel.forbidden) ? intel.forbidden : []).forEach((r, i) => {
+      if (r) aiInstructions.push({ id: "forbid-" + i, text: "Never use: " + String(r), kind: "forbidden" });
+    });
+  } catch (_) {}
+
+  const model = { facts, aiInstructions, contradictions: [], hasBackend: true };
+  try {
+    window.CANON_FACTS = facts;
+    window.CANON_AI_INSTRUCTIONS = aiInstructions;
+    window.CANON_CONTRADICTIONS = model.contradictions;
+  } catch (_) {}
+  return model;
+};
+
+const _loreUpdateData = async (id, patch) => {
+  const B = _lrB();
+  if (!B) return;
+  const e = B.EntityService.getSync(id, "lore");
+  if (!e) return;
+  await B.EntityService.update("lore", id, { data: { ...(e.data || {}), ...patch } });
+};
+const _loreOpenEditor = (id) => window.dispatchEvent(new CustomEvent("lw:open-entity-editor", { detail: { type: "lore", initial: { id }, mode: "full" } }));
+
+// ---------------------------------------------------------------------
+// LorePanelBody (LIVE)
 // ---------------------------------------------------------------------
 const LorePanelBody = ({ panel }) => {
+  const [storeVersion, setStoreVersion] = _lr_us(0);
+  _lr_ue(() => {
+    const bump = () => setStoreVersion((v) => v + 1);
+    const evs = ["lw:entity-store-updated", "lw:project-intel-updated", "lw:occurrences-updated", "lw:backend-ready"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+  const model = _lr_um(() => buildLoreModel(), [storeVersion]);
+
   const [scope, setScope] = _lr_us("all");
-  const [showAI, setShowAI] = _lr_us(false);
   const [view, setView] = _lr_us("facts"); // facts | contradictions | ai
 
-  const filteredFacts = scope === "all"
-    ? CANON_FACTS
-    : CANON_FACTS.filter((f) => f.scope.includes(scope === "world" ? "world" : scope === "magic" ? "magic" : scope === "history" ? "historical" : scope === "cultural" ? "cultural" : scope === "language" ? "language" : scope === "faction" ? "faction" : "—"));
+  const filteredFacts = scope === "all" ? model.facts : model.facts.filter((f) => f.scopeId === scope);
 
   return (
-    <div className="lore" data-ui="LorePanelBody">
+    <div className="lore" data-ui="LorePanelBody" data-entity-type="lore">
       <div className="lore-bar">
         <div className="lore-bar__views">
           {[["facts","Canon facts","book"], ["contradictions","Contradictions","warn"], ["ai","AI instructions","sparkle"]].map(([id, lbl, icon]) => (
@@ -95,8 +162,11 @@ const LorePanelBody = ({ panel }) => {
                     onClick={() => setView(id)}>
               <Icon name={icon} size={10}/>
               <span>{lbl}</span>
-              {id === "contradictions" && CANON_CONTRADICTIONS.length > 0 && (
-                <span className="lore-bar__q">{CANON_CONTRADICTIONS.length}</span>
+              {id === "contradictions" && model.contradictions.length > 0 && (
+                <span className="lore-bar__q">{model.contradictions.length}</span>
+              )}
+              {id === "ai" && model.aiInstructions.length > 0 && (
+                <span className="lore-bar__q">{model.aiInstructions.length}</span>
               )}
             </button>
           ))}
@@ -106,7 +176,7 @@ const LorePanelBody = ({ panel }) => {
         </button>
       </div>
 
-      {view === "facts" && (
+      {view === "facts" && model.facts.length > 0 && (
         <div className="lore-scopes">
           {CANON_SCOPES.map((s) => (
             <button key={s.id} className={"lore-scope" + (scope === s.id ? " is-on" : "")}
@@ -122,36 +192,39 @@ const LorePanelBody = ({ panel }) => {
       <div className="lore-body">
         {view === "facts" && (
           <div className="lore-facts">
+            {model.facts.length === 0 && (
+              <div className="refs-empty" style={{ padding: 24 }}>
+                <Icon name="book" size={20}/>
+                <p>No canon facts yet. Add one, or extract lore from the manuscript — the world rules you pin here are fed to the AI.</p>
+              </div>
+            )}
             {filteredFacts.map((f) => (
               <article key={f.id} className={"lore-fact lore-fact--" + f.hardness} data-included={f.included}>
                 <div className="lore-fact__head">
                   <span className={"lore-fact__hardness lore-fact__hardness--" + f.hardness}>{f.hardness === "hard" ? "HARD CANON" : "SOFT CANON"}</span>
                   <span className="lore-fact__scope">{f.scope}</span>
                   {f.included && <span className="lore-fact__badge lore-fact__badge--include">In Project Intelligence</span>}
-                  {f.contradictions > 0 && <span className="lore-fact__badge lore-fact__badge--warn">⚠ Contradiction</span>}
                   <span style={{ flex: 1 }}/>
-                  <span className="lore-fact__updated">Updated {f.lastUpdated}</span>
                 </div>
                 <p className="lore-fact__text">{f.text}</p>
                 {f.note && <p className="lore-fact__note">{f.note}</p>}
                 <div className="lore-fact__foot">
-                  <span className="lore-fact__source">{f.source}</span>
+                  {f.source && <span className="lore-fact__source">{f.source}</span>}
                   {f.linkedEntities.length > 0 && (
                     <span className="lore-fact__chips">
                       {f.linkedEntities.map((e) => (
-                        <span key={e} className="lore-fact__chip" data-callback="onLinkCanonToEntity">{e}</span>
+                        <span key={e.id} className="lore-fact__chip"
+                              onClick={() => window.dispatchEvent(new CustomEvent("lw:focus-entity", { detail: { entityId: e.id, label: e.name } }))}>{e.name}</span>
                       ))}
                     </span>
                   )}
                   <span style={{ flex: 1 }}/>
-                  <ConfidenceBadge level={f.confidence}/>
+                  {typeof ConfidenceBadge !== "undefined" && <ConfidenceBadge level={f.confidence}/>}
                 </div>
                 <div className="lore-fact__actions">
-                  <button data-callback="onMarkHardCanon">{f.hardness === "hard" ? "→ Soft" : "→ Hard"}</button>
-                  <button data-callback="onEditCanonFact">Edit</button>
-                  <button data-callback="onLinkCanonToReference">Link reference</button>
-                  <button data-callback="onCopyToProjectIntelligenceFile">{f.included ? "Exclude from AI" : "Include in AI"}</button>
-                  <button data-callback="onFlagContradiction" className="lore-fact__actions-warn">Flag contradiction</button>
+                  <button onClick={() => _loreUpdateData(f.id, { hardness: f.hardness === "hard" ? "soft" : "hard" })}>{f.hardness === "hard" ? "→ Soft" : "→ Hard"}</button>
+                  <button onClick={() => _loreOpenEditor(f.id)}>Edit</button>
+                  <button onClick={() => _loreUpdateData(f.id, { includedInAI: !f.included })}>{f.included ? "Exclude from AI" : "Include in AI"}</button>
                 </div>
               </article>
             ))}
@@ -160,42 +233,10 @@ const LorePanelBody = ({ panel }) => {
 
         {view === "contradictions" && (
           <div className="lore-contras">
-            {CANON_CONTRADICTIONS.map((c) => (
-              <article key={c.id} className="lore-contra">
-                <div className="lore-contra__head">
-                  <Icon name="warn" size={11}/>
-                  <span>Contradiction</span>
-                  <span style={{ flex: 1 }}/>
-                </div>
-                <div className="lore-contra__split">
-                  <div className="lore-contra__col">
-                    <div className="lore-contra__lbl">Source A</div>
-                    <div className="lore-contra__source">{c.a.source}</div>
-                    {c.a.factId && CANON_FACTS.find((f) => f.id === c.a.factId) && (
-                      <p className="lore-contra__quote">"{CANON_FACTS.find((f) => f.id === c.a.factId).text}"</p>
-                    )}
-                    {c.a.text && <p className="lore-contra__quote">{c.a.text}</p>}
-                  </div>
-                  <div className="lore-contra__vs">vs</div>
-                  <div className="lore-contra__col">
-                    <div className="lore-contra__lbl">Source B</div>
-                    <div className="lore-contra__source">{c.b.source}</div>
-                    {c.b.text && <p className="lore-contra__quote">{c.b.text}</p>}
-                  </div>
-                </div>
-                <p className="lore-contra__sum">{c.summary}</p>
-                <div className="lore-contra__suggestion">
-                  <Icon name="sparkle" size={10}/>
-                  <span><b>Suggestion:</b> {c.suggestion}</span>
-                </div>
-                <div className="lore-contra__actions">
-                  <button data-callback="onResolveCanonContradiction">Accept suggestion</button>
-                  <button data-callback="onEditCanonFact">Edit</button>
-                  <button data-callback="onMergeCanonFact">Merge</button>
-                  <button data-callback="onDenyCanonContradiction">Dismiss</button>
-                </div>
-              </article>
-            ))}
+            <div className="refs-empty" style={{ padding: 24 }}>
+              <Icon name="warn" size={20}/>
+              <p>No contradictions detected. When canon facts disagree across chapters, they'll surface here to reconcile.</p>
+            </div>
           </div>
         )}
 
@@ -203,16 +244,21 @@ const LorePanelBody = ({ panel }) => {
           <div className="lore-ai">
             <p className="lore-ai__intro">
               These instructions are appended to the AI's context every time it generates text for this project.
+              Edit them in onboarding / Project Intelligence.
             </p>
-            {CANON_AI_INSTRUCTIONS.map((i) => (
+            {model.aiInstructions.length === 0 && (
+              <div className="refs-empty" style={{ padding: 16 }}>
+                <Icon name="sparkle" size={18}/>
+                <p>No AI instructions yet. Add canon rules or forbidden terms in onboarding to steer every generation.</p>
+              </div>
+            )}
+            {model.aiInstructions.map((i) => (
               <div key={i.id} className="lore-ai__card">
                 <span className="lore-ai__bullet">▶</span>
                 <p>{i.text}</p>
-                <button data-callback="onEditCanonFact">Edit</button>
-                <button data-callback="onRemoveCanonFact" className="lore-ai__danger">Remove</button>
               </div>
             ))}
-            <button className="lore-ai__add" data-callback="onCreateCanonFact">
+            <button className="lore-ai__add" onClick={() => window.dispatchEvent(new CustomEvent("lw:open-onboarding-answers", { detail: { sectionId: "world" } }))}>
               <Icon name="plus" size={11}/><span>Add AI instruction</span>
             </button>
           </div>
@@ -223,64 +269,107 @@ const LorePanelBody = ({ panel }) => {
 };
 
 // ---------------------------------------------------------------------
-// References data
+// References — type metadata + live-kind normalisation.
 // ---------------------------------------------------------------------
-const REFERENCES = [
-  { id: "ref1", title: "Hess Court Etiquette — research note",
-    type: "research", tags: ["worldbuilding","hess"], linkedEntities: ["f-glass","gc-throne"],
-    aiContext: true, canonSource: true, styleSource: false,
-    lastOpened: "Yesterday", privacy: "local", sourceState: "active",
-    size: "1.2k words", excerpt: "Audience protocol, court seating, who may speak first…" },
-  { id: "ref2", title: "Aelinor — voice profile",
-    type: "style", tags: ["voice","aelinor","style"], linkedEntities: ["aelinor"],
-    aiContext: true, canonSource: false, styleSource: true,
-    lastOpened: "3 days ago", privacy: "local", sourceState: "active",
-    size: "820 words", excerpt: "Reach contraction, deliberate cadence, weather metaphors…" },
-  { id: "ref3", title: "salt-cliffs-reference.jpg",
-    type: "image", tags: ["atlas","pale-reach","mood"], linkedEntities: ["ac"],
-    aiContext: false, canonSource: false, styleSource: false,
-    lastOpened: "1 week ago", privacy: "local", sourceState: "active",
-    size: "2.1 MB", excerpt: "Photo reference — Donegal coast, used for the Auger Cliffs." },
-  { id: "ref4", title: "Bk I draft — Ch. 11",
-    type: "manuscript", tags: ["bk1","reference","canon"], linkedEntities: ["gc"],
-    aiContext: true, canonSource: true, styleSource: true,
-    lastOpened: "Today", privacy: "local", sourceState: "pinned",
-    size: "6.8k words", excerpt: "First Glass Audience scene — establishes the three-day rule." },
-  { id: "ref5", title: "Marlowe — style notes (private)",
-    type: "instructions", tags: ["author","instructions","style"], linkedEntities: [],
-    aiContext: true, canonSource: false, styleSource: true,
-    lastOpened: "Yesterday", privacy: "private", sourceState: "active",
-    size: "480 words", excerpt: "No epigraphs. Avoid prophesy unless filtered through dialogue…" },
-  { id: "ref6", title: "Pale Reach — character pinboard",
-    type: "image", tags: ["mood","atlas","cast"], linkedEntities: ["pr","aelinor","brec"],
-    aiContext: false, canonSource: false, styleSource: false,
-    lastOpened: "5 days ago", privacy: "local", sourceState: "active",
-    size: "4 photos · 3 sketches", excerpt: "Visual reference board." },
-];
-
 const REF_TYPE_META = {
   research:     { label: "Research",     color: "#3e6db5", icon: "book"    },
   style:        { label: "Style",        color: "#b86a82", icon: "feather" },
   image:        { label: "Image",        color: "#c97a3a", icon: "image"   },
   manuscript:   { label: "Manuscript",   color: "#5d6d4e", icon: "scroll"  },
   instructions: { label: "Instructions", color: "#c98a2c", icon: "sparkle" },
+  note:         { label: "Note",         color: "#7a6aa3", icon: "paper"   },
+  canon:        { label: "Canon",        color: "#7a5a3a", icon: "book"    },
+  url:          { label: "Link",         color: "#3d7a78", icon: "link"    },
+};
+// Map a stored reference `kind` (which can be a callback name like
+// "onPasteReference", or "pasted"/"note"/…) to a REF_TYPE_META key.
+const _refTypeKey = (kind) => {
+  const k = String(kind || "").toLowerCase();
+  if (REF_TYPE_META[k]) return k;
+  if (/paste|note|text/.test(k)) return "note";
+  if (/upload|research|doc/.test(k)) return "research";
+  if (/url|link/.test(k)) return "url";
+  if (/style|voice/.test(k)) return "style";
+  if (/image|photo|img/.test(k)) return "image";
+  if (/manuscript|draft/.test(k)) return "manuscript";
+  if (/instruction/.test(k)) return "instructions";
+  if (/canon/.test(k)) return "canon";
+  return "research";
+};
+const _refWordCount = (s) => {
+  const n = String(s || "").trim().split(/\s+/).filter(Boolean).length;
+  return n ? (n >= 1000 ? (n / 1000).toFixed(1) + "k words" : n + " words") : "";
+};
+
+const buildReferencesModel = () => {
+  const B = _lrB();
+  if (!B || !B.ReferencesService) return { refs: [], hasBackend: false };
+  const entityIndex = _lrEntityIndex();
+  let raw = [];
+  try { raw = B.ReferencesService.listSync() || []; } catch (_) {}
+  const refs = raw
+    .filter((r) => r && r.status !== "archived")
+    .map((r) => {
+      const typeKey = _refTypeKey(r.kind || r.type);
+      const linked = (Array.isArray(r.linkedEntities) ? r.linkedEntities : [])
+        .map((id) => (typeof id === "string" ? id : (id && id.id)))
+        .filter(Boolean)
+        .map((id) => ({ id, name: entityIndex.get(id)?.name || id }));
+      return {
+        id: r.id,
+        title: r.title || r.name || "Untitled reference",
+        typeKey,
+        aiContext: r.aiContext ?? r.includedInAIContext ?? true,
+        canonSource: !!(r.isCanonSource || r.canonSource || r.kind === "canon"),
+        styleSource: !!(r.isStyleInfluence || r.styleSource || r.kind === "style"),
+        privacy: r.privacy || (r.isPrivate ? "private" : "local"),
+        pinned: r.sourceState === "pinned" || r.pinned === true,
+        excerpt: r.excerpt || String(r.content || "").slice(0, 160),
+        size: r.size || _refWordCount(r.content),
+        tags: Array.isArray(r.tags) ? r.tags : [],
+        linkedEntities: linked,
+        _raw: r,
+      };
+    });
+  return { refs, hasBackend: true };
+};
+
+const _refSave = async (patch) => {
+  const B = _lrB();
+  if (B && B.ReferencesService) await B.ReferencesService.save(patch);
 };
 
 // ---------------------------------------------------------------------
-// ReferencesPanelBody
+// ReferencesPanelBody (LIVE)
 // ---------------------------------------------------------------------
 const ReferencesPanelBody = ({ panel }) => {
+  const [storeVersion, setStoreVersion] = _lr_us(0);
+  _lr_ue(() => {
+    const bump = () => setStoreVersion((v) => v + 1);
+    const evs = ["lw:references-updated", "lw:entity-store-updated", "lw:backend-ready"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+  const model = _lr_um(() => buildReferencesModel(), [storeVersion]);
+
   const [filter, setFilter] = _lr_us("all");
   const [search, setSearch] = _lr_us("");
 
-  const filtered = REFERENCES.filter((r) => {
-    if (filter !== "all" && r.type !== filter) return false;
-    if (search && !r.title.toLowerCase().includes(search.toLowerCase())) return false;
+  // Kinds that actually exist in the live references (for the type chips).
+  const kindsPresent = _lr_um(() => {
+    const set = new Set();
+    for (const r of model.refs) set.add(r.typeKey);
+    return [...set];
+  }, [model]);
+
+  const filtered = model.refs.filter((r) => {
+    if (filter !== "all" && r.typeKey !== filter) return false;
+    if (search && !(r.title.toLowerCase().includes(search.toLowerCase()) || r.tags.some((t) => t.toLowerCase().includes(search.toLowerCase())))) return false;
     return true;
   });
 
   return (
-    <div className="refs" data-ui="ReferencesPanelBody">
+    <div className="refs" data-ui="ReferencesPanelBody" data-entity-type="references">
       <div className="refs-bar">
         <div className="refs-bar__search">
           <Icon name="search" size={11}/>
@@ -296,10 +385,11 @@ const ReferencesPanelBody = ({ panel }) => {
 
       <div className="refs-types">
         <button className={"refs-type" + (filter === "all" ? " is-on" : "")} onClick={() => setFilter("all")}>
-          <span>All</span><span className="refs-type__n">{REFERENCES.length}</span>
+          <span>All</span><span className="refs-type__n">{model.refs.length}</span>
         </button>
-        {Object.entries(REF_TYPE_META).map(([id, m]) => {
-          const n = REFERENCES.filter((r) => r.type === id).length;
+        {kindsPresent.map((id) => {
+          const m = REF_TYPE_META[id] || REF_TYPE_META.research;
+          const n = model.refs.filter((r) => r.typeKey === id).length;
           return (
             <button key={id}
               className={"refs-type" + (filter === id ? " is-on" : "")}
@@ -315,7 +405,7 @@ const ReferencesPanelBody = ({ panel }) => {
 
       <div className="refs-list">
         {filtered.map((r) => {
-          const t = REF_TYPE_META[r.type] || REF_TYPE_META.research;
+          const t = REF_TYPE_META[r.typeKey] || REF_TYPE_META.research;
           return (
             <article key={r.id} className="refs-card" style={{ "--c": t.color }}>
               <div className="refs-card__head">
@@ -323,43 +413,50 @@ const ReferencesPanelBody = ({ panel }) => {
                 <span className="refs-card__type">{t.label}</span>
                 <span className="refs-card__title">{r.title}</span>
                 {r.privacy === "private" && <span className="refs-card__priv" title="Private — never sent to cloud">🔒</span>}
-                {r.sourceState === "pinned" && <Icon name="pin-tack" size={10}/>}
+                {r.pinned && <Icon name="pin-tack" size={10}/>}
               </div>
-              <p className="refs-card__excerpt">{r.excerpt}</p>
+              {r.excerpt && <p className="refs-card__excerpt">{r.excerpt}</p>}
               <div className="refs-card__badges">
                 {r.aiContext   && <span className="refs-card__badge refs-card__badge--ai">In AI context</span>}
                 {r.canonSource && <span className="refs-card__badge refs-card__badge--canon">Canon source</span>}
                 {r.styleSource && <span className="refs-card__badge refs-card__badge--style">Style ref</span>}
                 {!r.aiContext  && <span className="refs-card__badge refs-card__badge--off">Excluded from AI</span>}
               </div>
-              <div className="refs-card__tags">
-                {r.tags.map((tag) => <span key={tag} className="refs-card__tag">#{tag}</span>)}
-              </div>
+              {r.tags.length > 0 && (
+                <div className="refs-card__tags">
+                  {r.tags.map((tag) => <span key={tag} className="refs-card__tag">#{tag}</span>)}
+                </div>
+              )}
               {r.linkedEntities.length > 0 && (
                 <div className="refs-card__entities">
                   <span className="refs-card__lbl">Linked:</span>
                   {r.linkedEntities.map((e) => (
-                    <button key={e} className="refs-card__entity" data-callback="onOpenRelatedEntity">{e}</button>
+                    <button key={e.id} className="refs-card__entity"
+                            onClick={() => window.dispatchEvent(new CustomEvent("lw:focus-entity", { detail: { entityId: e.id, label: e.name } }))}>{e.name}</button>
                   ))}
                 </div>
               )}
               <div className="refs-card__foot">
-                <span>{r.size}</span>
-                <span>·</span>
-                <span>Last opened {r.lastOpened}</span>
+                {r.size && <><span>{r.size}</span><span>·</span></>}
+                <span className="refs-card__lbl">{t.label}</span>
                 <span style={{ flex: 1 }}/>
                 <div className="refs-card__actions">
-                  <button data-callback="onToggleReferenceAIContext">{r.aiContext ? "Exclude" : "Include"} AI</button>
-                  <button data-callback="onToggleReferenceCanonSource">Canon {r.canonSource ? "✓" : ""}</button>
-                  <button data-callback="onToggleReferenceStyleSource">Style {r.styleSource ? "✓" : ""}</button>
-                  <button data-callback="onTagReference">Tag</button>
-                  <button data-callback="onArchiveReference" className="refs-card__actions-warn">Archive</button>
+                  <button onClick={() => _refSave({ ...r._raw, aiContext: !r.aiContext })}>{r.aiContext ? "Exclude" : "Include"} AI</button>
+                  <button onClick={() => _refSave({ ...r._raw, isCanonSource: !r.canonSource })}>Canon {r.canonSource ? "✓" : ""}</button>
+                  <button onClick={() => _refSave({ ...r._raw, isStyleInfluence: !r.styleSource })}>Style {r.styleSource ? "✓" : ""}</button>
+                  <button onClick={() => _refSave({ ...r._raw, status: "archived" })} className="refs-card__actions-warn">Archive</button>
                 </div>
               </div>
             </article>
           );
         })}
-        {filtered.length === 0 && (
+        {model.refs.length === 0 && (
+          <div className="refs-empty">
+            <Icon name="paper" size={20}/>
+            <p>No references yet. Upload or paste research, style notes, or manuscript excerpts — the ones you mark "In AI context" steer every generation.</p>
+          </div>
+        )}
+        {model.refs.length > 0 && filtered.length === 0 && (
           <div className="refs-empty">
             <Icon name="paper" size={20}/>
             <p>No references match.</p>
@@ -370,8 +467,14 @@ const ReferencesPanelBody = ({ panel }) => {
   );
 };
 
+// Live diagnostics defaults (app.jsx reads .length). Do NOT seed
+// window.REFERENCES with demo data — it is ReferencesService's fallback.
+window.CANON_FACTS = window.CANON_FACTS || [];
+window.CANON_CONTRADICTIONS = window.CANON_CONTRADICTIONS || [];
+window.CANON_AI_INSTRUCTIONS = window.CANON_AI_INSTRUCTIONS || [];
+window.REFERENCES = window.REFERENCES || [];
+
 Object.assign(window, {
-  CANON_FACTS, CANON_CONTRADICTIONS, CANON_AI_INSTRUCTIONS, CANON_SCOPES,
-  REFERENCES, REF_TYPE_META,
+  CANON_SCOPES, REF_TYPE_META, buildLoreModel, buildReferencesModel,
   LorePanelBody, ReferencesPanelBody,
 });

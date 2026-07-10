@@ -65,6 +65,15 @@ display/seed wiring, not a rebuild.
   location / quest / faction filters; dedicated per-relationship and per-item
   lanes await those live passes.
 
+## From Area 6 — Lore & References (tracked in AREA_6_LORE_REFERENCES_AUDIT.md)
+- **Live contradiction detection** — cross-chapter canon-conflict finding is an
+  extraction-quality follow-up (the Contradictions tab shows an honest empty
+  state today).
+- **Inline AI-instruction editing** — canon rules render live/read-only; editing
+  routes to onboarding. In-panel editor is later polish.
+- **Reference tag editor + upload preview** — Upload/Paste save real refs; a
+  richer tag/preview surface is deferred.
+
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).
 - **AI Writer model picker UI** (routing already supports per-task models).
