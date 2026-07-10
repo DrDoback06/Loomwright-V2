@@ -133,13 +133,21 @@
     const afterOccurrences = occurrenceSnapshot();
     const occurrenceChanges = diffOccurrences(beforeOccurrences, afterOccurrences);
     if (!updated?.id) return updated;
-    return service.updateItem(updated.id, (current) => ({
+    const receiptUpdated = await service.updateItem(updated.id, (current) => ({
       ...current,
       impactReceipt: {
         ...(current.impactReceipt || {}),
         changedOccurrences: occurrenceChanges,
       },
     }));
+    // AppShell refreshes panel decoration on entity-store updates. The original
+    // Accept path may emit that event before this complete receipt exists, so
+    // issue one final refresh only after entity + occurrence receipt data is
+    // committed. This does not create another store or mutate entity content.
+    window.dispatchEvent(new CustomEvent("lw:entity-store-updated", {
+      detail: { reason: "impact-receipt-complete", reviewItemId: updated.id },
+    }));
+    return receiptUpdated;
   };
 
   service.receiptSafety = function occurrenceAwareSafety(itemOrId) {
