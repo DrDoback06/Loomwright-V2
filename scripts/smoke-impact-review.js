@@ -150,7 +150,7 @@ async function main() {
 
   const analysis = IR.analyse("ir-review");
   check("analysis includes stored evidence", analysis.evidence.some((e) => e.quote.includes("Witness Key")));
-  check("analysis builds a before/after owner change", analysis.changes.some((c) => c.key === "currentOwner" && c.before?.id === mara.id && c.after?.id === soren.id));
+  check("analysis builds a before/after owner change", analysis.changes.some((c) => c.fieldKey === "currentOwner" && c.key === "Current owner" && c.before?.id === mara.id && c.after?.id === soren.id));
   check("analysis calculates linked spiderweb entities", analysis.impact.affected.some((e) => e.id === quest.id) && analysis.impact.affected.some((e) => e.id === gate.id));
   check("analysis includes affected chapters", analysis.impact.chapters.some((c) => c.id === "ir-ch1"));
   check("analysis provides consequence guidance", analysis.hints.some((h) => /ownership/i.test(h)));
