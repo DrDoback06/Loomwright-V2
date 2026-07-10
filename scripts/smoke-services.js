@@ -1473,6 +1473,30 @@ async function main() {
     }
   }
 
+  // --- Area 5: Per-task model routing (the contract the picker UI writes) ---
+  {
+    // Seed a usable provider, then pin a task to a specific provider+model the
+    // way SetTaskRouting does, and confirm resolveRoute honours it.
+    await B.KeysService.saveProvider("openai", { providerType: "openai", enabled: true, apiKey: "sk-smoke-test", availableModels: ["gpt-4o", "gpt-4o-mini"], defaultModel: "gpt-4o-mini" });
+    const cfg = B.KeysService.loadProviderSync("openai");
+    log("[route] seeded provider is usable (enabled + keyed)", !!cfg && cfg.hasKey === true && cfg.enabled !== false);
+
+    await B.AIRoutingService.save({ defaultProviderId: "openai", tier: "normal", mode: "balanced" });
+    await B.AIRoutingService.save({ taskRoutes: { writingDraft: { providerId: "openai", model: "gpt-4o" } } });
+    const drafted = B.AIRoutingService.resolveRoute("writingDraft");
+    log("[route] pinned task resolves to its provider + model", !!drafted && drafted.providerId === "openai" && drafted.model === "gpt-4o");
+
+    // A task left on Auto falls back to the default provider, not the pin.
+    const auto = B.AIRoutingService.resolveRoute("rewritePassage");
+    log("[route] un-pinned task falls back to the default provider", !!auto && auto.providerId === "openai");
+
+    // taskRoutes persist across a reload (merge semantics on save).
+    await B.AIRoutingService.save({ taskRoutes: { deepExtraction: { providerId: "openai", model: "gpt-4o-mini" } } });
+    const routing = B.AIRoutingService.loadSync();
+    log("[route] multiple task routes coexist after merge-save",
+      routing.taskRoutes.writingDraft?.model === "gpt-4o" && routing.taskRoutes.deepExtraction?.model === "gpt-4o-mini");
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

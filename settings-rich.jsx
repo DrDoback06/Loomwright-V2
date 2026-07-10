@@ -542,6 +542,105 @@ const SetAIRouting = () => {
 };
 
 // =====================================================================
+// PER-TASK MODEL ROUTING (AI Writer model picker)
+//
+// The backend (AIRoutingService.taskRoutes + resolveRoute) already supports
+// routing each AI task to a specific provider + model; this surfaces it. Each
+// task can be left on "Auto" (default provider / tier resolution) or pinned to
+// a configured provider and one of its models. Persists straight to
+// AIRoutingService so extraction, drafting, etc. pick it up on the next call.
+// =====================================================================
+const TASK_ROUTES_META = [
+  { id: "writingDraft",        label: "Draft generation",     hint: "Composition overlay — Generate Draft." },
+  { id: "rewritePassage",      label: "Rewrite passage",      hint: "Rewrite / expand a selected passage." },
+  { id: "continueWriting",     label: "Continue writing",     hint: "Continue from the cursor." },
+  { id: "quickExtraction",     label: "Quick extraction",     hint: "Fast per-chapter entity scan." },
+  { id: "deepExtraction",      label: "Deep extraction",      hint: "Thorough multi-pass extraction." },
+  { id: "continuityCheck",     label: "Continuity check",     hint: "Contradiction / canon checks." },
+  { id: "projectIntelligence", label: "Project intelligence", hint: "Rebuild the distilled project brief." },
+  { id: "referenceSummary",    label: "Reference summary",    hint: "Summarise a reference source." },
+  { id: "skillTreeGeneration", label: "Skill-tree generation",hint: "Draft skill-tree nodes." },
+  { id: "aiHandoffAssist",     label: "Handoff assist",       hint: "Prep the external AI handoff pack." },
+];
+
+const SetTaskRouting = () => {
+  const RS = () => window.LoomwrightBackend?.AIRoutingService;
+  const KS = () => window.LoomwrightBackend?.KeysService;
+  const [version, setVersion] = _set_us(0);
+  _set_ue(() => {
+    const bump = () => setVersion((v) => v + 1);
+    const evs = ["lw:ai-routing-updated", "lw:ai-providers-updated", "lw:settings-updated", "lw:backend-ready"];
+    evs.forEach((e) => window.addEventListener(e, bump));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+
+  const routing = _set_um(() => (RS()?.loadSync?.() || { taskRoutes: {} }), [version]);
+  const taskRoutes = routing.taskRoutes || {};
+
+  // Providers usable for a real call: enabled + keyed (or a local provider).
+  const providerCfgs = _set_um(() => KS()?.loadAllProviderSettingsSync?.() || {}, [version]);
+  const usableProviders = _set_um(() => Object.values(providerCfgs).filter((c) =>
+    c && c.enabled !== false && (c.hasKey || RS()?.isLocalProviderCfg?.(c))
+  ), [providerCfgs, version]);
+
+  const providerName = (id) => {
+    const curated = SET_AI_PROVIDERS.find((p) => p.id === id);
+    if (curated) return curated.name;
+    const cfg = providerCfgs[id];
+    return (cfg && (cfg.name || cfg.providerType)) || id;
+  };
+  const modelsFor = (id) => {
+    const cfg = providerCfgs[id];
+    if (cfg && Array.isArray(cfg.availableModels) && cfg.availableModels.length) return cfg.availableModels;
+    const dm = (cfg && (cfg.defaultModel || cfg.model)) || (SET_AI_PROVIDERS.find((p) => p.id === id)?.defaultModel);
+    return dm ? [dm] : [];
+  };
+
+  const setRoute = (task, providerId, model) => {
+    // Empty providerId → "Auto": store an empty route so resolveRoute ignores it.
+    const entry = providerId ? { providerId, model: model || (modelsFor(providerId)[0] || "") } : {};
+    RS()?.save?.({ taskRoutes: { [task]: entry } });
+    setVersion((v) => v + 1);
+  };
+
+  const providerOptions = [{ value: "", label: "Auto (default / tier)" }]
+    .concat(usableProviders.map((p) => ({ value: p.id, label: providerName(p.id) })));
+
+  return (
+    <SetGroupCard title="Per-task model routing" hint="Pin an AI task to a specific provider and model, or leave it on Auto to follow your default provider and cost tier.">
+      {usableProviders.length === 0 ? (
+        <div className="set-note set-note--info" data-testid="task-routing-empty">
+          <b>No usable providers yet.</b> Add and enable a provider (with a key, or a local
+          provider like Ollama) in <b>AI Providers</b> to route individual tasks.
+        </div>
+      ) : (
+        TASK_ROUTES_META.map((t) => {
+          const route = taskRoutes[t.id] || {};
+          const pinned = !!route.providerId;
+          const models = pinned ? modelsFor(route.providerId) : [];
+          return (
+            <SetRow key={t.id} label={t.label} hint={t.hint}>
+              <div className="set-row__inline" data-task-route={t.id}>
+                <SetSelect value={route.providerId || ""} options={providerOptions}
+                  onChange={(pid) => setRoute(t.id, pid, "")}/>
+                {pinned && models.length > 0 && (
+                  <SetSelect value={route.model || models[0]} options={models}
+                    onChange={(m) => setRoute(t.id, route.providerId, m)}/>
+                )}
+                {pinned && models.length === 0 && (
+                  <SetInput value={route.model || ""} placeholder="model name"
+                    onChange={(m) => setRoute(t.id, route.providerId, m)}/>
+                )}
+              </div>
+            </SetRow>
+          );
+        })
+      )}
+    </SetGroupCard>
+  );
+};
+
+// =====================================================================
 // PRIVACY
 // =====================================================================
 const SetPrivacy = () => {
@@ -809,7 +908,7 @@ const RichSettingsSection = ({ sectionId, onRequest }) => {
     case "editor":     return <SetEditor/>;
     case "authors":    return <SetAuthors/>;
     case "ai":         return <SetAIProviders/>;
-    case "ai-routing": return <SetAIRouting/>;
+    case "ai-routing": return <><SetAIRouting/><SetTaskRouting/></>;
     case "privacy":    return <SetPrivacy/>;
     case "extraction": return <SetExtraction/>;
     case "review":     return <SetReview/>;
@@ -823,6 +922,6 @@ const RichSettingsSection = ({ sectionId, onRequest }) => {
 };
 
 Object.assign(window, {
-  RichSettingsSection,
+  RichSettingsSection, SetTaskRouting, TASK_ROUTES_META,
   SET_AI_PROVIDERS, SET_AI_PROVIDERS_MORE, SET_AI_USE_CASES,
 });

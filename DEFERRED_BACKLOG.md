@@ -79,6 +79,12 @@ display/seed wiring, not a rebuild.
 
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).
-- **AI Writer model picker UI** (routing already supports per-task models).
+- **AI Writer model picker UI** — ✅ **DONE (Area 5).** Settings → AI routing &
+  cost now has a **Per-task model routing** card (`SetTaskRouting`): each AI
+  task (draft/rewrite/continue/extraction/continuity/intel/…) can be pinned to a
+  configured provider + model or left on Auto, persisting to
+  `AIRoutingService.taskRoutes` which `resolveRoute` already honours. Shows an
+  empty note until a usable provider is configured. Remaining: a per-action
+  Deep-model chooser on the adaptive wheel → **Area 6 (wheel)**.
 - **Offline grammar/spell/thesaurus** in the Writer's Room (Word-like). →
   **Writers Room polish**.
