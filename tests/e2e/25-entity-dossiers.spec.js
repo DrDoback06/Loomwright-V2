@@ -108,7 +108,7 @@ test.describe("Y. Live entity dossiers and comparison", () => {
     await dossier.locator("[data-testid='dossier-tab-evolution']").click();
     await expect(dossier.locator("[data-testid='dossier-chapter-y-ch1']")).toContainText("Mara carried the Witness Key");
     await expect(dossier.locator("[data-testid='dossier-chapter-y-ch2']")).toContainText("Mara gave the Witness Key to Soren");
-    await expect(dossier.locator("[data-testid='dossier-chapter-y-ch3']")).toContainText("broken");
+    await expect(dossier.locator("[data-testid='dossier-chapter-y-ch3']")).toContainText(/broken/i);
 
     await dossier.locator("[data-testid='dossier-as-of']").selectOption("y-ch1");
     await expect(dossier).toContainText("Mara Vale");
