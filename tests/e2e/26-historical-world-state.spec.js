@@ -74,6 +74,13 @@ async function openWorldState(page) {
   return workspace;
 }
 
+async function waitForReviewKind(page, trackingKind) {
+  await page.waitForFunction((kind) => {
+    const rows = window.LoomwrightBackend?.ReviewService?.listSync?.() || [];
+    return rows.some((row) => row.trackingKind === kind);
+  }, trackingKind, { timeout: 10000 });
+}
+
 test.describe("Z. Historical world state", () => {
   test("reconstructs chapter truth and relationship trajectory without current-state leakage", async ({ page }) => {
     await openFreshApp(page);
@@ -134,6 +141,7 @@ test.describe("Z. Historical world state", () => {
 
     await workspace.locator("[data-testid='world-tab-branches']").click();
     await workspace.locator("[data-testid='branch-commit']").click();
+    await waitForReviewKind(page, "branch-commit");
     const state = await page.evaluate(() => {
       const B = window.LoomwrightBackend;
       return {
@@ -164,6 +172,7 @@ test.describe("Z. Historical world state", () => {
     await expect(workspace).toContainText("Ch. 3 · The Fracture");
 
     await workspace.locator("[data-testid='retcon-propose']").click();
+    await waitForReviewKind(page, "retcon");
     const state = await page.evaluate(() => {
       const B = window.LoomwrightBackend;
       return {
