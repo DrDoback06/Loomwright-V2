@@ -14,7 +14,7 @@ const source = fs.readFileSync(filename, "utf8")
   .replace("B.SettingsService.setSection(\"extraction\"", "B.SettingsService.saveSection(\"extraction\"")
   .replace(
     "load(win, \"narrative-tracking-rules.jsx\");",
-    "load(win, \"narrative-tracking-rules.jsx\");\n  load(win, \"narrative-tracking-pronoun-bridge.jsx\");",
+    "load(win, \"narrative-tracking-rules.jsx\");\n  load(win, \"narrative-tracking-pronoun-object-rules.jsx\");\n  load(win, \"narrative-tracking-pronoun-bridge.jsx\");",
   );
 
 const compiled = new Module(filename, module);
