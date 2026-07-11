@@ -477,6 +477,13 @@ async function main() {
       );
       log(`${tag} candidate ${exp.entityType}/${exp.suggestedAction}${exp.suggestedChanges ? " +changes" : ""}`, hit);
     }
+    // Candidate-name assertions (present / absent).
+    for (const nm of fixture.expectedCandidateNames || []) {
+      log(`${tag} candidate named "${nm}"`, allCand.some((c) => c.name === nm));
+    }
+    for (const nm of fixture.forbiddenCandidateNames || []) {
+      log(`${tag} no candidate named "${nm}"`, !allCand.some((c) => c.name === nm), allCand.map((c) => c.name).join(", "));
+    }
   }
 
   // -------------------------------------------------------------------

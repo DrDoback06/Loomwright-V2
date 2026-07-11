@@ -3060,6 +3060,23 @@
   const NER_ITEM_VERB_BEFORE = /\b(?:called|named|wielded|carried|drew|sheathed|forged|enchanted|found|holding|held|equipped|gripped|raised)\s+$/i;
   const NER_ITEM_NOUN_END = /(?:sword|blade|dagger|knife|axe|bow|spear|lance|mace|hammer|flail|club|whip|ring|amulet|crown|circlet|cloak|robe|staff|wand|rod|sceptre|scepter|shield|tome|grimoire|chalice|goblet|orb|gauntlets?|helm|helmet|pendant|necklace|locket|relic|key|crystal|gem|jewel|stone|elixir|potion|scroll|banner|horn|bell|mirror|talisman|charm|armour|armor|plate|mail|boots|gloves|belt|brooch)$/i;
   const NER_SKILL_BEFORE = /\b(?:skill|spell|ability|technique|power|talent|art|incantation|maneuver|manoeuvre)\s+(?:(?:called|named|known\s+as)\s+)?$/i;
+  // Implicit dialogue attribution — a name hugging a quotation mark is almost
+  // always the speaker (`"…!" Pipkins` or `Grimguff: "…"`). This is the most
+  // common way prose names a character WITHOUT an explicit speech verb, which
+  // the dialogue-verb cues above miss.
+  const NER_QUOTE_BEFORE = /["'”’)\]][\s,.!?—–-]*$/;
+  const NER_QUOTE_AFTER  = /^[\s,.:—–-]*["'“‘(]/;
+  // A name that opens a sentence and is immediately followed by a character
+  // action / state verb (`Grimguff looked.`, `Pipkins was at his side`).
+  // Deliberately animate verbs only — ambiguous ones ("came", "was", "fell",
+  // "stopped") also take abstract/time subjects ("Morning came", "Silence
+  // fell") and would mislabel them as characters.
+  const NER_SUBJECT_VERBS = "looked|stared|glanced|gazed|nodded|shrugged|frowned|smiled|grinned|smirked|laughed|chuckled|sighed|gasped|blinked|scowled|glared|knelt|reached|grabbed|drew|raised|lowered|stepped|strode|bolted|flinched|winced|hesitated|shook|leaned|spun|ducked|swore|cursed|wept|said|spoke|muttered|growled|snarled|whispered|shouted|snapped|replied|answered|asked|called|watched|pulled|pushed";
+  const NER_SUBJECT_VERB_AFTER = new RegExp(`^\\s+(?:${NER_SUBJECT_VERBS})\\b`, "i");
+  // Capitalised dialogue / sentence openers that are contractions of pronouns
+  // or common words ("It's", "You're", "That's", "Don't") are never names —
+  // they trip the quote-adjacency signal from inside a quotation.
+  const NER_CONTRACTION_OPENER = /^(?:It|I|You|He|She|We|They|That|This|There|Here|What|Who|Where|When|Why|How|Don|Can|Won|Isn|Aren|Wasn|Weren|Didn|Doesn|Couldn|Wouldn|Shouldn|Hasn|Haven|Hadn|Ain|Let|Its|Thats|Whats|Theres|Heres)['’]/;
 
   // Find runs of capitalised words (multi-word proper nouns), trimming
   // leading stopwords (sentence-initial "The Keep" → "Keep") and recording
@@ -3125,6 +3142,10 @@
       const after = text.slice(o.end, Math.min(text.length, o.end + 28));
       if (NER_HONORIFICS_BEFORE.test(before)) return { type: "cast", signal: "honorific", confidence: 0.82 };
       if (NER_DIALOGUE_AFTER.test(after) || NER_DIALOGUE_BEFORE.test(before)) consider({ type: "cast", signal: "dialogue", confidence: 0.8 });
+      // Implicit speaker: name hugging a quote mark.
+      if (NER_QUOTE_BEFORE.test(before) || NER_QUOTE_AFTER.test(after)) consider({ type: "cast", signal: "speaker", confidence: 0.8 });
+      // Sentence-opening name followed by a character verb.
+      if (o.atSentenceStart && NER_SUBJECT_VERB_AFTER.test(after)) consider({ type: "cast", signal: "subject-verb", confidence: 0.74 });
       if (NER_LOC_OF_BEFORE.test(before)) { consider({ type: "locations", signal: "loc-cue", confidence: 0.8 }); }
       if (NER_LOC_HEADNOUN_AFTER.test(after)) consider({ type: "locations", signal: "loc-headnoun", confidence: 0.7 });
       if (NER_SKILL_BEFORE.test(before)) consider({ type: "skills", signal: "skill-cue", confidence: 0.72 });
@@ -3158,6 +3179,11 @@
       if (out.length >= maxCandidates) break;
       const surface = g.surface;
       const count = g.occ.length;
+      // Multi-word ALL-CAPS runs are signage / emphasis ("CIVIC PARTICIPANT",
+      // "DO NOT ENTER"), never character or place names — skip them.
+      if (/\s/.test(surface) && surface === surface.toUpperCase()) continue;
+      // Contraction / pronoun openers from inside dialogue are not names.
+      if (NER_CONTRACTION_OPENER.test(surface)) continue;
       const known = findKnownEntityMention(surface, { threshold: 0.9 });
       let matchType = "new";
       if (known && (known.matchType === "exact" || known.matchType === "nickname")) continue;
