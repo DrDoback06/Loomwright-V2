@@ -74,6 +74,10 @@ async function runDeepLocalExtraction(page) {
   return wizard;
 }
 
+async function closeCompletedWizard(wizard) {
+  await wizard.getByRole("button", { name: "Close", exact: true }).last().click();
+}
+
 test.describe("X. Deep local narrative tracking", () => {
   test("converts one chapter into state, perspective, thread, contradiction, and enriched occurrence proposals", async ({ page }) => {
     await openFreshApp(page);
@@ -129,7 +133,7 @@ test.describe("X. Deep local narrative tracking", () => {
     await openFreshApp(page);
     await seedTrackingProject(page);
     const wizard = await runDeepLocalExtraction(page);
-    await wizard.getByRole("button", { name: /close/i }).click();
+    await closeCompletedWizard(wizard);
 
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "items" } })));
     const panel = page.locator("[data-panel-id='p-items']");
@@ -165,7 +169,7 @@ test.describe("X. Deep local narrative tracking", () => {
     await openFreshApp(page);
     await seedTrackingProject(page);
     let wizard = await runDeepLocalExtraction(page);
-    await wizard.getByRole("button", { name: /close/i }).click();
+    await closeCompletedWizard(wizard);
 
     wizard = await runDeepLocalExtraction(page);
     const history = await page.evaluate(() => window.LoomwrightBackend.ExtractionService.loadHistorySync());
