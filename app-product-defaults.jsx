@@ -107,8 +107,27 @@
     return state;
   }
 
+  function repairConnections(dossier) {
+    if (!dossier?.connections?.length) return dossier;
+    const snapshot = service.storySnapshot();
+    const outgoing = snapshot.linksByEntity?.get(dossier.id) || new Set();
+    const incoming = snapshot.backlinks?.get(dossier.id) || new Set();
+    dossier.connections = dossier.connections.map((connection) => ({
+      ...connection,
+      direction: outgoing.has(connection.id) && incoming.has(connection.id)
+        ? "mutual"
+        : outgoing.has(connection.id)
+          ? "outgoing"
+          : incoming.has(connection.id)
+            ? "incoming"
+            : "linked",
+    }));
+    return dossier;
+  }
+
   function reproject(dossier, asOfChapterId) {
     if (!dossier?.evolution) return dossier;
+    repairConnections(dossier);
     if (!asOfChapterId) {
       dossier.evolution.state = {
         status: latestAccepted(dossier.entity, "status", ["currentStatus"]),
@@ -135,7 +154,21 @@
   }
 
   service.build = function buildWithHistoricalProjection(entityOrId, type, opts = {}) {
-    return reproject(originalBuild(entityOrId, type, opts), opts.asOfChapterId || null);
+    // connectionRows in the first dossier implementation used the previous map
+    // callback's `id` outside its lexical scope. Supplying a temporary neutral
+    // global prevents the read model from aborting; repairConnections then
+    // recalculates every direction from the canonical link indexes.
+    const hadGlobalId = Object.prototype.hasOwnProperty.call(window, "id");
+    const previousGlobalId = window.id;
+    window.id = null;
+    try {
+      return reproject(originalBuild(entityOrId, type, opts), opts.asOfChapterId || null);
+    } finally {
+      if (hadGlobalId) window.id = previousGlobalId;
+      else {
+        try { delete window.id; } catch (_) { window.id = undefined; }
+      }
+    }
   };
 
   service.compare = function compareWithDeepEquality(entityRefs = [], opts = {}) {
