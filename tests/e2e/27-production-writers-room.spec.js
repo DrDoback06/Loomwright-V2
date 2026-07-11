@@ -101,6 +101,8 @@ test.describe("AA. Production Writer's Room", () => {
     await dialog.locator("[data-testid='wr-replace-all']").click();
     await expect(body).toContainText("Ember waited");
     await expect(body).toContainText("Ember carried");
+    await dialog.locator("[data-action='close']").click();
+    await expect(dialog).toBeHidden();
 
     await page.locator("[data-testid='wr-tb-undo']").click();
     await expect(body).toContainText("Ash waited");
