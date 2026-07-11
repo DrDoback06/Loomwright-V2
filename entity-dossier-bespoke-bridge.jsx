@@ -6,7 +6,17 @@
 (function () {
   if (typeof LiveEntityDossier === "undefined") return;
 
-  const { useState, useEffect, useMemo } = React;
+  // Keep bridge-specific layout isolated from the existing panel styles without
+  // adding another permanent stylesheet dependency to every build entry.
+  if (!document.querySelector("link[data-loomwright-dossier-bridge]")) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "entity-dossier-bridge.css";
+    link.setAttribute("data-loomwright-dossier-bridge", "true");
+    document.head.appendChild(link);
+  }
+
+  const { useState, useEffect, useMemo, useRef } = React;
   const REFRESH_EVENTS = [
     "lw:entity-store-updated",
     "lw:occurrence-store-updated",
@@ -22,6 +32,7 @@
     if (!BaseBody || BaseBody.__liveDossierBridge) return BaseBody;
 
     const BridgedBody = function LiveDossierBespokeBridge(props) {
+      const rootRef = useRef(null);
       const listNow = () => window.LoomwrightBackend?.EntityService?.listSync?.(entityType) || [];
       const [selectedId, setSelectedId] = useState(() => (
         props.panel?.selected?.id
@@ -52,6 +63,18 @@
         }
       }, [entities, selectedId]);
 
+      // Bespoke rosters predate the shared entity test/accessibility contract.
+      // Mirror their canonical data-entity-id onto the same stable row test id
+      // used by EntityRosterCard, without altering their visual implementation.
+      useEffect(() => {
+        const root = rootRef.current;
+        if (!root) return;
+        root.querySelectorAll("[data-entity-id]").forEach((row) => {
+          const id = row.getAttribute("data-entity-id");
+          if (id && !row.getAttribute("data-testid")) row.setAttribute("data-testid", `ent-row-${id}`);
+        });
+      }, [entities, tick]);
+
       const selectedEntity = entities.find((entity) => entity.id === selectedId) || null;
       const onSelectEntity = (reference) => {
         const id = reference?.id || reference?.entityId || null;
@@ -61,7 +84,7 @@
       };
 
       return (
-        <div className="led-bespoke-bridge" data-ui="LiveDossierBespokeBridge" data-entity-type={entityType}>
+        <div ref={rootRef} className="led-bespoke-bridge" data-ui="LiveDossierBespokeBridge" data-entity-type={entityType}>
           <BaseBody {...props} onSelectEntity={onSelectEntity}/>
           {selectedEntity && (
             <section className="led-bespoke-bridge__dossier" data-ui={`${label}LiveDossierExtension`}>
