@@ -138,6 +138,8 @@ test.describe("AC. Live Tangle boards", () => {
     const tangle = await openTangle(page);
 
     await tangle.locator("[data-testid='live-tangle-tray-ac-court']").click();
+    const courtNodeId = await nodeIdForEntity(page, "ac-court");
+    expect(courtNodeId).toBeTruthy();
     await tangle.getByRole("button", { name: "New board" }).click();
     const dialog = page.locator("[data-testid='live-tangle-board-dialog']");
     await dialog.locator("[data-testid='live-tangle-board-name']").fill("Alternate ending");
@@ -153,13 +155,13 @@ test.describe("AC. Live Tangle boards", () => {
     await inspector.locator("[data-testid='live-tangle-inspector-save']").click();
 
     await tangle.locator("[data-testid='live-tangle-board-select']").selectOption("tangle-board-main");
-    await expect(tangle).toContainText("Lantern Court");
-    await expect(tangle).not.toContainText("The key is never found");
+    await expect(tangle.locator(`[data-testid='live-tangle-node-${courtNodeId}']`)).toContainText("Lantern Court");
+    await expect(tangle.locator(`[data-testid='live-tangle-node-${altNoteId}']`)).toHaveCount(0);
 
     const alternateBoard = await page.evaluate(() => window.LoomwrightBackend.LiveTangleService.loadStateSync().boards.find((board) => board.name === "Alternate ending"));
     await tangle.locator("[data-testid='live-tangle-board-select']").selectOption(alternateBoard.id);
-    await expect(tangle).toContainText("The key is never found");
-    await expect(tangle).not.toContainText("Lantern Court");
+    await expect(tangle.locator(`[data-testid='live-tangle-node-${altNoteId}']`)).toContainText("The key is never found");
+    await expect(tangle.locator(`[data-testid='live-tangle-node-${courtNodeId}']`)).toHaveCount(0);
 
     const persisted = await page.evaluate(() => {
       const state = window.LoomwrightBackend.LiveTangleService.loadStateSync();
