@@ -136,6 +136,10 @@ const buildLiveTimelineDataset = (B) => {
     if (!l || !l.id) continue;
     locs[l.id] = { id: l.id, name: l.name || "Unknown", type: (l.data && l.data.type) || l.type || "" };
   }
+  const questNames = {};
+  for (const q of (B.EntityService.listSync("quests") || [])) {
+    if (q && q.id) questNames[q.id] = q.name || "Untitled quest";
+  }
 
   // chapterId -> num, and per-entity earliest chapter num from occurrences.
   const chapterNum = new Map();
@@ -187,6 +191,7 @@ const buildLiveTimelineDataset = (B) => {
       entities,
       locationId: locId && locs[locId] ? locId : null,
       quest: _tlPickId(d.quest) || null,
+      questLabel: (() => { const qid = _tlPickId(d.quest); return qid ? (questNames[qid] || (d.quest && d.quest.name) || null) : null; })(),
       summary: ent.summary || d.summary || "",
       flashback,
       source: chapter != null ? ("Ch. " + chapter) : (d.sourceQuote ? "Source quote" : (dateText || "")),
@@ -371,7 +376,7 @@ const TLInspector = ({ event, onClose, cast = {}, locs = {} }) => {
         <TLRow k="Canon"      v={event.canon}/>
         <TLRow k="Date type"  v={event.dateType}/>
         {loc && <TLRow k="Location" v={loc.name}/>}
-        {event.quest && <TLRow k="Quest" v={event.quest}/>}
+        {event.quest && <TLRow k="Quest" v={event.questLabel || event.quest}/>}
       </div>
       <div className="tl-insp__sec">
         <div className="tl-insp__sech">Cast involved</div>

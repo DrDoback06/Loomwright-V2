@@ -1452,10 +1452,11 @@ async function main() {
       await B.ManuscriptChapterService.save({ chapters: [{ id: "ch-tl", num: 2, title: "Chapter 2" }], activeChapterId: "ch-tl" });
       const hero = await B.EntityService.save("cast", { name: "Tomas Reed" }, { status: "active" });
       const keep = await B.EntityService.save("locations", { name: "The Keep", data: { type: "city" } }, { status: "active" });
+      const quest = await B.EntityService.save("quests", { name: "Hold the Keep" }, { status: "active" });
       const ev = await B.EntityService.save("events", {
         name: "The Keep Falls",
         summary: "The outer wall was breached at dawn.",
-        data: { eventType: "Battle", participants: [{ id: hero.id, name: hero.name, type: "cast" }], location: { id: keep.id, name: keep.name, type: "locations" } },
+        data: { eventType: "Battle", participants: [{ id: hero.id, name: hero.name, type: "cast" }], location: { id: keep.id, name: keep.name, type: "locations" }, quest: { id: quest.id, name: quest.name, type: "quests" } },
       }, { status: "active" });
       await B.OccurrenceService.save({ entityId: ev.id, entityType: "events", exactText: "The Keep Falls", chapterId: "ch-tl", startOffset: 0, endOffset: 14 });
 
@@ -1466,6 +1467,7 @@ async function main() {
       log("[tl] event anchored to its occurrence chapter", !!evRec && evRec.chapter === 2 && evRec.era === "ch");
       log("[tl] participants resolve to live cast", !!evRec && evRec.entities.includes(hero.id));
       log("[tl] location resolves to a live location", !!evRec && evRec.locationId === keep.id && tds.locs[keep.id].name === "The Keep");
+      log("[tl] quest id resolves to the quest name", !!evRec && evRec.questLabel === "Hold the Keep");
 
       await B.ReviewService.add({ id: "rq-ev-smoke", entityType: "events", name: "The Long Night", confidence: 0.72, sourceQuote: "The dark came early and stayed.", chapterId: "ch-tl", suggestedAction: "create", status: "pending" });
       const tds2 = win.buildLiveTimelineDataset(B);
