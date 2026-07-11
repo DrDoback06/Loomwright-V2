@@ -110,6 +110,7 @@ const EntityRosterCard = ({
         data-callback="onSelectEntity"
         data-testid={"ent-card-" + entity.id}
         data-entity-id={entity.id}
+        data-entity-type={entity.type}
         onClick={onClick}
         draggable
         onDragStart={onDragStart}
@@ -133,6 +134,7 @@ const EntityRosterCard = ({
       data-callback="onSelectEntity"
       data-testid={"ent-row-" + entity.id}
       data-entity-id={entity.id}
+      data-entity-type={entity.type}
       role="button"
       tabIndex={0}
       onClick={onClick}

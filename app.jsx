@@ -1111,6 +1111,34 @@ const AppShell = () => {
     return () => window.removeEventListener("lw:open-entity-wheel", onEntityWheel);
   }, [onOpenAdaptiveWheel]);
 
+  // Delegated right-click on any entity row inside a panel body — covers every
+  // tab whose rows carry data-entity-id (framework rows + bespoke tabs like
+  // Items) with one handler. Surfaces that own their contextmenu (manuscript
+  // spans, timeline / relationship cards) call preventDefault first, so this
+  // skips them via defaultPrevented.
+  _ue_a(() => {
+    const onCtx = (e) => {
+      if (e.defaultPrevented) return;
+      const body = e.target.closest && e.target.closest(".panel__body");
+      if (!body) return;
+      const el = e.target.closest("[data-entity-id]");
+      if (!el) return;
+      const entityId = el.getAttribute("data-entity-id");
+      const entityType = el.getAttribute("data-entity-type")
+        || (el.closest("[data-panel-kind]") && el.closest("[data-panel-kind]").getAttribute("data-panel-kind"));
+      if (!entityId || !entityType) return;
+      e.preventDefault();
+      let label = "";
+      try { label = (window.LoomwrightBackend?.EntityService?.getSync?.(entityId, entityType) || {}).name || ""; } catch (_e) {}
+      if (!label) label = (el.textContent || "").trim().slice(0, 40);
+      window.dispatchEvent(new CustomEvent("lw:open-entity-wheel", {
+        detail: { x: e.clientX, y: e.clientY, entityId, entityType, label },
+      }));
+    };
+    document.addEventListener("contextmenu", onCtx);
+    return () => document.removeEventListener("contextmenu", onCtx);
+  }, []);
+
   // Global keyboard
   _ue_a(() => {
     const onKey = (e) => {

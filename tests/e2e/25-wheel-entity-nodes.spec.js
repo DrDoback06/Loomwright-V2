@@ -87,4 +87,21 @@ test.describe("T25. Adaptive wheel — entity-tab nodes", () => {
     expect(opened.type).toBe("relationships");
     expect(opened.initial && opened.initial.id).toBe(rel.id);
   });
+
+  test("delegated handler arms the wheel on a bespoke tab row (Items)", async ({ page }) => {
+    await openFreshApp(page);
+    const item = await saveEntity(page, "items", { name: "The Auger Stone", data: { rarity: "legendary" } }, { status: "active" });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("lw:open-panel", { detail: { kind: "items" } })));
+
+    // The Items roster row carries data-entity-id / data-entity-type; the
+    // delegated contextmenu handler in app.jsx opens the wheel from it.
+    const row = page.locator(`[data-entity-id='${item.id}']`).first();
+    await expect(row).toBeVisible({ timeout: 5000 });
+    await row.click({ button: "right" });
+
+    const wheel = page.locator("[data-testid='adaptive-wheel']");
+    await expect(wheel).toBeVisible({ timeout: 5000 });
+    await expect(wheel).toContainText("The Auger Stone");
+    await expect(wheel.locator("[data-testid='wheel-edit-entity']")).toBeVisible();
+  });
 });
