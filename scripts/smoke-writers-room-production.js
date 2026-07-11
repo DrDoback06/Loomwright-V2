@@ -114,6 +114,7 @@ async function main() {
   load("backend-services.jsx");
   await new Promise((resolve) => setTimeout(resolve, 50));
   load("writers-room-production-service.jsx");
+  load("app-product-defaults.jsx");
   const service = win.LoomwrightBackend?.WriterRoomProductionService;
   check("WriterRoomProductionService extends the existing backend", !!service);
   if (!service) process.exit(1);
