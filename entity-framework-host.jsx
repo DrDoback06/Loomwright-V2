@@ -6,13 +6,26 @@
 // CastPanelBody is — siblings of the PanelHeader/toolbar/body markup.
 // =====================================================================
 
-const { useState: _useState_efh, useMemo: _useMemo_efh } = React;
+const {
+  useState: _useState_efh,
+  useMemo: _useMemo_efh,
+  useEffect: _useEffect_efh,
+} = React;
 
 const FRAMEWORK_ENTITY_TYPES = new Set([
   "bestiary","locations","items","classes","races","stats","abilities",
   "skills","quests","events","factions","lore","relationships",
   "timeline","references"
 ]);
+
+const ENTITY_FRAMEWORK_STORE_EVENTS = [
+  "lw:entity-store-updated",
+  "lw:review-queue-updated",
+  "lw:impact-review-updated",
+  "lw:project-imported",
+  "lw:sample-project-loaded",
+  "lw:backend-ready",
+];
 
 const EntityFrameworkPanelBody = ({ panel, onSelectEntity, ...frameworkCallbacks }) => {
   const { entityType } = panel;
@@ -26,11 +39,42 @@ const EntityFrameworkPanelBody = ({ panel, onSelectEntity, ...frameworkCallbacks
   const [editing, setEditing]       = _useState_efh(false);
   const [reviewMode, setReviewMode] = _useState_efh(false);
   const [mergeOpen, setMergeOpen]   = _useState_efh(false);
+  const [storeVersion, setStoreVersion] = _useState_efh(0);
 
-  const entities    = panel.entities    || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_SAMPLES?.[entityType] : null) || [];
-  const reviewItems = panel.reviewItems || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_REVIEW_SAMPLES?.[entityType] : null) || [];
-  const suggestions = panel.suggestions || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_SUGGESTION_SAMPLES?.[entityType] : null) || [];
-  const queueCount  = panel.queueCount ?? reviewItems.length;
+  // Panels can remain open while extraction, editors, imports, Impact Review,
+  // sample loading or tests mutate the canonical stores. Re-read those stores
+  // instead of freezing the panel.entities snapshot captured when the panel was
+  // first decorated.
+  _useEffect_efh(() => {
+    const bump = () => setStoreVersion((value) => value + 1);
+    ENTITY_FRAMEWORK_STORE_EVENTS.forEach((name) => window.addEventListener(name, bump));
+    return () => ENTITY_FRAMEWORK_STORE_EVENTS.forEach((name) => window.removeEventListener(name, bump));
+  }, [entityType]);
+
+  const entities = _useMemo_efh(() => {
+    void storeVersion;
+    const service = window.LoomwrightBackend?.EntityService;
+    if (service?.listSync) return service.listSync(entityType);
+    return panel.entities
+      || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_SAMPLES?.[entityType] : null)
+      || [];
+  }, [entityType, panel.entities, storeVersion]);
+
+  const reviewItems = _useMemo_efh(() => {
+    void storeVersion;
+    const service = window.LoomwrightBackend?.ReviewService;
+    if (service?.listSync) return service.listSync(entityType);
+    return panel.reviewItems
+      || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_REVIEW_SAMPLES?.[entityType] : null)
+      || [];
+  }, [entityType, panel.reviewItems, storeVersion]);
+
+  const suggestions = panel.suggestions
+    || (window.__LW_SAMPLE_LOADED__ ? window.ENTITY_SUGGESTION_SAMPLES?.[entityType] : null)
+    || [];
+
+  const queueCount = reviewItems.length
+    + entities.reduce((sum, entity) => sum + (entity.reviewQueueCount || entity.queue || 0), 0);
 
   // Per-panel polished empty state — when the live store is empty AND the
   // sample project hasn't been loaded, surface clear actions instead of
@@ -108,13 +152,24 @@ const EntityFrameworkPanelBody = ({ panel, onSelectEntity, ...frameworkCallbacks
   const filtered = _useMemo_efh(() => {
     if (!search) return entities;
     const q = search.toLowerCase();
-    return entities.filter((e) =>
-      (e.name || "").toLowerCase().includes(q) ||
-      (e.subtitle || "").toLowerCase().includes(q));
+    return entities.filter((entity) =>
+      (entity.name || "").toLowerCase().includes(q)
+      || (entity.subtitle || "").toLowerCase().includes(q)
+    );
   }, [entities, search]);
 
-  const selectedEntity = entities.find((e) => e.id === selectedId);
-  const multiEntities  = entities.filter((e) => multiIds.includes(e.id));
+  const selectedEntity = entities.find((entity) => entity.id === selectedId);
+  const multiEntities  = entities.filter((entity) => multiIds.includes(entity.id));
+
+  // If a selected or multi-selected record is removed elsewhere, clean the
+  // local selection without disturbing the rest of the panel state.
+  _useEffect_efh(() => {
+    if (selectedId && !entities.some((entity) => entity.id === selectedId)) {
+      setSelectedId(null);
+      setEditing(false);
+    }
+    setMultiIds((ids) => ids.filter((id) => entities.some((entity) => entity.id === id)));
+  }, [entities, selectedId]);
 
   // panel.state can override the auto-derived mode (loading/error/empty/review/etc)
   const mode = panel.state === "loading"     ? "loading"
@@ -145,10 +200,10 @@ const EntityFrameworkPanelBody = ({ panel, onSelectEntity, ...frameworkCallbacks
       suggestions={suggestions}
       filters={typeFilters}
       detailRender={detailRender ? (entity) => detailRender(entity, {
-        onSelectEntity: (e) => {
-          setSelectedId(e.id);
-          onSelectEntity && onSelectEntity(e);
-          frameworkCallbacks.onOpenRelatedTab && frameworkCallbacks.onOpenRelatedTab(e);
+        onSelectEntity: (related) => {
+          setSelectedId(related.id);
+          onSelectEntity && onSelectEntity(related);
+          frameworkCallbacks.onOpenRelatedTab && frameworkCallbacks.onOpenRelatedTab(related);
         },
         onOpenRelatedTab: frameworkCallbacks.onOpenRelatedTab,
         onOpenSourceMention: frameworkCallbacks.onOpenSourceMention,
@@ -161,20 +216,25 @@ const EntityFrameworkPanelBody = ({ panel, onSelectEntity, ...frameworkCallbacks
       onGroupByChange={setGroupBy}
       onSortChange={() => {}}
       onFilterChange={() => {}}
-      onSelectEntity={(e) => { setSelectedId(e.id); setEditing(false); setReviewMode(false); onSelectEntity && onSelectEntity(e); }}
+      onSelectEntity={(entity) => {
+        setSelectedId(entity.id);
+        setEditing(false);
+        setReviewMode(false);
+        onSelectEntity && onSelectEntity(entity);
+      }}
       onBackToOverview={() => { setSelectedId(null); setEditing(false); setReviewMode(false); }}
-      onToggleMulti={(e) => setMultiIds((ids) => ids.includes(e.id) ? ids.filter((x) => x !== e.id) : ids.concat(e.id))}
+      onToggleMulti={(entity) => setMultiIds((ids) => ids.includes(entity.id) ? ids.filter((id) => id !== entity.id) : ids.concat(entity.id))}
       onEnterMultiMode={() => setMultiMode(true)}
       onExitMultiMode={() => { setMultiMode(false); setMultiIds([]); }}
       onCreateEntity={frameworkCallbacks.onCreateEntity || (() => {})}
       onImportEntity={frameworkCallbacks.onImportEntity || (() => {})}
-      onEditEntity={(e) => {
-        if (e?.save) { setEditing(false); }
-        else { setEditing(true); if (e?.id) setSelectedId(e.id); }
-        frameworkCallbacks.onEditEntity && frameworkCallbacks.onEditEntity(e);
+      onEditEntity={(entity) => {
+        if (entity?.save) { setEditing(false); }
+        else { setEditing(true); if (entity?.id) setSelectedId(entity.id); }
+        frameworkCallbacks.onEditEntity && frameworkCallbacks.onEditEntity(entity);
       }}
       onDeleteEntityRequest={frameworkCallbacks.onDeleteEntityRequest || (() => {})}
-      onMergeEntity={(p) => { setMergeOpen(true); frameworkCallbacks.onMergeEntity && frameworkCallbacks.onMergeEntity(p); }}
+      onMergeEntity={(payload) => { setMergeOpen(true); frameworkCallbacks.onMergeEntity && frameworkCallbacks.onMergeEntity(payload); }}
       mergeModalOpen={mergeOpen}
       mergeModalSources={multiEntities.length ? multiEntities : (selectedEntity ? [selectedEntity] : [])}
       mergeModalTarget={(multiEntities[0] || selectedEntity)}
