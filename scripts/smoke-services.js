@@ -1497,6 +1497,18 @@ async function main() {
       routing.taskRoutes.writingDraft?.model === "gpt-4o" && routing.taskRoutes.deepExtraction?.model === "gpt-4o-mini");
   }
 
+  // --- Area 7: the wheel Tag action appends to entity.data.tags ---
+  {
+    const tagged = await B.EntityService.save("cast", { name: "Tagged One" }, { status: "active" });
+    // Mirrors what QuickTagHost does on submit.
+    await B.LinkService.appendField(tagged.id, "cast", "tags", "villain");
+    await B.LinkService.appendField(tagged.id, "cast", "tags", "pov");
+    await B.LinkService.appendField(tagged.id, "cast", "tags", "villain"); // dedupe
+    const after = B.EntityService.getSync(tagged.id, "cast");
+    log("[tag] tag lands in entity.data.tags", !!after && Array.isArray(after.data.tags) && after.data.tags.includes("villain") && after.data.tags.includes("pov"));
+    log("[tag] duplicate tags are deduped", !!after && after.data.tags.filter((t) => t === "villain").length === 1);
+  }
+
   console.log("");
   if (failures.length) {
     console.log(`FAIL — ${failures.length} smoke check(s) failed:`);

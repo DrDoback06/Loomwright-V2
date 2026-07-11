@@ -27,6 +27,7 @@ function wheelSlotsForContext(ctx, queueCount) {
   if (kind === "entity") return [
     { id: "open-entity", icon: "paper", lbl: "Open" },
     { id: "edit-entity", icon: "more", lbl: "Edit" },
+    { id: "tag", icon: "bookmark", lbl: "Tag" },
     { id: "merge-entity", icon: "link", lbl: "Merge" },
     review,
   ];
@@ -74,6 +75,60 @@ function GlobalToastHost() {
           <button onClick={() => setToasts((list) => list.filter((x) => x.id !== t.id))} aria-label="Dismiss notice" style={{ marginLeft: 8, border: "none", background: "transparent", cursor: "pointer", color: "var(--ink-3, #888)", fontSize: 14, lineHeight: 1 }}>×</button>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// QuickTagHost — a small floating tag input opened by the adaptive wheel's
+// "Tag" action (lw:open-tag-input). Appends the typed tag to the entity's
+// data.tags via LinkService.appendField (deduped) and persists.
+// ---------------------------------------------------------------------
+function QuickTagHost() {
+  const [state, setState] = _us_a(null); // { entityId, entityType, label, x, y }
+  const [value, setValue] = _us_a("");
+  const inputRef = _ur_a(null);
+  _ue_a(() => {
+    const onOpen = (e) => {
+      const d = (e && e.detail) || {};
+      if (!d.entityId) return;
+      setState({ entityId: d.entityId, entityType: d.entityType, label: d.label || "entity", x: d.x || 40, y: d.y || 40 });
+      setValue("");
+    };
+    window.addEventListener("lw:open-tag-input", onOpen);
+    return () => window.removeEventListener("lw:open-tag-input", onOpen);
+  }, []);
+  _ue_a(() => { if (state && inputRef.current) inputRef.current.focus(); }, [state]);
+  if (!state) return null;
+  const close = () => { setState(null); setValue(""); };
+  const commit = async () => {
+    const tag = value.trim();
+    if (!tag) { close(); return; }
+    const LS = window.LoomwrightBackend?.LinkService;
+    try {
+      if (LS && LS.appendField) await LS.appendField(state.entityId, state.entityType, "tags", tag);
+      window.dispatchEvent(new CustomEvent("lw:entity-store-updated"));
+      window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: `Tagged ${state.label}: “${tag}”.` } }));
+    } catch (_e) {
+      window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message: "Couldn't add tag." } }));
+    }
+    close();
+  };
+  const left = Math.max(12, Math.min((typeof window !== "undefined" ? window.innerWidth : 1280) - 260, state.x));
+  const top = Math.max(12, Math.min((typeof window !== "undefined" ? window.innerHeight : 800) - 80, state.y));
+  return (
+    <div data-ui="QuickTagHost" role="dialog" aria-label={"Add a tag to " + state.label}
+      style={{ position: "fixed", left, top, zIndex: 10001, display: "flex", alignItems: "center", gap: 6,
+        padding: "8px 10px", background: "var(--bg-elev, #fff)", border: "1px solid var(--line-2, #ddd)",
+        borderRadius: "var(--r-3, 8px)", boxShadow: "var(--shadow-3, 0 6px 20px rgba(0,0,0,0.18))" }}>
+      <Icon name="bookmark" size={12}/>
+      <input ref={inputRef} data-testid="quick-tag-input" value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } if (e.key === "Escape") { e.preventDefault(); close(); } }}
+        placeholder={"Tag " + state.label + "…"}
+        style={{ width: 180, fontSize: 12, padding: "4px 6px", border: "1px solid var(--line-2, #ddd)", borderRadius: 6, background: "var(--bg, #fff)", color: "var(--ink-1, #222)" }}/>
+      <button data-testid="quick-tag-add" onClick={commit} title="Add tag"
+        style={{ border: "none", background: "var(--accent, #9a7b3a)", color: "#fff", borderRadius: 6, padding: "4px 8px", fontSize: 12, cursor: "pointer" }}>Add</button>
     </div>
   );
 }
@@ -1055,7 +1110,7 @@ const AppShell = () => {
   const onSelectBook = _uc_a(() => {}, []);
 
   const wheelCtxRef = _ur_a(null);
-  const onOpenAdaptiveWheel = _uc_a((opts) => { wheelCtxRef.current = (opts && opts.context) || null; setWheel({ open: true, context: null, ...opts }); }, []);
+  const onOpenAdaptiveWheel = _uc_a((opts) => { wheelCtxRef.current = { ...((opts && opts.context) || {}), _x: opts && opts.x, _y: opts && opts.y }; setWheel({ open: true, context: null, ...opts }); }, []);
   const onCloseAdaptiveWheel = _uc_a(() => setWheel((w) => ({ ...w, open: false })), []);
   const onRunWheelAction = _uc_a((id) => {
     setWheel((w) => ({ ...w, open: false }));
@@ -1087,7 +1142,11 @@ const AppShell = () => {
         else onOpenPanel("review");
         break;
       case "speed": onOpenPanel("speedReader"); break;
-      case "tag": notify("Tagging is coming with the entity tabs."); break;
+      case "tag":
+        if (ctx.entityId) {
+          window.dispatchEvent(new CustomEvent("lw:open-tag-input", { detail: { entityId: ctx.entityId, entityType: ctx.entityType, label: ctx.label, x: ctx._x || 0, y: ctx._y || 0 } }));
+        } else { notify("Open an entity to tag it."); }
+        break;
       case "extract": window.dispatchEvent(new CustomEvent("lw:open-extraction-wizard", { detail: { scope: "manuscript" } })); break;
       default: break;
     }
@@ -1577,6 +1636,7 @@ const AppShell = () => {
       <div className="mobile-note">📱 On mobile: rails collapse to drawer/bottom nav. See specimen page.</div>
 
       <GlobalToastHost/>
+      <QuickTagHost/>
     </>
   );
 };
