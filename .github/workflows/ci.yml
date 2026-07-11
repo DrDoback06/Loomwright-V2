@@ -19,7 +19,7 @@ jobs:
   verify:
     name: Validate, build and test
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 70
 
     steps:
       - name: Check out repository
@@ -85,6 +85,12 @@ jobs:
           set -o pipefail
           npm run test:smoke:atlas 2>&1 | tee smoke-live-atlas.log
 
+      - name: Run live Tangle board smoke tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:smoke:tangle 2>&1 | tee smoke-live-tangle.log
+
       - name: Build production bundle
         run: npm run build
 
@@ -92,7 +98,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run enhanced product acceptance tests
-        run: npx playwright test tests/e2e/21-story-intelligence.spec.js tests/e2e/22-product-defaults.spec.js tests/e2e/23-impact-review.spec.js tests/e2e/24-narrative-tracking.spec.js tests/e2e/25-entity-dossiers.spec.js tests/e2e/26-historical-world-state.spec.js tests/e2e/27-production-writers-room.spec.js tests/e2e/28-live-atlas-travel.spec.js
+        run: npx playwright test tests/e2e/21-story-intelligence.spec.js tests/e2e/22-product-defaults.spec.js tests/e2e/23-impact-review.spec.js tests/e2e/24-narrative-tracking.spec.js tests/e2e/25-entity-dossiers.spec.js tests/e2e/26-historical-world-state.spec.js tests/e2e/27-production-writers-room.spec.js tests/e2e/28-live-atlas-travel.spec.js tests/e2e/29-live-tangle-boards.spec.js
         env:
           CI: true
 
@@ -120,6 +126,7 @@ jobs:
             smoke-historical-world-state.log
             smoke-writers-room-production.log
             smoke-live-atlas.log
+            smoke-live-tangle.log
             test-results/
             playwright-report/
           if-no-files-found: ignore
