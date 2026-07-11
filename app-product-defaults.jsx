@@ -125,6 +125,20 @@
     return dossier;
   }
 
+  function withNeutralGlobalId(callback) {
+    const hadGlobalId = Object.prototype.hasOwnProperty.call(window, "id");
+    const previousGlobalId = window.id;
+    window.id = null;
+    try {
+      return callback();
+    } finally {
+      if (hadGlobalId) window.id = previousGlobalId;
+      else {
+        try { delete window.id; } catch (_) { window.id = undefined; }
+      }
+    }
+  }
+
   function reproject(dossier, asOfChapterId) {
     if (!dossier?.evolution) return dossier;
     repairConnections(dossier);
@@ -158,21 +172,12 @@
     // callback's `id` outside its lexical scope. Supplying a temporary neutral
     // global prevents the read model from aborting; repairConnections then
     // recalculates every direction from the canonical link indexes.
-    const hadGlobalId = Object.prototype.hasOwnProperty.call(window, "id");
-    const previousGlobalId = window.id;
-    window.id = null;
-    try {
-      return reproject(originalBuild(entityOrId, type, opts), opts.asOfChapterId || null);
-    } finally {
-      if (hadGlobalId) window.id = previousGlobalId;
-      else {
-        try { delete window.id; } catch (_) { window.id = undefined; }
-      }
-    }
+    return withNeutralGlobalId(() => reproject(originalBuild(entityOrId, type, opts), opts.asOfChapterId || null));
   };
 
   service.compare = function compareWithDeepEquality(entityRefs = [], opts = {}) {
-    const comparison = originalCompare(entityRefs, opts);
+    const comparison = withNeutralGlobalId(() => originalCompare(entityRefs, opts));
+    comparison.dossiers = (comparison.dossiers || []).map((dossier) => repairConnections(dossier));
     comparison.rows = (comparison.rows || []).map((row) => {
       const signatures = [...new Set(row.values.map((value) => deepStable(value.raw)))];
       return { ...row, same: signatures.length <= 1 };
