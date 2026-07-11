@@ -98,9 +98,11 @@ display/seed wiring, not a rebuild.
   `mobileCompact`, `editorWidth`, `font`, `margins`, **`authorAttribution`**
   (drives the attribution toggle), **`chapterRail`** (`hidden` hides the chapter
   strip; left/right render the default top strip), and **`focus`** (starts the
-  room in focus mode on mount). Still unread: `panelStack` (needs the panel-stack
-  layout modes) and `themeIntensity` (app-wide accent ramp). → **Writers Room /
-  theming polish**.
+  room in focus mode on mount). **`themeIntensity`** now modulates the app-wide
+  accent (muted toward neutral grey at low intensity; strict no-op when unset so
+  the default palette identity is preserved). Still unread: `panelStack` (needs
+  the panel-stack layout modes) — the only remaining workspace pref. → **panel
+  layout polish**.
 
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).

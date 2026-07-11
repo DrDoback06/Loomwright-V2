@@ -233,18 +233,43 @@ const AppShell = () => {
     colors: { ...BRAND.colors, accent: tweaks.accent },
   };
 
+  // workspace.themeIntensity (0..100) modulates accent saturation. Undefined =
+  // leave the accent exactly as-is, so the default look never changes unless
+  // the user explicitly moves the slider.
+  const _readThemeIntensity = () => {
+    try {
+      const v = window.LoomwrightBackend?.SettingsService?.getSectionSync?.("workspace", {})?.themeIntensity;
+      return (typeof v === "number" && v >= 0 && v <= 100) ? v : null;
+    } catch (_e) { return null; }
+  };
+  const [themeIntensity, setThemeIntensity] = _us_a(_readThemeIntensity);
+  _ue_a(() => {
+    const apply = () => setThemeIntensity(_readThemeIntensity());
+    const evs = ["lw:settings-saved", "lw:settings-updated", "lw:backend-ready", "lw:project-imported"];
+    evs.forEach((e) => window.addEventListener(e, apply));
+    return () => evs.forEach((e) => window.removeEventListener(e, apply));
+  }, []);
+
   // Apply theme + density + typeset to <html>
   _ue_a(() => {
     const html = document.documentElement;
     html.setAttribute("data-theme", tweaks.theme);
     html.setAttribute("data-density", tweaks.density);
     html.setAttribute("data-typeset", tweaks.typeset);
-    // Accent override
-    html.style.setProperty("--accent", tweaks.accent);
-    // Derive deep & soft from accent (basic adjust)
-    html.style.setProperty("--accent-deep", shadeColor(tweaks.accent, -0.35));
-    html.style.setProperty("--accent-soft", shadeColor(tweaks.accent, 0.55));
-  }, [tweaks.theme, tweaks.density, tweaks.typeset, tweaks.accent]);
+    // Effective accent: optionally muted toward neutral grey by themeIntensity
+    // (100 = full accent, 0 = up to 50% toward grey). No-op when unset.
+    let accent = tweaks.accent;
+    if (themeIntensity != null) {
+      html.setAttribute("data-accent-intensity", String(themeIntensity));
+      accent = mixHex(tweaks.accent, "#8a8a8a", ((100 - themeIntensity) / 100) * 0.5);
+    } else {
+      html.removeAttribute("data-accent-intensity");
+    }
+    html.style.setProperty("--accent", accent);
+    // Derive deep & soft from the effective accent
+    html.style.setProperty("--accent-deep", shadeColor(accent, -0.35));
+    html.style.setProperty("--accent-soft", shadeColor(accent, 0.55));
+  }, [tweaks.theme, tweaks.density, tweaks.typeset, tweaks.accent, themeIntensity]);
 
   // App view: shell or design system
   const [view, setView] = _us_a("shell");
@@ -1654,6 +1679,17 @@ function shadeColor(hex, amt) {
   };
   const toHex = (n) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0");
   return "#" + toHex(adj(r)) + toHex(adj(g)) + toHex(adj(b));
+}
+
+// Blend hex `a` toward hex `b` by t (0..1). Used to modulate accent saturation
+// from the workspace `themeIntensity` pref (blend toward a neutral grey).
+function mixHex(a, b, t) {
+  const pa = a.replace("#", ""), pb = b.replace("#", "");
+  const ar = parseInt(pa.substring(0, 2), 16), ag = parseInt(pa.substring(2, 4), 16), ab = parseInt(pa.substring(4, 6), 16);
+  const br = parseInt(pb.substring(0, 2), 16), bg = parseInt(pb.substring(2, 4), 16), bb = parseInt(pb.substring(4, 6), 16);
+  const mix = (x, y) => Math.round(x + (y - x) * t);
+  const toHex = (n) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0");
+  return "#" + toHex(mix(ar, br)) + toHex(mix(ag, bg)) + toHex(mix(ab, bb));
 }
 
 // Mount
