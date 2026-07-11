@@ -12,10 +12,10 @@ display/seed wiring, not a rebuild.
   locations, per-event chapter derived from occurrences (drives era + sort),
   and review mode listing live event candidates (Accept/Deny wired to the real
   queue). Filter chips source from the live store when a real project exists.
-  Demo constants remain a fallback for an empty project. Deferred within the
-  tab: real per-event date-type/canon/era authoring (currently defaulted or
-  heuristic) and quest-name resolution in the inspector → later timeline-depth
-  pass.
+  Demo constants remain a fallback for an empty project. The inspector now
+  resolves the event's quest id to the quest name. Deferred within the tab: real
+  per-event date-type/canon/era authoring (currently defaulted or heuristic) →
+  later timeline-depth pass.
 - **Skill Trees tab** — the panel (`SkillTreeLiveManager`) is already live-backed
   by `SkillTreeService` + `EntityService("skills")`. Remaining: the visual
   constellation canvas and a skill-candidate → tree assignment selector → later
