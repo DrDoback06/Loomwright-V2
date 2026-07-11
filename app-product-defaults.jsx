@@ -190,3 +190,42 @@
   service.__historyRulesInstalled = true;
   window.dispatchEvent(new CustomEvent("lw:entity-store-updated", { detail: { reason: "dossier-history-rules-ready" } }));
 })();
+
+// =====================================================================
+// Exact-range note metadata compatibility.
+//
+// ManuscriptNoteService predates exact text-range anchors and normalises notes
+// to paragraph-level fields. Preserve the range coordinates and anchor version
+// after the canonical note has been created so every Writer's Room surface sees
+// the same stored shape.
+// =====================================================================
+
+(function () {
+  const backend = window.LoomwrightBackend;
+  const notes = backend?.ManuscriptNoteService;
+  if (!notes || notes.__rangeMetadataRulesInstalled) return;
+
+  const originalCreate = notes.createNote?.bind(notes);
+  if (!originalCreate) return;
+
+  notes.createNote = async function createNoteWithRangeMetadata(fields = {}) {
+    const note = await originalCreate(fields);
+    if (!note?.id || fields.rangeStart == null || fields.rangeEnd == null) return note;
+
+    const patch = {
+      rangeStart: Number(fields.rangeStart),
+      rangeEnd: Number(fields.rangeEnd),
+      quote: fields.quote || note.quote || "",
+      source: fields.source || "selection-range",
+      blockType: fields.blockType || fields.anchorVersion?.blockType || null,
+      anchorVersion: fields.anchorVersion || null,
+    };
+
+    if (notes.updateNote) await notes.updateNote(note.id, patch);
+    const persisted = notes.listByChapterSync?.(fields.chapterId || note.chapterId)?.find((row) => row.id === note.id);
+    return persisted || { ...note, ...patch };
+  };
+
+  notes.__rangeMetadataRulesInstalled = true;
+  window.dispatchEvent(new CustomEvent("lw:writer-range-note-rules-ready"));
+})();
