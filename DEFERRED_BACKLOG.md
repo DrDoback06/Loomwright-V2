@@ -94,11 +94,13 @@ display/seed wiring, not a rebuild.
 - **Deep (BYOK) model picker on the wheel** — Deep actions route through the
   existing cost tier today; a per-action model chooser is the AI Writer model
   picker. → **Area 5 (AI Writer)**.
-- **Apply remaining `workspace.*` prefs** — `mobileCompact` (compact layout),
-  and now **`editorWidth` / `font` / `margins`** are read by the Writer's Room
-  (via `--wr-editor-w` / `--wr-editor-font` CSS vars + margin gating), reacting
-  live to a settings save. Still unread: `panelStack`, `chapterRail`,
-  `authorAttribution`, `themeIntensity`, `focus`. → **Writers Room polish**.
+- **Apply remaining `workspace.*` prefs** — the Writer's Room now reads
+  `mobileCompact`, `editorWidth`, `font`, `margins`, **`authorAttribution`**
+  (drives the attribution toggle), **`chapterRail`** (`hidden` hides the chapter
+  strip; left/right render the default top strip), and **`focus`** (starts the
+  room in focus mode on mount). Still unread: `panelStack` (needs the panel-stack
+  layout modes) and `themeIntensity` (app-wide accent ramp). → **Writers Room /
+  theming polish**.
 
 ## Cross-cutting (not yet scheduled)
 - **Multi-project support** (single project per device today).

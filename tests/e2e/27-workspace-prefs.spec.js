@@ -49,4 +49,41 @@ test.describe("T27. Writer's Room — workspace layout prefs", () => {
     await setWorkspacePref(page, { margins: true });
     await expect(wr).toHaveAttribute("data-margins", "shown");
   });
+
+  test("authorAttribution pref drives the attribution state", async ({ page }) => {
+    await openFreshApp(page);
+    const wr = page.locator("[data-ui='WritersRoomScreen']");
+    await expect(wr).toBeVisible({ timeout: 8000 });
+
+    await setWorkspacePref(page, { authorAttribution: false });
+    await expect(wr).toHaveAttribute("data-attribution", "false");
+
+    await setWorkspacePref(page, { authorAttribution: true });
+    await expect(wr).toHaveAttribute("data-attribution", "true");
+  });
+
+  test("chapterRail:hidden hides the chapter strip", async ({ page }) => {
+    await openFreshApp(page);
+    const wr = page.locator("[data-ui='WritersRoomScreen']");
+    await expect(wr).toBeVisible({ timeout: 8000 });
+
+    const strip = page.locator("[data-ui='ChapterNodeStrip']");
+    await setWorkspacePref(page, { chapterRail: "hidden" });
+    await expect(wr).toHaveAttribute("data-chapter-rail", "hidden");
+    await expect(strip).toBeHidden();
+
+    await setWorkspacePref(page, { chapterRail: "left" });
+    await expect(strip).toBeVisible();
+  });
+
+  test("focus pref starts the room in focus mode", async ({ page }) => {
+    // Seed the pref BEFORE the room mounts (focus is applied once on mount).
+    await openFreshApp(page);
+    await page.evaluate(() => window.LoomwrightBackend.SettingsService.saveSection("workspace", { focus: true }));
+    await page.reload();
+    await page.waitForFunction(() => !!window.LoomwrightBackend, null, { timeout: 45000 });
+    const wr = page.locator("[data-ui='WritersRoomScreen']");
+    await expect(wr).toBeVisible({ timeout: 8000 });
+    await expect(wr).toHaveAttribute("data-focus", "true");
+  });
 });

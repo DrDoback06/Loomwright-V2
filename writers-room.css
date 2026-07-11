@@ -18,6 +18,9 @@
 .wr[data-focus="true"] .wr-margin,
 .wr[data-focus="true"] .wr-toolbar { display: none; }
 
+/* workspace.chapterRail === "hidden" hides the chapter node strip. */
+.wr[data-chapter-rail="hidden"] .wr-strip { display: none; }
+
 .wr-stage__col {
   position: relative;
   display: flex;

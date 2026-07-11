@@ -1232,7 +1232,9 @@ const WritersRoomScreen = ({
   const [voice, setVoice] = _wrUS(false);
   const [styleS, setStyleS] = _wrUS(false);
   const [revision, setRevision] = _wrUS(false);
-  const [attribution, setAttribution] = _wrUS(true);
+  const [attribution, setAttribution] = _wrUS(() => {
+    try { return window.LoomwrightBackend?.SettingsService?.getSectionSync?.("workspace", {})?.authorAttribution !== false; } catch (_e) { return true; }
+  });
   // Persisted Writer's Room layout prefs (onboarding / Settings → Workspace).
   // editorWidth / font / margins are applied here; mobileCompact is read below.
   const _wrWorkspacePrefs = () => { try { return window.LoomwrightBackend?.SettingsService?.getSectionSync?.("workspace", {}) || {}; } catch (_e) { return {}; } };
@@ -1248,6 +1250,19 @@ const WritersRoomScreen = ({
     ? (WR_FONT_STACKS[wsPrefs.font] || ("'" + wsPrefs.font + "', var(--font-serif)"))
     : null;
   const prefMarginsHidden = wsPrefs.margins === false;
+  const chapterRailPref = wsPrefs.chapterRail || "left"; // left | right | hidden
+
+  // authorAttribution pref drives the attribution toggle (still user-toggleable
+  // between changes); re-sync only when that pref value changes.
+  _wrUE(() => { setAttribution(wsPrefs.authorAttribution !== false); }, [wsPrefs.authorAttribution]);
+  // focus pref: start the room in focus mode. Applied once on mount so a later
+  // manual layout change isn't overridden.
+  const _wrFocusApplied = _wrUR(false);
+  _wrUE(() => {
+    if (_wrFocusApplied.current) return;
+    _wrFocusApplied.current = true;
+    try { if (_wrWorkspacePrefs().focus === true) setL((p) => ({ ...p, writingLayoutMode: "clean" })); } catch (_e) {}
+  }, []);
 
   // Derive focus/margins from layout mode
   const focusMode = L.writingLayoutMode === "clean";
@@ -1801,6 +1816,7 @@ const WritersRoomScreen = ({
       data-margins-right={rightMarginVisible ? "shown" : "collapsed"}
       data-writing-layout={L.writingLayoutMode}
       data-attribution={attribution ? "true" : "false"}
+      data-chapter-rail={chapterRailPref}
       data-typewriter={typewriter ? "true" : "false"}
       data-mobile={isMobile ? "true" : "false"}
       data-drawer={mobileDrawer || "none"}
