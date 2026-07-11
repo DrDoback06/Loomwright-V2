@@ -19,7 +19,7 @@ jobs:
   verify:
     name: Validate, build and test
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
 
     steps:
       - name: Check out repository
@@ -49,14 +49,20 @@ jobs:
           set -o pipefail
           npm run test:smoke:intelligence 2>&1 | tee smoke-intelligence.log
 
+      - name: Run Impact Review smoke tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:smoke:impact 2>&1 | tee smoke-impact-review.log
+
       - name: Build production bundle
         run: npm run build
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run story intelligence acceptance tests
-        run: npx playwright test tests/e2e/21-story-intelligence.spec.js tests/e2e/22-product-defaults.spec.js
+      - name: Run enhanced product acceptance tests
+        run: npx playwright test tests/e2e/21-story-intelligence.spec.js tests/e2e/22-product-defaults.spec.js tests/e2e/23-impact-review.spec.js
         env:
           CI: true
 
@@ -78,6 +84,7 @@ jobs:
           path: |
             smoke-core.log
             smoke-intelligence.log
+            smoke-impact-review.log
             test-results/
             playwright-report/
           if-no-files-found: ignore
