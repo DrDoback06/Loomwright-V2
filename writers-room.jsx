@@ -5,6 +5,14 @@
 
 const { useState: _wrUS, useEffect: _wrUE, useRef: _wrUR, useCallback: _wrUC, useMemo: _wrUM } = React;
 
+// Map the workspace `font` pref to a real serif stack (falls back to the app's
+// --font-serif when the named face isn't loaded).
+const WR_FONT_STACKS = {
+  "Source Serif 4":    "'Source Serif 4', 'Source Serif Pro', var(--font-serif)",
+  "EB Garamond":       "'EB Garamond', Garamond, var(--font-serif)",
+  "Cormorant Garamond":"'Cormorant Garamond', Cormorant, var(--font-serif)",
+};
+
 // ---------------------------------------------------------------------
 // Demo data — Claude Code replaces these with real backend data.
 // ---------------------------------------------------------------------
@@ -1225,9 +1233,25 @@ const WritersRoomScreen = ({
   const [styleS, setStyleS] = _wrUS(false);
   const [revision, setRevision] = _wrUS(false);
   const [attribution, setAttribution] = _wrUS(true);
+  // Persisted Writer's Room layout prefs (onboarding / Settings → Workspace).
+  // editorWidth / font / margins are applied here; mobileCompact is read below.
+  const _wrWorkspacePrefs = () => { try { return window.LoomwrightBackend?.SettingsService?.getSectionSync?.("workspace", {}) || {}; } catch (_e) { return {}; } };
+  const [wsPrefs, setWsPrefs] = _wrUS(_wrWorkspacePrefs);
+  _wrUE(() => {
+    const apply = () => setWsPrefs(_wrWorkspacePrefs());
+    const evs = ["lw:settings-saved", "lw:settings-updated", "lw:backend-ready", "lw:project-imported"];
+    evs.forEach((e) => window.addEventListener(e, apply));
+    return () => evs.forEach((e) => window.removeEventListener(e, apply));
+  }, []);
+  const editorWidthPref = (typeof wsPrefs.editorWidth === "number" && wsPrefs.editorWidth >= 400) ? wsPrefs.editorWidth : null;
+  const editorFontPref = wsPrefs.font
+    ? (WR_FONT_STACKS[wsPrefs.font] || ("'" + wsPrefs.font + "', var(--font-serif)"))
+    : null;
+  const prefMarginsHidden = wsPrefs.margins === false;
+
   // Derive focus/margins from layout mode
   const focusMode = L.writingLayoutMode === "clean";
-  const marginsHidden = L.writingLayoutMode === "clean" || L.writingLayoutMode === "manuscript-focus";
+  const marginsHidden = L.writingLayoutMode === "clean" || L.writingLayoutMode === "manuscript-focus" || prefMarginsHidden;
   const leftMarginVisible  = !L.leftMarginCollapsed  && (L.writingLayoutMode === "full" || L.writingLayoutMode === "notes");
   const rightMarginVisible = !L.rightMarginCollapsed && (L.writingLayoutMode === "full" || L.writingLayoutMode === "review");
   const [typewriter, setTypewriter] = _wrUS(false);
@@ -1788,6 +1812,8 @@ const WritersRoomScreen = ({
       style={{
         "--wr-left-w":  (leftMarginVisible  ? L.leftMarginWidth  : 0) + "px",
         "--wr-right-w": (rightMarginVisible ? L.rightMarginWidth : 0) + "px",
+        ...(editorWidthPref ? { "--wr-editor-w": editorWidthPref + "px" } : {}),
+        ...(editorFontPref  ? { "--wr-editor-font": editorFontPref } : {}),
       }}
     >
       {focusMode && (
