@@ -14,6 +14,7 @@
   let currentMatch = -1;
   let inputTimer = null;
   let dragSourceId = null;
+  let pendingCommentMeta = null;
 
   function notify(message) {
     try { window.dispatchEvent(new CustomEvent("lw:backend-notice", { detail: { message } })); } catch (_) {}
@@ -51,12 +52,15 @@
       { title: "Find / replace", testId: "wr-tb-find-replace", run: openFindDialog },
     ];
     controls.forEach((control) => {
-      const el = Array.from(toolbar.querySelectorAll("button")).find((candidate) => candidate.title === control.title || candidate.title?.startsWith(control.title));
-      if (!el || el.dataset.productionBound) return;
-      el.disabled = false;
-      el.removeAttribute("disabled");
-      el.dataset.productionBound = "true";
+      const el = Array.from(toolbar.querySelectorAll("button")).find((candidate) => candidate.title === control.title || candidate.title?.startsWith(control.title) || candidate.getAttribute("data-testid") === control.testId);
+      if (!el) return;
+      if (el.disabled) el.disabled = false;
+      if (el.hasAttribute("disabled")) el.removeAttribute("disabled");
+      if (el.getAttribute("aria-disabled") !== "false") el.setAttribute("aria-disabled", "false");
+      if (el.title !== control.title) el.title = control.title;
       el.setAttribute("data-testid", control.testId);
+      if (el.dataset.productionBound) return;
+      el.dataset.productionBound = "true";
       el.addEventListener("mousedown", (event) => event.preventDefault());
       el.addEventListener("click", (event) => {
         event.preventDefault();
@@ -136,6 +140,18 @@
     query.select();
   }
 
+  function restorePendingCommentSelection() {
+    const range = pendingCommentMeta?.range;
+    if (!range) return false;
+    try {
+      const selection = window.getSelection?.();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
   function ensureCommentDialog() {
     if (commentDialog) return commentDialog;
     const wrap = document.createElement("div");
@@ -151,12 +167,13 @@
         <footer><button type="button" data-action="cancel">Cancel</button><button type="button" class="is-primary" data-action="save" data-testid="wr-range-comment-save">Add comment</button></footer>
       </section>`;
     document.body.appendChild(wrap);
-    const close = () => { wrap.hidden = true; service.bodyElement()?.focus(); };
+    const close = () => { wrap.hidden = true; pendingCommentMeta = null; service.bodyElement()?.focus(); };
     wrap.querySelector("[data-action='close']").addEventListener("click", close);
     wrap.querySelector("[data-action='cancel']").addEventListener("click", close);
     wrap.querySelector("[data-action='save']").addEventListener("click", async () => {
       const status = wrap.querySelector("[data-field='status']");
       const noteText = wrap.querySelector("[data-field='note']").value.trim();
+      restorePendingCommentSelection();
       const result = await service.createRangeComment(noteText);
       if (!result || result.error) {
         status.textContent = result?.error || "Select text within one paragraph first.";
@@ -174,6 +191,7 @@
       notify(meta?.error || "Select text within one paragraph before adding a range comment.");
       return;
     }
+    pendingCommentMeta = meta;
     const dialog = ensureCommentDialog();
     dialog.querySelector("[data-field='quote']").textContent = `“${meta.quote}”`;
     dialog.querySelector("[data-field='note']").value = "";
@@ -254,15 +272,15 @@
   }
 
   const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => {
+    mutations.forEach((mutation) => mutation.addedNodes?.forEach((node) => {
       if (node.nodeType !== 1) return;
       bindAll(node);
     }));
     bindAll(document);
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "aria-disabled"] });
   window.addEventListener("lw:manuscript-chapters-updated", () => setTimeout(() => bindAll(document), 0));
-  window.addEventListener("lw:set-active-chapter", () => setTimeout(() => { service.restoreStructuredHtml({ force: true }); service.ensureSeed(); }, 0));
+  window.addEventListener("lw:set-active-chapter", () => setTimeout(() => { service.restoreStructuredHtml({ force: true }); service.ensureSeed(); bindAll(document); }, 0));
   window.addEventListener("beforeunload", () => service.capture("before-unload"));
   bindAll(document);
 })();
