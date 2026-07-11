@@ -1,0 +1,24 @@
+/* Bespoke panel → shared dossier bridge. */
+.led-bespoke-bridge {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.led-bespoke-bridge > [data-ui$="PanelBody"] {
+  flex: 0 0 auto;
+  min-height: 420px;
+}
+
+.led-bespoke-bridge__dossier {
+  flex: 0 0 auto;
+  margin: 12px;
+  border-top: 1px solid var(--line-2);
+  padding-top: 12px;
+}
+
+/* Pending decisions are context, not a replacement for normal entity browsing.
+   The full Impact Review Centre remains visible in explicit review panels. */
+.pstk__panel:not([data-state="review"]) > .panel__body > .ir-centre {
+  display: none;
+}
