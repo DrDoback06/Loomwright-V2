@@ -111,7 +111,7 @@ test.describe("Z. Historical world state", () => {
 
     await workspace.locator("[data-testid='branch-create-name']").fill("Mara Keeps the Key");
     await workspace.locator("[data-testid='branch-create']").click();
-    const branchOption = workspace.locator("[data-testid^='world-branch-']").filter({ hasText: "Mara Keeps the Key" });
+    const branchOption = workspace.locator("button[data-testid^='world-branch-']").filter({ hasText: "Mara Keeps the Key" });
     await expect(branchOption).toBeVisible({ timeout: 10000 });
 
     await workspace.locator("[data-testid='branch-change-entity']").selectOption("z-key");
@@ -161,7 +161,7 @@ test.describe("Z. Historical world state", () => {
     await expect(workspace).toContainText("Later chapters");
     await expect(workspace).toContainText("Dependent state changes");
     await expect(workspace).toContainText("Mara Vale");
-    await expect(workspace).toContainText("Chapter 3 · The Fracture");
+    await expect(workspace).toContainText("Ch. 3 · The Fracture");
 
     await workspace.locator("[data-testid='retcon-propose']").click();
     const state = await page.evaluate(() => {
