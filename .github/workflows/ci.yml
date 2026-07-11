@@ -19,7 +19,7 @@ jobs:
   verify:
     name: Validate, build and test
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
 
     steps:
       - name: Check out repository
@@ -61,6 +61,12 @@ jobs:
           set -o pipefail
           npm run test:smoke:tracking 2>&1 | tee smoke-narrative-tracking.log
 
+      - name: Run live entity dossier smoke tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:smoke:dossiers 2>&1 | tee smoke-entity-dossiers.log
+
       - name: Build production bundle
         run: npm run build
 
@@ -68,7 +74,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run enhanced product acceptance tests
-        run: npx playwright test tests/e2e/21-story-intelligence.spec.js tests/e2e/22-product-defaults.spec.js tests/e2e/23-impact-review.spec.js tests/e2e/24-narrative-tracking.spec.js
+        run: npx playwright test tests/e2e/21-story-intelligence.spec.js tests/e2e/22-product-defaults.spec.js tests/e2e/23-impact-review.spec.js tests/e2e/24-narrative-tracking.spec.js tests/e2e/25-entity-dossiers.spec.js
         env:
           CI: true
 
@@ -92,6 +98,7 @@ jobs:
             smoke-intelligence.log
             smoke-impact-review.log
             smoke-narrative-tracking.log
+            smoke-entity-dossiers.log
             test-results/
             playwright-report/
           if-no-files-found: ignore
