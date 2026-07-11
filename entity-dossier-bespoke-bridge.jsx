@@ -64,14 +64,26 @@
       }, [entities, selectedId]);
 
       // Bespoke rosters predate the shared entity test/accessibility contract.
-      // Mirror their canonical data-entity-id onto the same stable row test id
-      // used by EntityRosterCard, without altering their visual implementation.
+      // Mirror canonical ids onto the stable row test id used by EntityRosterCard.
+      // Location hierarchy rows never carried ids, so resolve them by their exact
+      // visible name against the live canonical store.
       useEffect(() => {
         const root = rootRef.current;
         if (!root) return;
+        const byName = new Map(entities.map((entity) => [String(entity.name || "").trim(), entity.id]));
+
         root.querySelectorAll("[data-entity-id]").forEach((row) => {
           const id = row.getAttribute("data-entity-id");
           if (id && !row.getAttribute("data-testid")) row.setAttribute("data-testid", `ent-row-${id}`);
+        });
+
+        root.querySelectorAll(".loc-tree__row").forEach((row) => {
+          const name = row.querySelector(".loc-tree__name")?.textContent?.trim() || "";
+          const id = byName.get(name);
+          if (!id) return;
+          row.setAttribute("data-entity-id", id);
+          row.setAttribute("data-entity-type", entityType);
+          row.setAttribute("data-testid", `ent-row-${id}`);
         });
       }, [entities, tick]);
 
