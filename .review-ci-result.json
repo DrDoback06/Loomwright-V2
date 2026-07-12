@@ -1,0 +1,15 @@
+{
+  "status": "failure",
+  "sourceSha": "9f645ae2ff8a6f8282c779e8f2dc083c8b504d5e",
+  "runId": 29196993711,
+  "recordedAt": "2026-07-12T14:56:01.575617+00:00",
+  "steps": {
+    "install": "success",
+    "typecheck": "success",
+    "lint": "success",
+    "unit": "success",
+    "build": "success",
+    "browser": "success",
+    "e2e": "failure"
+  }
+}
