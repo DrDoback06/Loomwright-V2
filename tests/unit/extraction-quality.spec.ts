@@ -4,7 +4,7 @@ import type { KnownEntity } from '@/services/extraction/known-index';
 
 const noisyChapter = `
 Blood welled through the torn fabric of the hi-vis vest he'd been wearing since the Jobcentre, back when he'd been Graham Hendricks.
-Dreadknight Berserker Graham Hendricks still believed you should wear what the system gave you.
+Seven feet of Dreadknight Berserker, Graham Hendricks still believed you should wear what the system gave you.
 
 "You're bleeding!" Pipkins was at his side instantly.
 "It's fine," Graham said.
@@ -22,7 +22,7 @@ British rain rattled against the windows.
 `;
 
 describe('contextual discovery quality', () => {
-  it('keeps real people and places while rejecting dialogue fragments, commands and adjectives', () => {
+  it('keeps real people and typed world content while rejecting dialogue fragments, commands and adjectives', () => {
     const result = runLocalExtraction({ text: noisyChapter, entities: [] });
     const names = result.candidates.map((candidate) => candidate.name);
     const byName = new Map(result.candidates.map((candidate) => [candidate.name, candidate]));
@@ -36,14 +36,7 @@ describe('contextual discovery quality', () => {
     expect(byName.get('Darren Fletchley')?.entityType).toBe('cast');
     expect(byName.get('Dreadknight Berserker')?.entityType).toBe('classes');
 
-    for (const forbidden of [
-      "IT'S A SWAN WITH A KNIFE",
-      'Slap',
-      'RUN',
-      "I'm",
-      'British',
-      'CLAIMWISE',
-    ]) {
+    for (const forbidden of ["IT'S A SWAN WITH A KNIFE", 'Slap', 'RUN', "I'm", 'British', 'CLAIMWISE']) {
       expect(names, `should reject ${forbidden}`).not.toContain(forbidden);
     }
   });
