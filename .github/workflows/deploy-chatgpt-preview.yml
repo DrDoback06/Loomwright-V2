@@ -90,6 +90,45 @@ jobs:
           }
           (dist / "preview-version.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
           (dist / ".nojekyll").write_text("", encoding="utf-8")
+
+          # The June deployment installed a cache-first worker. Replace it at the
+          # same URL so returning browsers delete the stale Claude-era bundle,
+          # release controlled pages, and then use the network-hosted preview.
+          cleanup_worker = r"""
+          self.addEventListener("install", (event) => {
+            self.skipWaiting();
+          });
+
+          self.addEventListener("activate", (event) => {
+            event.waitUntil((async () => {
+              const keys = await caches.keys();
+              await Promise.all(keys.map((key) => caches.delete(key)));
+              await self.clients.claim();
+              const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+              await Promise.all(clients.map((client) => client.navigate(client.url)));
+              await self.registration.unregister();
+            })());
+          });
+          """.strip() + "\n"
+          (dist / "sw.js").write_text(cleanup_worker, encoding="utf-8")
+
+          refresh_script = r"""
+          <script>
+            if ("serviceWorker" in navigator) {
+              window.addEventListener("load", function () {
+                navigator.serviceWorker.getRegistrations()
+                  .then(function (registrations) {
+                    registrations.forEach(function (registration) { registration.update().catch(function () {}); });
+                  })
+                  .catch(function () {});
+              });
+            }
+          </script>
+          """
+          html = index.read_text(encoding="utf-8")
+          if "getRegistrations()" not in html:
+              html = html.replace("</body>", refresh_script + "\n</body>")
+              index.write_text(html, encoding="utf-8")
           PY
 
       - name: Mirror production output to gh-pages
