@@ -19,7 +19,7 @@ concurrency:
 jobs:
   apply-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,12 +30,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(find .extraction-payload -maxdepth 1 -type f -name 'part-*' | wc -l)" -eq 4
+          test "$(find .extraction-payload -maxdepth 1 -type f -name 'part-*' | wc -l)" -eq 8
           echo "4e6343a18b0942d0b1a598d2e3984f322ab0d68aae7de7061cfcdbde65e3cb21  .extraction-payload/part-00" | sha256sum -c -
-          echo "37f9fbc9662eb66f0f9332be1cf77184811d8871d3f0f715da26c2fdaed4936a  .extraction-payload/part-01" | sha256sum -c -
+          echo "b457bb08ed5aa2f2ef504c456731664150fed19cb9b398d8d12c535a4a7fe22a  .extraction-payload/part-01-00" | sha256sum -c -
+          echo "a99939322bc780026b0e82ecd1ab075ce50cb676a30dc3cbd2d6070ef77d856f  .extraction-payload/part-01-01" | sha256sum -c -
+          echo "1381ac6d4c859f1046bc020fd451b06855381a630e4fdf43e5a605e64db4bacd  .extraction-payload/part-01-02" | sha256sum -c -
+          echo "ff71d81db81e179d5d79a54c15e4cc706a63d4bcabfb8c611240b01fb116a66d  .extraction-payload/part-01-03" | sha256sum -c -
+          echo "6887c1c2dc393fb825aed3329e1f913fed145574db8b665249b23fcc1a6ad410  .extraction-payload/part-01-04" | sha256sum -c -
           echo "3bf9fe464c6bed6bf468ac086a779c088c0f8d2b6d6cdda310a1f4e110e7015c  .extraction-payload/part-02" | sha256sum -c -
           echo "eb15fad88eab674c87a6bfeb39b88485503128a8471677a22c0b66bf725d7871  .extraction-payload/part-03" | sha256sum -c -
-          cat .extraction-payload/part-* > /tmp/extraction-intelligence.b64
+          cat \
+            .extraction-payload/part-00 \
+            .extraction-payload/part-01-00 \
+            .extraction-payload/part-01-01 \
+            .extraction-payload/part-01-02 \
+            .extraction-payload/part-01-03 \
+            .extraction-payload/part-01-04 \
+            .extraction-payload/part-02 \
+            .extraction-payload/part-03 \
+            > /tmp/extraction-intelligence.b64
           test "$(stat -c%s /tmp/extraction-intelligence.b64)" -eq 67012
           base64 --decode /tmp/extraction-intelligence.b64 > /tmp/extraction-intelligence.tar.gz
           test "$(stat -c%s /tmp/extraction-intelligence.tar.gz)" -eq 50257
