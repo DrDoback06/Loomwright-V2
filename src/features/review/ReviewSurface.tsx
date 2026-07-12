@@ -356,6 +356,20 @@ export function ReviewSurface() {
                   </p>
                 ) : null}
 
+                {cluster.candidates.some((candidate) => candidate.summary || candidate.sourceQuote) ? (
+                  <div className="lw-identitycard__glance" aria-label="Extraction preview">
+                    {cluster.candidates.slice(0, 2).map((candidate) => (
+                      <div key={candidate.id} className="lw-identitycard__glanceitem">
+                        {candidate.summary ? <p>{candidate.summary}</p> : null}
+                        {candidate.sourceQuote ? <blockquote>“{candidate.sourceQuote}”</blockquote> : null}
+                      </div>
+                    ))}
+                    {cluster.candidates.length > 2 ? (
+                      <span>+ {cluster.candidates.length - 2} more extracted record{cluster.candidates.length - 2 === 1 ? '' : 's'}</span>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 <button
                   type="button"
                   className="lw-identitycard__evidencebtn"
@@ -397,7 +411,7 @@ export function ReviewSurface() {
                 <div className="lw-qcard__actions lw-identitycard__actions">
                   {directNew ? (
                     <button type="button" className="lw-btn lw-btn--primary" onClick={() => void acceptNew(cluster.candidates[0])}>
-                      Accept as new
+                      {cluster.candidates[0].source === 'handoff' ? 'Accept' : 'Accept as new'}
                     </button>
                   ) : (
                     <button type="button" className="lw-btn lw-btn--primary" onClick={() => openClusterMerge(cluster)}>
@@ -455,7 +469,7 @@ export function ReviewSurface() {
                 <div className="lw-qcard__actions">
                   {candidate.suggestedAction === 'create' && !candidate.existingEntityId ? (
                     <button type="button" className="lw-btn lw-btn--primary" onClick={() => void acceptNew(candidate)}>
-                      Accept as new
+                      {candidate.source === 'handoff' ? 'Accept' : 'Accept as new'}
                     </button>
                   ) : (
                     <button

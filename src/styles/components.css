@@ -3366,3 +3366,44 @@ select.lw-input {
   border-radius: var(--r-5);
   background: color-mix(in srgb, var(--accent-soft, #e7d9b5) 30%, transparent);
 }
+
+
+.lw-identitycard__glance {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-4);
+  background: var(--bg-tint);
+}
+
+.lw-identitycard__glanceitem {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.lw-identitycard__glanceitem + .lw-identitycard__glanceitem {
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line-1);
+}
+
+.lw-identitycard__glance p,
+.lw-identitycard__glance blockquote {
+  margin: 0;
+}
+
+.lw-identitycard__glance p {
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
+.lw-identitycard__glance blockquote {
+  color: var(--ink-2);
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+.lw-identitycard__glance > span {
+  color: var(--ink-4);
+  font-size: var(--fs-2xs);
+}

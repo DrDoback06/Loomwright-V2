@@ -168,7 +168,7 @@ export function MergePreviewDialog() {
         <header className="lw-mergepreview__head">
           <div>
             <p className="lw-mergepreview__eyebrow">Identity resolution · exact preview</p>
-            <h1 id="merge-preview-title">Merge into one canonical entity</h1>
+            <h1 id="merge-preview-title">Resolve these records into one identity</h1>
             <p>
               Nothing changes until you confirm. Every alias, field, chapter placement, mention,
               relationship, route, and linked tab affected by this merge is shown below.
@@ -520,7 +520,7 @@ export function MergePreviewDialog() {
             <footer className="lw-mergepreview__foot">
               <p>
                 Confirmation creates one reversible merge receipt. Every merged source name teaches future
-                extraction which canonical entity to use; checked names are also displayed on the dossier as aliases or titles for <strong>{canonicalName || 'the canonical entity'}</strong>.
+                extraction which record to use; checked names are also displayed on the dossier as aliases or titles for <strong>{canonicalName || 'the chosen identity'}</strong>.
               </p>
               <div>
                 <button type="button" className="lw-btn" onClick={close}>Cancel</button>

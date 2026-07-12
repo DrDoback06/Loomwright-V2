@@ -298,7 +298,7 @@ export function EntityEditorDrawer() {
                       <button
                         type="button"
                         className="lw-iconbtn lw-dice"
-                        aria-label="Reroll field"
+                        aria-label={field.kind === 'pills' ? `Reroll ${field.label}` : 'Reroll field'}
                         title={`Reroll ${field.label}`}
                         onClick={() => void rollOne(field)}
                       >
