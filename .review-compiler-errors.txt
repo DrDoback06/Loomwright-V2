@@ -1,4 +1,0 @@
-152:2026-07-12T16:39:42.3359982Z ##[error]src/features/review/ReviewSurface.tsx(202,6): error TS17008: JSX element 'div' has no corresponding closing tag.
-153:2026-07-12T16:39:42.3368861Z ##[error]src/features/review/ReviewSurface.tsx(273,10): error TS17008: JSX element 'ul' has no corresponding closing tag.
-154:2026-07-12T16:39:42.3371771Z ##[error]src/features/review/ReviewSurface.tsx(285,137): error TS1005: '</' expected.
-155:2026-07-12T16:39:42.3384876Z ##[error]src/features/review/ReviewSurface.tsx(285,137): error TS1160: Unterminated template literal.
