@@ -1,5 +1,6 @@
 name: Export review implementation source
 
+# Refresh after corrected browser run to patch the final compatibility failures.
 on:
   push:
     branches: [main]
@@ -22,7 +23,7 @@ jobs:
       - name: Upload TypeScript source
         uses: actions/upload-artifact@v4
         with:
-          name: loomwright-review-source
+          name: loomwright-review-source-final
           path: |
             src
             tests
@@ -39,13 +40,13 @@ jobs:
         shell: bash
         run: |
           sleep 4
-          ARTIFACT_ID=$(gh api "repos/$REPO/actions/artifacts?name=loomwright-review-source&per_page=10" --jq '.artifacts | sort_by(.created_at) | reverse | .[0].id')
-          CREATED_AT=$(gh api "repos/$REPO/actions/artifacts?name=loomwright-review-source&per_page=10" --jq '.artifacts | sort_by(.created_at) | reverse | .[0].created_at')
+          ARTIFACT_ID=$(gh api "repos/$REPO/actions/artifacts?name=loomwright-review-source-final&per_page=10" --jq '.artifacts | sort_by(.created_at) | reverse | .[0].id')
+          CREATED_AT=$(gh api "repos/$REPO/actions/artifacts?name=loomwright-review-source-final&per_page=10" --jq '.artifacts | sort_by(.created_at) | reverse | .[0].created_at')
           git fetch origin main
           git switch --detach origin/main
-          printf '{"artifactId":%s,"name":"loomwright-review-source","createdAt":"%s","sourceRef":"agent/review-identity-resolution"}\n' "$ARTIFACT_ID" "$CREATED_AT" > .loomwright-review-source.json
+          printf '{"artifactId":%s,"name":"loomwright-review-source-final","createdAt":"%s","sourceRef":"agent/review-identity-resolution"}\n' "$ARTIFACT_ID" "$CREATED_AT" > .loomwright-review-source-final.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .loomwright-review-source.json
-          git commit -m "Record Loomwright review source artifact" || exit 0
+          git add .loomwright-review-source-final.json
+          git commit -m "Record final Loomwright review source artifact" || exit 0
           git push origin HEAD:main
