@@ -1,0 +1,100 @@
+2026-07-12T18:36:36.4168323Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-07-12T18:36:36.4168999Z hint:
+2026-07-12T18:36:36.4169414Z hint: 	git branch -m <name>
+2026-07-12T18:36:36.4170064Z hint:
+2026-07-12T18:36:36.4171024Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-07-12T18:36:36.4175800Z Initialized empty Git repository in /home/runner/work/Loomwright-V2/Loomwright-V2/.git/
+2026-07-12T18:36:36.4185441Z [command]/usr/bin/git remote add origin https://github.com/DrDoback06/Loomwright-V2
+2026-07-12T18:36:36.4220827Z ##[endgroup]
+2026-07-12T18:36:36.4222022Z ##[group]Disabling automatic garbage collection
+2026-07-12T18:36:36.4224812Z [command]/usr/bin/git config --local gc.auto 0
+2026-07-12T18:36:36.4248920Z ##[endgroup]
+2026-07-12T18:36:36.4250283Z ##[group]Setting up auth
+2026-07-12T18:36:36.4255956Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-12T18:36:36.4284376Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-12T18:36:36.4576534Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-12T18:36:36.4605014Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-12T18:36:36.4795619Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-12T18:36:36.4824087Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-12T18:36:36.4993283Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-07-12T18:36:36.5022046Z ##[endgroup]
+2026-07-12T18:36:36.5022835Z ##[group]Fetching the repository
+2026-07-12T18:36:36.5031425Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +refs/heads/agent/extraction-intelligence*:refs/remotes/origin/agent/extraction-intelligence* +refs/tags/agent/extraction-intelligence*:refs/tags/agent/extraction-intelligence*
+2026-07-12T18:36:37.6324351Z From https://github.com/DrDoback06/Loomwright-V2
+2026-07-12T18:36:37.6326405Z  * [new branch]      agent/extraction-intelligence -> origin/agent/extraction-intelligence
+2026-07-12T18:36:37.6360893Z ##[endgroup]
+2026-07-12T18:36:37.6368110Z ##[group]Determining the checkout info
+2026-07-12T18:36:37.6370087Z [command]/usr/bin/git branch --list --remote origin/agent/extraction-intelligence
+2026-07-12T18:36:37.6383701Z   origin/agent/extraction-intelligence
+2026-07-12T18:36:37.6390879Z ##[endgroup]
+2026-07-12T18:36:37.6394177Z [command]/usr/bin/git sparse-checkout disable
+2026-07-12T18:36:37.6431384Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-07-12T18:36:37.6454062Z ##[group]Checking out the ref
+2026-07-12T18:36:37.6457714Z [command]/usr/bin/git checkout --progress --force -B agent/extraction-intelligence refs/remotes/origin/agent/extraction-intelligence
+2026-07-12T18:36:37.7584781Z Switched to a new branch 'agent/extraction-intelligence'
+2026-07-12T18:36:37.7590485Z branch 'agent/extraction-intelligence' set up to track 'origin/agent/extraction-intelligence'.
+2026-07-12T18:36:37.7599582Z ##[endgroup]
+2026-07-12T18:36:37.7638521Z [command]/usr/bin/git log -1 --format=%H
+2026-07-12T18:36:37.7661244Z f792fa944c7cf6be4684e8861a6d018bbe579e84
+2026-07-12T18:36:37.7869036Z ##[group]Run set -euo pipefail
+2026-07-12T18:36:37.7870670Z [36;1mset -euo pipefail[0m
+2026-07-12T18:36:37.7872526Z [36;1mtest "$(find .extraction-payload -maxdepth 1 -type f -name 'part-*' | wc -l)" -eq 4[0m
+2026-07-12T18:36:37.7875814Z [36;1mecho "4e6343a18b0942d0b1a598d2e3984f322ab0d68aae7de7061cfcdbde65e3cb21  .extraction-payload/part-00" | sha256sum -c -[0m
+2026-07-12T18:36:37.7879739Z [36;1mecho "37f9fbc9662eb66f0f9332be1cf77184811d8871d3f0f715da26c2fdaed4936a  .extraction-payload/part-01" | sha256sum -c -[0m
+2026-07-12T18:36:37.7883854Z [36;1mecho "3bf9fe464c6bed6bf468ac086a779c088c0f8d2b6d6cdda310a1f4e110e7015c  .extraction-payload/part-02" | sha256sum -c -[0m
+2026-07-12T18:36:37.7887788Z [36;1mecho "eb15fad88eab674c87a6bfeb39b88485503128a8471677a22c0b66bf725d7871  .extraction-payload/part-03" | sha256sum -c -[0m
+2026-07-12T18:36:37.7891136Z [36;1mcat .extraction-payload/part-* > /tmp/extraction-intelligence.b64[0m
+2026-07-12T18:36:37.7893258Z [36;1mtest "$(stat -c%s /tmp/extraction-intelligence.b64)" -eq 67012[0m
+2026-07-12T18:36:37.7895590Z [36;1mbase64 --decode /tmp/extraction-intelligence.b64 > /tmp/extraction-intelligence.tar.gz[0m
+2026-07-12T18:36:37.7897997Z [36;1mtest "$(stat -c%s /tmp/extraction-intelligence.tar.gz)" -eq 50257[0m
+2026-07-12T18:36:37.7901139Z [36;1mecho "89a4db165e9b516bb6d3325d734d14edd80badc285ebec5a195a25b52ad6736d  /tmp/extraction-intelligence.tar.gz" | sha256sum -c -[0m
+2026-07-12T18:36:37.7903722Z [36;1m[0m
+2026-07-12T18:36:37.7905523Z [36;1mtar -tzf /tmp/extraction-intelligence.tar.gz | sed 's#^\./##' | grep -v '/$' | sort > /tmp/archive-paths.txt[0m
+2026-07-12T18:36:37.7907760Z [36;1mcat > /tmp/expected-paths.txt <<'EOF'[0m
+2026-07-12T18:36:37.7909107Z [36;1msrc/db/repos/review.ts[0m
+2026-07-12T18:36:37.7910444Z [36;1msrc/features/review/ReviewSurface.tsx[0m
+2026-07-12T18:36:37.7911864Z [36;1msrc/features/shell/ProjectGate.tsx[0m
+2026-07-12T18:36:37.7913325Z [36;1msrc/features/writers-room/WritersRoom.tsx[0m
+2026-07-12T18:36:37.7914788Z [36;1msrc/services/ai/ai-candidates.ts[0m
+2026-07-12T18:36:37.7916164Z [36;1msrc/services/extraction/discovery.ts[0m
+2026-07-12T18:36:37.7917562Z [36;1msrc/services/extraction/engine.ts[0m
+2026-07-12T18:36:37.7918945Z [36;1msrc/services/extraction/known-index.ts[0m
+2026-07-12T18:36:37.7920535Z [36;1msrc/services/extraction/rebuild.ts[0m
+2026-07-12T18:36:37.7921906Z [36;1msrc/services/extraction/session.ts[0m
+2026-07-12T18:36:37.7923429Z [36;1msrc/services/extraction/surface-intelligence.ts[0m
+2026-07-12T18:36:37.7924912Z [36;1msrc/styles/components.css[0m
+2026-07-12T18:36:37.7926696Z [36;1mtests/fixtures/extraction/17-compliance-run-noise-control.fixture.cjs[0m
+2026-07-12T18:36:37.7928547Z [36;1mtests/unit/ai-layer.spec.ts[0m
+2026-07-12T18:36:37.7929966Z [36;1mtests/unit/extraction-fixtures.spec.ts[0m
+2026-07-12T18:36:37.7931400Z [36;1mtests/unit/extraction-rebuild.spec.ts[0m
+2026-07-12T18:36:37.7932650Z [36;1mEOF[0m
+2026-07-12T18:36:37.7933849Z [36;1msort -o /tmp/expected-paths.txt /tmp/expected-paths.txt[0m
+2026-07-12T18:36:37.7935612Z [36;1mdiff -u /tmp/expected-paths.txt /tmp/archive-paths.txt[0m
+2026-07-12T18:36:37.7937941Z [36;1mtest "$(tar -tvzf /tmp/extraction-intelligence.tar.gz | awk '$1 ~ /^l/ {count++} END {print count+0}')" -eq 0[0m
+2026-07-12T18:36:37.7940293Z [36;1mtar -xzf /tmp/extraction-intelligence.tar.gz[0m
+2026-07-12T18:36:37.7941827Z [36;1mrm -rf .extraction-payload .extraction-export[0m
+2026-07-12T18:36:37.7943444Z [36;1mrm -f .github/workflows/export-extraction-source.yml[0m
+2026-07-12T18:36:37.7944880Z [36;1mgit diff --check[0m
+2026-07-12T18:36:37.8064945Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-07-12T18:36:37.8066551Z ##[endgroup]
+2026-07-12T18:36:37.8175463Z .extraction-payload/part-00: OK
+2026-07-12T18:36:37.8189411Z sha256sum: WARNING: 1 computed checksum did NOT match
+2026-07-12T18:36:37.8192083Z .extraction-payload/part-01: FAILED
+2026-07-12T18:36:37.8205233Z ##[error]Process completed with exit code 1.
+2026-07-12T18:36:37.8534666Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-12T18:36:37.8539325Z Post job cleanup.
+2026-07-12T18:36:37.9356847Z [command]/usr/bin/git version
+2026-07-12T18:36:37.9396065Z git version 2.54.0
+2026-07-12T18:36:37.9434901Z Temporarily overriding HOME='/home/runner/work/_temp/aa9087ad-42d9-41de-87a8-4421f92a43e8' before making global git config changes
+2026-07-12T18:36:37.9440339Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-12T18:36:37.9444807Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Loomwright-V2/Loomwright-V2
+2026-07-12T18:36:37.9473128Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-12T18:36:37.9511007Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-12T18:36:37.9693774Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-12T18:36:37.9715629Z http.https://github.com/.extraheader
+2026-07-12T18:36:37.9726305Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-07-12T18:36:37.9754277Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-12T18:36:37.9949060Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-12T18:36:37.9976640Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-12T18:36:38.0354476Z Cleaning up orphan processes
+2026-07-12T18:36:38.0682252Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
