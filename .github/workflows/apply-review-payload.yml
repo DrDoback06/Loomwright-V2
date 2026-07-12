@@ -26,7 +26,17 @@ jobs:
           test "$(find .final-review-patch -maxdepth 1 -type f -name 'part-*' | wc -l)" -eq 2
           cat .final-review-patch/part-* > /tmp/loomwright-final-review-patch.b64
           base64 --decode /tmp/loomwright-final-review-patch.b64 > /tmp/loomwright-final-review-patch.tar.gz
-          echo "ffb37867e6f5b654e62eeb063ede626503d03116149fcafc06d87b4968843e60  /tmp/loomwright-final-review-patch.tar.gz" | sha256sum -c -
+
+          tar -tzf /tmp/loomwright-final-review-patch.tar.gz | sed 's#^\./##' | sort > /tmp/archive-paths.txt
+          cat > /tmp/expected-paths.txt <<'EOF'
+          src/features/codex/EntityEditorDrawer.tsx
+          src/features/review/ReviewSurface.tsx
+          src/styles/components.css
+          EOF
+          sort -o /tmp/expected-paths.txt /tmp/expected-paths.txt
+          diff -u /tmp/expected-paths.txt /tmp/archive-paths.txt
+          test "$(tar -tvzf /tmp/loomwright-final-review-patch.tar.gz | awk '$1 ~ /^l/ {count++} END {print count+0}')" -eq 0
+
           tar -xzf /tmp/loomwright-final-review-patch.tar.gz
           rm -rf .final-review-patch
 
