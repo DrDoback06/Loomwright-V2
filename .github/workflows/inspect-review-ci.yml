@@ -1,6 +1,6 @@
 name: Inspect latest review identity CI
 
-# Refresh after corrected browser compatibility verification trigger.
+# Capture the remaining failures from the corrected browser run.
 on:
   push:
     branches: [main]
@@ -21,18 +21,40 @@ jobs:
           ref: main
           fetch-depth: 1
 
-      - name: Capture latest review CI state
+      - name: Capture latest review CI state and failures
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          JOB_ID: "86667870239"
         shell: bash
         run: |
           set -euo pipefail
           gh api "repos/$REPO/actions/runs?branch=agent/review-identity-resolution&per_page=20" \
             --jq '{runs: [.workflow_runs[] | select(.name == "Review Identity CI") | {id, status, conclusion, head_sha, created_at, updated_at, html_url}]}' \
             > .review-ci-inspection.json
+          gh api "repos/$REPO/actions/jobs/$JOB_ID/logs" > /tmp/review-job.log
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('/tmp/review-job.log').read_text(encoding='utf-8', errors='replace')
+          lines = text.splitlines()
+          needles = ('##[notice]', '##[error]', 'failed', 'timeout', 'strict mode violation', 'locator:', 'error: expect', 'error: locator')
+          hits = []
+          used = set()
+          for index, line in enumerate(lines):
+              lower = line.lower()
+              if any(needle.lower() in lower for needle in needles):
+                  for pos in range(max(0, index - 5), min(len(lines), index + 22)):
+                      if pos not in used:
+                          used.add(pos)
+                          hits.append((pos, lines[pos]))
+          hits.sort()
+          selected = [f'{pos + 1}: {line}' for pos, line in hits]
+          if not selected:
+              selected = lines[-1000:]
+          Path('.review-ci-failure.txt').write_text('\n'.join(selected[-2200:]) + '\n', encoding='utf-8')
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .review-ci-inspection.json
-          git commit -m "Record latest review identity CI state" || exit 0
+          git add .review-ci-inspection.json .review-ci-failure.txt
+          git commit -m "Record corrected review identity browser failures" || exit 0
           git push origin HEAD:main
