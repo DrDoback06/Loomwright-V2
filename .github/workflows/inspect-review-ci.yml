@@ -19,17 +19,43 @@ jobs:
         with:
           ref: main
           fetch-depth: 1
-      - name: Capture review CI runs
+
+      - name: Capture review CI state and browser-test failures
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          JOB_ID: "86661646774"
         shell: bash
         run: |
+          set -euo pipefail
           gh api "repos/$REPO/actions/runs?branch=agent/review-identity-resolution&per_page=20" \
             --jq '{runs: [.workflow_runs[] | select(.name == "Review Identity CI") | {id, status, conclusion, head_sha, created_at, updated_at, html_url}]}' \
             > .review-ci-inspection.json
+
+          gh api "repos/$REPO/actions/jobs/$JOB_ID/logs" > /tmp/review-job.log
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('/tmp/review-job.log').read_text(encoding='utf-8', errors='replace')
+          lines = text.splitlines()
+          needles = ('error:', 'failed', 'failure', 'timeout', 'expect(', 'toBeVisible', 'toHaveText', 'toContainText', '✘', '×')
+          hits = []
+          used = set()
+          for index, line in enumerate(lines):
+              lower = line.lower()
+              if any(needle.lower() in lower for needle in needles):
+                  for pos in range(max(0, index - 5), min(len(lines), index + 18)):
+                      if pos not in used:
+                          used.add(pos)
+                          hits.append((pos, lines[pos]))
+          hits.sort()
+          selected = [f'{pos + 1}: {line}' for pos, line in hits]
+          if not selected:
+              selected = lines[-1200:]
+          Path('.review-ci-failure.txt').write_text('\n'.join(selected[-1800:]) + '\n', encoding='utf-8')
+          PY
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .review-ci-inspection.json
-          git commit -m "Record review identity CI inspection" || exit 0
+          git add .review-ci-inspection.json .review-ci-failure.txt
+          git commit -m "Record review identity browser-test failures" || exit 0
           git push origin HEAD:main
