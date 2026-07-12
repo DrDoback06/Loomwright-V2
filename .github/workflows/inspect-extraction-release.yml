@@ -19,16 +19,19 @@ jobs:
         with:
           ref: main
           fetch-depth: 1
-      - name: Capture extraction release state
+      - name: Capture extraction release state and failure
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          JOB_ID: "86680685786"
         run: |
           gh api "repos/$REPO/actions/runs?branch=agent/extraction-intelligence&per_page=20" \
             --jq '{runs: [.workflow_runs[] | select(.name == "Apply extraction intelligence release") | {id,name,status,conclusion,head_sha,created_at,updated_at,html_url}]}' \
             > .extraction-run-state.json
+          gh api "repos/$REPO/actions/jobs/$JOB_ID/logs" > /tmp/extraction.log
+          tail -n 100 /tmp/extraction.log > .extraction-run-failure.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .extraction-run-state.json
-          git commit -m "Record extraction intelligence release state" || exit 0
+          git add .extraction-run-state.json .extraction-run-failure.txt
+          git commit -m "Record extraction intelligence release failure" || exit 0
           git push origin HEAD:main
