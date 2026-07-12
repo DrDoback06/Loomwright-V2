@@ -6,101 +6,29 @@ on:
       - agent/review-identity-resolution
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 concurrency:
-  group: loomwright-review-identity-release
+  group: loomwright-review-identity-ci
   cancel-in-progress: true
-
-env:
-  LW_BASE: /Loomwright-V2/
 
 jobs:
   verify:
-    name: Verify, persist and package
     runs-on: ubuntu-latest
-    outputs:
-      source_sha: ${{ steps.source.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - name: Apply final deterministic compatibility patch
-        run: |
-          python scripts/final-review-patch.py
-          git diff --check
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Unit tests
-        run: npm run test:unit
-
-      - name: Production build
-        run: npm run build
-
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Full desktop and mobile browser suite
-        run: npm run test:e2e
-
-      - name: Persist the exact verified source
-        id: source
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/features/review/ReviewSurface.tsx src/features/review/MergePreviewDialog.tsx src/features/codex/EntityEditorDrawer.tsx src/styles/components.css
-          git commit -m "Complete review identity resolution release"
-          git push origin HEAD:agent/review-identity-resolution
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare GitHub Pages package
-        run: |
-          cp dist/index.html dist/404.html
-          touch dist/.nojekyll
-          cat > dist/deployed-version.json <<JSON
-          {
-            "application": "loomwright-review-identity-resolution",
-            "sourceBranch": "agent/review-identity-resolution",
-            "sourceSha": "${{ steps.source.outputs.sha }}",
-            "verification": {
-              "typecheck": "passed",
-              "lint": "passed",
-              "unitTests": 98,
-              "browserSuite": "passed-desktop-and-mobile"
-            }
-          }
-          JSON
-
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    name: Deploy verified Loomwright build
-    needs: verify
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
