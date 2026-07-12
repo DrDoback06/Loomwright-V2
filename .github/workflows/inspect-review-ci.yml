@@ -12,6 +12,10 @@ permissions:
   actions: read
   deployments: read
 
+concurrency:
+  group: verify-live-loomwright-release
+  cancel-in-progress: true
+
 jobs:
   verify-live:
     runs-on: ubuntu-latest
@@ -31,6 +35,7 @@ jobs:
           DEPLOYMENT_ID=$(gh api "repos/$REPO/deployments?environment=github-pages&per_page=20" --jq 'map(select(.ref == "main")) | sort_by(.created_at) | reverse | .[0].id')
           gh api "repos/$REPO/deployments/$DEPLOYMENT_ID/statuses" > /tmp/statuses.json
           LIVE=$(curl --fail --location --retry 8 --retry-delay 3 --max-time 30 "https://drdoback06.github.io/Loomwright-V2/deployed-version.json")
+          export SOURCE_SHA DEPLOYMENT_ID LIVE
           python - <<'PY'
           import json, os
           from pathlib import Path
