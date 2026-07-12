@@ -1,15 +1,15 @@
 {
   "status": "failure",
-  "sourceSha": "8a0c656aac7505e5018d9f83bcec236ee15e3d91",
-  "runId": 29199343436,
-  "recordedAt": "2026-07-12T16:10:26.533226+00:00",
+  "sourceSha": "000081f63b3b80e5e20c06a2b0620175e8b41ad6",
+  "runId": 29199992110,
+  "recordedAt": "2026-07-12T16:22:18.770734+00:00",
   "steps": {
     "install": "success",
     "typecheck": "success",
     "lint": "success",
-    "unit": "success",
-    "build": "success",
-    "browser": "success",
-    "e2e": "failure"
+    "unit": "failure",
+    "build": "skipped",
+    "browser": "skipped",
+    "e2e": "skipped"
   }
 }
