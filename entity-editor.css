@@ -781,33 +781,3 @@
   color: var(--ink-4);
   font-weight: 600;
 }
-
-/* Start-from-template strip (creating a new entry) */
-.ee-templates {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 7px 18px;
-  border-bottom: 1px solid var(--line-1);
-  background: var(--bg-paper-2, rgba(120, 96, 60, 0.05));
-}
-.ee-templates__lbl {
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-4);
-  margin-right: 2px;
-}
-.ee-templates__chip {
-  font-family: inherit;
-  font-size: 10.5px;
-  color: var(--ink-2);
-  background: var(--bg-paper);
-  border: 1px solid var(--line-2);
-  border-radius: 999px;
-  padding: 3px 10px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.ee-templates__chip:hover { border-color: var(--ink-3); color: var(--ink-1); }

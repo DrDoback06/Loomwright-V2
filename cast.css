@@ -65,22 +65,6 @@
   border-color: color-mix(in srgb, var(--cast-accent) 40%, transparent);
 }
 
-/* ----- Roster search ----- */
-.cast__search {
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 8px; margin-bottom: var(--sp-3, 8px);
-  border: 1px solid var(--line-2); border-radius: var(--r-pill, 999px);
-  color: var(--ink-4);
-}
-.cast__search__input {
-  flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
-  font-family: var(--font-sans); font-size: var(--fs-sm); color: var(--ink-1);
-}
-.cast__search__clear {
-  border: 0; background: transparent; color: var(--ink-4);
-  cursor: pointer; padding: 2px; display: inline-flex;
-}
-
 /* ----- Filter bar (group-by + status filter chips) ----- */
 .cast__filterbar {
   display: flex; flex-wrap: wrap; align-items: center;
@@ -853,27 +837,3 @@
   border-color: var(--accent);
   background: linear-gradient(0deg, var(--accent-soft), transparent 60%);
 }
-
-/* "Show on Atlas" affordance beside the Currently fact */
-.cast-fields__atlas {
-  margin-left: 8px;
-  font-family: inherit;
-  font-size: 10px;
-  color: var(--accent-deep, #7a5a3a);
-  background: transparent;
-  border: none;
-  border-bottom: 1px dashed currentColor;
-  padding: 0;
-  cursor: pointer;
-}
-.cast-fields__atlas:hover { color: var(--ink-1, #2a2218); }
-
-/* "Fill from manuscript" hero chip */
-.chip--action {
-  cursor: pointer;
-  border: 1px dashed var(--line-2, rgba(74,56,28,0.3));
-  background: transparent;
-  color: var(--accent-deep, #7a5a3a);
-  font: inherit;
-}
-.chip--action:hover { border-style: solid; color: var(--ink-1, #2a2218); }

@@ -2,12 +2,9 @@
 <html lang="en" data-theme="parchment-light" data-density="balanced" data-typeset="literary">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <meta name="theme-color" content="#f4ecd8"/>
-  <title>Loomwright v2</title>
-  <link rel="icon" href="icons/loomwright-icon.svg" type="image/svg+xml"/>
-  <link rel="manifest" href="manifest.json"/>
-  <link rel="apple-touch-icon" href="icons/loomwright-icon.svg"/>
+  <meta name="viewport" content="width=1280, initial-scale=1"/>
+  <title>Loomwright · ChatGPT Completion Preview</title>
+  <link rel="icon" href="data:,"/>
 
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -16,12 +13,19 @@
   <link rel="stylesheet" href="tokens.css"/>
   <link rel="stylesheet" href="components.css"/>
   <link rel="stylesheet" href="writers-room.css"/>
+  <link rel="stylesheet" href="writers-room-production.css"/>
   <link rel="stylesheet" href="extraction-review.css"/>
+  <link rel="stylesheet" href="impact-review.css"/>
+  <link rel="stylesheet" href="narrative-tracking.css"/>
+  <link rel="stylesheet" href="entity-dossier.css"/>
+  <link rel="stylesheet" href="historical-world-state.css"/>
   <link rel="stylesheet" href="cast.css"/>
   <link rel="stylesheet" href="entity-framework.css"/>
   <link rel="stylesheet" href="atlas.css"/>
   <link rel="stylesheet" href="atlas-quick.css"/>
   <link rel="stylesheet" href="atlas-focus.css"/>
+  <link rel="stylesheet" href="live-atlas.css"/>
+  <link rel="stylesheet" href="live-tangle.css"/>
   <link rel="stylesheet" href="skill-trees.css"/>
   <link rel="stylesheet" href="relationships.css"/>
   <link rel="stylesheet" href="timeline.css"/>
@@ -33,28 +37,23 @@
   <link rel="stylesheet" href="home.css"/>
   <link rel="stylesheet" href="full-workspaces.css"/>
   <link rel="stylesheet" href="speed-reader.css"/>
-  <link rel="stylesheet" href="random-tables.css"/>
   <link rel="stylesheet" href="ai-handoff.css"/>
   <link rel="stylesheet" href="settings-rich.css"/>
   <link rel="stylesheet" href="onboarding.css"/>
   <link rel="stylesheet" href="onboarding-intel.css"/>
-  <link rel="stylesheet" href="help.css"/>
-  <link rel="stylesheet" href="mobile.css"/>
 </head>
 <body>
   <div id="root"></div>
 
-  <!-- Production build: precompiled bundle, no in-browser Babel, no CDN runtime. -->
+  <!-- Production build: ordered precompiled classic scripts, no in-browser Babel. -->
   <script src="vendor/react.development.js"></script>
   <script src="vendor/react-dom.development.js"></script>
   <script src="loomwright.bundle.js"></script>
-  <script>
-    // Offline shell — production only (vite dev serves source directly).
-    if ("serviceWorker" in navigator && location.protocol !== "file:") {
-      window.addEventListener("load", function () {
-        navigator.serviceWorker.register("./sw.js").catch(function () {});
-      });
-    }
-  </script>
+
+<div id="lw-chatgpt-preview" role="status" aria-label="Deployment version"
+     style="position:fixed;right:14px;bottom:14px;z-index:2147483647;padding:7px 10px;border:1px solid rgba(83,63,39,.28);border-radius:999px;background:rgba(248,241,222,.94);box-shadow:0 4px 18px rgba(38,28,18,.14);color:#4b3826;font:600 11px/1.2 Inter,system-ui,sans-serif;letter-spacing:.04em;backdrop-filter:blur(8px);pointer-events:none;">
+  ChatGPT completion preview · July 2026
+</div>
+
 </body>
 </html>

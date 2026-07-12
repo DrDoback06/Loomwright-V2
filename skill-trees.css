@@ -585,7 +585,6 @@
   background: linear-gradient(to bottom, var(--st-paper), var(--st-paper-2));
 }
 .stc__svg {
-  touch-action: none; /* pointer-event pan/drag/pinch own the gesture */
   width: 100%; height: 100%;
   display: block;
 }
@@ -850,64 +849,3 @@
 .ste-future { max-width: 480px; margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--ink-2); padding: 32px; }
 .ste-future h2 { font-family: var(--font-display); font-size: var(--fs-2xl); color: var(--ink-1); }
 .ste-future p { font-size: var(--fs-sm); color: var(--ink-3); line-height: 1.6; }
-
-/* ---------------------------------------------------------------------
-   Live-panel additions: empty states, inline pickers, draft tree select,
-   editable inspector name. Same parchment recipe as the rest.
-   --------------------------------------------------------------------- */
-.stp__empty {
-  margin: 10px 12px;
-  text-align: center;
-  padding: 16px 12px;
-  color: var(--st-ink-3);
-  font-size: 11px;
-  font-style: italic;
-  background: var(--st-paper-2);
-  border: 1px dashed var(--st-line-1, rgba(74,56,28,0.3));
-  border-radius: 4px;
-}
-.stp__empty--lg { padding: 40px 20px; font-size: 13px; }
-.stp__picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
-  padding: 8px;
-  background: var(--st-paper-2);
-  border: 1px dashed var(--st-line-1, rgba(74,56,28,0.3));
-  border-radius: 4px;
-}
-.stp__picker-empty { font-size: 10.5px; font-style: italic; color: var(--st-ink-3); padding: 2px 4px; }
-.ste-list__draft-tree {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 6px 0 4px;
-  font-size: 10px;
-  color: var(--st-ink-3);
-}
-.ste-list__draft-tree select {
-  flex: 1;
-  font-family: inherit;
-  font-size: 10.5px;
-  color: var(--st-ink-1);
-  background: var(--st-paper);
-  border: 1px solid var(--st-line-1, rgba(74,56,28,0.3));
-  border-radius: 3px;
-  padding: 2px 4px;
-}
-.ste-insp__name--edit {
-  flex: 1;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 14px;
-  color: var(--st-ink-1);
-  background: transparent;
-  border: none;
-  border-bottom: 1px dashed transparent;
-  padding: 0;
-}
-.ste-insp__name--edit:hover { border-bottom-color: var(--st-line-1, rgba(74,56,28,0.3)); }
-.ste-insp__name--edit:focus { outline: none; border-bottom-color: var(--st-ink-3); }
-.stc__svg[data-tool="pan"] { cursor: grab; }
-.stc__svg[data-tool="add-node"], .stc__svg[data-tool="branch"] { cursor: crosshair; }

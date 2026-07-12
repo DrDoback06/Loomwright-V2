@@ -356,17 +356,3 @@
   color: var(--ink-2);
   line-height: 1.4;
 }
-
-/* Entity-aware reading: known names tint as they flash */
-.sr-panel__word.is-entity .sr-panel__word-side,
-.sr-stage-word.is-entity .sr-side { color: var(--ec, var(--ink-1)); }
-.sr-panel__word.is-entity .sr-panel__word-pivot,
-.sr-stage-word.is-entity .fws-reader-word__pivot { color: var(--ec, var(--accent-deep)); filter: saturate(1.3); }
-.sr-entity-glyph {
-  margin-left: 10px;
-  font-family: var(--font-display);
-  font-size: 0.55em;
-  color: var(--ec, var(--accent-deep));
-  opacity: 0.85;
-  vertical-align: super;
-}

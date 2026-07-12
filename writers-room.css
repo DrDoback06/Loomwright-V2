@@ -301,16 +301,14 @@
 }
 .wr-canvas {
   position: relative;
-  /* --wr-editor-* come from the persisted workspace.* prefs
-     (onboarding "Workspace" step / Settings ▸ Editor). */
-  width: min(var(--wr-editor-max, 720px), 100%);
+  width: min(720px, 100%);
   margin: 0 auto;
   background: var(--bg-paper);
   border: 1px solid var(--line-2);
   border-radius: var(--r-5);
   box-shadow: var(--shadow-2);
-  padding: var(--sp-13) var(--wr-editor-pad, var(--sp-14)) var(--sp-13);
-  font-family: var(--wr-editor-font, var(--font-serif));
+  padding: var(--sp-13) var(--sp-14) var(--sp-13);
+  font-family: var(--font-serif);
   font-size: var(--fs-lg);
   line-height: 1.7;
   color: var(--ink-1);
@@ -476,105 +474,6 @@
   font-size: var(--fs-xl);
 }
 .wr-scene-break__line { flex: 1; height: 1px; background: var(--line-2); }
-
-/* Block formats inserted from the toolbar (Heading / Quote). */
-.wr-h {
-  font-family: var(--font-display);
-  font-size: var(--fs-2xl);
-  color: var(--ink-1);
-  line-height: 1.2;
-  margin: var(--sp-9) 0 var(--sp-4);
-}
-.wr-q {
-  margin: var(--sp-6) 0;
-  padding: var(--sp-2) 0 var(--sp-2) var(--sp-6);
-  border-left: 3px solid var(--accent);
-  color: var(--ink-2);
-  font-style: italic;
-}
-
-/* Find & Replace bar + match highlights (CSS Custom Highlight API). */
-::highlight(wr-find) { background-color: rgba(214, 179, 69, 0.32); }
-::highlight(wr-find-current) { background-color: rgba(212, 124, 45, 0.55); color: var(--ink-1); }
-.wr-find {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 8px 12px;
-  background: var(--bg-paper-2);
-  border-bottom: 1px solid var(--line-2);
-}
-.wr-find__row { display: flex; align-items: center; gap: 6px; }
-.wr-find__input {
-  flex: 1; min-width: 0;
-  padding: 4px 8px;
-  font-family: var(--font-sans); font-size: var(--fs-sm);
-  border: 1px solid var(--line-2); border-radius: var(--r-2, 6px);
-  background: var(--bg-paper-1, #fff); color: var(--ink-1);
-}
-.wr-find__input:focus { outline: none; border-color: var(--accent); }
-.wr-find__count { font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--ink-4); min-width: 40px; text-align: center; }
-.wr-find__btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 26px; height: 26px; padding: 0 6px;
-  border: 1px solid var(--line-2); border-radius: var(--r-2, 6px);
-  background: transparent; color: var(--ink-2); cursor: pointer;
-  font-family: var(--font-sans); font-size: var(--fs-2xs);
-}
-.wr-find__btn:hover:not(:disabled) { background: rgba(0,0,0,0.04); }
-.wr-find__btn:disabled { opacity: 0.4; cursor: default; }
-.wr-find__btn--toggle.is-active { background: var(--accent); color: var(--accent-on); border-color: var(--accent-deep, var(--accent)); }
-.wr-find__btn--text { min-width: auto; }
-
-/* Inline marks: Highlight / Reference / Footnote (persistent decorations). */
-.wr-mk--highlight { background-color: rgba(214, 179, 69, 0.40); border-radius: 2px; padding: 0 1px; }
-.wr-mk--reference { color: var(--accent-deep, var(--accent)); border-bottom: 1px dashed var(--accent); cursor: pointer; }
-.wr-mk--footnote { border-bottom: 1px dotted var(--ink-4); cursor: help; }
-.wr-mk--footnote::after { content: "※"; font-size: 0.7em; vertical-align: super; color: var(--accent-deep, var(--accent)); margin-left: 1px; }
-
-/* Footnote note editor popover */
-.wr-fn-pop {
-  position: fixed; z-index: 60; width: 260px;
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 8px; border-radius: var(--r-3, 8px);
-  background: var(--bg-paper-1, #fff); border: 1px solid var(--line-2);
-  box-shadow: var(--shadow-2, 0 8px 28px rgba(0,0,0,0.18));
-}
-.wr-fn-pop__ta {
-  width: 100%; min-height: 64px; resize: vertical;
-  padding: 6px 8px; font-family: var(--font-serif); font-size: var(--fs-sm);
-  border: 1px solid var(--line-2); border-radius: var(--r-2, 6px);
-  background: var(--bg-paper-2); color: var(--ink-1);
-}
-.wr-fn-pop__ta:focus { outline: none; border-color: var(--accent); }
-.wr-fn-pop__row { display: flex; gap: 6px; justify-content: flex-end; }
-
-/* Thesaurus popover */
-.wr-thes {
-  position: fixed; z-index: 60; width: 212px; padding: 8px;
-  border-radius: var(--r-3, 8px); background: var(--bg-paper-1, #fff);
-  border: 1px solid var(--line-2); box-shadow: var(--shadow-2, 0 8px 28px rgba(0,0,0,0.18));
-}
-.wr-thes__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.wr-thes__word { font-family: var(--font-display); font-size: var(--fs-lg, var(--fs-md)); color: var(--ink-1); }
-.wr-thes__list { display: flex; flex-wrap: wrap; gap: 4px; }
-.wr-thes__syn {
-  padding: 3px 8px; border: 1px solid var(--line-2); border-radius: var(--r-pill);
-  background: var(--bg-paper-2); color: var(--ink-2); cursor: pointer;
-  font-family: var(--font-serif); font-size: var(--fs-sm);
-}
-.wr-thes__syn:hover { background: var(--accent); color: var(--accent-on); border-color: var(--accent-deep, var(--accent)); }
-.wr-thes__empty { color: var(--ink-3); font-style: italic; font-size: var(--fs-sm); }
-
-/* Author stats: word count / goal progress, typewriter + autosave toggles */
-.wr-stats { display: flex; align-items: center; gap: 8px; font-family: var(--font-sans); font-size: var(--fs-2xs); color: var(--ink-3); }
-.wr-stats__words { white-space: nowrap; }
-.wr-stats__bar { width: 56px; height: 4px; border-radius: 2px; background: var(--line-2); overflow: hidden; }
-.wr-stats__fill { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
-.wr-stats__goal { display: inline-flex; align-items: center; gap: 4px; }
-.wr-stats__goallbl { text-transform: uppercase; letter-spacing: 0.06em; }
-.wr-stats__goalinput { width: 54px; padding: 2px 4px; border: 1px solid var(--line-2); border-radius: var(--r-2, 6px); background: var(--bg-paper-1, #fff); color: var(--ink-2); font: inherit; }
-.wr-stats__goalinput:focus { outline: none; border-color: var(--accent); }
-.wr-stats__toggle { padding: 2px 7px; border: 1px solid var(--line-2); border-radius: var(--r-pill); background: transparent; color: var(--ink-3); cursor: pointer; font: inherit; }
-.wr-stats__toggle.is-active { background: var(--accent); color: var(--accent-on); border-color: var(--accent-deep, var(--accent)); }
 
 /* Empty / loading / error chapter states */
 .wr-canvas--empty,
@@ -1114,6 +1013,19 @@
   box-shadow: var(--shadow-2);
 }
 
+/* Mobile collapse note */
+.wr-mobile-note {
+  position: absolute; bottom: 8px; left: 50%;
+  transform: translateX(-50%);
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  background: var(--bg-paper-2);
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-2);
+  display: none;
+}
 /* =====================================================================
    Mobile / compact — driven by .wr[data-mobile="true"] (viewport <= 860px
    OR the workspace.mobileCompact pref). Side margins become bottom-sheet
@@ -1121,6 +1033,9 @@
    wraps to multiple rows. Above this, margins render inline (the canvas
    column is minmax(0,1fr), so it shrinks rather than overflowing).
    ===================================================================== */
+.wr[data-mobile="true"] .wr-mobile-note { display: block; }
+.wr[data-mobile="true"][data-drawer="left"] .wr-mobile-note,
+.wr[data-mobile="true"][data-drawer="right"] .wr-mobile-note { display: none; }
 
 .wr-drawer-backdrop {
   position: fixed; inset: 0; z-index: 1150;

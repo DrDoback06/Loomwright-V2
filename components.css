@@ -573,15 +573,11 @@
    The whole strip docks to the right edge of the work area.
    ===================================================================== */
 .pstk {
-  /* Full-bleed overlay so edge-dock regions map to the whole workspace.
-     pointer-events:none lets clicks fall through to the route content;
-     the in-flow stack zones sit at the right via justify-content:flex-end. */
-  position: absolute; inset: 0;
-  display: flex; flex-direction: row; justify-content: flex-end;
+  position: absolute; top: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: row;
   pointer-events: none;
   z-index: var(--z-panel);
 }
-.pstk__docked-wrap { display: flex; flex-direction: row; height: 100%; }
 .pstk__zone {
   pointer-events: auto;
   display: flex; flex-direction: row;
@@ -642,42 +638,11 @@
   height: 100%;
 }
 .pstk__panel.is-expanded { width: var(--panel-w-expanded); }
-/* Floating (popped-out) panel — a movable/resizable window over the workspace.
-   Position/size come from inline style; this is just the window dressing. */
-.pstk__panel.is-floating {
-  border: 1px solid var(--gold, #c98a2c);
-  border-left: 1px solid var(--gold, #c98a2c);
-  border-radius: var(--r-3, 10px);
-  box-shadow: 0 18px 48px rgba(40,30,12,0.34);
-  overflow: hidden;
-  animation: none;
-}
-.pstk__panel.is-floating .pstk__head { cursor: grab; }
-.pstk__panel.is-floating .pstk__head:active { cursor: grabbing; }
 .pstk__panel--pinned { border-left: 2px solid var(--accent); }
 .pstk__panel--pinned + .pstk__panel--pinned { margin-left: 0; border-radius: 0; }
 .pstk__panel.is-front { box-shadow: -10px 0 30px -8px rgba(70,50,20,0.24); }
 .pstk__panel--stack + .pstk__panel--stack { margin-left: -16px; border-radius: var(--r-5) 0 0 var(--r-5); }
 .pstk__panel--stack + .pstk__panel--stack + .pstk__panel--stack { margin-left: -28px; }
-
-/* ---------- Edge-dock split regions (opt-in) ---------- */
-/* A floating panel dragged to an edge becomes a resizable region; the route
-   content reflows around it (see .app-work__content insets in app.jsx). */
-.pstk-edge-dock {
-  background: var(--bg-paper-2);
-  box-shadow: 0 6px 24px -14px rgba(40,30,12,0.4);
-}
-.pstk-edge-dock--left   { border-right: 1px solid var(--line-2); }
-.pstk-edge-dock--right  { border-left: 1px solid var(--line-2); }
-.pstk-edge-dock--top    { border-bottom: 1px solid var(--line-2); }
-.pstk-edge-dock--bottom { border-top: 1px solid var(--line-2); }
-.pstk-edge-dock__resizer { background: transparent; transition: background 120ms; }
-.pstk-edge-dock__resizer:hover { background: var(--gold, #c98a2c); opacity: 0.5; }
-.pstk__panel.is-edge-docked {
-  width: 100%; height: 100%;
-  border: none; box-shadow: none; border-radius: 0; animation: none;
-}
-.pstk__panel.is-edge-docked .pstk__head { cursor: default; }
 
 .pstk__head {
   display: flex; align-items: center; gap: var(--sp-4);
@@ -1378,6 +1343,18 @@
 /* Tweaks-related */
 .tweaks-host { font-family: var(--font-sans); }
 
+/* Mobile note */
+.mobile-note {
+  position: fixed; right: 12px; bottom: 36px;
+  background: var(--bg-elev); border: 1px solid var(--line-2);
+  border-radius: var(--r-3);
+  padding: 6px 10px;
+  font-size: var(--fs-2xs); color: var(--ink-3);
+  box-shadow: var(--shadow-2);
+  display: none;
+}
+@media (max-width: 720px) { .mobile-note { display: block; } }
+
 /* View switcher tabs in topbar */
 .view-tabs { display: flex; align-items: center; gap: 2px; padding: 2px; background: var(--bg-sunken); border-radius: var(--r-3); border: 1px solid var(--line-2); }
 .view-tabs__btn {
@@ -1391,89 +1368,3 @@
   font-weight: 500;
 }
 .view-tabs__btn.is-active { background: var(--bg-elev); color: var(--ink-1); box-shadow: var(--shadow-1); }
-
-/* ---------------------------------------------------------------------
-   LockTray — "keep selected" chips (desktop strip + mobile row)
-   --------------------------------------------------------------------- */
-.locktray {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  padding: 4px 10px;
-  background: var(--bg-paper-2);
-  min-height: 26px;
-}
-/* Desktop: floating pill bottom-left of the work area, above the panel
-   stack so chips stay clickable whatever panels are open. */
-.locktray:not(.locktray--mobile) {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  z-index: calc(var(--z-panel, 40) + 3);
-  max-width: min(620px, 60%);
-  border: 1px solid var(--line-2);
-  border-radius: 999px;
-  box-shadow: var(--shadow-2, 0 4px 14px rgba(0,0,0,0.12));
-}
-.locktray__lead {
-  display: inline-flex;
-  align-items: center;
-  color: var(--ink-3);
-}
-.locktray__chip {
-  display: inline-flex;
-  align-items: stretch;
-  border: 1px solid var(--es, var(--line-2));
-  border-radius: 999px;
-  background: var(--bg-paper);
-  overflow: hidden;
-  font-size: 11px;
-  line-height: 1;
-}
-.locktray__chip__open {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px 4px 8px;
-  border: 0;
-  background: transparent;
-  color: var(--ink-1);
-  font-family: var(--font-sans);
-  font-size: 11px;
-  cursor: pointer;
-}
-.locktray__chip__open:hover { background: var(--es, var(--bg-paper-2)); }
-.locktray__chip__glyph { color: var(--ed, var(--ink-2)); font-family: var(--font-display); }
-.locktray__chip__type { color: var(--ink-3); font-size: 10px; }
-.locktray__chip__label { font-weight: 600; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.locktray__chip__x {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 6px;
-  border: 0;
-  border-left: 1px solid var(--line-1);
-  background: transparent;
-  color: var(--ink-3);
-  cursor: pointer;
-}
-.locktray__chip__x:hover { color: #a84a3a; background: rgba(168, 74, 58, 0.08); }
-
-/* Mobile: chips row floats above the bottom nav. */
-.locktray--mobile {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(54px + env(safe-area-inset-bottom, 0px));
-  z-index: 59;
-  border-top: 1px solid var(--line-2);
-  border-bottom: 0;
-  overflow-x: auto;
-  flex-wrap: nowrap;
-  -webkit-overflow-scrolling: touch;
-}
-.locktray--mobile .locktray__chip { flex: 0 0 auto; }
-
-/* Trash recovery countdown */
-.trash__days { color: var(--ink-3); }
-.trash__days--low { color: #a84a3a; font-weight: 600; }

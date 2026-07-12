@@ -1,0 +1,6 @@
+{
+  "deployment": "chatgpt-completion-preview",
+  "sourceRef": "agent/live-tangle-boards",
+  "sourceSha": "0f4b98c02686aa0747032645c49f52b77cb466db",
+  "builtBy": "Deploy ChatGPT Loomwright preview"
+}
