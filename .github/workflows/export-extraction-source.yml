@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   export:
@@ -21,6 +22,7 @@ jobs:
           fetch-depth: 1
 
       - name: Package the TypeScript source and tests
+        id: package
         shell: bash
         run: |
           set -euo pipefail
@@ -29,26 +31,50 @@ jobs:
           tar -czf /tmp/loomwright-extraction-source.tar.gz \
             src tests package.json package-lock.json tsconfig.json vite.config.ts playwright.config.ts index.html
           SHA=$(sha256sum /tmp/loomwright-extraction-source.tar.gz | awk '{print $1}')
-          base64 -w 0 /tmp/loomwright-extraction-source.tar.gz > /tmp/export.b64
-          split -b 50000 -d -a 3 /tmp/export.b64 .extraction-export/part-
-          COUNT=$(find .extraction-export -maxdepth 1 -type f -name 'part-*' | wc -l)
           SOURCE=$(git rev-parse HEAD)
           BYTES=$(stat -c%s /tmp/loomwright-extraction-source.tar.gz)
-          cat > .extraction-export/manifest.json <<JSON
-          {
-            "sourceSha": "$SOURCE",
-            "archiveSha256": "$SHA",
-            "archiveBytes": $BYTES,
-            "chunkCount": $COUNT,
-            "chunkPattern": ".extraction-export/part-%03d"
-          }
-          JSON
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+          echo "bytes=$BYTES" >> "$GITHUB_OUTPUT"
 
-      - name: Commit export chunks
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: loomwright-extraction-source
+          path: /tmp/loomwright-extraction-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Record artifact identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ARCHIVE_SHA: ${{ steps.package.outputs.sha }}
+          SOURCE_SHA: ${{ steps.package.outputs.source }}
+          ARCHIVE_BYTES: ${{ steps.package.outputs.bytes }}
         shell: bash
         run: |
+          set -euo pipefail
+          ARTIFACT_ID=""
+          for attempt in 1 2 3 4 5; do
+            ARTIFACT_ID=$(gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID/artifacts" \
+              --jq '.artifacts[] | select(.name == "loomwright-extraction-source") | .id' | head -n 1)
+            [ -n "$ARTIFACT_ID" ] && break
+            sleep 2
+          done
+          test -n "$ARTIFACT_ID"
+          cat > .extraction-export/artifact.json <<JSON
+          {
+            "sourceSha": "$SOURCE_SHA",
+            "archiveSha256": "$ARCHIVE_SHA",
+            "archiveBytes": $ARCHIVE_BYTES,
+            "runId": $GITHUB_RUN_ID,
+            "artifactId": $ARTIFACT_ID,
+            "artifactName": "loomwright-extraction-source"
+          }
+          JSON
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A .extraction-export
-          git commit -m "Export extraction intelligence source" || exit 0
+          git add .extraction-export/artifact.json
+          git commit -m "Record extraction source artifact" || exit 0
           git push origin HEAD:agent/extraction-intelligence
