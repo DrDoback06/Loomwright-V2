@@ -1,0 +1,874 @@
+## FILES
+src/App.tsx
+src/db/repos/atlas.ts
+src/db/repos/audit.ts
+src/db/repos/chapters.ts
+src/db/repos/entities.ts
+src/db/repos/graphs.ts
+src/db/repos/identity.ts
+src/db/repos/links.ts
+src/db/repos/merge.ts
+src/db/repos/notes.ts
+src/db/repos/projects.ts
+src/db/repos/review.ts
+src/db/repos/trash.ts
+src/db/repos/undo.ts
+src/db/schema.ts
+src/db/types.ts
+src/domain/entity-configs/bestiary.ts
+src/domain/entity-configs/cast.ts
+src/domain/entity-configs/classes.ts
+src/domain/entity-configs/events.ts
+src/domain/entity-configs/factions.ts
+src/domain/entity-configs/index.ts
+src/domain/entity-configs/items.ts
+src/domain/entity-configs/locations.ts
+src/domain/entity-configs/lore.ts
+src/domain/entity-configs/quests.ts
+src/domain/entity-configs/races.ts
+src/domain/entity-configs/references.ts
+src/domain/entity-configs/relationships.ts
+src/domain/entity-configs/skills.ts
+src/domain/entity-configs/stats.ts
+src/domain/entity-configs/timeline.ts
+src/domain/entity-configs/types.ts
+src/domain/entity-types.ts
+src/features/atlas/AtlasSurface.tsx
+src/features/canvas/NodeGraphCanvas.tsx
+src/features/canvas/useCanvas.ts
+src/features/codex/CodexPanel.tsx
+src/features/codex/EntityDetail.tsx
+src/features/codex/EntityEditorDrawer.tsx
+src/features/codex/EntityRosterSurface.tsx
+src/features/codex/ReferenceImport.tsx
+src/features/codex/RelationshipGraph.tsx
+src/features/codex/TimelineView.tsx
+src/features/codex/fields/FieldInput.tsx
+src/features/generate/AiTab.tsx
+src/features/generate/CreateAnythingDialog.tsx
+src/features/generate/PrivacyConfirm.tsx
+src/features/generate/StagedBundleBar.tsx
+src/features/generate/useStagedGraph.ts
+src/features/handoff/HandoffSurface.tsx
+src/features/help/HelpDialog.tsx
+src/features/home/HomePage.tsx
+src/features/onboarding/OnboardingWizard.tsx
+src/features/review/MergePreviewDialog.tsx
+src/features/review/ReviewSurface.tsx
+src/features/search/CommandPalette.tsx
+src/features/settings/SettingsSurface.tsx
+src/features/shell/LeftRail.tsx
+src/features/shell/MobileNav.tsx
+src/features/shell/PanelDock.tsx
+src/features/shell/ProjectGate.tsx
+src/features/shell/ProjectSwitcher.tsx
+src/features/shell/Toasts.tsx
+src/features/shell/TopBar.tsx
+src/features/shell/useInstallPrompt.ts
+src/features/shell/useViewport.ts
+src/features/skill-trees/SkillTreesSurface.tsx
+src/features/system/TrashSurface.tsx
+src/features/tangle/TangleSurface.tsx
+src/features/today/TodaySurface.tsx
+src/features/tools/RandomTablesSurface.tsx
+src/features/tools/SpeedReaderSurface.tsx
+src/features/tools/TemplatesSurface.tsx
+src/features/writers-room/ComposePanel.tsx
+src/features/writers-room/NotesMargin.tsx
+src/features/writers-room/Toolbar.tsx
+src/features/writers-room/WritersRoom.tsx
+src/features/writers-room/mention-highlights.ts
+src/features/writers-room/paragraph-id.ts
+src/lib/download.ts
+src/lib/id.ts
+src/lib/remap.ts
+src/main.tsx
+src/services/ai/ai-candidates.ts
+src/services/ai/deep-extraction.ts
+src/services/ai/handoff.ts
+src/services/ai/providers.ts
+src/services/ai/settings.ts
+src/services/archive/project.ts
+src/services/archive/world-bible.ts
+src/services/chapter-awareness.ts
+src/services/crypto/keys.ts
+src/services/drag.ts
+src/services/extraction/detectors.ts
+src/services/extraction/discovery.ts
+src/services/extraction/engine.ts
+src/services/extraction/known-index.ts
+src/services/extraction/ner-lexicon.ts
+src/services/extraction/project-known.ts
+src/services/extraction/session.ts
+src/services/extraction/text-utils.ts
+src/services/generate/apply.ts
+src/services/generate/coerce.ts
+src/services/generate/known.ts
+src/services/generate/layout.ts
+src/services/generate/random/engine.ts
+src/services/generate/random/packs/cast.ts
+src/services/generate/random/packs/generic.ts
+src/services/generate/random/packs/index.ts
+src/services/generate/random/packs/items.ts
+src/services/generate/random/packs/lexicon.ts
+src/services/generate/random/packs/locations.ts
+src/services/generate/random/packs/quests.ts
+src/services/generate/random/packs/skills.ts
+src/services/generate/random/rng.ts
+src/services/generate/random/topology.ts
+src/services/generate/serialize.ts
+src/services/generate/spec.ts
+src/services/generate/staging.ts
+src/services/generate/types.ts
+src/services/generate/wire.ts
+src/services/identity-resolution.ts
+src/services/insights.ts
+src/services/manuscript-import.ts
+src/services/onboarding-ai.ts
+src/services/onboarding.ts
+src/services/random-tables.ts
+src/services/relations.ts
+src/services/sample-project.ts
+src/services/search.ts
+src/services/speed-reader.ts
+src/services/style-analysis.ts
+src/services/templates.ts
+src/stores/editor.ts
+src/stores/focus.ts
+src/stores/generation.ts
+src/stores/layout.ts
+src/stores/merge.ts
+src/stores/project.ts
+src/stores/toasts.ts
+src/stores/ui.ts
+src/styles/base.css
+src/styles/components.css
+src/styles/tokens.css
+src/styles/writers-room.css
+tests/e2e/00-boot.spec.ts
+tests/e2e/01-projects.spec.ts
+tests/e2e/02-cast.spec.ts
+tests/e2e/03-writers-room.spec.ts
+tests/e2e/04-extraction-review.spec.ts
+tests/e2e/05-cross-panel.spec.ts
+tests/e2e/06-workspaces.spec.ts
+tests/e2e/07-atlas.spec.ts
+tests/e2e/08-canvases.spec.ts
+tests/e2e/09-ai.spec.ts
+tests/e2e/10-search-today.spec.ts
+tests/e2e/11-tools.spec.ts
+tests/e2e/12-interchange.spec.ts
+tests/e2e/13-onboarding.spec.ts
+tests/e2e/14-offline.spec.ts
+tests/e2e/15-sweep.spec.ts
+tests/e2e/16-generate.spec.ts
+tests/e2e/17-identity-resolution.spec.ts
+tests/e2e/helpers.ts
+tests/fixtures/extraction/01-simple-known-mention.fixture.cjs
+tests/fixtures/extraction/02-alias-nickname.fixture.cjs
+tests/fixtures/extraction/03-character-and-location.fixture.cjs
+tests/fixtures/extraction/04-item-ownership-change.fixture.cjs
+tests/fixtures/extraction/05-travel-location-change.fixture.cjs
+tests/fixtures/extraction/06-quest-progression.fixture.cjs
+tests/fixtures/extraction/07-event-creation.fixture.cjs
+tests/fixtures/extraction/08-relationship-interaction.fixture.cjs
+tests/fixtures/extraction/09-stat-change-phrase.fixture.cjs
+tests/fixtures/extraction/10-lore-canon-mention.fixture.cjs
+tests/fixtures/extraction/11-false-positive-trap.fixture.cjs
+tests/fixtures/extraction/12-long-chapter-chunking.fixture.cjs
+tests/fixtures/extraction/13-discover-new-cast-dialogue.fixture.cjs
+tests/fixtures/extraction/14-discover-location-cue.fixture.cjs
+tests/fixtures/extraction/15-discover-item-and-skill.fixture.cjs
+tests/fixtures/extraction/16-discover-false-positive-control.fixture.cjs
+tests/fixtures/extraction/README.md
+tests/unit/ai-layer.spec.ts
+tests/unit/archive.spec.ts
+tests/unit/entities-repo.spec.ts
+tests/unit/extraction-fixtures.spec.ts
+tests/unit/generate.spec.ts
+tests/unit/identity-resolution.spec.ts
+tests/unit/insights.spec.ts
+tests/unit/onboarding-ai.spec.ts
+tests/unit/onboarding.spec.ts
+tests/unit/paragraphs.spec.ts
+tests/unit/setup.ts
+tests/unit/tools-services.spec.ts
+tests/unit/ui-store.spec.ts
+
+## EXTRACTION REFERENCES
+src/domain/entity-configs/locations.ts:13: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/timeline.ts:4: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/classes.ts:7: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/factions.ts:6: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/skills.ts:6: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/stats.ts:6: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/stats.ts:12:    'A trackable value or trait. Used by extraction to record changes the manuscript implies.',
+src/domain/entity-configs/stats.ts:45:        { id: 'extractionRules', label: 'Phrase rules', kind: 'row-list', hint: 'Phrases that signal this stat in prose — extraction scans for them (and the stat name).' },
+src/domain/entity-configs/bestiary.ts:8: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/races.ts:6: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/relationships.ts:8: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/references.ts:6: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/lore.ts:7: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/quests.ts:7: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/items.ts:14: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/events.ts:6: * — same sections and field ids so extraction field-mapping and future
+src/domain/entity-configs/cast.ts:10: * — same sections and field ids so extraction field-mapping and future
+src/features/onboarding/OnboardingWizard.tsx:13:import { discoverEntities } from '@/services/extraction/discovery';
+src/features/onboarding/OnboardingWizard.tsx:37: * import with auto chapter split + first extraction, AI/privacy. Every
+src/features/onboarding/OnboardingWizard.tsx:79:          (result.candidatesFound > 0 ? `, ${result.candidatesFound} extraction candidates await review.` : '.'),
+src/features/onboarding/OnboardingWizard.tsx:497:                headings like “Chapter One” or “# The Short Peal”, then the offline extractor
+src/features/onboarding/OnboardingWizard.tsx:523:                <span>Run the first extraction pass after import (results go to Review)</span>
+src/features/onboarding/OnboardingWizard.tsx:544:                  want drafting help or deep extraction.
+src/features/onboarding/OnboardingWizard.tsx:584:                    ? `${split.length} chapter(s) will import${a.runExtraction ? ' + first extraction to Review' : ''}.`
+src/features/search/CommandPalette.tsx:62:  // users immediately see likely canonical records instead of an empty drawer.
+src/features/search/CommandPalette.tsx:65:      setQuery(mergeRequest?.canonicalName?.trim() || '');
+src/features/search/CommandPalette.tsx:67:  }, [palettePurpose, mergeRequest?.canonicalName]);
+src/features/search/CommandPalette.tsx:87:      { id: 'write', title: "Go to Writer's Room", subtitle: 'Write and extract', run: () => go('writers-room') },
+src/features/search/CommandPalette.tsx:98:      { id: 'settings', title: 'Go to Settings', subtitle: 'AI, privacy, extraction', run: () => go('settings') },
+src/features/search/CommandPalette.tsx:224:            Choose the canonical existing entity. The merge preview remains open behind this search.
+src/features/help/HelpDialog.tsx:28:      'Save & Extract scans the chapter offline and sends candidates to Review — nothing enters the codex silently.',
+src/features/help/HelpDialog.tsx:37:      'Lock an entity to make other panels follow it; Merge into… rewrites every mention, link, and pending candidate in one transaction.',
+src/features/help/HelpDialog.tsx:65:      'Everything extraction finds queues here — nothing changes the codex until you accept it.',
+src/features/settings/SettingsSurface.tsx:4:import { DETECTOR_BASE_CONFIDENCE } from '@/services/extraction/detectors';
+src/features/settings/SettingsSurface.tsx:14:/** Settings: AI providers (BYOK), privacy, and extraction tuning. Keys
+src/features/settings/SettingsSurface.tsx:37:  const extraction = useLiveQuery(
+src/features/settings/SettingsSurface.tsx:40:      const row = await db.settings.get(`${projectId}:extraction`);
+src/features/settings/SettingsSurface.tsx:65:    const row = await db.settings.get(`${projectId}:extraction`);
+src/features/settings/SettingsSurface.tsx:68:      key: `${projectId}:extraction`,
+src/features/settings/SettingsSurface.tsx:272:      <section className="lw-card" data-testid="settings-extraction">
+src/features/settings/SettingsSurface.tsx:275:          Per-detector confidence. Lower = more candidates (more noise); higher = fewer,
+src/features/settings/SettingsSurface.tsx:280:            const value = extraction[id] ?? base;
+src/features/writers-room/WritersRoom.tsx:18:import { extractChapter } from '@/services/extraction/session';
+src/features/writers-room/WritersRoom.tsx:19:import { loadKnownProjectEntities } from '@/services/extraction/project-known';
+src/features/writers-room/WritersRoom.tsx:20:import { runDeepExtraction } from '@/services/ai/deep-extraction';
+src/features/writers-room/WritersRoom.tsx:54:  const [extracting, setExtracting] = useState(false);
+src/features/writers-room/WritersRoom.tsx:205:      const summary = await extractChapter(chapter);
+src/features/writers-room/WritersRoom.tsx:211:        summary.candidateCount > 0
+src/features/writers-room/WritersRoom.tsx:212:          ? `Found ${summary.candidateCount} candidate${summary.candidateCount === 1 ? '' : 's'} to review` +
+src/features/writers-room/WritersRoom.tsx:215:            ? `No new candidates · re-confirmed ${known || summary.occurrenceCount + ' mentions'}`
+src/features/writers-room/WritersRoom.tsx:216:            : 'Nothing recognisable yet — extraction learns as your codex grows.',
+src/features/writers-room/WritersRoom.tsx:217:        summary.candidateCount > 0
+src/features/writers-room/WritersRoom.tsx:239:          ? `AI deep pass found ${added} new candidate${added === 1 ? '' : 's'}.`
+src/features/writers-room/WritersRoom.tsx:246:      toast(err instanceof Error ? err.message : 'Deep extraction failed.', { kind: 'error' });
+src/features/writers-room/WritersRoom.tsx:367:                  disabled={extracting}
+src/features/writers-room/WritersRoom.tsx:370:                  {extracting ? 'Extracting…' : 'Save & Extract'}
+src/features/writers-room/WritersRoom.tsx:376:                    disabled={extracting}
+src/features/writers-room/paragraph-id.ts:8: * occurrences, and extraction all key off these ids, so they must survive
+src/features/writers-room/paragraph-id.ts:57:/** Derive the extraction substrate from a TipTap JSON document:
+src/features/codex/CodexPanel.tsx:187:                      canonicalName: entity.name,
+src/features/codex/CodexPanel.tsx:192:                      candidateIds: payload.candidateIds,
+src/features/codex/CodexPanel.tsx:194:                      canonicalName: entity.name,
+src/features/codex/EntityEditorDrawer.tsx:13:import { parseJsonObject } from '@/services/ai/ai-candidates';
+src/features/codex/TimelineView.tsx:44:          Create events (or extract them from chapters) and give them a “when” or “order” to
+src/features/codex/EntityDetail.tsx:47:      canonicalName: target.name,
+src/features/codex/RelationshipGraph.tsx:87:          Create relationships (or accept extracted ones) and the network draws itself.
+src/features/codex/EntityRosterSurface.tsx:201:                  Create one, or extract them from your manuscript once the Writer&apos;s Room
+src/features/codex/EntityRosterSurface.tsx:262:                      canonicalName: entity.name,
+src/features/codex/EntityRosterSurface.tsx:267:                      candidateIds: payload.candidateIds,
+src/features/codex/EntityRosterSurface.tsx:269:                      canonicalName: entity.name,
+src/features/codex/fields/FieldInput.tsx:8:import { findRanges } from '@/services/extraction/text-utils';
+src/features/codex/fields/FieldInput.tsx:500: * the exact word-boundary matching the extraction detectors use. */
+src/features/codex/fields/FieldInput.tsx:514:    ...normaliseRows(form?.extractionRules),
+src/features/codex/fields/FieldInput.tsx:533:              ? `✓ Matches: ${hits.join(', ')} — extraction will pick this up.`
+src/features/review/ReviewSurface.tsx:19:const BAND_LABEL: Record<ReviewCandidate['confidenceBand'], string> = {
+src/features/review/ReviewSurface.tsx:63:    if (sort === 'duplicates') rows.sort((a, b) => b.candidateIds.length - a.candidateIds.length);
+src/features/review/ReviewSurface.tsx:81:      candidateIds: cluster.candidateIds,
+src/features/review/ReviewSurface.tsx:83:      targetCandidateIds: cluster.suggestedEntity ? [] : [cluster.candidates[0]?.id].filter(Boolean),
+src/features/review/ReviewSurface.tsx:84:      canonicalName: cluster.suggestedEntity?.entity.name ?? cluster.primaryName,
+src/features/review/ReviewSurface.tsx:91:      candidateIds: cluster.candidateIds,
+src/features/review/ReviewSurface.tsx:92:      canonicalName: cluster.primaryName,
+src/features/review/ReviewSurface.tsx:98:  const acceptNew = async (candidate: ReviewCandidate) => {
+src/features/review/ReviewSurface.tsx:99:    const entity = await acceptCandidate(candidate.id);
+src/features/review/ReviewSurface.tsx:101:      toast('Could not apply this candidate — its target may have changed.', { kind: 'error' });
+src/features/review/ReviewSurface.tsx:118:    await Promise.all(cluster.candidateIds.map((id) => denyCandidate(id)));
+src/features/review/ReviewSurface.tsx:119:    toast(`Denied ${cluster.candidateIds.length} extraction${cluster.candidateIds.length === 1 ? '' : 's'}.`);
+src/features/review/ReviewSurface.tsx:123:    const names = [...new Set(cluster.candidates.map((candidate) => candidate.name))];
+src/features/review/ReviewSurface.tsx:134:    toast('Loomwright will keep these identities separate in future extraction.', { kind: 'success' });
+src/features/review/ReviewSurface.tsx:140:    const leftNames = [...new Set(cluster.candidates.map((candidate) => candidate.name))];
+src/features/review/ReviewSurface.tsx:166:        candidateIds: cluster.candidateIds,
+src/features/review/ReviewSurface.tsx:168:        canonicalName: payload.name,
+src/features/review/ReviewSurface.tsx:172:    const candidateIds = [...new Set([...cluster.candidateIds, ...payload.candidateIds])];
+src/features/review/ReviewSurface.tsx:173:    if (candidateIds.length === cluster.candidateIds.length) return;
+src/features/review/ReviewSurface.tsx:176:      candidateIds,
+src/features/review/ReviewSurface.tsx:177:      targetCandidateIds: cluster.candidateIds,
+src/features/review/ReviewSurface.tsx:178:      canonicalName: cluster.primaryName,
+src/features/review/ReviewSurface.tsx:184:      cluster.candidateIds.length === 1 &&
+src/features/review/ReviewSurface.tsx:186:      cluster.candidates[0]?.suggestedAction === 'create' &&
+src/features/review/ReviewSurface.tsx:187:      (cluster.confidenceBand === 'blue' || cluster.confidenceBand === 'green')
+src/features/review/ReviewSurface.tsx:192:      if (await acceptCandidate(cluster.candidateIds[0])) accepted += 1;
+src/features/review/ReviewSurface.tsx:209:            supporting reference{totalReferences === 1 ? '' : 's'}. Similar extractions are bundled;
+src/features/review/ReviewSurface.tsx:250:            Raw extractions · {pending.length}
+src/features/review/ReviewSurface.tsx:282:              cluster.candidateIds.length === 1 &&
+src/features/review/ReviewSurface.tsx:284:              cluster.candidates[0]?.suggestedAction === 'create';
+src/features/review/ReviewSurface.tsx:288:                className={`lw-card lw-qcard lw-identitycard lw-identitycard--${cluster.confidenceBand}${isDrop ? ' lw-identitycard--drop' : ''}`}
+src/features/review/ReviewSurface.tsx:294:                    candidateIds: cluster.candidateIds,
+src/features/review/ReviewSurface.tsx:311:                  <span className={`lw-band lw-band--${cluster.confidenceBand}`}>
+src/features/review/ReviewSurface.tsx:320:                      {cluster.candidateIds.length} extracted record{cluster.candidateIds.length === 1 ? '' : 's'} ·{' '}
+src/features/review/ReviewSurface.tsx:325:                  <span className="lw-identitycard__drag" title="Drag onto another candidate or existing entity">
+src/features/review/ReviewSurface.tsx:359:                {cluster.candidates.some((candidate) => candidate.summary || candidate.sourceQuote) ? (
+src/features/review/ReviewSurface.tsx:361:                    {cluster.candidates.slice(0, 2).map((candidate) => (
+src/features/review/ReviewSurface.tsx:362:                      <div key={candidate.id} className="lw-identitycard__glanceitem">
+src/features/review/ReviewSurface.tsx:363:                        {candidate.summary ? <p>{candidate.summary}</p> : null}
+src/features/review/ReviewSurface.tsx:364:                        {candidate.sourceQuote ? <blockquote>“{candidate.sourceQuote}”</blockquote> : null}
+src/features/review/ReviewSurface.tsx:367:                    {cluster.candidates.length > 2 ? (
+src/features/review/ReviewSurface.tsx:368:                      <span>+ {cluster.candidates.length - 2} more extracted record{cluster.candidates.length - 2 === 1 ? '' : 's'}</span>
+src/features/review/ReviewSurface.tsx:386:                  {isExpanded ? 'Hide' : 'Show'} every extracted detail and source
+src/features/review/ReviewSurface.tsx:391:                    {cluster.candidates.map((candidate) => (
+src/features/review/ReviewSurface.tsx:392:                      <li key={candidate.id}>
+src/features/review/ReviewSurface.tsx:394:                          <strong>{candidate.name}</strong>
+src/features/review/ReviewSurface.tsx:395:                          <span>{BAND_LABEL[candidate.confidenceBand]} · {Math.round(candidate.confidence * 100)}%</span>
+src/features/review/ReviewSurface.tsx:397:                        {candidate.summary ? <p>{candidate.summary}</p> : null}
+src/features/review/ReviewSurface.tsx:398:                        {candidate.sourceQuote ? <blockquote>“{candidate.sourceQuote}”</blockquote> : null}
+src/features/review/ReviewSurface.tsx:399:                        {candidate.suggestedChanges && Object.keys(candidate.suggestedChanges).length > 0 ? (
+src/features/review/ReviewSurface.tsx:401:                            {Object.entries(candidate.suggestedChanges).map(([key, value]) => (
+src/features/review/ReviewSurface.tsx:413:                    <button type="button" className="lw-btn lw-btn--primary" onClick={() => void acceptNew(cluster.candidates[0])}>
+src/features/review/ReviewSurface.tsx:414:                      {cluster.candidates[0].source === 'handoff' ? 'Accept' : 'Accept as new'}
+src/features/review/ReviewSurface.tsx:424:                  {cluster.candidateIds.length > 1 ? (
+src/features/review/ReviewSurface.tsx:439:          {pending.map((candidate) => {
+src/features/review/ReviewSurface.tsx:440:            const meta = ENTITY_TYPE_META[candidate.entityType];
+src/features/review/ReviewSurface.tsx:443:                key={candidate.id}
+src/features/review/ReviewSurface.tsx:444:                className={`lw-card lw-qcard lw-qcard--${candidate.confidenceBand}`}
+src/features/review/ReviewSurface.tsx:449:                    entityType: candidate.entityType,
+src/features/review/ReviewSurface.tsx:450:                    candidateIds: [candidate.id],
+src/features/review/ReviewSurface.tsx:451:                    name: candidate.name,
+src/features/review/ReviewSurface.tsx:459:                  <span className={`lw-band lw-band--${candidate.confidenceBand}`}>
+src/features/review/ReviewSurface.tsx:460:                    {BAND_LABEL[candidate.confidenceBand]} · {Math.round(candidate.confidence * 100)}%
+src/features/review/ReviewSurface.tsx:464:                  {candidate.name}
+src/features/review/ReviewSurface.tsx:465:                  <span className="lw-qcard__action">{candidate.suggestedAction}</span>
+src/features/review/ReviewSurface.tsx:467:                {candidate.summary ? <p className="lw-qcard__summary">{candidate.summary}</p> : null}
+src/features/review/ReviewSurface.tsx:468:                {candidate.sourceQuote ? <blockquote className="lw-qcard__quote">“{candidate.sourceQuote}”</blockquote> : null}
+src/features/review/ReviewSurface.tsx:470:                  {candidate.suggestedAction === 'create' && !candidate.existingEntityId ? (
+src/features/review/ReviewSurface.tsx:471:                    <button type="button" className="lw-btn lw-btn--primary" onClick={() => void acceptNew(candidate)}>
+src/features/review/ReviewSurface.tsx:472:                      {candidate.source === 'handoff' ? 'Accept' : 'Accept as new'}
+src/features/review/ReviewSurface.tsx:480:                          entityType: candidate.entityType,
+src/features/review/ReviewSurface.tsx:481:                          candidateIds: [candidate.id],
+src/features/review/ReviewSurface.tsx:482:                          targetEntityId: candidate.existingEntityId ?? null,
+src/features/review/ReviewSurface.tsx:483:                          canonicalName: candidate.name,
+src/features/review/ReviewSurface.tsx:490:                  <button type="button" className="lw-btn" onClick={() => void denyCandidate(candidate.id)}>Deny</button>
+src/features/review/MergePreviewDialog.tsx:48:  const [canonicalName, setCanonicalName] = useState('');
+src/features/review/MergePreviewDialog.tsx:66:        setCanonicalName(next.canonicalName);
+src/features/review/MergePreviewDialog.tsx:95:  const selectedTargetLabel = preview?.targetEntity?.name ?? 'New canonical entity';
+src/features/review/MergePreviewDialog.tsx:96:  const canConfirm = !!preview && canonicalName.trim().length > 0 && !saving;
+src/features/review/MergePreviewDialog.tsx:118:      setCanonicalNameInStore(canonicalName);
+src/features/review/MergePreviewDialog.tsx:120:        canonicalName,
+src/features/review/MergePreviewDialog.tsx:126:      // Clear that stale focus so the canonical roster is visible immediately;
+src/features/review/MergePreviewDialog.tsx:130:        `${result.entity.name} is now the canonical entity. ${preview.affected.occurrenceCount} mention${preview.affected.occurrenceCount === 1 ? '' : 's'} and every linked record were updated.`,
+src/features/review/MergePreviewDialog.tsx:134:            label: 'Open canonical',
+src/features/review/MergePreviewDialog.tsx:189:              <div className="lw-card lw-mergepreview__canonical">
+src/features/review/MergePreviewDialog.tsx:204:                    value={canonicalName}
+src/features/review/MergePreviewDialog.tsx:352:                    Checked names resolve straight to this entity in future extraction. Uncheck
+src/features/review/MergePreviewDialog.tsx:353:                    proposed additions you do not want; names already on the canonical record stay locked.
+src/features/review/MergePreviewDialog.tsx:409:                    Original information is shown beside every extracted or dragged value. The
+src/features/review/MergePreviewDialog.tsx:482:                    timeline displays locally without running extraction again.
+src/features/review/MergePreviewDialog.tsx:523:                extraction which record to use; checked names are also displayed on the dossier as aliases or titles for <strong>{canonicalName || 'the chosen identity'}</strong>.
+src/features/handoff/HandoffSurface.tsx:8:import type { KnownEntity } from '@/services/extraction/known-index';
+src/features/handoff/HandoffSurface.tsx:20: * land in the review queue like any extraction. */
+src/features/handoff/HandoffSurface.tsx:56:    toast(`${result.added} candidate${result.added === 1 ? '' : 's'} added to the review queue.`, {
+src/db/types.ts:26:  /** Set on a source record that has been folded into another canonical entity. */
+src/db/types.ts:39:  source: 'manual' | 'extraction' | 'merge' | 'import' | 'generate';
+src/db/types.ts:50:  /** Derived on save; the extraction/occurrence substrate. */
+src/db/types.ts:70:  /** null while the mention belongs to a pending discovery candidate;
+src/db/types.ts:80:  candidateId?: string;
+src/db/types.ts:93:  suggestedAction: 'create' | 'update' | 'merge';
+src/db/types.ts:99:  confidenceBand: 'blue' | 'green' | 'orange' | 'red';
+src/db/types.ts:114:/** A user-confirmed identity lesson. `same` rules teach extraction that a
+src/db/types.ts:115: * surface form belongs to a canonical entity; `different` rules stop a
+src/db/types.ts:124:  canonicalEntityId?: string;
+src/db/types.ts:139:  candidatesBefore: ReviewCandidate[];
+src/db/types.ts:142:  /** Existing mappings displaced by the canonical decision, restored on undo. */
+src/db/types.ts:148:export type AuditActor = 'user' | 'extraction' | 'ai' | 'import';
+src/db/types.ts:273:/** Encrypted API-key rows + the non-extractable root CryptoKey
+src/db/types.ts:280:  /** Root row only: the non-extractable AES key (structured-cloned). */
+src/db/repos/merge.ts:14:  candidateToChapterFact,
+src/db/repos/merge.ts:23:  candidateIds?: string[];
+src/db/repos/merge.ts:27:  canonicalName?: string;
+src/db/repos/merge.ts:82:  candidates: ReviewCandidate[];
+src/db/repos/merge.ts:83:  canonicalName: string;
+src/db/repos/merge.ts:89:    candidateCount: number;
+src/db/repos/merge.ts:139:  canonicalName: string;
+src/db/repos/merge.ts:323:  const candidates = (
+src/db/repos/merge.ts:324:    await Promise.all((request.candidateIds ?? []).map((id) => db.candidates.get(id)))
+src/db/repos/merge.ts:333:  const projectId = targetEntity?.projectId ?? sourceEntities[0]?.projectId ?? candidates[0]?.projectId;
+src/db/repos/merge.ts:337:  ) || candidates.some((candidate) => candidate.entityType !== request.entityType);
+src/db/repos/merge.ts:339:  return { candidates, sourceEntities, targetEntity, projectId };
+src/db/repos/merge.ts:343:  const { candidates: directCandidates, sourceEntities, targetEntity, projectId } = await loadRequest(request);
+src/db/repos/merge.ts:345:  const canonicalName =
+src/db/repos/merge.ts:346:    request.canonicalName ||
+src/db/repos/merge.ts:348:    directCandidates.find((candidate) => request.targetCandidateIds?.includes(candidate.id))?.name ||
+src/db/repos/merge.ts:359:  const directCandidateIds = new Set(directCandidates.map((candidate) => candidate.id));
+src/db/repos/merge.ts:362:      canonicalName,
+src/db/repos/merge.ts:365:      ...directCandidates.flatMap((candidate) => [
+src/db/repos/merge.ts:366:        candidate.name,
+src/db/repos/merge.ts:367:        ...((Array.isArray(candidate.suggestedChanges?.aliases)
+src/db/repos/merge.ts:368:          ? candidate.suggestedChanges.aliases
+src/db/repos/merge.ts:373:  const pendingForIdentity = await db.candidates
+src/db/repos/merge.ts:377:  const automaticallyRelinkedCandidates = pendingForIdentity.filter((candidate) => {
+src/db/repos/merge.ts:378:    if (directCandidateIds.has(candidate.id)) return false;
+src/db/repos/merge.ts:379:    const pointsAtSource = !!candidate.existingEntityId && sourceIds.has(candidate.existingEntityId);
+src/db/repos/merge.ts:381:      candidate.entityType === request.entityType &&
+src/db/repos/merge.ts:382:      initialSurfaceKeys.has(normaliseIdentitySurface(candidate.name));
+src/db/repos/merge.ts:385:  const candidates = [...directCandidates, ...automaticallyRelinkedCandidates];
+src/db/repos/merge.ts:390:    ...candidates.flatMap((candidate) => [
+src/db/repos/merge.ts:391:      candidate.name,
+src/db/repos/merge.ts:392:      ...((Array.isArray(candidate.suggestedChanges?.aliases)
+src/db/repos/merge.ts:393:        ? candidate.suggestedChanges?.aliases
+src/db/repos/merge.ts:396:  ]).filter((name) => normaliseIdentitySurface(name) !== normaliseIdentitySurface(canonicalName));
+src/db/repos/merge.ts:404:        ? 'Already on canonical entity'
+src/db/repos/merge.ts:423:  for (const candidate of candidates) {
+src/db/repos/merge.ts:424:    if (candidate.summary) {
+src/db/repos/merge.ts:426:        sourceId: candidate.id,
+src/db/repos/merge.ts:427:        sourceLabel: candidate.name,
+src/db/repos/merge.ts:428:        value: candidate.summary,
+src/db/repos/merge.ts:429:        chapterId: candidate.chapterId,
+src/db/repos/merge.ts:430:        chapterLabel: candidate.chapterId ? lookup.byId.get(candidate.chapterId)?.label : undefined,
+src/db/repos/merge.ts:431:        chapterOrder: candidate.chapterId ? lookup.byId.get(candidate.chapterId)?.order ?? null : null,
+src/db/repos/merge.ts:432:        sourceQuote: candidate.sourceQuote,
+src/db/repos/merge.ts:435:    for (const [rawKey, rawValue] of Object.entries(candidate.suggestedChanges ?? {})) {
+src/db/repos/merge.ts:447:        sourceId: candidate.id,
+src/db/repos/merge.ts:448:        sourceLabel: candidate.name,
+src/db/repos/merge.ts:450:        chapterId: candidate.chapterId,
+src/db/repos/merge.ts:451:        chapterLabel: candidate.chapterId ? lookup.byId.get(candidate.chapterId)?.label : undefined,
+src/db/repos/merge.ts:452:        chapterOrder: candidate.chapterId ? lookup.byId.get(candidate.chapterId)?.order ?? null : null,
+src/db/repos/merge.ts:453:        sourceQuote: candidate.sourceQuote,
+src/db/repos/merge.ts:479:  const candidateFacts = await Promise.all(candidates.map((candidate) => candidateToChapterFact(candidate, lookup)));
+src/db/repos/merge.ts:482:    ...mergeChapterFacts([], [...sourceEntityFacts, ...candidateFacts], lookup).map((fact) => ({
+src/db/repos/merge.ts:493:  const candidateIds = new Set(candidates.map((candidate) => candidate.id));
+src/db/repos/merge.ts:499:  const allAffectedCandidateIds = candidateIds;
+src/db/repos/merge.ts:503:      (occurrence.candidateId != null && allAffectedCandidateIds.has(occurrence.candidateId))
+src/db/repos/merge.ts:512:    ...candidates
+src/db/repos/merge.ts:513:      .map((candidate) => candidate.suggestedChanges?.location)
+src/db/repos/merge.ts:520:  const targetDisplayName = targetEntity?.name ?? canonicalName;
+src/db/repos/merge.ts:522:    ...directCandidates.map((candidate) => ({
+src/db/repos/merge.ts:523:      id: candidate.id,
+src/db/repos/merge.ts:524:      name: candidate.name,
+src/db/repos/merge.ts:527:      chapterLabel: candidate.chapterId ? lookup.byId.get(candidate.chapterId)?.label ?? 'Removed or unknown chapter' : 'No chapter',
+src/db/repos/merge.ts:529:    ...automaticallyRelinkedCandidates.map((candidate) => ({
+src/db/repos/merge.ts:530:      id: candidate.id,
+src/db/repos/merge.ts:531:      name: candidate.name,
+src/db/repos/merge.ts:533:      reason: candidate.existingEntityId && sourceIds.has(candidate.existingEntityId)
+src/db/repos/merge.ts:535:        : 'Uses a name that this merge will teach as canonical',
+src/db/repos/merge.ts:536:      chapterLabel: candidate.chapterId ? lookup.byId.get(candidate.chapterId)?.label ?? 'Removed or unknown chapter' : 'No chapter',
+src/db/repos/merge.ts:543:    before: occurrence.entityId ? entityNameById.get(occurrence.entityId) ?? occurrence.entityId : 'Pending extraction',
+src/db/repos/merge.ts:581:    warnings.push('New chapter evidence will be inserted by stable chapter id; later chapter-number changes update every linked view without re-extraction.');
+src/db/repos/merge.ts:591:  const aliasKeys = new Set([canonicalName, ...aliasNames].map(normaliseIdentitySurface));
+src/db/repos/merge.ts:596:      !!rule.canonicalEntityId &&
+src/db/repos/merge.ts:597:      rule.canonicalEntityId !== targetEntity?.id &&
+src/db/repos/merge.ts:598:      !sourceIds.has(rule.canonicalEntityId)
+src/db/repos/merge.ts:601:    warnings.push(`${collisions.length} learned name mapping${collisions.length === 1 ? '' : 's'} currently point elsewhere. Confirming will make this canonical decision authoritative.`);
+src/db/repos/merge.ts:610:    candidates,
+src/db/repos/merge.ts:611:    canonicalName,
+src/db/repos/merge.ts:616:      candidateCount: candidates.length,
+src/db/repos/merge.ts:711:  canonicalEntityId: string
+src/db/repos/merge.ts:720:    canonicalEntityId,
+src/db/repos/merge.ts:733:  const candidateIds = new Set(fresh.candidates.map((candidate) => candidate.id));
+src/db/repos/merge.ts:739:    name: options.canonicalName.trim() || fresh.canonicalName,
+src/db/repos/merge.ts:751:  const pendingCandidates = await db.candidates
+src/db/repos/merge.ts:756:  // A canonical decision can update more than the cards explicitly included in
+src/db/repos/merge.ts:762:      fresh.targetEntity?.name ?? options.canonicalName,
+src/db/repos/merge.ts:765:      ...fresh.candidates.map((candidate) => candidate.name),
+src/db/repos/merge.ts:769:  const candidateSnapshots = pendingCandidates.filter((candidate) => {
+src/db/repos/merge.ts:770:    if (candidateIds.has(candidate.id)) return true;
+src/db/repos/merge.ts:771:    const pointsAtSource = !!candidate.existingEntityId && sourceIds.has(candidate.existingEntityId);
+src/db/repos/merge.ts:773:      candidate.entityType === fresh.entityType &&
+src/db/repos/merge.ts:774:      preliminaryLearnedSurfaces.has(normaliseIdentitySurface(candidate.name));
+src/db/repos/merge.ts:777:  const snapshottedCandidateIds = new Set(candidateSnapshots.map((candidate) => candidate.id));
+src/db/repos/merge.ts:783:      (occurrence.candidateId != null && snapshottedCandidateIds.has(occurrence.candidateId))
+src/db/repos/merge.ts:791:  const candidateFacts = await Promise.all(fresh.candidates.map((candidate) => candidateToChapterFact(candidate, lookup)));
+src/db/repos/merge.ts:794:    timelineFacts: mergeChapterFacts(existingTimeline, [...sourceTimeline, ...candidateFacts], lookup),
+src/db/repos/merge.ts:799:  const incomingTravel = [...sourceTimeline, ...candidateFacts].filter((fact) => !!fact.location);
+src/db/repos/merge.ts:882:    ...fresh.candidates.map((candidate) => candidate.name),
+src/db/repos/merge.ts:887:    .filter((rule) => rule.kind === 'same' && rule.canonicalEntityId === target.id)
+src/db/repos/merge.ts:902:        rule.canonicalEntityId !== target.id
+src/db/repos/merge.ts:915:    candidatesBefore: candidateSnapshots,
+src/db/repos/merge.ts:927:      db.candidates,
+src/db/repos/merge.ts:1019:      for (const candidate of pendingCandidates) {
+src/db/repos/merge.ts:1020:        if (candidateIds.has(candidate.id)) {
+src/db/repos/merge.ts:1022:            fresh.candidates.length > 1 ||
+src/db/repos/merge.ts:1024:            candidate.suggestedAction === 'merge';
+src/db/repos/merge.ts:1025:          await db.candidates.update(candidate.id, {
+src/db/repos/merge.ts:1032:        const pointsAtSource = !!candidate.existingEntityId && sourceIds.has(candidate.existingEntityId);
+src/db/repos/merge.ts:1034:          candidate.entityType === target.type &&
+src/db/repos/merge.ts:1035:          learnedSurfaces.has(normaliseIdentitySurface(candidate.name));
+src/db/repos/merge.ts:1037:          await db.candidates.update(candidate.id, {
+src/db/repos/merge.ts:1040:            suggestedAction: candidate.suggestedAction === 'create' ? 'merge' : candidate.suggestedAction,
+src/db/repos/merge.ts:1042:              candidate.suggestedChanges ?? null,
+src/db/repos/merge.ts:1047:              (candidate.relatedEntityIds ?? []).map((id) => (sourceIds.has(id) ? target.id : id))
+src/db/repos/merge.ts:1050:          await db.occurrences.where('candidateId').equals(candidate.id).modify({
+src/db/repos/merge.ts:1071:      candidates: fresh.candidates,
+src/db/repos/merge.ts:1089:      db.candidates,
+src/db/repos/merge.ts:1100:      if (receipt.candidatesBefore.length) await db.candidates.bulkPut(receipt.candidatesBefore);
+src/db/repos/merge.ts:1133:    canonicalName: target.name,
+src/db/repos/trash.ts:34:      for (const sibling of siblings.filter((candidate) => candidate.order >= insertAt)) {
+src/db/repos/projects.ts:43:    [db.projects, db.entities, db.links, db.chapters, db.notes, db.occurrences, db.candidates, db.auditLog, db.trash],
+src/db/repos/projects.ts:51:        db.candidates.where('projectId').equals(id).delete(),
+src/db/repos/identity.ts:24:  canonicalEntityId: string;
+src/db/repos/identity.ts:34:        rule.canonicalEntityId === input.canonicalEntityId
+src/db/repos/identity.ts:45:    canonicalEntityId: input.canonicalEntityId,
+src/db/repos/identity.ts:97:export function canonicalRuleFor(
+src/db/repos/identity.ts:108:      !!rule.canonicalEntityId
+src/db/repos/review.ts:8:  const rows = await db.candidates.where('[projectId+status]').equals([projectId, 'pending']).toArray();
+src/db/repos/review.ts:13:  return db.candidates.where('[projectId+status]').equals([projectId, 'pending']).count();
+src/db/repos/review.ts:21:  const candidate = await db.candidates.get(id);
+src/db/repos/review.ts:22:  if (!candidate || candidate.status !== 'pending') return null;
+src/db/repos/review.ts:25:    entityType: candidate.entityType,
+src/db/repos/review.ts:26:    candidateIds: [candidate.id],
+src/db/repos/review.ts:27:    targetEntityId: candidate.existingEntityId ?? null,
+src/db/repos/review.ts:28:    canonicalName: candidate.existingEntityId ? undefined : candidate.name,
+src/db/repos/review.ts:31:    canonicalName: preview.targetEntity?.name ?? preview.canonicalName,
+src/db/repos/review.ts:41:  const candidate = await db.candidates.get(id);
+src/db/repos/review.ts:42:  if (!candidate || candidate.status !== 'pending') return;
+src/db/repos/review.ts:43:  await db.candidates.update(id, { status: 'denied' });
+src/db/repos/review.ts:44:  // Remove the pending mentions tied to this candidate.
+src/db/repos/review.ts:45:  await db.occurrences.where('candidateId').equals(id).delete();
+src/db/repos/review.ts:47:    projectId: candidate.projectId,
+src/db/repos/review.ts:49:    target: { table: 'candidates', id, label: candidate.name },
+src/db/repos/review.ts:63:/** Insert fresh candidates for a chapter, replacing its pending ones. User
+src/db/repos/review.ts:64: * identity lessons live in their own table, so re-extraction can replace raw
+src/db/repos/review.ts:70:  candidates: Omit<ReviewCandidate, 'id' | 'projectId' | 'chapterId' | 'status' | 'createdAt' | 'source'>[]
+src/db/repos/review.ts:72:  const priorPending = await db.candidates
+src/db/repos/review.ts:77:  await db.candidates.bulkDelete(priorPending.map((c) => c.id));
+src/db/repos/review.ts:80:  const rows: ReviewCandidate[] = candidates.map((c) => ({
+src/db/repos/review.ts:89:  if (rows.length) await db.candidates.bulkAdd(rows);
+src/db/repos/chapters.ts:19: * Chapter ids, not display numbers, anchor every extracted fact. Shifting the
+src/db/schema.ts:35:  candidates!: EntityTable<ReviewCandidate, 'id'>;
+src/db/schema.ts:58:      candidates: 'id, projectId, [projectId+status], [projectId+createdAt]',
+src/db/schema.ts:65:      candidates:
+src/db/schema.ts:67:      occurrences: 'id, projectId, [projectId+entityId], [projectId+chapterId], candidateId',
+src/db/schema.ts:85:        'id, projectId, [projectId+kind], [projectId+entityType], canonicalEntityId',
+src/services/ai/handoff.ts:4:import type { KnownEntity } from '@/services/extraction/known-index';
+src/services/ai/handoff.ts:5:import { extractJsonBlock, extractionPrompt, mapAiPayload } from './ai-candidates';
+src/services/ai/handoff.ts:10: * review queue exactly like in-app extraction. */
+src/services/ai/handoff.ts:24:    extractionPrompt(knownNames),
+src/services/ai/handoff.ts:35:/** Parse an external AI's reply into pending review candidates. */
+src/services/ai/handoff.ts:41:  const payload = extractJsonBlock(responseText);
+src/services/ai/handoff.ts:45:  const candidates = mapAiPayload(payload, known, 'handoff');
+src/services/ai/handoff.ts:46:  if (candidates.length === 0) {
+src/services/ai/handoff.ts:49:  const pending = await db.candidates
+src/services/ai/handoff.ts:54:    pending.map((c) => `${c.entityType}|${c.name.toLowerCase()}|${c.suggestedAction}`)
+src/services/ai/handoff.ts:57:  for (const c of candidates) {
+src/services/ai/handoff.ts:58:    const key = `${c.entityType}|${c.name.toLowerCase()}|${c.suggestedAction}`;
+src/services/ai/handoff.ts:66:      suggestedAction: c.suggestedAction,
+src/services/ai/handoff.ts:71:      confidenceBand: c.confidenceBand,
+src/services/ai/handoff.ts:82:  if (rows.length) await db.candidates.bulkAdd(rows);
+src/services/ai/providers.ts:123:      json.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ??
+src/services/ai/deep-extraction.ts:4:import { chunkText } from '@/services/extraction/text-utils';
+src/services/ai/deep-extraction.ts:5:import type { KnownEntity } from '@/services/extraction/known-index';
+src/services/ai/deep-extraction.ts:7:import { extractJsonBlock, extractionPrompt, mapAiPayload } from './ai-candidates';
+src/services/ai/deep-extraction.ts:25:  const system = extractionPrompt(knownNames);
+src/services/ai/deep-extraction.ts:35:    const payload = extractJsonBlock(text);
+src/services/ai/deep-extraction.ts:39:  // Dedupe against each other AND against existing pending candidates.
+src/services/ai/deep-extraction.ts:40:  const pending = await db.candidates
+src/services/ai/deep-extraction.ts:45:    pending.map((c) => `${c.entityType}|${c.name.toLowerCase()}|${c.suggestedAction}`)
+src/services/ai/deep-extraction.ts:49:    const key = `${c.entityType}|${c.name.toLowerCase()}|${c.suggestedAction}`;
+src/services/ai/deep-extraction.ts:58:      suggestedAction: c.suggestedAction,
+src/services/ai/deep-extraction.ts:63:      confidenceBand: c.confidenceBand,
+src/services/ai/deep-extraction.ts:74:  if (rows.length) await db.candidates.bulkAdd(rows);
+src/services/ai/ai-candidates.ts:2:import { buildCandidate, type ExtractionCandidate } from '@/services/extraction/detectors';
+src/services/ai/ai-candidates.ts:3:import { findKnownEntityMention, type KnownEntity } from '@/services/extraction/known-index';
+src/services/ai/ai-candidates.ts:5:/** The JSON shape we ask AI passes (deep extraction + handoff paste-back)
+src/services/ai/ai-candidates.ts:21: * by every AI paste-back path (deep extraction, handoff, onboarding). */
+src/services/ai/ai-candidates.ts:24:  const candidates = [fenced?.[1], text];
+src/services/ai/ai-candidates.ts:25:  for (const c of candidates) {
+src/services/ai/ai-candidates.ts:40:export function extractJsonBlock(text: string): AiExtractionPayload | null {
+src/services/ai/ai-candidates.ts:55:/** Map an AI payload into review candidates: names that exactly/alias
+src/services/ai/ai-candidates.ts:56: * match a known entity become field-update candidates (or are skipped
+src/services/ai/ai-candidates.ts:57: * when nothing new is offered); unknown names become create candidates.
+src/services/ai/ai-candidates.ts:99:            suggestedAction: 'update',
+src/services/ai/ai-candidates.ts:113:            suggestedAction: 'create',
+src/services/ai/ai-candidates.ts:134:        suggestedAction: 'create',
+src/services/ai/ai-candidates.ts:155:export function extractionPrompt(knownNames: { type: string; names: string[] }[]): string {
+src/services/ai/ai-candidates.ts:161:    'You are a story-canon extraction system. Read the chapter text and extract narrative entities.',
+src/services/extraction/known-index.ts:118:  /** null for occurrences of a not-yet-accepted discovery candidate —
+src/services/extraction/known-index.ts:119:   * accept backfills the entityId (legacy candidate-occurrence pattern). */
+src/services/extraction/known-index.ts:126:  /** Set on candidate occurrences: the candidate's canonical name. */
+src/services/extraction/known-index.ts:127:  candidateName?: string;
+src/services/extraction/session.ts:11:  candidateCount: number;
+src/services/extraction/session.ts:16:/** Run the offline extraction pass for one chapter and persist the
+src/services/extraction/session.ts:18: * candidates are replaced; accepted/denied work is preserved. */
+src/services/extraction/session.ts:19:export async function extractChapter(chapter: Chapter): Promise<ExtractionSummary> {
+src/services/extraction/session.ts:36:  const { occurrences, candidates } = runLocalExtraction({
+src/services/extraction/session.ts:45:  // Persist candidates first so candidate occurrences can point at them.
+src/services/extraction/session.ts:49:    candidates.map((c) => ({
+src/services/extraction/session.ts:52:      suggestedAction: c.suggestedAction,
+src/services/extraction/session.ts:57:      confidenceBand: c.confidenceBand,
+src/services/extraction/session.ts:65:  const candidateIdByName = new Map(rows.map((r) => [r.name.toLowerCase(), r.id]));
+src/services/extraction/session.ts:84:      candidateId: o.candidateName
+src/services/extraction/session.ts:85:        ? candidateIdByName.get(o.candidateName.toLowerCase())
+src/services/extraction/session.ts:109:    action: 'extraction.run',
+src/services/extraction/session.ts:110:    actor: 'extraction',
+src/services/extraction/session.ts:112:    after: { occurrenceCount: occurrenceRows.length, candidateCount: rows.length },
+src/services/extraction/session.ts:117:    candidateCount: rows.length,
+src/services/extraction/session.ts:123:  const row = await db.settings.get(`${projectId}:extraction`);
+src/services/extraction/text-utils.ts:1:/** Text utilities ported from the legacy extraction engine
+src/services/extraction/text-utils.ts:3: * tests/fixtures/extraction — change deliberately or not at all. */
+src/services/extraction/text-utils.ts:85:export function confidenceBand(value: number | null | undefined): ConfidenceBand {
+src/services/extraction/engine.ts:9:  /** gentle → 3, balanced → 2, aggressive → 1 minimum recurrences for
+src/services/extraction/engine.ts:18:  candidates: ExtractionCandidate[];
+src/services/extraction/engine.ts:21:/** The always-available offline extraction pass, pure and DB-free:
+src/services/extraction/engine.ts:27: * Behaviour pinned by tests/fixtures/extraction. */
+src/services/extraction/engine.ts:52:  const candidates = dedupeCandidates([...discovered, ...detectorCandidates]);
+src/services/extraction/engine.ts:55:  // candidateName set) so accepting the candidate can backfill the id and
+src/services/extraction/engine.ts:57:  for (const c of candidates) {
+src/services/extraction/engine.ts:61:      c.suggestedAction !== 'create'
+src/services/extraction/engine.ts:74:        candidateName: c.name,
+src/services/extraction/engine.ts:79:  return { occurrences, candidates };
+src/services/extraction/detectors.ts:8:import { confidenceBand, makeSourceQuote, type ConfidenceBand } from './text-utils';
+src/services/extraction/detectors.ts:16:  suggestedAction: 'create' | 'update' | 'merge';
+src/services/extraction/detectors.ts:21:  confidenceBand: ConfidenceBand;
+src/services/extraction/detectors.ts:31:type CandidateInput = Omit<ExtractionCandidate, 'confidenceBand'> & { confidenceBand?: ConfidenceBand };
+src/services/extraction/detectors.ts:36:    confidenceBand: input.confidenceBand ?? confidenceBand(input.confidence),
+src/services/extraction/detectors.ts:46:/** Per-detector base confidences — user-tunable via extraction settings. */
+src/services/extraction/detectors.ts:126:        suggestedAction: 'update',
+src/services/extraction/detectors.ts:165:        suggestedAction: 'update',
+src/services/extraction/detectors.ts:199:        suggestedAction: 'update',
+src/services/extraction/detectors.ts:236:        suggestedAction: 'create',
+src/services/extraction/detectors.ts:279:        suggestedAction: 'create',
+src/services/extraction/detectors.ts:317:        suggestedAction: 'create',
+src/services/extraction/detectors.ts:349:        suggestedAction: 'create',
+src/services/extraction/detectors.ts:379:        suggestedAction: 'create',
+src/services/extraction/detectors.ts:416:          suggestedAction: 'update',
+src/services/extraction/detectors.ts:450:        suggestedAction: 'create',
+src/services/extraction/detectors.ts:504:          suggestedAction: 'update',
+src/services/extraction/detectors.ts:534:        suggestedAction: 'create',
+src/services/extraction/detectors.ts:577:          suggestedAction: effect.type === 'events' ? 'update' : 'create',
+src/services/extraction/detectors.ts:620:          suggestedAction: 'update',
+src/services/extraction/detectors.ts:642:            suggestedAction: 'create',
+src/services/extraction/detectors.ts:677:/** Dedupe: same entityType + canonical name + suggestedAction +
+src/services/extraction/detectors.ts:678: * existingEntityId merge into one candidate (highest confidence wins,
+src/services/extraction/detectors.ts:680:export function dedupeCandidates(candidates: ExtractionCandidate[]): ExtractionCandidate[] {
+src/services/extraction/detectors.ts:681:  if (!candidates.length) return [];
+src/services/extraction/detectors.ts:686:  for (const c of candidates) {
+src/services/extraction/detectors.ts:690:      c.suggestedAction,
+src/services/extraction/detectors.ts:709:      existing.confidenceBand = c.confidenceBand;
+src/services/extraction/discovery.ts:20:import { confidenceBand, levenshteinSimilarity, makeSourceQuote } from './text-utils';
+src/services/extraction/discovery.ts:31:export function extractProperNounSpans(text: string): ProperNounSpan[] {
+src/services/extraction/discovery.ts:121:    if (NER_LOC_PREP_BEFORE.test(before)) consider({ type: 'locations', signal: 'loc-prep', confidence: 0.62 });
+src/services/extraction/discovery.ts:127: * project's first extraction is never empty. Deterministic, no AI. */
+src/services/extraction/discovery.ts:137:  const spans = extractProperNounSpans(text);
+src/services/extraction/discovery.ts:174:      signal = 'recurrence';
+src/services/extraction/discovery.ts:195:        suggestedAction: matchType === 'ambiguous' ? 'merge' : 'create',
+src/services/extraction/discovery.ts:210:/** Cluster near-duplicate discovery candidates of the same type: token
+src/services/extraction/discovery.ts:213:export function clusterAliases(candidates: ExtractionCandidate[]): ExtractionCandidate[] {
+src/services/extraction/discovery.ts:214:  if (candidates.length < 2) return candidates;
+src/services/extraction/discovery.ts:223:  for (let i = 0; i < candidates.length; i++) {
+src/services/extraction/discovery.ts:225:    const base = candidates[i];
+src/services/extraction/discovery.ts:228:    for (let j = i + 1; j < candidates.length; j++) {
+src/services/extraction/discovery.ts:230:      const other = candidates[j];
+src/services/extraction/discovery.ts:251:      base.confidenceBand = confidenceBand(base.confidence);
+src/services/extraction/project-known.ts:10:        rule.canonicalEntityId === entityId &&
+src/services/extraction/project-known.ts:17:/** Load the canonical extraction vocabulary for a project. User-confirmed
+src/services/extraction/project-known.ts:41:        entity.type === 'stats' && Array.isArray(entity.fields.extractionRules)
+src/services/extraction/project-known.ts:42:          ? (entity.fields.extractionRules as string[])
+src/services/archive/project.ts:33:    candidates: ReviewCandidate[];
+src/services/archive/project.ts:61:    candidates: await byProject<ReviewCandidate>(db.candidates),
+src/services/archive/project.ts:104:    t.candidates ?? [], t.atlasMaps ?? [], t.skillTrees ?? [], t.tangleBoards ?? [],
+src/services/archive/project.ts:126:    candidateId: o.candidateId ? (idMap.get(o.candidateId) ?? o.candidateId) : o.candidateId,
+src/services/archive/project.ts:128:  const candidates = rebase(t.candidates).map((c) => ({
+src/services/archive/project.ts:142:    canonicalEntityId: rule.canonicalEntityId
+src/services/archive/project.ts:143:      ? (idMap.get(rule.canonicalEntityId) ?? rule.canonicalEntityId)
+src/services/archive/project.ts:144:      : rule.canonicalEntityId,
+src/services/archive/project.ts:158:      db.candidates, db.atlasMaps, db.skillTrees, db.tangleBoards, db.randomTables,
+src/services/archive/project.ts:168:      await db.candidates.bulkAdd(candidates);
+src/services/archive/project.ts:186:      candidates: candidates.length,
+src/services/chapter-awareness.ts:17:  candidateId?: string;
+src/services/chapter-awareness.ts:46:    fact.candidateId ?? '',
+src/services/chapter-awareness.ts:84:export async function candidateToChapterFact(
+src/services/chapter-awareness.ts:85:  candidate: ReviewCandidate,
+src/services/chapter-awareness.ts:88:  const chapter = candidate.chapterId ? lookup.byId.get(candidate.chapterId) : undefined;
+src/services/chapter-awareness.ts:90:  const locationId = candidate.suggestedChanges?.location;
+src/services/chapter-awareness.ts:96:    id: `candidate:${candidate.id}`,
+src/services/chapter-awareness.ts:97:    chapterId: candidate.chapterId ?? null,
+src/services/chapter-awareness.ts:100:    kind: candidate.detector ?? candidate.suggestedAction,
+src/services/chapter-awareness.ts:102:      candidate.summary ||
+src/services/chapter-awareness.ts:103:      `${candidate.name}: ${candidate.suggestedAction === 'create' ? 'new entity' : 'new information'}`,
+src/services/chapter-awareness.ts:104:    sourceQuote: candidate.sourceQuote,
+src/services/chapter-awareness.ts:105:    candidateId: candidate.id,
+src/services/chapter-awareness.ts:107:    createdAt: candidate.createdAt,
+src/services/chapter-awareness.ts:165: * moved, renamed, or removed. Stable chapter ids remain canonical, so this
+src/services/chapter-awareness.ts:166: * does not re-run extraction; it only re-sorts small fact arrays and refreshes
+src/services/onboarding-ai.ts:1:import { parseJsonObject } from '@/services/ai/ai-candidates';
+src/services/onboarding-ai.ts:9: * extraction. */
+src/services/sample-project.ts:7:import { extractChapter } from '@/services/extraction/session';
+src/services/sample-project.ts:27: * a review queue populated by a real extraction pass. Remove it like any
+src/services/sample-project.ts:96:  // Two real chapters; extraction fills the review queue honestly.
+src/services/sample-project.ts:116:    await extractChapter(chapter);
+src/services/drag.ts:9:      candidateIds: string[];
+src/services/drag.ts:33:      Array.isArray(parsed.candidateIds) &&
+src/services/drag.ts:34:      parsed.candidateIds.length > 0 &&
+src/services/onboarding.ts:6:import { extractChapter } from '@/services/extraction/session';
+src/services/onboarding.ts:82:  candidatesFound: number;
+src/services/onboarding.ts:167:  // Manuscript → chapters (+ optional first extraction, through review).
+src/services/onboarding.ts:168:  let candidatesFound = 0;
+src/services/onboarding.ts:190:      const summary = await extractChapter(chapter);
+src/services/onboarding.ts:191:      candidatesFound += summary.candidateCount;
+src/services/onboarding.ts:200:    candidatesFound,
+src/services/generate/known.ts:2:import type { KnownEntity } from '@/services/extraction/known-index';
+src/services/generate/wire.ts:1:import { parseJsonObject } from '@/services/ai/ai-candidates';
+src/services/generate/wire.ts:2:import type { KnownEntity } from '@/services/extraction/known-index';
+src/services/generate/coerce.ts:3:import { findKnownEntityMention, type KnownEntity } from '@/services/extraction/known-index';
+src/services/generate/coerce.ts:43: * then unambiguous prefix/substring. Returns the canonical option. */
+src/services/generate/random/engine.ts:3:import type { KnownEntity } from '@/services/extraction/known-index';
+src/services/generate/random/packs/locations.ts:184:  const candidates = ctx.known.filter((k) => k.type === type);
+src/services/generate/random/packs/locations.ts:185:  if (!candidates.length || !rng.chance(p)) return undefined;
+src/services/generate/random/packs/locations.ts:187:    .shuffle(candidates)
+src/services/generate/random/packs/locations.ts:188:    .slice(0, rng.int(1, Math.min(2, candidates.length)))
+src/services/generate/random/packs/generic.ts:2:import type { KnownEntity } from '@/services/extraction/known-index';
+src/services/generate/random/packs/generic.ts:170:      const candidates = ctx.known.filter(
+src/services/generate/random/packs/generic.ts:173:      if (!candidates.length || (!opts.force && !rng.chance(0.6))) return undefined;
+src/services/generate/random/packs/generic.ts:174:      const picked = rng.pick(candidates);
+src/services/generate/random/packs/generic.ts:178:      const candidates = ctx.known.filter(
+src/services/generate/random/packs/generic.ts:181:      if (!candidates.length || (!opts.force && !rng.chance(0.5))) return undefined;
+src/services/generate/random/packs/generic.ts:183:        .shuffle(candidates)
+src/services/generate/random/packs/generic.ts:184:        .slice(0, rng.int(1, Math.min(2, candidates.length)))
+src/services/generate/random/packs/quests.ts:559:  const candidates = ctx.known.filter((k) => k.type === type);
+src/services/generate/random/packs/quests.ts:560:  if (!candidates.length || !rng.chance(p)) return undefined;
+src/services/generate/random/packs/quests.ts:561:  return refTo(rng.pick(candidates));
+src/services/generate/random/packs/quests.ts:565:  const candidates = ctx.known.filter((k) => k.type === type && k.id !== excludeId);
+src/services/generate/random/packs/quests.ts:566:  if (!candidates.length || !rng.chance(p)) return undefined;
+src/services/generate/random/packs/quests.ts:568:    .shuffle(candidates)
+src/services/generate/random/packs/quests.ts:569:    .slice(0, rng.int(1, Math.min(max, candidates.length)))
+src/services/generate/random/packs/items.ts:245:  const candidates = ctx.known.filter((k) => k.type === type);
+src/services/generate/random/packs/items.ts:246:  if (!candidates.length) return undefined;
+src/services/generate/random/packs/items.ts:247:  const picked = rng.pick(candidates);
+src/services/generate/random/packs/cast.ts:388:    const candidates = ctx.known.filter((k) => k.type === type);
+src/services/generate/random/packs/cast.ts:389:    if (!candidates.length || !rng.chance(chance)) return undefined;
+src/services/generate/random/packs/cast.ts:390:    const k = rng.pick(candidates);
+src/services/identity-resolution.ts:5:  canonicalRuleFor,
+src/services/identity-resolution.ts:56:  candidateIds: string[];
+src/services/identity-resolution.ts:57:  candidates: ReviewCandidate[];
+src/services/identity-resolution.ts:63:  confidenceBand: ReviewCandidate['confidenceBand'];
+src/services/identity-resolution.ts:123:  canonicalEntityId?: string
+src/services/identity-resolution.ts:127:  const leftRule = canonicalRuleFor(rules, entityType, left);
+src/services/identity-resolution.ts:128:  const rightRule = canonicalRuleFor(rules, entityType, right);
+src/services/identity-resolution.ts:130:    canonicalEntityId &&
+src/services/identity-resolution.ts:131:    (leftRule?.canonicalEntityId === canonicalEntityId || rightRule?.canonicalEntityId === canonicalEntityId)
+src/services/identity-resolution.ts:136:    leftRule?.canonicalEntityId &&
+src/services/identity-resolution.ts:137:    rightRule?.canonicalEntityId &&
+src/services/identity-resolution.ts:138:    leftRule.canonicalEntityId === rightRule.canonicalEntityId
+src/services/identity-resolution.ts:140:    return { score: 1, reasons: [{ label: 'Both names resolve to the same canonical entity', weight: 1 }] };
+src/services/identity-resolution.ts:191:function candidatePairScore(
+src/services/identity-resolution.ts:198:  // extraction happened to point both rows at the same entity.
+src/services/identity-resolution.ts:203:    return { score: 1, reasons: [{ label: 'Both extractions point at the same entity', weight: 1 }] };
+src/services/identity-resolution.ts:222:  candidates: ReviewCandidate[],
+src/services/identity-resolution.ts:228:  for (const candidate of candidates) {
+src/services/identity-resolution.ts:231:      isRejectedPair(rules, candidate.name, surface)
+src/services/identity-resolution.ts:234:    if (candidate.existingEntityId === entity.id) {
+src/services/identity-resolution.ts:238:      const result = scoreNames(candidate.name, surface, rules, candidate.entityType, entity.id);
+src/services/identity-resolution.ts:247:    const rule = canonicalRuleFor(rules, candidate.entityType, candidate.name);
+src/services/identity-resolution.ts:248:    if (rule?.canonicalEntityId === entity.id) {
+src/services/identity-resolution.ts:255:function choosePrimary(candidates: ReviewCandidate[]): ReviewCandidate {
+src/services/identity-resolution.ts:256:  return [...candidates].sort((a, b) => {
+src/services/identity-resolution.ts:288:  const [candidates, entities, rules] = await Promise.all([
+src/services/identity-resolution.ts:289:    db.candidates.where('[projectId+status]').equals([projectId, 'pending']).toArray(),
+src/services/identity-resolution.ts:294:  for (const candidate of candidates) {
+src/services/identity-resolution.ts:295:    const list = byType.get(candidate.entityType) ?? [];
+src/services/identity-resolution.ts:296:    list.push(candidate);
+src/services/identity-resolution.ts:297:    byType.set(candidate.entityType, list);
+src/services/identity-resolution.ts:305:        const match = candidatePairScore(rows[i], rows[j], rules);
+src/services/identity-resolution.ts:310:    rows.forEach((candidate, index) => {
+src/services/identity-resolution.ts:312:      grouped.set(root, [...(grouped.get(root) ?? []), candidate]);
+src/services/identity-resolution.ts:317:      const names = [...new Set(group.map((candidate) => candidate.name).filter(Boolean))];
+src/services/identity-resolution.ts:337:          const result = candidatePairScore(group[i], group[j], rules);
+src/services/identity-resolution.ts:345:      const confidence = Math.max(...group.map((candidate) => candidate.confidence));
+src/services/identity-resolution.ts:346:      const confidenceBand = [...group].sort((a, b) => b.confidence - a.confidence)[0].confidenceBand;
+src/services/identity-resolution.ts:348:        id: `identity:${group.map((candidate) => candidate.id).sort().join(':')}`,
+src/services/identity-resolution.ts:350:        candidateIds: group.map((candidate) => candidate.id),
+src/services/identity-resolution.ts:351:        candidates: group.sort((a, b) => b.confidence - a.confidence),
+src/services/identity-resolution.ts:355:          (count, candidate) => count + Math.max(1, candidate.sourceQuotes?.length ?? (candidate.sourceQuote ? 1 : 0)),
+src/services/identity-resolution.ts:358:        chapterIds: [...new Set(group.map((candidate) => candidate.chapterId).filter((id): id is string => !!id))],
+src/services/identity-resolution.ts:360:        confidenceBand,
+src/services/identity-resolution.ts:370:    return rank[a.certainty] - rank[b.certainty] || b.candidateIds.length - a.candidateIds.length || b.confidence - a.confidence;
+src/services/identity-resolution.ts:378:export function candidateSimilarity(
+src/services/identity-resolution.ts:383:  return candidatePairScore(left, right, rules).score;
+src/stores/merge.ts:18:        candidateIds: [...new Set(request.candidateIds ?? [])],
+src/stores/merge.ts:32:      request: state.request ? { ...state.request, canonicalName: name } : null,
+tests/e2e/14-offline.spec.ts:42:    // Offline extraction works end to end (it is pure local compute).
+tests/e2e/14-offline.spec.ts:44:    await expect(page.getByText(/candidate|Nothing recognisable/)).toBeVisible();
+tests/e2e/15-sweep.spec.ts:82:  test('the exotic field widgets are live: stats phrase rules feed extraction', async ({
+tests/e2e/15-sweep.spec.ts:111:    // candidate in Review.
+tests/e2e/15-sweep.spec.ts:121:    await expect(page.getByText(/candidate|re-confirmed/)).toBeVisible();
+tests/e2e/05-cross-panel.spec.ts:107:    // A chapter mentioning the duplicate, extracted so occurrences exist.
+tests/e2e/05-cross-panel.spec.ts:127:    await expect(page.getByText(/Aelinor is now the canonical entity/)).toBeVisible();
+tests/e2e/17-identity-resolution.spec.ts:52:    await expect(page.getByText(/Graham Hendricks is now the canonical entity/)).toBeVisible();
+tests/e2e/04-extraction-review.spec.ts:20:test.describe('extraction + review loop', () => {
+tests/e2e/04-extraction-review.spec.ts:57:    await expect(page.getByText(/candidate/)).toBeVisible();
+tests/e2e/04-extraction-review.spec.ts:62:    // A cast candidate for Maren exists — accept it via the real button.
+tests/e2e/04-extraction-review.spec.ts:76:  test('deny removes a candidate; denied work stays done after re-extraction', async ({ page }) => {
+tests/e2e/04-extraction-review.spec.ts:97:  test('item handoff between cast members produces an update candidate; accepting sets the owner', async ({
+tests/e2e/04-extraction-review.spec.ts:105:    // world through extraction itself: "Blade" is an item-noun cue, so the
+tests/e2e/04-extraction-review.spec.ts:120:    // Re-extract: now the item is KNOWN, so the transfer detector fires.
+tests/e2e/04-extraction-review.spec.ts:131:    await expect(page.getByText(/canonical entity/)).toBeVisible();
+tests/e2e/13-onboarding.spec.ts:65:    // 5 — Manuscript: auto chapter split preview + extraction toggle.
+tests/e2e/09-ai.spec.ts:82:  test('deep extraction feeds the review queue from a mocked JSON reply', async ({ page }) => {
+tests/e2e/09-ai.spec.ts:110:  test('handoff: build pack, paste reply, candidates land in review — fully offline', async ({
+tests/e2e/09-ai.spec.ts:125:    await expect(page.getByText('1 candidate added to the review queue.')).toBeVisible();
+tests/unit/extraction-fixtures.spec.ts:1:/** The extraction contract: run every golden fixture from
+tests/unit/extraction-fixtures.spec.ts:2: * tests/fixtures/extraction against the ported engine. These fixtures
+tests/unit/extraction-fixtures.spec.ts:8:import { runLocalExtraction } from '@/services/extraction/engine';
+tests/unit/extraction-fixtures.spec.ts:9:import type { KnownEntity } from '@/services/extraction/known-index';
+tests/unit/extraction-fixtures.spec.ts:13:const FIXTURE_DIR = join(__dirname, '..', 'fixtures', 'extraction');
+tests/unit/extraction-fixtures.spec.ts:23:    suggestedAction?: string;
+tests/unit/extraction-fixtures.spec.ts:51:describe('extraction fixtures (golden contract)', () => {
+tests/unit/extraction-fixtures.spec.ts:59:      const { occurrences, candidates } = runLocalExtraction({
+tests/unit/extraction-fixtures.spec.ts:92:      // Expected candidates: subset match on the given properties.
+tests/unit/extraction-fixtures.spec.ts:94:        const found = candidates.some((c) => {
+tests/unit/extraction-fixtures.spec.ts:96:          if (exp.suggestedAction && c.suggestedAction !== exp.suggestedAction) return false;
+tests/unit/extraction-fixtures.spec.ts:109:          `expected candidate ${JSON.stringify(exp)} in ${JSON.stringify(
+tests/unit/extraction-fixtures.spec.ts:110:            candidates.map((c) => ({
+tests/unit/extraction-fixtures.spec.ts:113:              a: c.suggestedAction,
+tests/unit/onboarding.spec.ts:92:    expect(result.candidatesFound).toBeGreaterThan(0);
+tests/unit/onboarding.spec.ts:109:    const pending = await db.candidates.where('[projectId+status]').equals([projectId, 'pending']).toArray();
+tests/unit/onboarding.spec.ts:127:      await db.candidates.where('[projectId+status]').equals([projectId, 'pending']).count()
+tests/unit/archive.spec.ts:46:  await db.settings.put({ key: `${projectId}:extraction`, value: { detectorConfidence: { ownership: 0.9 } } });
+tests/unit/archive.spec.ts:53:    await rememberSameIdentity({ projectId, entityType: 'cast', surface: 'Queen Ael', canonicalEntityId: aelinorId });
+tests/unit/archive.spec.ts:80:    expect(importedRules[0].canonicalEntityId).toBe(newAelinor.id);
+tests/unit/archive.spec.ts:83:    const setting = await db.settings.get(`${result.projectId}:extraction`);
+tests/unit/generate.spec.ts:7:import type { KnownEntity } from '@/services/extraction/known-index';
+tests/unit/generate.spec.ts:313:  it('parses extraction-style payloads keyed by type name', () => {
+tests/unit/ai-layer.spec.ts:3:import { extractJsonBlock, mapAiPayload } from '@/services/ai/ai-candidates';
+tests/unit/ai-layer.spec.ts:6:import type { KnownEntity } from '@/services/extraction/known-index';
+tests/unit/ai-layer.spec.ts:34:  it('extracts JSON from fenced and prose-wrapped replies', () => {
+tests/unit/ai-layer.spec.ts:35:    expect(extractJsonBlock('Here you go:\n```json\n{"characters":[{"name":"Maren"}]}\n```')).toEqual({
+tests/unit/ai-layer.spec.ts:38:    expect(extractJsonBlock('Sure! {"items":[{"name":"Salt Lantern"}]} Hope that helps.')).toEqual({
+tests/unit/ai-layer.spec.ts:41:    expect(extractJsonBlock('no json here')).toBeNull();
+tests/unit/ai-layer.spec.ts:44:  it('maps unknown names to create candidates and known names to updates', () => {
+tests/unit/ai-layer.spec.ts:58:    expect(maren?.suggestedAction).toBe('create');
+tests/unit/ai-layer.spec.ts:62:    expect(aelinor?.suggestedAction).toBe('update');
+tests/unit/ai-layer.spec.ts:66:    expect(auger?.suggestedAction).toBe('update');
+tests/unit/ai-layer.spec.ts:91:  it('paste-back lands candidates in the pending queue with dedupe', async () => {
+tests/unit/ai-layer.spec.ts:98:    const pending = await db.candidates.where('[projectId+status]').equals([projectId, 'pending']).toArray();
+tests/unit/identity-resolution.spec.ts:21:function candidate(input: Partial<ReviewCandidate> & Pick<ReviewCandidate, 'id' | 'projectId' | 'entityType' | 'name'>): ReviewCandidate {
+tests/unit/identity-resolution.spec.ts:23:    suggestedAction: 'create',
+tests/unit/identity-resolution.spec.ts:28:    confidenceBand: 'green',
+tests/unit/identity-resolution.spec.ts:48:    await db.candidates.bulkAdd([
+tests/unit/identity-resolution.spec.ts:49:      candidate({ id: 'c-graham', projectId, entityType: 'cast', name: 'Graham' }),
+tests/unit/identity-resolution.spec.ts:50:      candidate({ id: 'c-graham-h', projectId, entityType: 'cast', name: 'Graham Hendricks' }),
+tests/unit/identity-resolution.spec.ts:55:    expect(grouped[0].candidateIds).toHaveLength(2);
+tests/unit/identity-resolution.spec.ts:68:    expect(separated.every((cluster) => cluster.candidateIds.length === 1)).toBe(true);
+tests/unit/identity-resolution.spec.ts:132:    // all later display numbers become 5 and 6 without extraction running.
+tests/unit/identity-resolution.spec.ts:139:    const selected = candidate({
+tests/unit/identity-resolution.spec.ts:140:      id: 'candidate-selected',
+tests/unit/identity-resolution.spec.ts:145:      suggestedAction: 'merge',
+tests/unit/identity-resolution.spec.ts:153:    const implicit = candidate({
+tests/unit/identity-resolution.spec.ts:154:      id: 'candidate-implicit',
+tests/unit/identity-resolution.spec.ts:159:      suggestedAction: 'update',
+tests/unit/identity-resolution.spec.ts:165:    await db.candidates.bulkAdd([selected, implicit]);
+tests/unit/identity-resolution.spec.ts:169:        paragraphId: null, start: 0, end: 6, exactText: 'Graham', candidateId: selected.id, createdAt: 1,
+tests/unit/identity-resolution.spec.ts:173:        paragraphId: null, start: 0, end: 6, exactText: 'Graham', candidateId: implicit.id, createdAt: 2,
+tests/unit/identity-resolution.spec.ts:179:      candidateIds: [selected.id],
+tests/unit/identity-resolution.spec.ts:186:    expect(preview.candidates.map((row) => row.id).sort()).toEqual([implicit.id, selected.id].sort());
+tests/unit/identity-resolution.spec.ts:194:    const incomingChronology = preview.chronology.find((row) => row.candidateId === selected.id)!;
+tests/unit/identity-resolution.spec.ts:201:      canonicalName: target.name,
+tests/unit/identity-resolution.spec.ts:206:    const canonical = (await db.entities.get(target.id))!;
+tests/unit/identity-resolution.spec.ts:207:    expect(canonical.aliases).toContain('Graham');
+tests/unit/identity-resolution.spec.ts:208:    expect(canonical.fields.occupation).toBe('Courier');
+tests/unit/identity-resolution.spec.ts:209:    const mergedTravel = canonical.fields.travelTimeline as ChapterAnchoredFact[];
+tests/unit/identity-resolution.spec.ts:213:    expect((canonical.fields.currentLocation as { id: string }).id).toBe(places[4].id);
+tests/unit/identity-resolution.spec.ts:223:    const selectedAfter = (await db.candidates.get(selected.id))!;
+tests/unit/identity-resolution.spec.ts:224:    const implicitAfter = (await db.candidates.get(implicit.id))!;
+tests/unit/identity-resolution.spec.ts:229:    expect(canonical.fields.status).toBe('Resting');
+tests/unit/identity-resolution.spec.ts:232:    expect(rules.some((rule) => rule.surface === 'graham' && rule.canonicalEntityId === target.id)).toBe(true);
+tests/unit/identity-resolution.spec.ts:238:    expect(receipt.candidatesBefore.map((row) => row.id).sort()).toEqual([implicit.id, selected.id].sort());
+tests/unit/identity-resolution.spec.ts:248:    expect((await db.candidates.get(implicit.id))?.existingEntityId).toBe(source.id);
+tests/unit/identity-resolution.spec.ts:249:    expect((await db.candidates.get(implicit.id))?.status).toBe('pending');
+tests/unit/paragraphs.spec.ts:33:  it('extracts ordered pid/text pairs across marks and nesting', () => {
