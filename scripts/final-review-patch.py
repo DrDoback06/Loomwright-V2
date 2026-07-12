@@ -44,6 +44,17 @@ new = "                        aria-label={field.kind === 'pills' ? `Reroll ${fi
 assert text.count(old) == 1, 'reroll label anchor changed'
 editor.write_text(text.replace(old, new, 1), encoding='utf-8')
 
+merge_dialog = Path('src/features/review/MergePreviewDialog.tsx')
+text = merge_dialog.read_text(encoding='utf-8')
+old_heading = '<h1 id="merge-preview-title">Merge into one canonical entity</h1>'
+new_heading = '<h1 id="merge-preview-title">Resolve these records into one identity</h1>'
+assert text.count(old_heading) == 1, 'merge title anchor changed'
+text = text.replace(old_heading, new_heading, 1)
+old_footer = "extraction which canonical entity to use; checked names are also displayed on the dossier as aliases or titles for <strong>{canonicalName || 'the canonical entity'}</strong>."
+new_footer = "extraction which record to use; checked names are also displayed on the dossier as aliases or titles for <strong>{canonicalName || 'the chosen identity'}</strong>."
+assert text.count(old_footer) == 1, 'merge footer anchor changed'
+merge_dialog.write_text(text.replace(old_footer, new_footer, 1), encoding='utf-8')
+
 styles = Path('src/styles/components.css')
 text = styles.read_text(encoding='utf-8')
 assert '.lw-identitycard__glance {' not in text, 'glance styles already present'
