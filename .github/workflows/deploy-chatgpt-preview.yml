@@ -1,4 +1,4 @@
-name: Deploy verified Loomwright identity release
+name: Deploy verified Loomwright extraction release
 
 on:
   push:
@@ -18,12 +18,13 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  LOOMWRIGHT_REF: agent/review-identity-resolution
+  # Exact source that passed Review Identity CI run 29209640434.
+  LOOMWRIGHT_REF: 523c74ca96ff3371dbc11475754c3d539cf51a49
   LW_BASE: /Loomwright-V2/
 
 jobs:
   build:
-    name: Package verified identity-resolution build
+    name: Package verified context-aware extraction build
     runs-on: ubuntu-latest
     outputs:
       source_sha: ${{ steps.source.outputs.sha }}
@@ -59,17 +60,22 @@ jobs:
           touch dist/.nojekyll
           cat > dist/deployed-version.json <<JSON
           {
-            "application": "loomwright-review-identity-resolution",
+            "application": "loomwright-context-aware-extraction",
             "sourceBranch": "agent/review-identity-resolution",
             "sourceSha": "${{ steps.source.outputs.sha }}",
             "verification": {
               "typecheck": "passed",
               "lint": "passed",
-              "unitTests": 98,
-              "browserTests": 132,
-              "browserTestsSkipped": 10,
+              "unitSuite": "passed",
               "browserSuite": "passed-desktop-and-mobile",
-              "verifiedRunId": 29201028705
+              "verifiedRunId": 29209640434
+            },
+            "extractionRelease": {
+              "contextualTypeValidation": true,
+              "junkPhraseRejection": true,
+              "possessiveCanonicalisation": true,
+              "explicitLocationSkillEventCues": true,
+              "conservativeSingleTokenDiscovery": true
             }
           }
           JSON
@@ -81,7 +87,7 @@ jobs:
           path: dist
 
   deploy:
-    name: Publish verified Loomwright release
+    name: Publish verified Loomwright extraction release
     needs: build
     runs-on: ubuntu-latest
     environment:
