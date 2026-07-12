@@ -1,0 +1,11 @@
+{
+  "archiveSha256": "89a4db165e9b516bb6d3325d734d14edd80badc285ebec5a195a25b52ad6736d",
+  "archiveBytes": 50257,
+  "encodedBytes": 67012,
+  "chunks": [
+    {"path": ".extraction-payload/part-00", "bytes": 17000, "sha256": "4e6343a18b0942d0b1a598d2e3984f322ab0d68aae7de7061cfcdbde65e3cb21"},
+    {"path": ".extraction-payload/part-01", "bytes": 17000, "sha256": "37f9fbc9662eb66f0f9332be1cf77184811d8871d3f0f715da26c2fdaed4936a"},
+    {"path": ".extraction-payload/part-02", "bytes": 17000, "sha256": "3bf9fe464c6bed6bf468ac086a779c088c0f8d2b6d6cdda310a1f4e110e7015c"},
+    {"path": ".extraction-payload/part-03", "bytes": 16012, "sha256": "eb15fad88eab674c87a6bfeb39b88485503128a8471677a22c0b66bf725d7871"}
+  ]
+}

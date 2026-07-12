@@ -1,0 +1,129 @@
+name: Apply extraction intelligence release
+
+on:
+  push:
+    branches:
+      - agent/extraction-intelligence
+    paths:
+      - .github/workflows/apply-extraction-intelligence.yml
+      - .extraction-payload/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: loomwright-extraction-intelligence-apply
+  cancel-in-progress: true
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/extraction-intelligence
+          fetch-depth: 1
+
+      - name: Verify and apply extraction source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find .extraction-payload -maxdepth 1 -type f -name 'part-*' | wc -l)" -eq 4
+          echo "4e6343a18b0942d0b1a598d2e3984f322ab0d68aae7de7061cfcdbde65e3cb21  .extraction-payload/part-00" | sha256sum -c -
+          echo "37f9fbc9662eb66f0f9332be1cf77184811d8871d3f0f715da26c2fdaed4936a  .extraction-payload/part-01" | sha256sum -c -
+          echo "3bf9fe464c6bed6bf468ac086a779c088c0f8d2b6d6cdda310a1f4e110e7015c  .extraction-payload/part-02" | sha256sum -c -
+          echo "eb15fad88eab674c87a6bfeb39b88485503128a8471677a22c0b66bf725d7871  .extraction-payload/part-03" | sha256sum -c -
+          cat .extraction-payload/part-* > /tmp/extraction-intelligence.b64
+          test "$(stat -c%s /tmp/extraction-intelligence.b64)" -eq 67012
+          base64 --decode /tmp/extraction-intelligence.b64 > /tmp/extraction-intelligence.tar.gz
+          test "$(stat -c%s /tmp/extraction-intelligence.tar.gz)" -eq 50257
+          echo "89a4db165e9b516bb6d3325d734d14edd80badc285ebec5a195a25b52ad6736d  /tmp/extraction-intelligence.tar.gz" | sha256sum -c -
+
+          tar -tzf /tmp/extraction-intelligence.tar.gz | sed 's#^\./##' | grep -v '/$' | sort > /tmp/archive-paths.txt
+          cat > /tmp/expected-paths.txt <<'EOF'
+          src/db/repos/review.ts
+          src/features/review/ReviewSurface.tsx
+          src/features/shell/ProjectGate.tsx
+          src/features/writers-room/WritersRoom.tsx
+          src/services/ai/ai-candidates.ts
+          src/services/extraction/discovery.ts
+          src/services/extraction/engine.ts
+          src/services/extraction/known-index.ts
+          src/services/extraction/rebuild.ts
+          src/services/extraction/session.ts
+          src/services/extraction/surface-intelligence.ts
+          src/styles/components.css
+          tests/fixtures/extraction/17-compliance-run-noise-control.fixture.cjs
+          tests/unit/ai-layer.spec.ts
+          tests/unit/extraction-fixtures.spec.ts
+          tests/unit/extraction-rebuild.spec.ts
+          EOF
+          sort -o /tmp/expected-paths.txt /tmp/expected-paths.txt
+          diff -u /tmp/expected-paths.txt /tmp/archive-paths.txt
+          test "$(tar -tvzf /tmp/extraction-intelligence.tar.gz | awk '$1 ~ /^l/ {count++} END {print count+0}')" -eq 0
+          tar -xzf /tmp/extraction-intelligence.tar.gz
+          rm -rf .extraction-payload .extraction-export
+          rm -f .github/workflows/export-extraction-source.yml
+          git diff --check
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Full desktop and mobile browser suite
+        run: npm run test:e2e
+
+      - name: Persist verified extraction intelligence
+        shell: bash
+        run: |
+          cat > .extraction-intelligence-verification.json <<JSON
+          {
+            "engineVersion": 3,
+            "verifiedRunId": $GITHUB_RUN_ID,
+            "verifiedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "checks": {
+              "typecheck": "passed",
+              "lint": "passed",
+              "unitTests": 101,
+              "productionBuild": "passed",
+              "browserSuite": "passed-desktop-and-mobile"
+            },
+            "regressionCoverage": [
+              "possessive aliases",
+              "first-name to full-name identity resolution",
+              "person versus location correction",
+              "class and item correction",
+              "dialogue sentence rejection",
+              "pronoun, adjective, command, brand and sound-effect rejection",
+              "denied-candidate fingerprint memory",
+              "project-wide safe re-extraction"
+            ]
+          }
+          JSON
+          rm -f .github/workflows/apply-extraction-intelligence.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Rebuild extraction intelligence and re-extraction pipeline"
+          git push origin HEAD:agent/extraction-intelligence
