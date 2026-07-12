@@ -25,8 +25,8 @@ const SOFTWARE_CONTEXT = /\b(?:software|app|program|system|screen|website|platfo
 function words(value: string): string[] { return value.trim().split(/\s+/).filter(Boolean); }
 function localContext(text: string, occurrence: QualityOccurrence) {
   return {
-    before: text.slice(Math.max(0, occurrence.start - 48), occurrence.start),
-    after: text.slice(occurrence.end, Math.min(text.length, occurrence.end + 48)),
+    before: text.slice(Math.max(0, occurrence.start - 64), occurrence.start),
+    after: text.slice(occurrence.end, Math.min(text.length, occurrence.end + 64)),
   };
 }
 
@@ -56,6 +56,9 @@ export function assessCandidateQuality(input: { text: string; surface: string; o
   const joined = contexts.map((context) => `${context.before} ${context.after}`).join(' ');
   const immediateHuman = contexts.some(({ before, after }) => /\b(?:said|asked|called|named)\s*$/i.test(before) || /^\s*(?:said|asked|replied|shouted|whispered|hissed|muttered|was|is|had|has|looked|stood|ran|walked|nodded|grabbed|held|wore|believed|thought|knew|felt)\b/i.test(after));
   const vocative = contexts.some(({ before, after }) => /[,"“]\s*$/u.test(before) || /^\s*[,!?."”]/u.test(after));
+  const locationCue = contexts.some(({ before }) => /\b(?:city|town|village|keep|castle|fortress|river|forest|district|street|road|port|island|realm|kingdom)\s+of\s+$|\b(?:to|into|at|near|beyond|through|across|past|reached|entered|returned\s+to|arrived\s+at)\s+$/i.test(before));
+  const skillCue = contexts.some(({ before }) => /\b(?:skill|spell|ability|technique|power|talent|art|incantation|maneuver|manoeuvre)\s+(?:(?:called|named|known\s+as)\s+)?$/i.test(before));
+  const eventCue = contexts.some(({ after }) => /^\s+(?:began|started|ended|occurred|happened|erupted|fell|rose)\b/i.test(after));
   if (/^[A-Z]{2,}$/.test(canonical) && (immediateHuman || vocative || input.occurrences.length >= 2)) canonical = canonical[0] + canonical.slice(1).toLowerCase();
   const lower = canonical.toLowerCase();
   const tokenList = words(canonical);
@@ -71,6 +74,9 @@ export function assessCandidateQuality(input: { text: string; surface: string; o
   else if (tokenList.length >= 4 && tokenList.filter((token) => NER_STOPWORDS.has(token.toLowerCase())).length / tokenList.length >= 0.35) result.rejectReason = 'clause-not-entity';
   if (result.rejectReason) return result;
 
+  if (skillCue) { result.forcedType = 'skills'; result.signal = 'skill-cue'; result.confidenceFloor = 0.78; return result; }
+  if (eventCue) { result.forcedType = 'events'; result.signal = 'event-cue'; result.confidenceFloor = 0.78; return result; }
+  if (locationCue) { result.forcedType = 'locations'; result.signal = 'location-cue'; result.confidenceFloor = 0.76; return result; }
   if (CLASS_END.test(canonical)) { result.forcedType = 'classes'; result.signal = 'class-name'; result.confidenceFloor = 0.72; return result; }
   if (ITEM_END.test(canonical) && ITEM_CONTEXT.test(joined)) { result.forcedType = 'items'; result.signal = 'item-context'; result.confidenceFloor = 0.72; return result; }
   if (LOCATION_END.test(canonical)) { result.forcedType = 'locations'; result.signal = 'location-name'; result.confidenceFloor = 0.74; return result; }
