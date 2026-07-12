@@ -1,60 +1,8 @@
-177:2026-07-12T21:21:46.0272864Z  [31m❯[39m tests/unit/extraction-fixtures.spec.ts [2m([22m[2m16 tests[22m[2m | [22m[31m5 failed[39m[2m)[22m[32m 48[2mms[22m[39m
-178:2026-07-12T21:21:46.0342672Z    [32m✓[39m extraction fixtures (golden contract)[2m > [22msimple-known-mention — Single seeded cast member mentioned twice in one chapter. Expect 2 occurrences, 0 candidates.[32m 17[2mms[22m[39m
-179:2026-07-12T21:21:46.0346044Z    [32m✓[39m extraction fixtures (golden contract)[2m > [22malias-nickname — Cast member referred to by full name and capitalised alias in same chapter.[32m 4[2mms[22m[39m
-180:2026-07-12T21:21:46.0407141Z    [32m✓[39m extraction fixtures (golden contract)[2m > [22mcharacter-and-location — Two seeded cast and one seeded location. No travel verb; just co-occurrence.[32m 2[2mms[22m[39m
-181:2026-07-12T21:21:46.0442226Z    [32m✓[39m extraction fixtures (golden contract)[2m > [22mitem-ownership-change — Cast hands an item to another cast — should produce an item-ownership candidate with suggestedChanges.ownerId.[32m 1[2mms[22m[39m
-182:2026-07-12T21:21:46.0463830Z    [32m✓[39m extraction fixtures (golden contract)[2m > [22mtravel-location-change — Cast crosses a known location. Should produce a travel candidate (update on cast).[32m 0[2mms[22m[39m
-183:2026-07-12T21:21:46.0501719Z    [32m✓[39m extraction fixtures (golden contract)[2m > [22mquest-progression — Quest-progression pattern: 'the hunt for X' referencing a seeded item.[32m 1[2mms[22m[39m
-184:2026-07-12T21:21:46.0504206Z [31m   [31m×[31m extraction fixtures (golden contract)[2m > [22mevent-creation — Proper-noun event with 'began' verb. Event candidate with suggestedAction 'create'.[39m[32m 10[2mms[22m[39m
-185:2026-07-12T21:21:46.0541072Z [31m     → expected 2 to be less than or equal to 1[39m
-186:2026-07-12T21:21:46.0574090Z    [32m✓[39m extraction fixtures (golden contract)[2m > [22mrelationship-interaction — Two seeded cast and a relationship verb between them. Relationship candidate created.[32m 1[2mms[22m[39m
-187:2026-07-12T21:21:46.0612008Z    [32m✓[39m extraction fixtures (golden contract)[2m > [22mstat-change-phrase — Pattern <actor>'s <stat> <verb> for a seeded cast member. Stat candidate created.[32m 1[2mms[22m[39m
-188:2026-07-12T21:21:46.0642009Z [31m   [31m×[31m extraction fixtures (golden contract)[2m > [22mlore-canon-mention — Lore-flag phrase produces a lore candidate of scope 'world-history' or 'legend'.[39m[32m 1[2mms[22m[39m
-189:2026-07-12T21:21:46.0650987Z [31m     → expected 3 to be less than or equal to 1[39m
-190:2026-07-12T21:21:46.0682540Z [31m   [31m×[31m extraction fixtures (golden contract)[2m > [22mfalse-positive-trap — Common words that should NOT match seeded entities: 'hess' lowercased, 'pass' as a common noun, 'reach' as a verb.[39m[32m 2[2mms[22m[39m
-191:2026-07-12T21:21:46.0711067Z [31m     → expected 1 to be less than or equal to 0[39m
-192:2026-07-12T21:21:46.0716343Z    [32m✓[39m extraction fixtures (golden contract)[2m > [22mlong-chapter-chunking — Tests that a deliberate mention straddling the 5000/500-overlap chunk boundary is captured exactly once.[32m 1[2mms[22m[39m
-193:2026-07-12T21:21:46.0725276Z    [32m✓[39m extraction fixtures (golden contract)[2m > [22mdiscover-new-cast-dialogue — Fresh project discovers new cast from dialogue attribution + honorific, offline.[32m 1[2mms[22m[39m
-194:2026-07-12T21:21:46.0728094Z [31m   [31m×[31m extraction fixtures (golden contract)[2m > [22mdiscover-location-cue — Fresh project discovers new locations from cue phrases + directional prepositions, offline.[39m[32m 3[2mms[22m[39m
-195:2026-07-12T21:21:46.0731386Z [31m     → expected candidate {"entityType":"locations","suggestedAction":"create","matchType":"new"} in [{"t":"cast","n":"Hesselmark","a":"create","m":"new","ch":null},{"t":"cast","n":"Vraska","a":"create","m":"new","ch":null},{"t":"cast","n":"Dunmark","a":"create","m":"new","ch":null}]: expected false to be true // Object.is equality[39m
-196:2026-07-12T21:21:46.0733952Z [31m   [31m×[31m extraction fixtures (golden contract)[2m > [22mdiscover-item-and-skill — Fresh project discovers a named item and a named skill, offline.[39m[32m 1[2mms[22m[39m
-197:2026-07-12T21:21:46.0736771Z [31m     → expected candidate {"entityType":"skills","suggestedAction":"create","matchType":"new"} in [{"t":"cast","n":"Steve","a":"create","m":"new","ch":null},{"t":"items","n":"Big Sword","a":"create","m":"new","ch":null},{"t":"cast","n":"Power Strike","a":"create","m":"new","ch":null}]: expected false to be true // Object.is equality[39m
-198:2026-07-12T21:21:46.0739373Z    [32m✓[39m extraction fixtures (golden contract)[2m > [22mdiscover-false-positive-control — Sentence-initial common words and single-mention proper nouns produce no candidates.[32m 0[2mms[22m[39m
-201:2026-07-12T21:21:46.3682353Z  [31m❯[39m tests/unit/extraction-quality.spec.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 29[2mms[22m[39m
-203:2026-07-12T21:21:46.3685953Z [31m     → expected [ 'Blood', 'Jobcentre', …(7) ] to include 'Grimguff'[39m
-212:2026-07-12T21:21:47.0333218Z [41m[1m FAIL [22m[49m tests/unit/extraction-fixtures.spec.ts[2m > [22mextraction fixtures (golden contract)[2m > [22mevent-creation — Proper-noun event with 'began' verb. Event candidate with suggestedAction 'create'.
-213:2026-07-12T21:21:47.0371246Z [31m[1mAssertionError[22m: expected 2 to be less than or equal to 1[39m
-214:2026-07-12T21:21:47.0391070Z [36m [2m❯[22m tests/unit/extraction-fixtures.spec.ts:[2m89:33[22m[39m
-216:2026-07-12T21:21:47.0431210Z     [90m 88| [39m      [35mif[39m (fixture[33m.[39mmaxOccurrences [33m!=[39m [35mnull[39m) {
-217:2026-07-12T21:21:47.0451103Z     [90m 89| [39m        expect(explicit.length).toBeLessThanOrEqual(fixture.maxOccurre…
-229:2026-07-12T21:21:47.0523700Z [41m[1m FAIL [22m[49m tests/unit/extraction-fixtures.spec.ts[2m > [22mextraction fixtures (golden contract)[2m > [22mlore-canon-mention — Lore-flag phrase produces a lore candidate of scope 'world-history' or 'legend'.
-230:2026-07-12T21:21:47.0525390Z [31m[1mAssertionError[22m: expected 3 to be less than or equal to 1[39m
-231:2026-07-12T21:21:47.0532620Z [36m [2m❯[22m tests/unit/extraction-fixtures.spec.ts:[2m89:33[22m[39m
-233:2026-07-12T21:21:47.0534348Z     [90m 88| [39m      [35mif[39m (fixture[33m.[39mmaxOccurrences [33m!=[39m [35mnull[39m) {
-234:2026-07-12T21:21:47.0535444Z     [90m 89| [39m        expect(explicit.length).toBeLessThanOrEqual(fixture.maxOccurre…
-241:2026-07-12T21:21:47.0540970Z [41m[1m FAIL [22m[49m tests/unit/extraction-fixtures.spec.ts[2m > [22mextraction fixtures (golden contract)[2m > [22mfalse-positive-trap — Common words that should NOT match seeded entities: 'hess' lowercased, 'pass' as a common noun, 'reach' as a verb.
-242:2026-07-12T21:21:47.0542699Z [31m[1mAssertionError[22m: expected 1 to be less than or equal to 0[39m
-243:2026-07-12T21:21:47.0543633Z [36m [2m❯[22m tests/unit/extraction-fixtures.spec.ts:[2m89:33[22m[39m
-245:2026-07-12T21:21:47.0545035Z     [90m 88| [39m      [35mif[39m (fixture[33m.[39mmaxOccurrences [33m!=[39m [35mnull[39m) {
-246:2026-07-12T21:21:47.0546005Z     [90m 89| [39m        expect(explicit.length).toBeLessThanOrEqual(fixture.maxOccurre…
-253:2026-07-12T21:21:47.0550791Z [41m[1m FAIL [22m[49m tests/unit/extraction-fixtures.spec.ts[2m > [22mextraction fixtures (golden contract)[2m > [22mdiscover-location-cue — Fresh project discovers new locations from cue phrases + directional prepositions, offline.
-254:2026-07-12T21:21:47.0554213Z [31m[1mAssertionError[22m: expected candidate {"entityType":"locations","suggestedAction":"create","matchType":"new"} in [{"t":"cast","n":"Hesselmark","a":"create","m":"new","ch":null},{"t":"cast","n":"Vraska","a":"create","m":"new","ch":null},{"t":"cast","n":"Dunmark","a":"create","m":"new","ch":null}]: expected false to be true // Object.is equality[39m
-262:2026-07-12T21:21:47.0559359Z [36m [2m❯[22m tests/unit/extraction-fixtures.spec.ts:[2m118:11[22m[39m
-272:2026-07-12T21:21:47.0566453Z [41m[1m FAIL [22m[49m tests/unit/extraction-fixtures.spec.ts[2m > [22mextraction fixtures (golden contract)[2m > [22mdiscover-item-and-skill — Fresh project discovers a named item and a named skill, offline.
-275:2026-07-12T21:21:47.0589336Z ##[error]AssertionError: expected 2 to be less than or equal to 1
-276: ❯ tests/unit/extraction-fixtures.spec.ts:89:33
-280:2026-07-12T21:21:47.0602887Z ##[error]AssertionError: expected 3 to be less than or equal to 1
-281: ❯ tests/unit/extraction-fixtures.spec.ts:89:33
-285:2026-07-12T21:21:47.0604827Z ##[error]AssertionError: expected 1 to be less than or equal to 0
-286: ❯ tests/unit/extraction-fixtures.spec.ts:89:33
-290:2026-07-12T21:21:47.0608033Z ##[error]AssertionError: expected candidate {"entityType":"locations","suggestedAction":"create","matchType":"new"} in [{"t":"cast","n":"Hesselmark","a":"create","m":"new","ch":null},{"t":"cast","n":"Vraska","a":"create","m":"new","ch":null},{"t":"cast","n":"Dunmark","a":"create","m":"new","ch":null}]: expected false to be true // Object.is equality
-298: ❯ tests/unit/extraction-fixtures.spec.ts:118:11
-302:2026-07-12T21:21:47.0611152Z [31m[1mAssertionError[22m: expected candidate {"entityType":"skills","suggestedAction":"create","matchType":"new"} in [{"t":"cast","n":"Steve","a":"create","m":"new","ch":null},{"t":"items","n":"Big Sword","a":"create","m":"new","ch":null},{"t":"cast","n":"Power Strike","a":"create","m":"new","ch":null}]: expected false to be true // Object.is equality[39m
-310:2026-07-12T21:21:47.0614630Z [36m [2m❯[22m tests/unit/extraction-fixtures.spec.ts:[2m118:11[22m[39m
-320:2026-07-12T21:21:47.0620514Z [41m[1m FAIL [22m[49m tests/unit/extraction-quality.spec.ts[2m > [22mcontextual discovery quality[2m > [22mkeeps real people and places while rejecting dialogue fragments, commands and adjectives
-321:2026-07-12T21:21:47.0622352Z [31m[1mAssertionError[22m: expected [ 'Blood', 'Jobcentre', …(7) ] to include 'Grimguff'[39m
-322:2026-07-12T21:21:47.0623831Z [36m [2m❯[22m tests/unit/extraction-quality.spec.ts:[2m32:19[22m[39m
-332:2026-07-12T21:21:47.0634238Z ##[error]AssertionError: expected candidate {"entityType":"skills","suggestedAction":"create","matchType":"new"} in [{"t":"cast","n":"Steve","a":"create","m":"new","ch":null},{"t":"items","n":"Big Sword","a":"create","m":"new","ch":null},{"t":"cast","n":"Power Strike","a":"create","m":"new","ch":null}]: expected false to be true // Object.is equality
-340: ❯ tests/unit/extraction-fixtures.spec.ts:118:11
-344:2026-07-12T21:21:47.0638316Z ##[error]AssertionError: expected [ 'Blood', 'Jobcentre', …(7) ] to include 'Grimguff'
-345: ❯ tests/unit/extraction-quality.spec.ts:32:19
+176:2026-07-12T21:25:19.5396795Z  [32m✓[39m tests/unit/extraction-fixtures.spec.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 52[2mms[22m[39m
+178:2026-07-12T21:25:20.0296289Z  [31m❯[39m tests/unit/extraction-quality.spec.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 39[2mms[22m[39m
+180:2026-07-12T21:25:20.0336088Z [31m     → expected undefined to be 'classes' // Object.is equality[39m
+190:2026-07-12T21:25:21.1489711Z [41m[1m FAIL [22m[49m tests/unit/extraction-quality.spec.ts[2m > [22mcontextual discovery quality[2m > [22mkeeps real people and places while rejecting dialogue fragments, commands and adjectives
+191:2026-07-12T21:25:21.1510397Z [31m[1mAssertionError[22m: expected undefined to be 'classes' // Object.is equality[39m
+199:2026-07-12T21:25:21.1516458Z [36m [2m❯[22m tests/unit/extraction-quality.spec.ts:[2m37:61[22m[39m
+216:2026-07-12T21:25:21.1599608Z ##[error]AssertionError: expected undefined to be 'classes' // Object.is equality
+224: ❯ tests/unit/extraction-quality.spec.ts:37:61
