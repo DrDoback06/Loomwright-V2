@@ -1,5 +1,6 @@
 name: Diagnose previous Pages deployment
 
+# Refresh after restoring the working TypeScript build.
 on:
   push:
     branches: [main]
