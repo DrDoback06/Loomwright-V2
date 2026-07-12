@@ -1,811 +1,223 @@
-525: 2026-07-12T16:02:44.3808495Z > loomwright-v2@2.0.0 test:e2e
-526: 2026-07-12T16:02:44.3809006Z > playwright test
-527: 2026-07-12T16:02:44.3809281Z 
-528: 2026-07-12T16:02:48.9667725Z 
-529: 2026-07-12T16:02:48.9668758Z Running 142 tests using 2 workers
-530: 2026-07-12T16:03:26.8833763Z ····················×·····F::error file=tests/e2e/04-extraction-review.spec.ts,title=[desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner,line=125,col=32::  1) [desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner %0A    Error: expect(locator).toBeVisible() failed%0A%0A    Locator: locator('.lw-qcard').filter({ hasText: 'transferred' }).first()%0A    Expected: visible%0A    Timeout: 5000ms%0A    Error: element(s) not found%0A%0A    Call log:%0A      - Expect "toBeVisible" with timeout 5000ms%0A      - waiting for locator('.lw-qcard').filter({ hasText: 'transferred' }).first()%0A%0A%0A      123 |     await openNav(page, /Review/);%0A      124 |     const transferCard = page.locator('.lw-qcard', { hasText: 'transferred' }).first();%0A    > 125 |     await expect(transferCard).toBeVisible();%0A          |                                ^%0A      126 |     await expect(transferCard.getByText(/Saren/).first()).toBeVisible();%0A      127 |     await transferCard.getByRole('button', { name: 'Preview resolution' }).click();%0A      128 |     const preview = page.getByTestId('merge-preview');%0A        at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:125:32
-531: 2026-07-12T16:03:26.8879367Z ##[error]  1) [desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
-532: 
-533:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-534:     Error: expect(locator).toBeVisible() failed
-535: 
-536:     Locator: locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-537:     Expected: visible
-538:     Timeout: 5000ms
-539:     Error: element(s) not found
-540: 
-541:     Call log:
-542:       - Expect "toBeVisible" with timeout 5000ms
-543:       - waiting for locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-544: 
-545: 
-546:       123 |     await openNav(page, /Review/);
-547:       124 |     const transferCard = page.locator('.lw-qcard', { hasText: 'transferred' }).first();
-548:     > 125 |     await expect(transferCard).toBeVisible();
-549:           |                                ^
-550:       126 |     await expect(transferCard.getByText(/Saren/).first()).toBeVisible();
-551:       127 |     await transferCard.getByRole('button', { name: 'Preview resolution' }).click();
-552:       128 |     const preview = page.getByTestId('merge-preview');
-553:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:125:32
-554: 2026-07-12T16:03:49.2252383Z °·····×·F::error file=tests/e2e/09-ai.spec.ts,title=[desktop-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply,line=107,col=24::  2) [desktop-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply %0A    Error: expect(locator).toContainText(expected) failed%0A%0A    Locator: locator('.lw-qcard').filter({ hasText: 'Maren' }).first()%0A    Expected substring: "salt route"%0A    Received string:    "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"%0A    Timeout: 5000ms%0A%0A    Call log:%0A      - Expect "toContainText" with timeout 5000ms%0A      - waiting for locator('.lw-qcard').filter({ hasText: 'Maren' }).first()%0A        14 × locator resolved to <li draggable="true" data-testid="identity-cluster" class="lw-card lw-qcard lw-identitycard lw-identitycard--orange">…</li>%0A           - unexpected value "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"%0A%0A%0A      105 |     const card = page.locator('.lw-qcard', { hasText: 'Maren' }).first();%0A      106 |     await expect(card).toBeVisible();%0A    > 107 |     await expect(card).toContainText('salt route');%0A          |                        ^%0A      108 |   });%0A      109 |%0A      110 |   test('handoff: build pack, paste reply, candidates land in review — fully offline', async ({%0A        at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:107:24
-555: 2026-07-12T16:03:49.2276540Z ##[error]  2) [desktop-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply 
-556: 
-557:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-558:     Error: expect(locator).toContainText(expected) failed
-559: 
-560:     Locator: locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-561:     Expected substring: "salt route"
-562:     Received string:    "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-563:     Timeout: 5000ms
-564: 
-565:     Call log:
-566:       - Expect "toContainText" with timeout 5000ms
-567:       - waiting for locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-568:         14 × locator resolved to <li draggable="true" data-testid="identity-cluster" class="lw-card lw-qcard lw-identitycard lw-identitycard--orange">…</li>
-569:            - unexpected value "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-570: 
+555: 2026-07-12T16:48:43.8166623Z > loomwright-v2@2.0.0 test:e2e
+556: 2026-07-12T16:48:43.8167032Z > playwright test
+557: 2026-07-12T16:48:43.8167186Z 
+558: 2026-07-12T16:48:48.4491517Z 
+559: 2026-07-12T16:48:48.4492184Z Running 142 tests using 2 workers
+560: 2026-07-12T16:49:15.8603615Z ··················×··F::error file=tests/e2e/04-extraction-review.spec.ts,title=[desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner,line=131,col=54::  1) [desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner %0A    Error: expect(locator).toBeVisible() failed%0A%0A    Locator: getByText(/canonical entity/)%0A    Expected: visible%0A    Error: strict mode violation: getByText(/canonical entity/) resolved to 2 elements:%0A        1) <h1 id="merge-preview-title">Merge into one canonical entity</h1> aka getByRole('heading', { name: 'Merge into one canonical' })%0A        2) <p>…</p> aka getByText('Confirmation creates one')%0A%0A    Call log:%0A      - Expect "toBeVisible" with timeout 5000ms%0A      - waiting for getByText(/canonical entity/)%0A%0A%0A      129 |     await expect(preview).toContainText('Information to add or reconcile');%0A      130 |     await preview.getByRole('button', { name: 'Confirm merge everywhere' }).click();%0A    > 131 |     await expect(page.getByText(/canonical entity/)).toBeVisible();%0A          |                                                      ^%0A      132 |   });%0A      133 | });%0A      134 |%0A        at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:131:54
+561: 2026-07-12T16:49:15.8663143Z ##[error]  1) [desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
+562: 
+563:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+564:     Error: expect(locator).toBeVisible() failed
+565: 
+566:     Locator: getByText(/canonical entity/)
+567:     Expected: visible
+568:     Error: strict mode violation: getByText(/canonical entity/) resolved to 2 elements:
+569:         1) <h1 id="merge-preview-title">Merge into one canonical entity</h1> aka getByRole('heading', { name: 'Merge into one canonical' })
+570:         2) <p>…</p> aka getByText('Confirmation creates one')
 571: 
-572:       105 |     const card = page.locator('.lw-qcard', { hasText: 'Maren' }).first();
-573:       106 |     await expect(card).toBeVisible();
-574:     > 107 |     await expect(card).toContainText('salt route');
-575:           |                        ^
-576:       108 |   });
-577:       109 |
-578:       110 |   test('handoff: build pack, paste reply, candidates land in review — fully offline', async ({
-579:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:107:24
-580: 2026-07-12T16:05:42.0747081Z ·························××T::error file=tests/e2e/09-ai.spec.ts,title=[desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline::  3) [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline %0A    Test timeout of 60000ms exceeded.
-581: 2026-07-12T16:05:42.0758278Z ##[error]  3) [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-582:     Error: locator.click: Test timeout of 60000ms exceeded.
-583:     Call log:
-584:       - waiting for locator('.lw-qcard').filter({ hasText: 'Vraska Pass' }).getByRole('button', { name: 'Accept', exact: true })
-585: 
-586: 
-587:       132 |       .locator('.lw-qcard', { hasText: 'Vraska Pass' })
-588:       133 |       .getByRole('button', { name: 'Accept', exact: true })
-589:     > 134 |       .click();
-590:           |        ^
-591:       135 |     await openNav(page, 'Locations');
-592:       136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
-593:       137 |   });
-594:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:134:8
-595: 2026-07-12T16:05:42.0767995Z ##[error]  3) [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-596: 
-597:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-598:     Test timeout of 60000ms exceeded.
-599: 2026-07-12T16:05:42.0780403Z ##[error]  3) [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-600: 
-601:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-602:     Error: locator.click: Test timeout of 60000ms exceeded.
-603:     Call log:
-604:       - waiting for locator('.lw-qcard').filter({ hasText: 'Vraska Pass' }).getByRole('button', { name: 'Accept', exact: true })
-605: 
-606: 
-607:       132 |       .locator('.lw-qcard', { hasText: 'Vraska Pass' })
-608:       133 |       .getByRole('button', { name: 'Accept', exact: true })
-609:     > 134 |       .click();
-610:           |        ^
-611:       135 |     await openNav(page, 'Locations');
-612:       136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
-613:       137 |   });
-614:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:134:8
-615: 2026-07-12T16:06:13.2765384Z ················
-616: 2026-07-12T16:06:33.7688668Z ·····T::error file=tests/e2e/16-generate.spec.ts,title=[desktop-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field::  4) [desktop-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field %0A    Test timeout of 60000ms exceeded.
-617: 2026-07-12T16:06:33.7701195Z ##[error]  4) [desktop-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-618:     Error: locator.click: Test timeout of 60000ms exceeded.
-619:     Call log:
-620:       - waiting for getByRole('dialog', { name: 'New Character' }).getByRole('button', { name: 'Reroll Role in story' })
-621: 
-622: 
-623:       173 |     // A single die rerolls just its own field; the name stays put.
-624:       174 |     await drawer.getByRole('button', { name: 'Identity' }).click();
-625:     > 175 |     await drawer.getByRole('button', { name: 'Reroll Role in story' }).click();
-626:           |                                                                        ^
-627:       176 |     await expect(
-628:       177 |       page.getByRole('radiogroup', { name: 'Role in story' }).locator('[aria-checked="true"]')
-629:       178 |     ).toHaveCount(1);
-630:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/16-generate.spec.ts:175:72
-631: 2026-07-12T16:06:33.7711901Z ##[error]  4) [desktop-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-632: 
-633:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-634:     Test timeout of 60000ms exceeded.
-635: 2026-07-12T16:06:33.7724743Z ##[error]  4) [desktop-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-636: 
-637:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-638:     Error: locator.click: Test timeout of 60000ms exceeded.
-639:     Call log:
-640:       - waiting for getByRole('dialog', { name: 'New Character' }).getByRole('button', { name: 'Reroll Role in story' })
-641: 
-642: 
-643:       173 |     // A single die rerolls just its own field; the name stays put.
-644:       174 |     await drawer.getByRole('button', { name: 'Identity' }).click();
-645:     > 175 |     await drawer.getByRole('button', { name: 'Reroll Role in story' }).click();
-646:           |                                                                        ^
-647:       176 |     await expect(
-648:       177 |       page.getByRole('radiogroup', { name: 'Role in story' }).locator('[aria-checked="true"]')
-649:       178 |     ).toHaveCount(1);
-650:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/16-generate.spec.ts:175:72
-651: 2026-07-12T16:07:01.8332351Z ·······°°··×··°°·°°··F::error file=tests/e2e/04-extraction-review.spec.ts,title=[mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner,line=125,col=32::  5) [mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner %0A    Error: expect(locator).toBeVisible() failed%0A%0A    Locator: locator('.lw-qcard').filter({ hasText: 'transferred' }).first()%0A    Expected: visible%0A    Timeout: 5000ms%0A    Error: element(s) not found%0A%0A    Call log:%0A      - Expect "toBeVisible" with timeout 5000ms%0A      - waiting for locator('.lw-qcard').filter({ hasText: 'transferred' }).first()%0A%0A%0A      123 |     await openNav(page, /Review/);%0A      124 |     const transferCard = page.locator('.lw-qcard', { hasText: 'transferred' }).first();%0A    > 125 |     await expect(transferCard).toBeVisible();%0A          |                                ^%0A      126 |     await expect(transferCard.getByText(/Saren/).first()).toBeVisible();%0A      127 |     await transferCard.getByRole('button', { name: 'Preview resolution' }).click();%0A      128 |     const preview = page.getByTestId('merge-preview');%0A        at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:125:32
-652: 2026-07-12T16:07:01.8354335Z ##[error]  5) [mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
-653: 
-654:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-655:     Error: expect(locator).toBeVisible() failed
-656: 
-657:     Locator: locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-658:     Expected: visible
-659:     Timeout: 5000ms
-660:     Error: element(s) not found
-661: 
-662:     Call log:
-663:       - Expect "toBeVisible" with timeout 5000ms
-664:       - waiting for locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-665: 
-666: 
-667:       123 |     await openNav(page, /Review/);
-668:       124 |     const transferCard = page.locator('.lw-qcard', { hasText: 'transferred' }).first();
-669:     > 125 |     await expect(transferCard).toBeVisible();
-670:           |                                ^
-671:       126 |     await expect(transferCard.getByText(/Saren/).first()).toBeVisible();
-672:       127 |     await transferCard.getByRole('button', { name: 'Preview resolution' }).click();
-673:       128 |     const preview = page.getByTestId('merge-preview');
-674:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:125:32
-675: 2026-07-12T16:07:29.1357489Z ·×F::error file=tests/e2e/09-ai.spec.ts,title=[mobile-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply,line=107,col=24::  6) [mobile-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply %0A    Error: expect(locator).toContainText(expected) failed%0A%0A    Locator: locator('.lw-qcard').filter({ hasText: 'Maren' }).first()%0A    Expected substring: "salt route"%0A    Received string:    "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"%0A    Timeout: 5000ms%0A%0A    Call log:%0A      - Expect "toContainText" with timeout 5000ms%0A      - waiting for locator('.lw-qcard').filter({ hasText: 'Maren' }).first()%0A        14 × locator resolved to <li draggable="true" data-testid="identity-cluster" class="lw-card lw-qcard lw-identitycard lw-identitycard--orange">…</li>%0A           - unexpected value "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"%0A%0A%0A      105 |     const card = page.locator('.lw-qcard', { hasText: 'Maren' }).first();%0A      106 |     await expect(card).toBeVisible();%0A    > 107 |     await expect(card).toContainText('salt route');%0A          |                        ^%0A      108 |   });%0A      109 |%0A      110 |   test('handoff: build pack, paste reply, candidates land in review — fully offline', async ({%0A        at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:107:24
-676: 2026-07-12T16:07:29.1374427Z ##[error]  6) [mobile-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply 
-677: 
-678:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-679:     Error: expect(locator).toContainText(expected) failed
-680: 
-681:     Locator: locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-682:     Expected substring: "salt route"
-683:     Received string:    "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-684:     Timeout: 5000ms
-685: 
-686:     Call log:
-687:       - Expect "toContainText" with timeout 5000ms
-688:       - waiting for locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-689:         14 × locator resolved to <li draggable="true" data-testid="identity-cluster" class="lw-card lw-qcard lw-identitycard lw-identitycard--orange">…</li>
-690:            - unexpected value "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-691: 
-692: 
-693:       105 |     const card = page.locator('.lw-qcard', { hasText: 'Maren' }).first();
-694:       106 |     await expect(card).toBeVisible();
-695:     > 107 |     await expect(card).toContainText('salt route');
-696:           |                        ^
-697:       108 |   });
-698:       109 |
-699:       110 |   test('handoff: build pack, paste reply, candidates land in review — fully offline', async ({
-700:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:107:24
-701: 2026-07-12T16:09:04.2350127Z ··········°····×··········T::error file=tests/e2e/09-ai.spec.ts,title=[mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline::  7) [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline %0A    Test timeout of 60000ms exceeded.
-702: 2026-07-12T16:09:04.2360911Z ##[error]  7) [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-703:     Error: locator.click: Test timeout of 60000ms exceeded.
-704:     Call log:
-705:       - waiting for locator('.lw-qcard').filter({ hasText: 'Vraska Pass' }).getByRole('button', { name: 'Accept', exact: true })
-706: 
-707: 
-708:       132 |       .locator('.lw-qcard', { hasText: 'Vraska Pass' })
-709:       133 |       .getByRole('button', { name: 'Accept', exact: true })
-710:     > 134 |       .click();
-711:           |        ^
-712:       135 |     await openNav(page, 'Locations');
-713:       136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
-714:       137 |   });
-715:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:134:8
-716: 2026-07-12T16:09:04.2366289Z ##[error]  7) [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-717: 
-718:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-719:     Test timeout of 60000ms exceeded.
-720: 2026-07-12T16:09:04.2375103Z ##[error]  7) [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-721: 
-722:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-723:     Error: locator.click: Test timeout of 60000ms exceeded.
-724:     Call log:
-725:       - waiting for locator('.lw-qcard').filter({ hasText: 'Vraska Pass' }).getByRole('button', { name: 'Accept', exact: true })
-726: 
-727: 
-728:       132 |       .locator('.lw-qcard', { hasText: 'Vraska Pass' })
-729:       133 |       .getByRole('button', { name: 'Accept', exact: true })
-730:     > 134 |       .click();
-731:           |        ^
-732:       135 |     await openNav(page, 'Locations');
-733:       136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
-734:       137 |   });
-735:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:134:8
-736: 2026-07-12T16:10:26.4297077Z ······×··°°T::error file=tests/e2e/16-generate.spec.ts,title=[mobile-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field::  8) [mobile-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field %0A    Test timeout of 60000ms exceeded.
-737: 2026-07-12T16:10:26.4307690Z ##[error]  8) [mobile-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-738:     Error: locator.click: Test timeout of 60000ms exceeded.
-739:     Call log:
-740:       - waiting for getByRole('dialog', { name: 'New Character' }).getByRole('button', { name: 'Reroll Role in story' })
-741: 
-742: 
-743:       173 |     // A single die rerolls just its own field; the name stays put.
-744:       174 |     await drawer.getByRole('button', { name: 'Identity' }).click();
-745:     > 175 |     await drawer.getByRole('button', { name: 'Reroll Role in story' }).click();
-746:           |                                                                        ^
-747:       176 |     await expect(
-748:       177 |       page.getByRole('radiogroup', { name: 'Role in story' }).locator('[aria-checked="true"]')
-749:       178 |     ).toHaveCount(1);
-750:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/16-generate.spec.ts:175:72
-751: 2026-07-12T16:10:26.4316852Z ##[error]  8) [mobile-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-752: 
-753:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-754:     Test timeout of 60000ms exceeded.
-755: 2026-07-12T16:10:26.4343754Z ##[error]  8) [mobile-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-756: 
-757:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-758:     Error: locator.click: Test timeout of 60000ms exceeded.
-759:     Call log:
-760:       - waiting for getByRole('dialog', { name: 'New Character' }).getByRole('button', { name: 'Reroll Role in story' })
-761: 
-762: 
-763:       173 |     // A single die rerolls just its own field; the name stays put.
-764:       174 |     await drawer.getByRole('button', { name: 'Identity' }).click();
-765:     > 175 |     await drawer.getByRole('button', { name: 'Reroll Role in story' }).click();
-766:           |                                                                        ^
-767:       176 |     await expect(
-768:       177 |       page.getByRole('radiogroup', { name: 'Role in story' }).locator('[aria-checked="true"]')
-769:       178 |     ).toHaveCount(1);
-770:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/16-generate.spec.ts:175:72
-771: 2026-07-12T16:10:26.4608828Z 
-772: 2026-07-12T16:10:26.4656237Z ##[notice]  8 failed
-773:     [desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
-774:     [desktop-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply 
-775:     [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-776:     [desktop-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-777:     [mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
-778:     [mobile-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply 
-779:     [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-780:     [mobile-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-781:   10 skipped
-782:   124 passed (7.7m)
-783: 2026-07-12T16:10:26.4664907Z 
-784: 2026-07-12T16:10:26.4666324Z   1) [desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
-785: 2026-07-12T16:10:26.4667354Z 
-786: 2026-07-12T16:10:26.4667597Z     Error: expect(locator).toBeVisible() failed
-787: 2026-07-12T16:10:26.4667915Z 
-788: 2026-07-12T16:10:26.4668288Z     Locator: locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-789: 2026-07-12T16:10:26.4669175Z     Expected: visible
-790: 2026-07-12T16:10:26.4669510Z     Timeout: 5000ms
-791: 2026-07-12T16:10:26.4669875Z     Error: element(s) not found
-792: 2026-07-12T16:10:26.4670112Z 
-793: 2026-07-12T16:10:26.4670241Z     Call log:
-794: 2026-07-12T16:10:26.4670820Z       - Expect "toBeVisible" with timeout 5000ms
-795: 2026-07-12T16:10:26.4671518Z       - waiting for locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-796: 2026-07-12T16:10:26.4671977Z 
-797: 2026-07-12T16:10:26.4671985Z 
-798: 2026-07-12T16:10:26.4672200Z       123 |     await openNav(page, /Review/);
-799: 2026-07-12T16:10:26.4673153Z       124 |     const transferCard = page.locator('.lw-qcard', { hasText: 'transferred' }).first();
-800: 2026-07-12T16:10:26.4673926Z     > 125 |     await expect(transferCard).toBeVisible();
-801: 2026-07-12T16:10:26.4674428Z           |                                ^
-802: 2026-07-12T16:10:26.4675085Z       126 |     await expect(transferCard.getByText(/Saren/).first()).toBeVisible();
-803: 2026-07-12T16:10:26.4675989Z       127 |     await transferCard.getByRole('button', { name: 'Preview resolution' }).click();
-804: 2026-07-12T16:10:26.4676796Z       128 |     const preview = page.getByTestId('merge-preview');
-805: 2026-07-12T16:10:26.4677718Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:125:32
-806: 2026-07-12T16:10:26.4678311Z 
-807: 2026-07-12T16:10:26.4679118Z     Error Context: test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium/error-context.md
-808: 2026-07-12T16:10:26.4679904Z 
-809: 2026-07-12T16:10:26.4680557Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-810: 2026-07-12T16:10:26.4681900Z     test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium/trace.zip
-811: 2026-07-12T16:10:26.4682686Z     Usage:
-812: 2026-07-12T16:10:26.4682845Z 
-813: 2026-07-12T16:10:26.4683678Z         npx playwright show-trace test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium/trace.zip
-814: 2026-07-12T16:10:26.4684533Z 
-815: 2026-07-12T16:10:26.4685047Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-816: 2026-07-12T16:10:26.4685481Z 
-817: 2026-07-12T16:10:26.4686029Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-818: 2026-07-12T16:10:26.4686443Z 
-819: 2026-07-12T16:10:26.4686666Z     Error: expect(locator).toBeVisible() failed
-820: 2026-07-12T16:10:26.4686973Z 
-821: 2026-07-12T16:10:26.4687316Z     Locator: locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-822: 2026-07-12T16:10:26.4687863Z     Expected: visible
-823: 2026-07-12T16:10:26.4688199Z     Timeout: 5000ms
-824: 2026-07-12T16:10:26.4688539Z     Error: element(s) not found
-825: 2026-07-12T16:10:26.4688782Z 
-826: 2026-07-12T16:10:26.4688908Z     Call log:
-827: 2026-07-12T16:10:26.4689258Z       - Expect "toBeVisible" with timeout 5000ms
-828: 2026-07-12T16:10:26.4689964Z       - waiting for locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-829: 2026-07-12T16:10:26.4690440Z 
-830: 2026-07-12T16:10:26.4690472Z 
-831: 2026-07-12T16:10:26.4690897Z       123 |     await openNav(page, /Review/);
-832: 2026-07-12T16:10:26.4691709Z       124 |     const transferCard = page.locator('.lw-qcard', { hasText: 'transferred' }).first();
-833: 2026-07-12T16:10:26.4692542Z     > 125 |     await expect(transferCard).toBeVisible();
-834: 2026-07-12T16:10:26.4693066Z           |                                ^
-835: 2026-07-12T16:10:26.4693747Z       126 |     await expect(transferCard.getByText(/Saren/).first()).toBeVisible();
-836: 2026-07-12T16:10:26.4694720Z       127 |     await transferCard.getByRole('button', { name: 'Preview resolution' }).click();
-837: 2026-07-12T16:10:26.4695815Z       128 |     const preview = page.getByTestId('merge-preview');
-838: 2026-07-12T16:10:26.4696767Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:125:32
-839: 2026-07-12T16:10:26.4697389Z 
-840: 2026-07-12T16:10:26.4698308Z     Error Context: test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium-retry1/error-context.md
-841: 2026-07-12T16:10:26.4699442Z 
-842: 2026-07-12T16:10:26.4700199Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-843: 2026-07-12T16:10:26.4701766Z     test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium-retry1/trace.zip
-844: 2026-07-12T16:10:26.4702714Z     Usage:
-845: 2026-07-12T16:10:26.4702889Z 
-846: 2026-07-12T16:10:26.4703810Z         npx playwright show-trace test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium-retry1/trace.zip
-847: 2026-07-12T16:10:26.4704706Z 
-848: 2026-07-12T16:10:26.4705302Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-849: 2026-07-12T16:10:26.4705712Z 
-850: 2026-07-12T16:10:26.4706694Z   2) [desktop-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply 
-851: 2026-07-12T16:10:26.4707461Z 
-852: 2026-07-12T16:10:26.4707723Z     Error: expect(locator).toContainText(expected) failed
-853: 2026-07-12T16:10:26.4708096Z 
-854: 2026-07-12T16:10:26.4708412Z     Locator: locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-855: 2026-07-12T16:10:26.4708985Z     Expected substring: "salt route"
-856: 2026-07-12T16:10:26.4710439Z     Received string:    "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-857: 2026-07-12T16:10:26.4711661Z     Timeout: 5000ms
-858: 2026-07-12T16:10:26.4711843Z 
-859: 2026-07-12T16:10:26.4711966Z     Call log:
-860: 2026-07-12T16:10:26.4712387Z       - Expect "toContainText" with timeout 5000ms
-861: 2026-07-12T16:10:26.4713061Z       - waiting for locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-862: 2026-07-12T16:10:26.4714489Z         14 × locator resolved to <li draggable="true" data-testid="identity-cluster" class="lw-card lw-qcard lw-identitycard lw-identitycard--orange">…</li>
-863: 2026-07-12T16:10:26.4716490Z            - unexpected value "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-864: 2026-07-12T16:10:26.4717437Z 
-865: 2026-07-12T16:10:26.4717445Z 
-866: 2026-07-12T16:10:26.4717815Z       105 |     const card = page.locator('.lw-qcard', { hasText: 'Maren' }).first();
-867: 2026-07-12T16:10:26.4718476Z       106 |     await expect(card).toBeVisible();
-868: 2026-07-12T16:10:26.4719028Z     > 107 |     await expect(card).toContainText('salt route');
-869: 2026-07-12T16:10:26.4719522Z           |                        ^
-870: 2026-07-12T16:10:26.4719878Z       108 |   });
-871: 2026-07-12T16:10:26.4720168Z       109 |
-872: 2026-07-12T16:10:26.4721156Z       110 |   test('handoff: build pack, paste reply, candidates land in review — fully offline', async ({
-873: 2026-07-12T16:10:26.4722226Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:107:24
-874: 2026-07-12T16:10:26.4722754Z 
-875: 2026-07-12T16:10:26.4723593Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-desktop-chromium/error-context.md
-876: 2026-07-12T16:10:26.4724495Z 
-877: 2026-07-12T16:10:26.4725190Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-878: 2026-07-12T16:10:26.4726399Z     test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-desktop-chromium/trace.zip
-879: 2026-07-12T16:10:26.4727209Z     Usage:
-880: 2026-07-12T16:10:26.4727372Z 
-881: 2026-07-12T16:10:26.4728165Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-desktop-chromium/trace.zip
-882: 2026-07-12T16:10:26.4728994Z 
-883: 2026-07-12T16:10:26.4729928Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-884: 2026-07-12T16:10:26.4730399Z 
-885: 2026-07-12T16:10:26.4731148Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-886: 2026-07-12T16:10:26.4731619Z 
-887: 2026-07-12T16:10:26.4731920Z     Error: expect(locator).toContainText(expected) failed
-888: 2026-07-12T16:10:26.4732585Z 
-889: 2026-07-12T16:10:26.4732942Z     Locator: locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-890: 2026-07-12T16:10:26.4733574Z     Expected substring: "salt route"
-891: 2026-07-12T16:10:26.4735055Z     Received string:    "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-892: 2026-07-12T16:10:26.4736150Z     Timeout: 5000ms
-893: 2026-07-12T16:10:26.4736339Z 
-894: 2026-07-12T16:10:26.4736474Z     Call log:
-895: 2026-07-12T16:10:26.4736884Z       - Expect "toContainText" with timeout 5000ms
-896: 2026-07-12T16:10:26.4737627Z       - waiting for locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-897: 2026-07-12T16:10:26.4739204Z         14 × locator resolved to <li draggable="true" data-testid="identity-cluster" class="lw-card lw-qcard lw-identitycard lw-identitycard--orange">…</li>
-898: 2026-07-12T16:10:26.4741502Z            - unexpected value "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-899: 2026-07-12T16:10:26.4742501Z 
-900: 2026-07-12T16:10:26.4742510Z 
-901: 2026-07-12T16:10:26.4742892Z       105 |     const card = page.locator('.lw-qcard', { hasText: 'Maren' }).first();
-902: 2026-07-12T16:10:26.4743563Z       106 |     await expect(card).toBeVisible();
-903: 2026-07-12T16:10:26.4744154Z     > 107 |     await expect(card).toContainText('salt route');
-904: 2026-07-12T16:10:26.4744703Z           |                        ^
-905: 2026-07-12T16:10:26.4745089Z       108 |   });
-906: 2026-07-12T16:10:26.4745413Z       109 |
-907: 2026-07-12T16:10:26.4746291Z       110 |   test('handoff: build pack, paste reply, candidates land in review — fully offline', async ({
-908: 2026-07-12T16:10:26.4747343Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:107:24
-909: 2026-07-12T16:10:26.4747855Z 
-910: 2026-07-12T16:10:26.4748728Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-desktop-chromium-retry1/error-context.md
-911: 2026-07-12T16:10:26.4749626Z 
-912: 2026-07-12T16:10:26.4750251Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-913: 2026-07-12T16:10:26.4751608Z     test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-desktop-chromium-retry1/trace.zip
-914: 2026-07-12T16:10:26.4752451Z     Usage:
-915: 2026-07-12T16:10:26.4752615Z 
-916: 2026-07-12T16:10:26.4753458Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-desktop-chromium-retry1/trace.zip
-917: 2026-07-12T16:10:26.4754323Z 
-918: 2026-07-12T16:10:26.4754926Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-919: 2026-07-12T16:10:26.4755356Z 
-920: 2026-07-12T16:10:26.4756408Z   3) [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-921: 2026-07-12T16:10:26.4757252Z 
-922: 2026-07-12T16:10:26.4757442Z     Test timeout of 60000ms exceeded.
-923: 2026-07-12T16:10:26.4758007Z 
-924: 2026-07-12T16:10:26.4758290Z     Error: locator.click: Test timeout of 60000ms exceeded.
-925: 2026-07-12T16:10:26.4758759Z     Call log:
-926: 2026-07-12T16:10:26.4759576Z       - waiting for locator('.lw-qcard').filter({ hasText: 'Vraska Pass' }).getByRole('button', { name: 'Accept', exact: true })
-927: 2026-07-12T16:10:26.4760253Z 
-928: 2026-07-12T16:10:26.4760259Z 
-929: 2026-07-12T16:10:26.4760539Z       132 |       .locator('.lw-qcard', { hasText: 'Vraska Pass' })
-930: 2026-07-12T16:10:26.4761398Z       133 |       .getByRole('button', { name: 'Accept', exact: true })
-931: 2026-07-12T16:10:26.4761892Z     > 134 |       .click();
-932: 2026-07-12T16:10:26.4762387Z           |        ^
-933: 2026-07-12T16:10:26.4762786Z       135 |     await openNav(page, 'Locations');
-934: 2026-07-12T16:10:26.4763532Z       136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
-935: 2026-07-12T16:10:26.4764142Z       137 |   });
-936: 2026-07-12T16:10:26.4764729Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:134:8
-937: 2026-07-12T16:10:26.4765219Z 
-938: 2026-07-12T16:10:26.4766270Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium/error-context.md
-939: 2026-07-12T16:10:26.4767053Z 
-940: 2026-07-12T16:10:26.4767760Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-941: 2026-07-12T16:10:26.4769048Z     test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium/trace.zip
-942: 2026-07-12T16:10:26.4769827Z     Usage:
-943: 2026-07-12T16:10:26.4769991Z 
-944: 2026-07-12T16:10:26.4771157Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium/trace.zip
-945: 2026-07-12T16:10:26.4772067Z 
-946: 2026-07-12T16:10:26.4772657Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-947: 2026-07-12T16:10:26.4773122Z 
-948: 2026-07-12T16:10:26.4773720Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-949: 2026-07-12T16:10:26.4774203Z 
-950: 2026-07-12T16:10:26.4774406Z     Test timeout of 60000ms exceeded.
-951: 2026-07-12T16:10:26.4774690Z 
-952: 2026-07-12T16:10:26.4774978Z     Error: locator.click: Test timeout of 60000ms exceeded.
-953: 2026-07-12T16:10:26.4775486Z     Call log:
-954: 2026-07-12T16:10:26.4776318Z       - waiting for locator('.lw-qcard').filter({ hasText: 'Vraska Pass' }).getByRole('button', { name: 'Accept', exact: true })
-955: 2026-07-12T16:10:26.4776981Z 
-956: 2026-07-12T16:10:26.4776996Z 
-957: 2026-07-12T16:10:26.4777284Z       132 |       .locator('.lw-qcard', { hasText: 'Vraska Pass' })
-958: 2026-07-12T16:10:26.4777954Z       133 |       .getByRole('button', { name: 'Accept', exact: true })
-959: 2026-07-12T16:10:26.4778488Z     > 134 |       .click();
-960: 2026-07-12T16:10:26.4778839Z           |        ^
-961: 2026-07-12T16:10:26.4779354Z       135 |     await openNav(page, 'Locations');
-962: 2026-07-12T16:10:26.4780102Z       136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
-963: 2026-07-12T16:10:26.4781072Z       137 |   });
-964: 2026-07-12T16:10:26.4781720Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:134:8
-965: 2026-07-12T16:10:26.4782245Z 
-966: 2026-07-12T16:10:26.4783307Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium-retry1/error-context.md
-967: 2026-07-12T16:10:26.4784202Z 
-968: 2026-07-12T16:10:26.4784872Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-969: 2026-07-12T16:10:26.4786397Z     test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium-retry1/trace.zip
-970: 2026-07-12T16:10:26.4787253Z     Usage:
-971: 2026-07-12T16:10:26.4787411Z 
-972: 2026-07-12T16:10:26.4788436Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium-retry1/trace.zip
-973: 2026-07-12T16:10:26.4789350Z 
-974: 2026-07-12T16:10:26.4789941Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-975: 2026-07-12T16:10:26.4790422Z 
-976: 2026-07-12T16:10:26.4791882Z   4) [desktop-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-977: 2026-07-12T16:10:26.4792963Z 
-978: 2026-07-12T16:10:26.4793152Z     Test timeout of 60000ms exceeded.
-979: 2026-07-12T16:10:26.4793428Z 
-980: 2026-07-12T16:10:26.4793708Z     Error: locator.click: Test timeout of 60000ms exceeded.
-981: 2026-07-12T16:10:26.4794194Z     Call log:
-982: 2026-07-12T16:10:26.4794977Z       - waiting for getByRole('dialog', { name: 'New Character' }).getByRole('button', { name: 'Reroll Role in story' })
-983: 2026-07-12T16:10:26.4795621Z 
-984: 2026-07-12T16:10:26.4795629Z 
-985: 2026-07-12T16:10:26.4795990Z       173 |     // A single die rerolls just its own field; the name stays put.
-986: 2026-07-12T16:10:26.4796805Z       174 |     await drawer.getByRole('button', { name: 'Identity' }).click();
-987: 2026-07-12T16:10:26.4797685Z     > 175 |     await drawer.getByRole('button', { name: 'Reroll Role in story' }).click();
-988: 2026-07-12T16:10:26.4798481Z           |                                                                        ^
-989: 2026-07-12T16:10:26.4798979Z       176 |     await expect(
-990: 2026-07-12T16:10:26.4799751Z       177 |       page.getByRole('radiogroup', { name: 'Role in story' }).locator('[aria-checked="true"]')
-991: 2026-07-12T16:10:26.4800502Z       178 |     ).toHaveCount(1);
-992: 2026-07-12T16:10:26.4801376Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/16-generate.spec.ts:175:72
-993: 2026-07-12T16:10:26.4801915Z 
-994: 2026-07-12T16:10:26.4802719Z     Error Context: test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-desktop-chromium/error-context.md
-995: 2026-07-12T16:10:26.4803548Z 
-996: 2026-07-12T16:10:26.4804190Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-997: 2026-07-12T16:10:26.4805380Z     test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-desktop-chromium/trace.zip
-998: 2026-07-12T16:10:26.4806228Z     Usage:
-999: 2026-07-12T16:10:26.4806394Z 
-1000: 2026-07-12T16:10:26.4807221Z         npx playwright show-trace test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-desktop-chromium/trace.zip
-1001: 2026-07-12T16:10:26.4808071Z 
-1002: 2026-07-12T16:10:26.4808642Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-1003: 2026-07-12T16:10:26.4809088Z 
-1004: 2026-07-12T16:10:26.4809657Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-1005: 2026-07-12T16:10:26.4810117Z 
-1006: 2026-07-12T16:10:26.4810511Z     Test timeout of 60000ms exceeded.
-1007: 2026-07-12T16:10:26.4810908Z 
-1008: 2026-07-12T16:10:26.4811224Z     Error: locator.click: Test timeout of 60000ms exceeded.
-1009: 2026-07-12T16:10:26.4811748Z     Call log:
-1010: 2026-07-12T16:10:26.4812558Z       - waiting for getByRole('dialog', { name: 'New Character' }).getByRole('button', { name: 'Reroll Role in story' })
-1011: 2026-07-12T16:10:26.4813233Z 
-1012: 2026-07-12T16:10:26.4813455Z 
-1013: 2026-07-12T16:10:26.4813812Z       173 |     // A single die rerolls just its own field; the name stays put.
-1014: 2026-07-12T16:10:26.4814574Z       174 |     await drawer.getByRole('button', { name: 'Identity' }).click();
-1015: 2026-07-12T16:10:26.4815409Z     > 175 |     await drawer.getByRole('button', { name: 'Reroll Role in story' }).click();
-1016: 2026-07-12T16:10:26.4816165Z           |                                                                        ^
-1017: 2026-07-12T16:10:26.4816660Z       176 |     await expect(
-1018: 2026-07-12T16:10:26.4817429Z       177 |       page.getByRole('radiogroup', { name: 'Role in story' }).locator('[aria-checked="true"]')
-1019: 2026-07-12T16:10:26.4818186Z       178 |     ).toHaveCount(1);
-1020: 2026-07-12T16:10:26.4818942Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/16-generate.spec.ts:175:72
-1021: 2026-07-12T16:10:26.4819500Z 
-1022: 2026-07-12T16:10:26.4820349Z     Error Context: test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-desktop-chromium-retry1/error-context.md
-1023: 2026-07-12T16:10:26.4821363Z 
-1024: 2026-07-12T16:10:26.4822054Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-1025: 2026-07-12T16:10:26.4823383Z     test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-desktop-chromium-retry1/trace.zip
-1026: 2026-07-12T16:10:26.4824275Z     Usage:
-1027: 2026-07-12T16:10:26.4824432Z 
-1028: 2026-07-12T16:10:26.4825312Z         npx playwright show-trace test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-desktop-chromium-retry1/trace.zip
-1029: 2026-07-12T16:10:26.4826224Z 
-1030: 2026-07-12T16:10:26.4826838Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-1031: 2026-07-12T16:10:26.4827307Z 
-1032: 2026-07-12T16:10:26.4828624Z   5) [mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
-1033: 2026-07-12T16:10:26.4829585Z 
-1034: 2026-07-12T16:10:26.4829882Z     Error: expect(locator).toBeVisible() failed
-1035: 2026-07-12T16:10:26.4830186Z 
-1036: 2026-07-12T16:10:26.4830536Z     Locator: locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-1037: 2026-07-12T16:10:26.4831244Z     Expected: visible
-1038: 2026-07-12T16:10:26.4831563Z     Timeout: 5000ms
-1039: 2026-07-12T16:10:26.4831913Z     Error: element(s) not found
-1040: 2026-07-12T16:10:26.4832149Z 
-1041: 2026-07-12T16:10:26.4832267Z     Call log:
-1042: 2026-07-12T16:10:26.4832699Z       - Expect "toBeVisible" with timeout 5000ms
-1043: 2026-07-12T16:10:26.4833400Z       - waiting for locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-1044: 2026-07-12T16:10:26.4833878Z 
-1045: 2026-07-12T16:10:26.4833901Z 
-1046: 2026-07-12T16:10:26.4834109Z       123 |     await openNav(page, /Review/);
-1047: 2026-07-12T16:10:26.4834879Z       124 |     const transferCard = page.locator('.lw-qcard', { hasText: 'transferred' }).first();
-1048: 2026-07-12T16:10:26.4835443Z     > 125 |     await expect(transferCard).toBeVisible();
-1049: 2026-07-12T16:10:26.4835787Z           |                                ^
-1050: 2026-07-12T16:10:26.4836442Z       126 |     await expect(transferCard.getByText(/Saren/).first()).toBeVisible();
-1051: 2026-07-12T16:10:26.4837044Z       127 |     await transferCard.getByRole('button', { name: 'Preview resolution' }).click();
-1052: 2026-07-12T16:10:26.4837579Z       128 |     const preview = page.getByTestId('merge-preview');
-1053: 2026-07-12T16:10:26.4838172Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:125:32
-1054: 2026-07-12T16:10:26.4838551Z 
-1055: 2026-07-12T16:10:26.4839180Z     Error Context: test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium/error-context.md
-1056: 2026-07-12T16:10:26.4839717Z 
-1057: 2026-07-12T16:10:26.4840169Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-1058: 2026-07-12T16:10:26.4841143Z     test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium/trace.zip
-1059: 2026-07-12T16:10:26.4841677Z     Usage:
-1060: 2026-07-12T16:10:26.4841801Z 
-1061: 2026-07-12T16:10:26.4842304Z         npx playwright show-trace test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium/trace.zip
-1062: 2026-07-12T16:10:26.4842826Z 
-1063: 2026-07-12T16:10:26.4843193Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-1064: 2026-07-12T16:10:26.4843467Z 
-1065: 2026-07-12T16:10:26.4843811Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-1066: 2026-07-12T16:10:26.4844086Z 
-1067: 2026-07-12T16:10:26.4844242Z     Error: expect(locator).toBeVisible() failed
-1068: 2026-07-12T16:10:26.4844447Z 
-1069: 2026-07-12T16:10:26.4844700Z     Locator: locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-1070: 2026-07-12T16:10:26.4845082Z     Expected: visible
-1071: 2026-07-12T16:10:26.4845309Z     Timeout: 5000ms
-1072: 2026-07-12T16:10:26.4845565Z     Error: element(s) not found
-1073: 2026-07-12T16:10:26.4845729Z 
-1074: 2026-07-12T16:10:26.4845821Z     Call log:
-1075: 2026-07-12T16:10:26.4846088Z       - Expect "toBeVisible" with timeout 5000ms
-1076: 2026-07-12T16:10:26.4846552Z       - waiting for locator('.lw-qcard').filter({ hasText: 'transferred' }).first()
-1077: 2026-07-12T16:10:26.4846851Z 
-1078: 2026-07-12T16:10:26.4846856Z 
-1079: 2026-07-12T16:10:26.4846996Z       123 |     await openNav(page, /Review/);
-1080: 2026-07-12T16:10:26.4847674Z       124 |     const transferCard = page.locator('.lw-qcard', { hasText: 'transferred' }).first();
-1081: 2026-07-12T16:10:26.4848372Z     > 125 |     await expect(transferCard).toBeVisible();
-1082: 2026-07-12T16:10:26.4848795Z           |                                ^
-1083: 2026-07-12T16:10:26.4849234Z       126 |     await expect(transferCard.getByText(/Saren/).first()).toBeVisible();
-1084: 2026-07-12T16:10:26.4849821Z       127 |     await transferCard.getByRole('button', { name: 'Preview resolution' }).click();
-1085: 2026-07-12T16:10:26.4850339Z       128 |     const preview = page.getByTestId('merge-preview');
-1086: 2026-07-12T16:10:26.4851103Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:125:32
-1087: 2026-07-12T16:10:26.4851492Z 
-1088: 2026-07-12T16:10:26.4852025Z     Error Context: test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium-retry1/error-context.md
-1089: 2026-07-12T16:10:26.4852585Z 
-1090: 2026-07-12T16:10:26.4853005Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-1091: 2026-07-12T16:10:26.4853787Z     test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium-retry1/trace.zip
-1092: 2026-07-12T16:10:26.4854355Z     Usage:
-1093: 2026-07-12T16:10:26.4854467Z 
-1094: 2026-07-12T16:10:26.4855260Z         npx playwright show-trace test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium-retry1/trace.zip
-1095: 2026-07-12T16:10:26.4855856Z 
-1096: 2026-07-12T16:10:26.4856214Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-1097: 2026-07-12T16:10:26.4856509Z 
-1098: 2026-07-12T16:10:26.4857133Z   6) [mobile-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply 
-1099: 2026-07-12T16:10:26.4857767Z 
-1100: 2026-07-12T16:10:26.4857960Z     Error: expect(locator).toContainText(expected) failed
-1101: 2026-07-12T16:10:26.4858198Z 
-1102: 2026-07-12T16:10:26.4858423Z     Locator: locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-1103: 2026-07-12T16:10:26.4858823Z     Expected substring: "salt route"
-1104: 2026-07-12T16:10:26.4859769Z     Received string:    "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-1105: 2026-07-12T16:10:26.4860464Z     Timeout: 5000ms
-1106: 2026-07-12T16:10:26.4860765Z 
-1107: 2026-07-12T16:10:26.4860865Z     Call log:
-1108: 2026-07-12T16:10:26.4861147Z       - Expect "toContainText" with timeout 5000ms
-1109: 2026-07-12T16:10:26.4861591Z       - waiting for locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-1110: 2026-07-12T16:10:26.4862525Z         14 × locator resolved to <li draggable="true" data-testid="identity-cluster" class="lw-card lw-qcard lw-identitycard lw-identitycard--orange">…</li>
-1111: 2026-07-12T16:10:26.4863808Z            - unexpected value "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-1112: 2026-07-12T16:10:26.4864416Z 
-1113: 2026-07-12T16:10:26.4864421Z 
-1114: 2026-07-12T16:10:26.4864674Z       105 |     const card = page.locator('.lw-qcard', { hasText: 'Maren' }).first();
-1115: 2026-07-12T16:10:26.4865110Z       106 |     await expect(card).toBeVisible();
-1116: 2026-07-12T16:10:26.4865489Z     > 107 |     await expect(card).toContainText('salt route');
-1117: 2026-07-12T16:10:26.4865878Z           |                        ^
-1118: 2026-07-12T16:10:26.4866331Z       108 |   });
-1119: 2026-07-12T16:10:26.4866625Z       109 |
-1120: 2026-07-12T16:10:26.4867492Z       110 |   test('handoff: build pack, paste reply, candidates land in review — fully offline', async ({
-1121: 2026-07-12T16:10:26.4868750Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:107:24
-1122: 2026-07-12T16:10:26.4869342Z 
-1123: 2026-07-12T16:10:26.4870204Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-mobile-chromium/error-context.md
-1124: 2026-07-12T16:10:26.4871170Z 
-1125: 2026-07-12T16:10:26.4871815Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-1126: 2026-07-12T16:10:26.4872966Z     test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-mobile-chromium/trace.zip
-1127: 2026-07-12T16:10:26.4873830Z     Usage:
-1128: 2026-07-12T16:10:26.4873988Z 
-1129: 2026-07-12T16:10:26.4874769Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-mobile-chromium/trace.zip
-1130: 2026-07-12T16:10:26.4875614Z 
-1131: 2026-07-12T16:10:26.4876151Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-1132: 2026-07-12T16:10:26.4876562Z 
-1133: 2026-07-12T16:10:26.4877086Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-1134: 2026-07-12T16:10:26.4877756Z 
-1135: 2026-07-12T16:10:26.4878037Z     Error: expect(locator).toContainText(expected) failed
-1136: 2026-07-12T16:10:26.4878378Z 
-1137: 2026-07-12T16:10:26.4878712Z     Locator: locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-1138: 2026-07-12T16:10:26.4879371Z     Expected substring: "salt route"
-1139: 2026-07-12T16:10:26.4881152Z     Received string:    "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-1140: 2026-07-12T16:10:26.4882252Z     Timeout: 5000ms
-1141: 2026-07-12T16:10:26.4882446Z 
-1142: 2026-07-12T16:10:26.4882761Z     Call log:
-1143: 2026-07-12T16:10:26.4883172Z       - Expect "toContainText" with timeout 5000ms
-1144: 2026-07-12T16:10:26.4883886Z       - waiting for locator('.lw-qcard').filter({ hasText: 'Maren' }).first()
-1145: 2026-07-12T16:10:26.4885450Z         14 × locator resolved to <li draggable="true" data-testid="identity-cluster" class="lw-card lw-qcard lw-identitycard lw-identitycard--orange">…</li>
-1146: 2026-07-12T16:10:26.4887673Z            - unexpected value "◐ CastLooks new · 72%Maren1 extracted record · 1 reference · 1 chapter⠿ Drag to mergeShow every extracted detail and sourceAccept as new⌕ Find existingDeny"
-1147: 2026-07-12T16:10:26.4888705Z 
-1148: 2026-07-12T16:10:26.4888713Z 
-1149: 2026-07-12T16:10:26.4889120Z       105 |     const card = page.locator('.lw-qcard', { hasText: 'Maren' }).first();
-1150: 2026-07-12T16:10:26.4889823Z       106 |     await expect(card).toBeVisible();
-1151: 2026-07-12T16:10:26.4890426Z     > 107 |     await expect(card).toContainText('salt route');
-1152: 2026-07-12T16:10:26.4891142Z           |                        ^
-1153: 2026-07-12T16:10:26.4891530Z       108 |   });
-1154: 2026-07-12T16:10:26.4891831Z       109 |
-1155: 2026-07-12T16:10:26.4892700Z       110 |   test('handoff: build pack, paste reply, candidates land in review — fully offline', async ({
-1156: 2026-07-12T16:10:26.4893762Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:107:24
-1157: 2026-07-12T16:10:26.4894286Z 
-1158: 2026-07-12T16:10:26.4895216Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-mobile-chromium-retry1/error-context.md
-1159: 2026-07-12T16:10:26.4896157Z 
-1160: 2026-07-12T16:10:26.4896824Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-1161: 2026-07-12T16:10:26.4898192Z     test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-mobile-chromium-retry1/trace.zip
-1162: 2026-07-12T16:10:26.4899171Z     Usage:
-1163: 2026-07-12T16:10:26.4899352Z 
-1164: 2026-07-12T16:10:26.4900295Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-f8176-ue-from-a-mocked-JSON-reply-mobile-chromium-retry1/trace.zip
-1165: 2026-07-12T16:10:26.4901394Z 
-1166: 2026-07-12T16:10:26.4901972Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-1167: 2026-07-12T16:10:26.4902408Z 
-1168: 2026-07-12T16:10:26.4903448Z   7) [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-1169: 2026-07-12T16:10:26.4904307Z 
-1170: 2026-07-12T16:10:26.4904490Z     Test timeout of 60000ms exceeded.
-1171: 2026-07-12T16:10:26.4904765Z 
-1172: 2026-07-12T16:10:26.4905064Z     Error: locator.click: Test timeout of 60000ms exceeded.
-1173: 2026-07-12T16:10:26.4905538Z     Call log:
-1174: 2026-07-12T16:10:26.4906342Z       - waiting for locator('.lw-qcard').filter({ hasText: 'Vraska Pass' }).getByRole('button', { name: 'Accept', exact: true })
-1175: 2026-07-12T16:10:26.4907015Z 
-1176: 2026-07-12T16:10:26.4907022Z 
-1177: 2026-07-12T16:10:26.4907320Z       132 |       .locator('.lw-qcard', { hasText: 'Vraska Pass' })
-1178: 2026-07-12T16:10:26.4908225Z       133 |       .getByRole('button', { name: 'Accept', exact: true })
-1179: 2026-07-12T16:10:26.4908754Z     > 134 |       .click();
-1180: 2026-07-12T16:10:26.4909161Z           |        ^
-1181: 2026-07-12T16:10:26.4909594Z       135 |     await openNav(page, 'Locations');
-1182: 2026-07-12T16:10:26.4910386Z       136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
-1183: 2026-07-12T16:10:26.4911382Z       137 |   });
-1184: 2026-07-12T16:10:26.4912017Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:134:8
-1185: 2026-07-12T16:10:26.4912538Z 
-1186: 2026-07-12T16:10:26.4913529Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium/error-context.md
-1187: 2026-07-12T16:10:26.4914312Z 
-1188: 2026-07-12T16:10:26.4914960Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-1189: 2026-07-12T16:10:26.4916285Z     test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium/trace.zip
-1190: 2026-07-12T16:10:26.4917110Z     Usage:
-1191: 2026-07-12T16:10:26.4917301Z 
-1192: 2026-07-12T16:10:26.4918289Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium/trace.zip
-1193: 2026-07-12T16:10:26.4919090Z 
-1194: 2026-07-12T16:10:26.4919670Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-1195: 2026-07-12T16:10:26.4920128Z 
-1196: 2026-07-12T16:10:26.4920844Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-1197: 2026-07-12T16:10:26.4921318Z 
-1198: 2026-07-12T16:10:26.4921563Z     Test timeout of 60000ms exceeded.
-1199: 2026-07-12T16:10:26.4921843Z 
-1200: 2026-07-12T16:10:26.4922118Z     Error: locator.click: Test timeout of 60000ms exceeded.
-1201: 2026-07-12T16:10:26.4922611Z     Call log:
-1202: 2026-07-12T16:10:26.4923437Z       - waiting for locator('.lw-qcard').filter({ hasText: 'Vraska Pass' }).getByRole('button', { name: 'Accept', exact: true })
-1203: 2026-07-12T16:10:26.4924062Z 
-1204: 2026-07-12T16:10:26.4924083Z 
-1205: 2026-07-12T16:10:26.4924287Z       132 |       .locator('.lw-qcard', { hasText: 'Vraska Pass' })
-1206: 2026-07-12T16:10:26.4924730Z       133 |       .getByRole('button', { name: 'Accept', exact: true })
-1207: 2026-07-12T16:10:26.4925069Z     > 134 |       .click();
-1208: 2026-07-12T16:10:26.4925301Z           |        ^
-1209: 2026-07-12T16:10:26.4925583Z       135 |     await openNav(page, 'Locations');
-1210: 2026-07-12T16:10:26.4926090Z       136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
-1211: 2026-07-12T16:10:26.4926522Z       137 |   });
-1212: 2026-07-12T16:10:26.4927177Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:134:8
-1213: 2026-07-12T16:10:26.4927717Z 
-1214: 2026-07-12T16:10:26.4928764Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium-retry1/error-context.md
-1215: 2026-07-12T16:10:26.4929383Z 
-1216: 2026-07-12T16:10:26.4929837Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-1217: 2026-07-12T16:10:26.4930880Z     test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium-retry1/trace.zip
-1218: 2026-07-12T16:10:26.4931448Z     Usage:
-1219: 2026-07-12T16:10:26.4931562Z 
-1220: 2026-07-12T16:10:26.4932171Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium-retry1/trace.zip
-1221: 2026-07-12T16:10:26.4932895Z 
-1222: 2026-07-12T16:10:26.4933243Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-1223: 2026-07-12T16:10:26.4933523Z 
-1224: 2026-07-12T16:10:26.4934312Z   8) [mobile-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-1225: 2026-07-12T16:10:26.4934932Z 
-1226: 2026-07-12T16:10:26.4935071Z     Test timeout of 60000ms exceeded.
-1227: 2026-07-12T16:10:26.4935253Z 
-1228: 2026-07-12T16:10:26.4935610Z     Error: locator.click: Test timeout of 60000ms exceeded.
-1229: 2026-07-12T16:10:26.4935945Z     Call log:
-1230: 2026-07-12T16:10:26.4936444Z       - waiting for getByRole('dialog', { name: 'New Character' }).getByRole('button', { name: 'Reroll Role in story' })
-1231: 2026-07-12T16:10:26.4936847Z 
-1232: 2026-07-12T16:10:26.4936853Z 
-1233: 2026-07-12T16:10:26.4937080Z       173 |     // A single die rerolls just its own field; the name stays put.
-1234: 2026-07-12T16:10:26.4937588Z       174 |     await drawer.getByRole('button', { name: 'Identity' }).click();
-1235: 2026-07-12T16:10:26.4938124Z     > 175 |     await drawer.getByRole('button', { name: 'Reroll Role in story' }).click();
-1236: 2026-07-12T16:10:26.4938608Z           |                                                                        ^
-1237: 2026-07-12T16:10:26.4938931Z       176 |     await expect(
-1238: 2026-07-12T16:10:26.4939409Z       177 |       page.getByRole('radiogroup', { name: 'Role in story' }).locator('[aria-checked="true"]')
-1239: 2026-07-12T16:10:26.4939872Z       178 |     ).toHaveCount(1);
-1240: 2026-07-12T16:10:26.4940343Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/16-generate.spec.ts:175:72
-1241: 2026-07-12T16:10:26.4940895Z 
-1242: 2026-07-12T16:10:26.4941390Z     Error Context: test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-mobile-chromium/error-context.md
-1243: 2026-07-12T16:10:26.4941913Z 
-1244: 2026-07-12T16:10:26.4942334Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-1245: 2026-07-12T16:10:26.4943077Z     test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-mobile-chromium/trace.zip
-1246: 2026-07-12T16:10:26.4943596Z     Usage:
-1247: 2026-07-12T16:10:26.4943711Z 
-1248: 2026-07-12T16:10:26.4944222Z         npx playwright show-trace test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-mobile-chromium/trace.zip
-1249: 2026-07-12T16:10:26.4944760Z 
-1250: 2026-07-12T16:10:26.4945124Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-1251: 2026-07-12T16:10:26.4945397Z 
-1252: 2026-07-12T16:10:26.4945752Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
-1253: 2026-07-12T16:10:26.4946025Z 
-1254: 2026-07-12T16:10:26.4946155Z     Test timeout of 60000ms exceeded.
-1255: 2026-07-12T16:10:26.4946332Z 
-1256: 2026-07-12T16:10:26.4946517Z     Error: locator.click: Test timeout of 60000ms exceeded.
-1257: 2026-07-12T16:10:26.4946829Z     Call log:
-1258: 2026-07-12T16:10:26.4947315Z       - waiting for getByRole('dialog', { name: 'New Character' }).getByRole('button', { name: 'Reroll Role in story' })
-1259: 2026-07-12T16:10:26.4947880Z 
-1260: 2026-07-12T16:10:26.4947885Z 
-1261: 2026-07-12T16:10:26.4948115Z       173 |     // A single die rerolls just its own field; the name stays put.
-1262: 2026-07-12T16:10:26.4948608Z       174 |     await drawer.getByRole('button', { name: 'Identity' }).click();
-1263: 2026-07-12T16:10:26.4949129Z     > 175 |     await drawer.getByRole('button', { name: 'Reroll Role in story' }).click();
-1264: 2026-07-12T16:10:26.4949612Z           |                                                                        ^
-1265: 2026-07-12T16:10:26.4950066Z       176 |     await expect(
-1266: 2026-07-12T16:10:26.4950539Z       177 |       page.getByRole('radiogroup', { name: 'Role in story' }).locator('[aria-checked="true"]')
-1267: 2026-07-12T16:10:26.4951203Z       178 |     ).toHaveCount(1);
-1268: 2026-07-12T16:10:26.4951670Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/16-generate.spec.ts:175:72
-1269: 2026-07-12T16:10:26.4952017Z 
-1270: 2026-07-12T16:10:26.4952568Z     Error Context: test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-mobile-chromium-retry1/error-context.md
-1271: 2026-07-12T16:10:26.4953119Z 
-1272: 2026-07-12T16:10:26.4953537Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
-1273: 2026-07-12T16:10:26.4954306Z     test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-mobile-chromium-retry1/trace.zip
-1274: 2026-07-12T16:10:26.4954868Z     Usage:
-1275: 2026-07-12T16:10:26.4954978Z 
-1276: 2026-07-12T16:10:26.4955528Z         npx playwright show-trace test-results/16-generate-generation-JSO-63eea--die-rerolls-only-its-field-mobile-chromium-retry1/trace.zip
-1277: 2026-07-12T16:10:26.4956095Z 
-1278: 2026-07-12T16:10:26.4956439Z     ────────────────────────────────────────────────────────────────────────────────────────────────
-1279: 2026-07-12T16:10:26.4956708Z 
-1280: 2026-07-12T16:10:26.4956797Z   8 failed
-1281: 2026-07-12T16:10:26.4957682Z     [desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
-1282: 2026-07-12T16:10:26.4958914Z     [desktop-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply 
-1283: 2026-07-12T16:10:26.4960047Z     [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-1284: 2026-07-12T16:10:26.4961495Z     [desktop-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-1285: 2026-07-12T16:10:26.4962851Z     [mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
-1286: 2026-07-12T16:10:26.4964039Z     [mobile-chromium] › tests/e2e/09-ai.spec.ts:82:3 › AI layer (mocked providers) › deep extraction feeds the review queue from a mocked JSON reply 
-1287: 2026-07-12T16:10:26.4965150Z     [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
-1288: 2026-07-12T16:10:26.4966386Z     [mobile-chromium] › tests/e2e/16-generate.spec.ts:156:3 › generation: JSON round-trip, create-anything dialog › random roll prefills the drawer; a field die rerolls only its field 
-1289: 2026-07-12T16:10:26.4967082Z   10 skipped
-1290: 2026-07-12T16:10:26.4967290Z   124 passed (7.7m)
-1291: 2026-07-12T16:10:26.4969883Z ##[error]Process completed with exit code 1.
-1292: 2026-07-12T16:10:26.5028448Z ##[group]Run python - <<'PY'
-1293: 2026-07-12T16:10:26.5028789Z [36;1mpython - <<'PY'[0m
-1294: 2026-07-12T16:10:26.5029041Z [36;1mimport json, os[0m
-1295: 2026-07-12T16:10:26.5029309Z [36;1mfrom datetime import datetime, timezone[0m
-1296: 2026-07-12T16:10:26.5029618Z [36;1mresult = {[0m
-1297: 2026-07-12T16:10:26.5029940Z [36;1m    "status": os.environ["RESULT"],[0m
-1298: 2026-07-12T16:10:26.5030441Z [36;1m    "sourceSha": os.environ["SOURCE_SHA"],[0m
-1299: 2026-07-12T16:10:26.5031050Z [36;1m    "runId": int(os.environ["RUN_ID"]),[0m
-1300: 2026-07-12T16:10:26.5031413Z [36;1m    "recordedAt": datetime.now(timezone.utc).isoformat(),[0m
-1301: 2026-07-12T16:10:26.5031762Z [36;1m    "steps": {[0m
-1302: 2026-07-12T16:10:26.5032021Z [36;1m        "install": os.environ["INSTALL"],[0m
-1303: 2026-07-12T16:10:26.5032343Z [36;1m        "typecheck": os.environ["TYPECHECK"],[0m
-1304: 2026-07-12T16:10:26.5032660Z [36;1m        "lint": os.environ["LINT"],[0m
-1305: 2026-07-12T16:10:26.5032940Z [36;1m        "unit": os.environ["UNIT"],[0m
-1306: 2026-07-12T16:10:26.5033266Z [36;1m        "build": os.environ["BUILD"],[0m
-1307: 2026-07-12T16:10:26.5033570Z [36;1m        "browser": os.environ["BROWSER"],[0m
-1308: 2026-07-12T16:10:26.5033859Z [36;1m        "e2e": os.environ["E2E"],[0m
-1309: 2026-07-12T16:10:26.5034123Z [36;1m    },[0m
-1310: 2026-07-12T16:10:26.5034319Z [36;1m}[0m
-1311: 2026-07-12T16:10:26.5034639Z [36;1mwith open('.review-ci-result.json', 'w', encoding='utf-8') as handle:[0m
-1312: 2026-07-12T16:10:26.5035062Z [36;1m    json.dump(result, handle, indent=2)[0m
-1333: 2026-07-12T16:10:26.5077351Z ##[endgroup]
-1334: 2026-07-12T16:10:26.6292113Z [agent/review-identity-resolution 9bfc274] Record review identity CI result [skip ci]
-1335: 2026-07-12T16:10:26.6293036Z  1 file changed, 3 insertions(+), 3 deletions(-)
-1336: 2026-07-12T16:10:27.5440501Z To https://github.com/DrDoback06/Loomwright-V2
-1337: 2026-07-12T16:10:27.5441523Z    8a0c656..9bfc274  HEAD -> agent/review-identity-resolution
-1338: 2026-07-12T16:10:27.5487099Z ##[error]Process completed with exit code 1.
-1339: 2026-07-12T16:10:27.5611128Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-1340: 2026-07-12T16:10:27.5612328Z Post job cleanup.
-1341: 2026-07-12T16:10:27.6487787Z [command]/usr/bin/git version
-1342: 2026-07-12T16:10:27.6566419Z git version 2.54.0
-1343: 2026-07-12T16:10:27.6605390Z Temporarily overriding HOME='/home/runner/work/_temp/49bd3809-990f-482c-97f2-d25f3d7a768c' before making global git config changes
-1344: 2026-07-12T16:10:27.6607011Z Adding repository directory to the temporary git global config as a safe directory
-1345: 2026-07-12T16:10:27.6610471Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Loomwright-V2/Loomwright-V2
-1346: 2026-07-12T16:10:27.6651355Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
-1347: 2026-07-12T16:10:27.6688733Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
-1348: 2026-07-12T16:10:27.6952839Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
-1349: 2026-07-12T16:10:27.6982184Z http.https://github.com/.extraheader
-1350: 2026-07-12T16:10:27.6993750Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
-1351: 2026-07-12T16:10:27.7028419Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
-1352: 2026-07-12T16:10:27.7321151Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
-1353: 2026-07-12T16:10:27.7365932Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
-1354: 2026-07-12T16:10:27.7812822Z Cleaning up orphan processes
-1355: 2026-07-12T16:10:27.8122780Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+572:     Call log:
+573:       - Expect "toBeVisible" with timeout 5000ms
+574:       - waiting for getByText(/canonical entity/)
+575: 
+576: 
+577:       129 |     await expect(preview).toContainText('Information to add or reconcile');
+578:       130 |     await preview.getByRole('button', { name: 'Confirm merge everywhere' }).click();
+579:     > 131 |     await expect(page.getByText(/canonical entity/)).toBeVisible();
+580:           |                                                      ^
+581:       132 |   });
+582:       133 | });
+583:       134 |
+584:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:131:54
+585: 2026-07-12T16:50:23.1247314Z ·····°····················································
+586: 2026-07-12T16:51:01.3177536Z ··········°°···×·°°·°°···F::error file=tests/e2e/04-extraction-review.spec.ts,title=[mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner,line=131,col=54::  2) [mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner %0A    Error: expect(locator).toBeVisible() failed%0A%0A    Locator: getByText(/canonical entity/)%0A    Expected: visible%0A    Error: strict mode violation: getByText(/canonical entity/) resolved to 2 elements:%0A        1) <h1 id="merge-preview-title">Merge into one canonical entity</h1> aka getByRole('heading', { name: 'Merge into one canonical' })%0A        2) <p>…</p> aka getByText('Confirmation creates one')%0A%0A    Call log:%0A      - Expect "toBeVisible" with timeout 5000ms%0A      - waiting for getByText(/canonical entity/)%0A%0A%0A      129 |     await expect(preview).toContainText('Information to add or reconcile');%0A      130 |     await preview.getByRole('button', { name: 'Confirm merge everywhere' }).click();%0A    > 131 |     await expect(page.getByText(/canonical entity/)).toBeVisible();%0A          |                                                      ^%0A      132 |   });%0A      133 | });%0A      134 |%0A        at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:131:54
+587: 2026-07-12T16:51:01.3193222Z ##[error]  2) [mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
+588: 
+589:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+590:     Error: expect(locator).toBeVisible() failed
+591: 
+592:     Locator: getByText(/canonical entity/)
+593:     Expected: visible
+594:     Error: strict mode violation: getByText(/canonical entity/) resolved to 2 elements:
+595:         1) <h1 id="merge-preview-title">Merge into one canonical entity</h1> aka getByRole('heading', { name: 'Merge into one canonical' })
+596:         2) <p>…</p> aka getByText('Confirmation creates one')
+597: 
+598:     Call log:
+599:       - Expect "toBeVisible" with timeout 5000ms
+600:       - waiting for getByText(/canonical entity/)
+601: 
+602: 
+603:       129 |     await expect(preview).toContainText('Information to add or reconcile');
+604:       130 |     await preview.getByRole('button', { name: 'Confirm merge everywhere' }).click();
+605:     > 131 |     await expect(page.getByText(/canonical entity/)).toBeVisible();
+606:           |                                                      ^
+607:       132 |   });
+608:       133 | });
+609:       134 |
+610:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:131:54
+611: 2026-07-12T16:51:46.4265249Z ···········°························°°
+612: 2026-07-12T16:51:46.4299702Z ##[notice]  2 failed
+613:     [desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
+614:     [mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
+615:   10 skipped
+616:   130 passed (3.0m)
+617: 2026-07-12T16:51:46.4303941Z 
+618: 2026-07-12T16:51:46.4305590Z   1) [desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
+619: 2026-07-12T16:51:46.4306852Z 
+620: 2026-07-12T16:51:46.4307146Z     Error: expect(locator).toBeVisible() failed
+621: 2026-07-12T16:51:46.4307518Z 
+622: 2026-07-12T16:51:46.4307763Z     Locator: getByText(/canonical entity/)
+623: 2026-07-12T16:51:46.4308263Z     Expected: visible
+624: 2026-07-12T16:51:46.4308994Z     Error: strict mode violation: getByText(/canonical entity/) resolved to 2 elements:
+625: 2026-07-12T16:51:46.4310430Z         1) <h1 id="merge-preview-title">Merge into one canonical entity</h1> aka getByRole('heading', { name: 'Merge into one canonical' })
+626: 2026-07-12T16:51:46.4311730Z         2) <p>…</p> aka getByText('Confirmation creates one')
+627: 2026-07-12T16:51:46.4312220Z 
+628: 2026-07-12T16:51:46.4312365Z     Call log:
+629: 2026-07-12T16:51:46.4313699Z       - Expect "toBeVisible" with timeout 5000ms
+630: 2026-07-12T16:51:46.4314396Z       - waiting for getByText(/canonical entity/)
+631: 2026-07-12T16:51:46.4314775Z 
+632: 2026-07-12T16:51:46.4314785Z 
+633: 2026-07-12T16:51:46.4315577Z       129 |     await expect(preview).toContainText('Information to add or reconcile');
+634: 2026-07-12T16:51:46.4316739Z       130 |     await preview.getByRole('button', { name: 'Confirm merge everywhere' }).click();
+635: 2026-07-12T16:51:46.4317817Z     > 131 |     await expect(page.getByText(/canonical entity/)).toBeVisible();
+636: 2026-07-12T16:51:46.4318593Z           |                                                      ^
+637: 2026-07-12T16:51:46.4319093Z       132 |   });
+638: 2026-07-12T16:51:46.4319424Z       133 | });
+639: 2026-07-12T16:51:46.4319740Z       134 |
+640: 2026-07-12T16:51:46.4320547Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:131:54
+641: 2026-07-12T16:51:46.4321235Z 
+642: 2026-07-12T16:51:46.4322167Z     Error Context: test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium/error-context.md
+643: 2026-07-12T16:51:46.4323368Z 
+644: 2026-07-12T16:51:46.4324165Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+645: 2026-07-12T16:51:46.4325745Z     test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium/trace.zip
+646: 2026-07-12T16:51:46.4326717Z     Usage:
+647: 2026-07-12T16:51:46.4326899Z 
+648: 2026-07-12T16:51:46.4327874Z         npx playwright show-trace test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium/trace.zip
+649: 2026-07-12T16:51:46.4328894Z 
+650: 2026-07-12T16:51:46.4329587Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+651: 2026-07-12T16:51:46.4330095Z 
+652: 2026-07-12T16:51:46.4330749Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+653: 2026-07-12T16:51:46.4331269Z 
+654: 2026-07-12T16:51:46.4331532Z     Error: expect(locator).toBeVisible() failed
+655: 2026-07-12T16:51:46.4331910Z 
+656: 2026-07-12T16:51:46.4332435Z     Locator: getByText(/canonical entity/)
+657: 2026-07-12T16:51:46.4333177Z     Expected: visible
+658: 2026-07-12T16:51:46.4333884Z     Error: strict mode violation: getByText(/canonical entity/) resolved to 2 elements:
+659: 2026-07-12T16:51:46.4335325Z         1) <h1 id="merge-preview-title">Merge into one canonical entity</h1> aka getByRole('heading', { name: 'Merge into one canonical' })
+660: 2026-07-12T16:51:46.4336681Z         2) <p>…</p> aka getByText('Confirmation creates one')
+661: 2026-07-12T16:51:46.4337106Z 
+662: 2026-07-12T16:51:46.4337259Z     Call log:
+663: 2026-07-12T16:51:46.4337689Z       - Expect "toBeVisible" with timeout 5000ms
+664: 2026-07-12T16:51:46.4338294Z       - waiting for getByText(/canonical entity/)
+665: 2026-07-12T16:51:46.4338659Z 
+666: 2026-07-12T16:51:46.4338667Z 
+667: 2026-07-12T16:51:46.4339128Z       129 |     await expect(preview).toContainText('Information to add or reconcile');
+668: 2026-07-12T16:51:46.4340231Z       130 |     await preview.getByRole('button', { name: 'Confirm merge everywhere' }).click();
+669: 2026-07-12T16:51:46.4341282Z     > 131 |     await expect(page.getByText(/canonical entity/)).toBeVisible();
+670: 2026-07-12T16:51:46.4342040Z           |                                                      ^
+671: 2026-07-12T16:51:46.4343027Z       132 |   });
+672: 2026-07-12T16:51:46.4343426Z       133 | });
+673: 2026-07-12T16:51:46.4343772Z       134 |
+674: 2026-07-12T16:51:46.4344593Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:131:54
+675: 2026-07-12T16:51:46.4345288Z 
+676: 2026-07-12T16:51:46.4346331Z     Error Context: test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium-retry1/error-context.md
+677: 2026-07-12T16:51:46.4347384Z 
+678: 2026-07-12T16:51:46.4348161Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+679: 2026-07-12T16:51:46.4349659Z     test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium-retry1/trace.zip
+680: 2026-07-12T16:51:46.4350736Z     Usage:
+681: 2026-07-12T16:51:46.4350916Z 
+682: 2026-07-12T16:51:46.4351991Z         npx playwright show-trace test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-desktop-chromium-retry1/trace.zip
+683: 2026-07-12T16:51:46.4353365Z 
+684: 2026-07-12T16:51:46.4354057Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+685: 2026-07-12T16:51:46.4354585Z 
+686: 2026-07-12T16:51:46.4356054Z   2) [mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
+687: 2026-07-12T16:51:46.4357265Z 
+688: 2026-07-12T16:51:46.4357543Z     Error: expect(locator).toBeVisible() failed
+689: 2026-07-12T16:51:46.4357923Z 
+690: 2026-07-12T16:51:46.4358155Z     Locator: getByText(/canonical entity/)
+691: 2026-07-12T16:51:46.4358651Z     Expected: visible
+692: 2026-07-12T16:51:46.4359383Z     Error: strict mode violation: getByText(/canonical entity/) resolved to 2 elements:
+693: 2026-07-12T16:51:46.4360817Z         1) <h1 id="merge-preview-title">Merge into one canonical entity</h1> aka getByRole('heading', { name: 'Merge into one canonical' })
+694: 2026-07-12T16:51:46.4362138Z         2) <p>…</p> aka getByText('Confirmation creates one')
+695: 2026-07-12T16:51:46.4362551Z 
+696: 2026-07-12T16:51:46.4362961Z     Call log:
+697: 2026-07-12T16:51:46.4363424Z       - Expect "toBeVisible" with timeout 5000ms
+698: 2026-07-12T16:51:46.4364059Z       - waiting for getByText(/canonical entity/)
+699: 2026-07-12T16:51:46.4364434Z 
+700: 2026-07-12T16:51:46.4364443Z 
+701: 2026-07-12T16:51:46.4364926Z       129 |     await expect(preview).toContainText('Information to add or reconcile');
+702: 2026-07-12T16:51:46.4365991Z       130 |     await preview.getByRole('button', { name: 'Confirm merge everywhere' }).click();
+703: 2026-07-12T16:51:46.4367041Z     > 131 |     await expect(page.getByText(/canonical entity/)).toBeVisible();
+704: 2026-07-12T16:51:46.4367836Z           |                                                      ^
+705: 2026-07-12T16:51:46.4368320Z       132 |   });
+706: 2026-07-12T16:51:46.4368658Z       133 | });
+707: 2026-07-12T16:51:46.4369244Z       134 |
+708: 2026-07-12T16:51:46.4369800Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:131:54
+709: 2026-07-12T16:51:46.4370330Z 
+710: 2026-07-12T16:51:46.4370867Z     Error Context: test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium/error-context.md
+711: 2026-07-12T16:51:46.4371417Z 
+712: 2026-07-12T16:51:46.4371885Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+713: 2026-07-12T16:51:46.4372922Z     test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium/trace.zip
+714: 2026-07-12T16:51:46.4373600Z     Usage:
+715: 2026-07-12T16:51:46.4373713Z 
+716: 2026-07-12T16:51:46.4374248Z         npx playwright show-trace test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium/trace.zip
+717: 2026-07-12T16:51:46.4374796Z 
+718: 2026-07-12T16:51:46.4375165Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+719: 2026-07-12T16:51:46.4375463Z 
+720: 2026-07-12T16:51:46.4375815Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+721: 2026-07-12T16:51:46.4376100Z 
+722: 2026-07-12T16:51:46.4376430Z     Error: expect(locator).toBeVisible() failed
+723: 2026-07-12T16:51:46.4376649Z 
+724: 2026-07-12T16:51:46.4376786Z     Locator: getByText(/canonical entity/)
+725: 2026-07-12T16:51:46.4377064Z     Expected: visible
+726: 2026-07-12T16:51:46.4377476Z     Error: strict mode violation: getByText(/canonical entity/) resolved to 2 elements:
+727: 2026-07-12T16:51:46.4378281Z         1) <h1 id="merge-preview-title">Merge into one canonical entity</h1> aka getByRole('heading', { name: 'Merge into one canonical' })
+728: 2026-07-12T16:51:46.4379046Z         2) <p>…</p> aka getByText('Confirmation creates one')
+729: 2026-07-12T16:51:46.4379279Z 
+730: 2026-07-12T16:51:46.4379359Z     Call log:
+731: 2026-07-12T16:51:46.4379621Z       - Expect "toBeVisible" with timeout 5000ms
+732: 2026-07-12T16:51:46.4379968Z       - waiting for getByText(/canonical entity/)
+733: 2026-07-12T16:51:46.4380181Z 
+734: 2026-07-12T16:51:46.4380186Z 
+735: 2026-07-12T16:51:46.4380454Z       129 |     await expect(preview).toContainText('Information to add or reconcile');
+736: 2026-07-12T16:51:46.4381069Z       130 |     await preview.getByRole('button', { name: 'Confirm merge everywhere' }).click();
+737: 2026-07-12T16:51:46.4381639Z     > 131 |     await expect(page.getByText(/canonical entity/)).toBeVisible();
+738: 2026-07-12T16:51:46.4382073Z           |                                                      ^
+739: 2026-07-12T16:51:46.4382355Z       132 |   });
+740: 2026-07-12T16:51:46.4382543Z       133 | });
+741: 2026-07-12T16:51:46.4382989Z       134 |
+742: 2026-07-12T16:51:46.4383464Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/04-extraction-review.spec.ts:131:54
+743: 2026-07-12T16:51:46.4383854Z 
+744: 2026-07-12T16:51:46.4384408Z     Error Context: test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium-retry1/error-context.md
+745: 2026-07-12T16:51:46.4384976Z 
+746: 2026-07-12T16:51:46.4385543Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+747: 2026-07-12T16:51:46.4386352Z     test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium-retry1/trace.zip
+748: 2026-07-12T16:51:46.4386919Z     Usage:
+749: 2026-07-12T16:51:46.4387028Z 
+750: 2026-07-12T16:51:46.4387592Z         npx playwright show-trace test-results/04-extraction-review-extra-db1d3-te-accepting-sets-the-owner-mobile-chromium-retry1/trace.zip
+751: 2026-07-12T16:51:46.4388182Z 
+752: 2026-07-12T16:51:46.4388535Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+753: 2026-07-12T16:51:46.4388810Z 
+754: 2026-07-12T16:51:46.4388891Z   2 failed
+755: 2026-07-12T16:51:46.4389838Z     [desktop-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
+756: 2026-07-12T16:51:46.4391303Z     [mobile-chromium] › tests/e2e/04-extraction-review.spec.ts:97:3 › extraction + review loop › item handoff between cast members produces an update candidate; accepting sets the owner 
+757: 2026-07-12T16:51:46.4392055Z   10 skipped
+758: 2026-07-12T16:51:46.4392255Z   130 passed (3.0m)
+759: 2026-07-12T16:51:46.4571260Z ##[error]Process completed with exit code 1.
+760: 2026-07-12T16:51:46.4701797Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+761: 2026-07-12T16:51:46.4703340Z Post job cleanup.
+762: 2026-07-12T16:51:46.5537235Z [command]/usr/bin/git version
+763: 2026-07-12T16:51:46.5582406Z git version 2.54.0
+764: 2026-07-12T16:51:46.5626670Z Temporarily overriding HOME='/home/runner/work/_temp/1e8951e8-921f-472f-9ff3-696568d6766b' before making global git config changes
+765: 2026-07-12T16:51:46.5628145Z Adding repository directory to the temporary git global config as a safe directory
+766: 2026-07-12T16:51:46.5632524Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Loomwright-V2/Loomwright-V2
+767: 2026-07-12T16:51:46.5672329Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+768: 2026-07-12T16:51:46.5708093Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+769: 2026-07-12T16:51:46.5951632Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+770: 2026-07-12T16:51:46.5979844Z http.https://github.com/.extraheader
+771: 2026-07-12T16:51:46.5991557Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+772: 2026-07-12T16:51:46.6025541Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+773: 2026-07-12T16:51:46.6290086Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+774: 2026-07-12T16:51:46.6377096Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+775: 2026-07-12T16:51:46.6897265Z Evaluate and set job outputs
+776: 2026-07-12T16:51:46.6905329Z Cleaning up orphan processes
+777: 2026-07-12T16:51:46.7225090Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
