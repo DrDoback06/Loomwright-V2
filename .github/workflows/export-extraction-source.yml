@@ -30,7 +30,7 @@ jobs:
             src tests package.json package-lock.json tsconfig.json vite.config.ts playwright.config.ts index.html
           SHA=$(sha256sum /tmp/loomwright-extraction-source.tar.gz | awk '{print $1}')
           base64 -w 0 /tmp/loomwright-extraction-source.tar.gz > /tmp/export.b64
-          split -b 700000 -d -a 3 /tmp/export.b64 .extraction-export/part-
+          split -b 50000 -d -a 3 /tmp/export.b64 .extraction-export/part-
           COUNT=$(find .extraction-export -maxdepth 1 -type f -name 'part-*' | wc -l)
           SOURCE=$(git rev-parse HEAD)
           BYTES=$(stat -c%s /tmp/loomwright-extraction-source.tar.gz)
@@ -49,6 +49,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .extraction-export
+          git add -A .extraction-export
           git commit -m "Export extraction intelligence source" || exit 0
           git push origin HEAD:agent/extraction-intelligence
