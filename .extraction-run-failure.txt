@@ -1,100 +1,217 @@
-2026-07-12T18:36:36.4168323Z hint: 'development'. The just-created branch can be renamed via this command:
-2026-07-12T18:36:36.4168999Z hint:
-2026-07-12T18:36:36.4169414Z hint: 	git branch -m <name>
-2026-07-12T18:36:36.4170064Z hint:
-2026-07-12T18:36:36.4171024Z hint: Disable this message with "git config set advice.defaultBranchName false"
-2026-07-12T18:36:36.4175800Z Initialized empty Git repository in /home/runner/work/Loomwright-V2/Loomwright-V2/.git/
-2026-07-12T18:36:36.4185441Z [command]/usr/bin/git remote add origin https://github.com/DrDoback06/Loomwright-V2
-2026-07-12T18:36:36.4220827Z ##[endgroup]
-2026-07-12T18:36:36.4222022Z ##[group]Disabling automatic garbage collection
-2026-07-12T18:36:36.4224812Z [command]/usr/bin/git config --local gc.auto 0
-2026-07-12T18:36:36.4248920Z ##[endgroup]
-2026-07-12T18:36:36.4250283Z ##[group]Setting up auth
-2026-07-12T18:36:36.4255956Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
-2026-07-12T18:36:36.4284376Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
-2026-07-12T18:36:36.4576534Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
-2026-07-12T18:36:36.4605014Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
-2026-07-12T18:36:36.4795619Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
-2026-07-12T18:36:36.4824087Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
-2026-07-12T18:36:36.4993283Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
-2026-07-12T18:36:36.5022046Z ##[endgroup]
-2026-07-12T18:36:36.5022835Z ##[group]Fetching the repository
-2026-07-12T18:36:36.5031425Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +refs/heads/agent/extraction-intelligence*:refs/remotes/origin/agent/extraction-intelligence* +refs/tags/agent/extraction-intelligence*:refs/tags/agent/extraction-intelligence*
-2026-07-12T18:36:37.6324351Z From https://github.com/DrDoback06/Loomwright-V2
-2026-07-12T18:36:37.6326405Z  * [new branch]      agent/extraction-intelligence -> origin/agent/extraction-intelligence
-2026-07-12T18:36:37.6360893Z ##[endgroup]
-2026-07-12T18:36:37.6368110Z ##[group]Determining the checkout info
-2026-07-12T18:36:37.6370087Z [command]/usr/bin/git branch --list --remote origin/agent/extraction-intelligence
-2026-07-12T18:36:37.6383701Z   origin/agent/extraction-intelligence
-2026-07-12T18:36:37.6390879Z ##[endgroup]
-2026-07-12T18:36:37.6394177Z [command]/usr/bin/git sparse-checkout disable
-2026-07-12T18:36:37.6431384Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
-2026-07-12T18:36:37.6454062Z ##[group]Checking out the ref
-2026-07-12T18:36:37.6457714Z [command]/usr/bin/git checkout --progress --force -B agent/extraction-intelligence refs/remotes/origin/agent/extraction-intelligence
-2026-07-12T18:36:37.7584781Z Switched to a new branch 'agent/extraction-intelligence'
-2026-07-12T18:36:37.7590485Z branch 'agent/extraction-intelligence' set up to track 'origin/agent/extraction-intelligence'.
-2026-07-12T18:36:37.7599582Z ##[endgroup]
-2026-07-12T18:36:37.7638521Z [command]/usr/bin/git log -1 --format=%H
-2026-07-12T18:36:37.7661244Z f792fa944c7cf6be4684e8861a6d018bbe579e84
-2026-07-12T18:36:37.7869036Z ##[group]Run set -euo pipefail
-2026-07-12T18:36:37.7870670Z [36;1mset -euo pipefail[0m
-2026-07-12T18:36:37.7872526Z [36;1mtest "$(find .extraction-payload -maxdepth 1 -type f -name 'part-*' | wc -l)" -eq 4[0m
-2026-07-12T18:36:37.7875814Z [36;1mecho "4e6343a18b0942d0b1a598d2e3984f322ab0d68aae7de7061cfcdbde65e3cb21  .extraction-payload/part-00" | sha256sum -c -[0m
-2026-07-12T18:36:37.7879739Z [36;1mecho "37f9fbc9662eb66f0f9332be1cf77184811d8871d3f0f715da26c2fdaed4936a  .extraction-payload/part-01" | sha256sum -c -[0m
-2026-07-12T18:36:37.7883854Z [36;1mecho "3bf9fe464c6bed6bf468ac086a779c088c0f8d2b6d6cdda310a1f4e110e7015c  .extraction-payload/part-02" | sha256sum -c -[0m
-2026-07-12T18:36:37.7887788Z [36;1mecho "eb15fad88eab674c87a6bfeb39b88485503128a8471677a22c0b66bf725d7871  .extraction-payload/part-03" | sha256sum -c -[0m
-2026-07-12T18:36:37.7891136Z [36;1mcat .extraction-payload/part-* > /tmp/extraction-intelligence.b64[0m
-2026-07-12T18:36:37.7893258Z [36;1mtest "$(stat -c%s /tmp/extraction-intelligence.b64)" -eq 67012[0m
-2026-07-12T18:36:37.7895590Z [36;1mbase64 --decode /tmp/extraction-intelligence.b64 > /tmp/extraction-intelligence.tar.gz[0m
-2026-07-12T18:36:37.7897997Z [36;1mtest "$(stat -c%s /tmp/extraction-intelligence.tar.gz)" -eq 50257[0m
-2026-07-12T18:36:37.7901139Z [36;1mecho "89a4db165e9b516bb6d3325d734d14edd80badc285ebec5a195a25b52ad6736d  /tmp/extraction-intelligence.tar.gz" | sha256sum -c -[0m
-2026-07-12T18:36:37.7903722Z [36;1m[0m
-2026-07-12T18:36:37.7905523Z [36;1mtar -tzf /tmp/extraction-intelligence.tar.gz | sed 's#^\./##' | grep -v '/$' | sort > /tmp/archive-paths.txt[0m
-2026-07-12T18:36:37.7907760Z [36;1mcat > /tmp/expected-paths.txt <<'EOF'[0m
-2026-07-12T18:36:37.7909107Z [36;1msrc/db/repos/review.ts[0m
-2026-07-12T18:36:37.7910444Z [36;1msrc/features/review/ReviewSurface.tsx[0m
-2026-07-12T18:36:37.7911864Z [36;1msrc/features/shell/ProjectGate.tsx[0m
-2026-07-12T18:36:37.7913325Z [36;1msrc/features/writers-room/WritersRoom.tsx[0m
-2026-07-12T18:36:37.7914788Z [36;1msrc/services/ai/ai-candidates.ts[0m
-2026-07-12T18:36:37.7916164Z [36;1msrc/services/extraction/discovery.ts[0m
-2026-07-12T18:36:37.7917562Z [36;1msrc/services/extraction/engine.ts[0m
-2026-07-12T18:36:37.7918945Z [36;1msrc/services/extraction/known-index.ts[0m
-2026-07-12T18:36:37.7920535Z [36;1msrc/services/extraction/rebuild.ts[0m
-2026-07-12T18:36:37.7921906Z [36;1msrc/services/extraction/session.ts[0m
-2026-07-12T18:36:37.7923429Z [36;1msrc/services/extraction/surface-intelligence.ts[0m
-2026-07-12T18:36:37.7924912Z [36;1msrc/styles/components.css[0m
-2026-07-12T18:36:37.7926696Z [36;1mtests/fixtures/extraction/17-compliance-run-noise-control.fixture.cjs[0m
-2026-07-12T18:36:37.7928547Z [36;1mtests/unit/ai-layer.spec.ts[0m
-2026-07-12T18:36:37.7929966Z [36;1mtests/unit/extraction-fixtures.spec.ts[0m
-2026-07-12T18:36:37.7931400Z [36;1mtests/unit/extraction-rebuild.spec.ts[0m
-2026-07-12T18:36:37.7932650Z [36;1mEOF[0m
-2026-07-12T18:36:37.7933849Z [36;1msort -o /tmp/expected-paths.txt /tmp/expected-paths.txt[0m
-2026-07-12T18:36:37.7935612Z [36;1mdiff -u /tmp/expected-paths.txt /tmp/archive-paths.txt[0m
-2026-07-12T18:36:37.7937941Z [36;1mtest "$(tar -tvzf /tmp/extraction-intelligence.tar.gz | awk '$1 ~ /^l/ {count++} END {print count+0}')" -eq 0[0m
-2026-07-12T18:36:37.7940293Z [36;1mtar -xzf /tmp/extraction-intelligence.tar.gz[0m
-2026-07-12T18:36:37.7941827Z [36;1mrm -rf .extraction-payload .extraction-export[0m
-2026-07-12T18:36:37.7943444Z [36;1mrm -f .github/workflows/export-extraction-source.yml[0m
-2026-07-12T18:36:37.7944880Z [36;1mgit diff --check[0m
-2026-07-12T18:36:37.8064945Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
-2026-07-12T18:36:37.8066551Z ##[endgroup]
-2026-07-12T18:36:37.8175463Z .extraction-payload/part-00: OK
-2026-07-12T18:36:37.8189411Z sha256sum: WARNING: 1 computed checksum did NOT match
-2026-07-12T18:36:37.8192083Z .extraction-payload/part-01: FAILED
-2026-07-12T18:36:37.8205233Z ##[error]Process completed with exit code 1.
-2026-07-12T18:36:37.8534666Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-2026-07-12T18:36:37.8539325Z Post job cleanup.
-2026-07-12T18:36:37.9356847Z [command]/usr/bin/git version
-2026-07-12T18:36:37.9396065Z git version 2.54.0
-2026-07-12T18:36:37.9434901Z Temporarily overriding HOME='/home/runner/work/_temp/aa9087ad-42d9-41de-87a8-4421f92a43e8' before making global git config changes
-2026-07-12T18:36:37.9440339Z Adding repository directory to the temporary git global config as a safe directory
-2026-07-12T18:36:37.9444807Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Loomwright-V2/Loomwright-V2
-2026-07-12T18:36:37.9473128Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
-2026-07-12T18:36:37.9511007Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
-2026-07-12T18:36:37.9693774Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
-2026-07-12T18:36:37.9715629Z http.https://github.com/.extraheader
-2026-07-12T18:36:37.9726305Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
-2026-07-12T18:36:37.9754277Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
-2026-07-12T18:36:37.9949060Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
-2026-07-12T18:36:37.9976640Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
-2026-07-12T18:36:38.0354476Z Cleaning up orphan processes
-2026-07-12T18:36:38.0682252Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+591: 2026-07-12T18:44:53.0976882Z 
+592: 2026-07-12T18:44:53.0977216Z > loomwright-v2@2.0.0 test:e2e
+593: 2026-07-12T18:44:53.0977587Z > playwright test
+594: 2026-07-12T18:44:53.0977742Z 
+595: 2026-07-12T18:44:57.6816042Z 
+596: 2026-07-12T18:44:57.6816750Z Running 142 tests using 2 workers
+597: 2026-07-12T18:45:55.8158216Z ··························°·······×····F::error file=tests/e2e/09-ai.spec.ts,title=[desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline,line=136,col=69::  1) [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline %0A    Error: expect(locator).toBeVisible() failed%0A%0A    Locator: getByRole('button', { name: /Vraska Pass/ })%0A    Expected: visible%0A    Timeout: 5000ms%0A    Error: element(s) not found%0A%0A    Call log:%0A      - Expect "toBeVisible" with timeout 5000ms%0A      - waiting for getByRole('button', { name: /Vraska Pass/ })%0A%0A%0A      134 |       .click();%0A      135 |     await openNav(page, 'Locations');%0A    > 136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();%0A          |                                                                     ^%0A      137 |   });%0A      138 |%0A      139 |   test('local-only mode hides every AI entry point', async ({ page }) => {%0A        at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:136:69
+598: 2026-07-12T18:45:55.8193402Z ##[error]  1) [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
+599: 
+600:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+601:     Error: expect(locator).toBeVisible() failed
+602: 
+603:     Locator: getByRole('button', { name: /Vraska Pass/ })
+604:     Expected: visible
+605:     Timeout: 5000ms
+606:     Error: element(s) not found
+607: 
+608:     Call log:
+609:       - Expect "toBeVisible" with timeout 5000ms
+610:       - waiting for getByRole('button', { name: /Vraska Pass/ })
+611: 
+612: 
+613:       134 |       .click();
+614:       135 |     await openNav(page, 'Locations');
+615:     > 136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
+616:           |                                                                     ^
+617:       137 |   });
+618:       138 |
+619:       139 |   test('local-only mode hides every AI entry point', async ({ page }) => {
+620:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:136:69
+621: 2026-07-12T18:46:53.8539407Z ········································
+622: 2026-07-12T18:48:14.4673786Z ··········°·°···°°·°°······×·······F::error file=tests/e2e/09-ai.spec.ts,title=[mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline,line=136,col=69::  2) [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline %0A    Error: expect(locator).toBeVisible() failed%0A%0A    Locator: getByRole('button', { name: /Vraska Pass/ })%0A    Expected: visible%0A    Timeout: 5000ms%0A    Error: element(s) not found%0A%0A    Call log:%0A      - Expect "toBeVisible" with timeout 5000ms%0A      - waiting for getByRole('button', { name: /Vraska Pass/ })%0A%0A%0A      134 |       .click();%0A      135 |     await openNav(page, 'Locations');%0A    > 136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();%0A          |                                                                     ^%0A      137 |   });%0A      138 |%0A      139 |   test('local-only mode hides every AI entry point', async ({ page }) => {%0A        at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:136:69
+623: 2026-07-12T18:48:14.4690536Z ##[error]  2) [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
+624: 
+625:     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+626:     Error: expect(locator).toBeVisible() failed
+627: 
+628:     Locator: getByRole('button', { name: /Vraska Pass/ })
+629:     Expected: visible
+630:     Timeout: 5000ms
+631:     Error: element(s) not found
+632: 
+633:     Call log:
+634:       - Expect "toBeVisible" with timeout 5000ms
+635:       - waiting for getByRole('button', { name: /Vraska Pass/ })
+636: 
+637: 
+638:       134 |       .click();
+639:       135 |     await openNav(page, 'Locations');
+640:     > 136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
+641:           |                                                                     ^
+642:       137 |   });
+643:       138 |
+644:       139 |   test('local-only mode hides every AI entry point', async ({ page }) => {
+645:         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:136:69
+646: 2026-07-12T18:49:16.3856617Z ·°·······················°°·
+647: 2026-07-12T18:49:16.3886566Z ##[notice]  2 failed
+648:     [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
+649:     [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
+650:   10 skipped
+651:   130 passed (4.4m)
+652: 2026-07-12T18:49:16.3890500Z 
+653: 2026-07-12T18:49:16.3893630Z   1) [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
+654: 2026-07-12T18:49:16.3894570Z 
+655: 2026-07-12T18:49:16.3895450Z     Error: expect(locator).toBeVisible() failed
+656: 2026-07-12T18:49:16.3896122Z 
+657: 2026-07-12T18:49:16.3896594Z     Locator: getByRole('button', { name: /Vraska Pass/ })
+658: 2026-07-12T18:49:16.3897217Z     Expected: visible
+659: 2026-07-12T18:49:16.3897583Z     Timeout: 5000ms
+660: 2026-07-12T18:49:16.3897961Z     Error: element(s) not found
+661: 2026-07-12T18:49:16.3898212Z 
+662: 2026-07-12T18:49:16.3898347Z     Call log:
+663: 2026-07-12T18:49:16.3898711Z       - Expect "toBeVisible" with timeout 5000ms
+664: 2026-07-12T18:49:16.3899149Z       - waiting for getByRole('button', { name: /Vraska Pass/ })
+665: 2026-07-12T18:49:16.3899424Z 
+666: 2026-07-12T18:49:16.3899429Z 
+667: 2026-07-12T18:49:16.3899527Z       134 |       .click();
+668: 2026-07-12T18:49:16.3900066Z       135 |     await openNav(page, 'Locations');
+669: 2026-07-12T18:49:16.3900801Z     > 136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
+670: 2026-07-12T18:49:16.3901642Z           |                                                                     ^
+671: 2026-07-12T18:49:16.3902021Z       137 |   });
+672: 2026-07-12T18:49:16.3902222Z       138 |
+673: 2026-07-12T18:49:16.3902600Z       139 |   test('local-only mode hides every AI entry point', async ({ page }) => {
+674: 2026-07-12T18:49:16.3903183Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:136:69
+675: 2026-07-12T18:49:16.3903514Z 
+676: 2026-07-12T18:49:16.3904297Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium/error-context.md
+677: 2026-07-12T18:49:16.3904820Z 
+678: 2026-07-12T18:49:16.3905244Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+679: 2026-07-12T18:49:16.3906048Z     test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium/trace.zip
+680: 2026-07-12T18:49:16.3906544Z     Usage:
+681: 2026-07-12T18:49:16.3906650Z 
+682: 2026-07-12T18:49:16.3907224Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium/trace.zip
+683: 2026-07-12T18:49:16.3907725Z 
+684: 2026-07-12T18:49:16.3908073Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+685: 2026-07-12T18:49:16.3908632Z 
+686: 2026-07-12T18:49:16.3908988Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+687: 2026-07-12T18:49:16.3909263Z 
+688: 2026-07-12T18:49:16.3909418Z     Error: expect(locator).toBeVisible() failed
+689: 2026-07-12T18:49:16.3909620Z 
+690: 2026-07-12T18:49:16.3910011Z     Locator: getByRole('button', { name: /Vraska Pass/ })
+691: 2026-07-12T18:49:16.3910337Z     Expected: visible
+692: 2026-07-12T18:49:16.3910579Z     Timeout: 5000ms
+693: 2026-07-12T18:49:16.3910821Z     Error: element(s) not found
+694: 2026-07-12T18:49:16.3910981Z 
+695: 2026-07-12T18:49:16.3911068Z     Call log:
+696: 2026-07-12T18:49:16.3911326Z       - Expect "toBeVisible" with timeout 5000ms
+697: 2026-07-12T18:49:16.3911718Z       - waiting for getByRole('button', { name: /Vraska Pass/ })
+698: 2026-07-12T18:49:16.3911965Z 
+699: 2026-07-12T18:49:16.3911971Z 
+700: 2026-07-12T18:49:16.3912063Z       134 |       .click();
+701: 2026-07-12T18:49:16.3912352Z       135 |     await openNav(page, 'Locations');
+702: 2026-07-12T18:49:16.3912840Z     > 136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
+703: 2026-07-12T18:49:16.3913342Z           |                                                                     ^
+704: 2026-07-12T18:49:16.3913645Z       137 |   });
+705: 2026-07-12T18:49:16.3913840Z       138 |
+706: 2026-07-12T18:49:16.3914198Z       139 |   test('local-only mode hides every AI entry point', async ({ page }) => {
+707: 2026-07-12T18:49:16.3914771Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:136:69
+708: 2026-07-12T18:49:16.3915255Z 
+709: 2026-07-12T18:49:16.3915898Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium-retry1/error-context.md
+710: 2026-07-12T18:49:16.3916416Z 
+711: 2026-07-12T18:49:16.3916814Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+712: 2026-07-12T18:49:16.3917627Z     test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium-retry1/trace.zip
+713: 2026-07-12T18:49:16.3918161Z     Usage:
+714: 2026-07-12T18:49:16.3918269Z 
+715: 2026-07-12T18:49:16.3918876Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-desktop-chromium-retry1/trace.zip
+716: 2026-07-12T18:49:16.3919401Z 
+717: 2026-07-12T18:49:16.3920407Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+718: 2026-07-12T18:49:16.3920894Z 
+719: 2026-07-12T18:49:16.3922090Z   2) [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
+720: 2026-07-12T18:49:16.3922916Z 
+721: 2026-07-12T18:49:16.3923142Z     Error: expect(locator).toBeVisible() failed
+722: 2026-07-12T18:49:16.3930193Z 
+723: 2026-07-12T18:49:16.3930518Z     Locator: getByRole('button', { name: /Vraska Pass/ })
+724: 2026-07-12T18:49:16.3931030Z     Expected: visible
+725: 2026-07-12T18:49:16.3931350Z     Timeout: 5000ms
+726: 2026-07-12T18:49:16.3931698Z     Error: element(s) not found
+727: 2026-07-12T18:49:16.3931936Z 
+728: 2026-07-12T18:49:16.3932313Z     Call log:
+729: 2026-07-12T18:49:16.3932911Z       - Expect "toBeVisible" with timeout 5000ms
+730: 2026-07-12T18:49:16.3933690Z       - waiting for getByRole('button', { name: /Vraska Pass/ })
+731: 2026-07-12T18:49:16.3934175Z 
+732: 2026-07-12T18:49:16.3934182Z 
+733: 2026-07-12T18:49:16.3934387Z       134 |       .click();
+734: 2026-07-12T18:49:16.3935083Z       135 |     await openNav(page, 'Locations');
+735: 2026-07-12T18:49:16.3935956Z     > 136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
+736: 2026-07-12T18:49:16.3936934Z           |                                                                     ^
+737: 2026-07-12T18:49:16.3937603Z       137 |   });
+738: 2026-07-12T18:49:16.3938002Z       138 |
+739: 2026-07-12T18:49:16.3938792Z       139 |   test('local-only mode hides every AI entry point', async ({ page }) => {
+740: 2026-07-12T18:49:16.3939975Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:136:69
+741: 2026-07-12T18:49:16.3940575Z 
+742: 2026-07-12T18:49:16.3941733Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium/error-context.md
+743: 2026-07-12T18:49:16.3942617Z 
+744: 2026-07-12T18:49:16.3943314Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+745: 2026-07-12T18:49:16.3958144Z     test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium/trace.zip
+746: 2026-07-12T18:49:16.3959348Z     Usage:
+747: 2026-07-12T18:49:16.3959526Z 
+748: 2026-07-12T18:49:16.3960724Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium/trace.zip
+749: 2026-07-12T18:49:16.3961581Z 
+750: 2026-07-12T18:49:16.3962192Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+751: 2026-07-12T18:49:16.3962659Z 
+752: 2026-07-12T18:49:16.3963227Z     Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+753: 2026-07-12T18:49:16.3963674Z 
+754: 2026-07-12T18:49:16.3963909Z     Error: expect(locator).toBeVisible() failed
+755: 2026-07-12T18:49:16.3964214Z 
+756: 2026-07-12T18:49:16.3964470Z     Locator: getByRole('button', { name: /Vraska Pass/ })
+757: 2026-07-12T18:49:16.3964909Z     Expected: visible
+758: 2026-07-12T18:49:16.3965204Z     Timeout: 5000ms
+759: 2026-07-12T18:49:16.3965547Z     Error: element(s) not found
+760: 2026-07-12T18:49:16.3965790Z 
+761: 2026-07-12T18:49:16.3965912Z     Call log:
+762: 2026-07-12T18:49:16.3966270Z       - Expect "toBeVisible" with timeout 5000ms
+763: 2026-07-12T18:49:16.3966869Z       - waiting for getByRole('button', { name: /Vraska Pass/ })
+764: 2026-07-12T18:49:16.3967230Z 
+765: 2026-07-12T18:49:16.3967238Z 
+766: 2026-07-12T18:49:16.3967354Z       134 |       .click();
+767: 2026-07-12T18:49:16.3967751Z       135 |     await openNav(page, 'Locations');
+768: 2026-07-12T18:49:16.3968445Z     > 136 |     await expect(page.getByRole('button', { name: /Vraska Pass/ })).toBeVisible();
+769: 2026-07-12T18:49:16.3969153Z           |                                                                     ^
+770: 2026-07-12T18:49:16.3969584Z       137 |   });
+771: 2026-07-12T18:49:16.3969995Z       138 |
+772: 2026-07-12T18:49:16.3970514Z       139 |   test('local-only mode hides every AI entry point', async ({ page }) => {
+773: 2026-07-12T18:49:16.3971340Z         at /home/runner/work/Loomwright-V2/Loomwright-V2/tests/e2e/09-ai.spec.ts:136:69
+774: 2026-07-12T18:49:16.3971805Z 
+775: 2026-07-12T18:49:16.3972734Z     Error Context: test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium-retry1/error-context.md
+776: 2026-07-12T18:49:16.3973498Z 
+777: 2026-07-12T18:49:16.3974072Z     attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+778: 2026-07-12T18:49:16.3975278Z     test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium-retry1/trace.zip
+779: 2026-07-12T18:49:16.3976035Z     Usage:
+780: 2026-07-12T18:49:16.3976188Z 
+781: 2026-07-12T18:49:16.3977115Z         npx playwright show-trace test-results/09-ai-AI-layer-mocked-prov-a84f5-d-in-review-—-fully-offline-mobile-chromium-retry1/trace.zip
+782: 2026-07-12T18:49:16.3978085Z 
+783: 2026-07-12T18:49:16.3978608Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+784: 2026-07-12T18:49:16.3979009Z 
+785: 2026-07-12T18:49:16.3979117Z   2 failed
+786: 2026-07-12T18:49:16.3980399Z     [desktop-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
+787: 2026-07-12T18:49:16.3982238Z     [mobile-chromium] › tests/e2e/09-ai.spec.ts:110:3 › AI layer (mocked providers) › handoff: build pack, paste reply, candidates land in review — fully offline 
+788: 2026-07-12T18:49:16.3983245Z   10 skipped
+789: 2026-07-12T18:49:16.3983551Z   130 passed (4.4m)
+790: 2026-07-12T18:49:16.4154111Z ##[error]Process completed with exit code 1.
+791: 2026-07-12T18:49:16.4289137Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+792: 2026-07-12T18:49:16.4290610Z Post job cleanup.
+793: 2026-07-12T18:49:16.5180670Z [command]/usr/bin/git version
+794: 2026-07-12T18:49:16.5256539Z git version 2.54.0
+795: 2026-07-12T18:49:16.5294688Z Temporarily overriding HOME='/home/runner/work/_temp/73cf1acd-9248-4c14-8ed6-d996a570443a' before making global git config changes
+796: 2026-07-12T18:49:16.5296429Z Adding repository directory to the temporary git global config as a safe directory
+797: 2026-07-12T18:49:16.5300341Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Loomwright-V2/Loomwright-V2
+798: 2026-07-12T18:49:16.5341820Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+799: 2026-07-12T18:49:16.5379149Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+800: 2026-07-12T18:49:16.5647430Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+801: 2026-07-12T18:49:16.5680376Z http.https://github.com/.extraheader
+802: 2026-07-12T18:49:16.5694469Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+803: 2026-07-12T18:49:16.5732568Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+804: 2026-07-12T18:49:16.5990054Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+805: 2026-07-12T18:49:16.6026553Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+806: 2026-07-12T18:49:16.6510673Z Cleaning up orphan processes
+807: 2026-07-12T18:49:16.6835105Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
