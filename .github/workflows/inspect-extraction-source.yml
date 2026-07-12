@@ -1,4 +1,4 @@
-name: Inspect Loomwright extraction source
+name: Inspect Loomwright extraction CI
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   inspect:
@@ -16,31 +17,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/review-identity-resolution
-          fetch-depth: 1
-      - name: Locate extraction pipeline
-        shell: bash
-        run: |
-          set -euo pipefail
-          {
-            echo '## FILES'
-            find src tests -type f | sort
-            echo
-            echo '## EXTRACTION REFERENCES'
-            grep -RInE "extract|candidate|recurrence|loc-prep|confidenceBand|suggestedAction|canonical|possessive" src tests --include='*.ts' --include='*.tsx' | head -n 5000 || true
-          } > /tmp/extraction-source-report.txt
-      - uses: actions/checkout@v4
-        with:
           ref: main
-          path: control
           fetch-depth: 1
-      - name: Commit report
-        shell: bash
+      - name: Capture latest extraction CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          cp /tmp/extraction-source-report.txt control/.extraction-source-report.txt
-          cd control
+          gh api "repos/$REPO/actions/runs?branch=agent/review-identity-resolution&per_page=10" \
+            --jq '{runs: [.workflow_runs[] | select(.name == "Review Identity CI") | {id,status,conclusion,head_sha,created_at,updated_at,html_url}]}' \
+            > .extraction-ci.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .extraction-source-report.txt
-          git commit -m "Record extraction source map" || exit 0
+          git add .extraction-ci.json
+          git commit -m "Record extraction quality CI" || exit 0
           git push origin HEAD:main
