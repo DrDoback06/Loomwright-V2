@@ -1,0 +1,32 @@
+name: Export review implementation source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/export-review-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/review-identity-resolution
+          fetch-depth: 1
+      - name: Upload TypeScript source
+        uses: actions/upload-artifact@v4
+        with:
+          name: loomwright-review-source
+          path: |
+            src
+            tests
+            package.json
+            package-lock.json
+            tsconfig*.json
+            vite.config.ts
+          retention-days: 1
