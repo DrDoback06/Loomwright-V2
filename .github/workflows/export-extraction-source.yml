@@ -1,0 +1,54 @@
+name: Export extraction intelligence source
+
+on:
+  push:
+    branches:
+      - agent/extraction-intelligence
+    paths:
+      - .github/workflows/export-extraction-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/extraction-intelligence
+          fetch-depth: 1
+
+      - name: Package the TypeScript source and tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .extraction-export
+          mkdir -p .extraction-export
+          tar -czf /tmp/loomwright-extraction-source.tar.gz \
+            src tests package.json package-lock.json tsconfig.json vite.config.ts playwright.config.ts index.html
+          SHA=$(sha256sum /tmp/loomwright-extraction-source.tar.gz | awk '{print $1}')
+          base64 -w 0 /tmp/loomwright-extraction-source.tar.gz > /tmp/export.b64
+          split -b 700000 -d -a 3 /tmp/export.b64 .extraction-export/part-
+          COUNT=$(find .extraction-export -maxdepth 1 -type f -name 'part-*' | wc -l)
+          SOURCE=$(git rev-parse HEAD)
+          BYTES=$(stat -c%s /tmp/loomwright-extraction-source.tar.gz)
+          cat > .extraction-export/manifest.json <<JSON
+          {
+            "sourceSha": "$SOURCE",
+            "archiveSha256": "$SHA",
+            "archiveBytes": $BYTES,
+            "chunkCount": $COUNT,
+            "chunkPattern": ".extraction-export/part-%03d"
+          }
+          JSON
+
+      - name: Commit export chunks
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .extraction-export
+          git commit -m "Export extraction intelligence source" || exit 0
+          git push origin HEAD:agent/extraction-intelligence
