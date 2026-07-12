@@ -1,0 +1,21 @@
+{
+  "sourceSha": "1642f1bbe468383078b659d39d1ef35361bd97d6",
+  "releaseRunId": 29201245976,
+  "deploymentId": 5414442920,
+  "deploymentState": "success",
+  "deploymentEnvironmentUrl": "https://drdoback06.github.io/Loomwright-V2/",
+  "liveManifest": {
+    "application": "loomwright-review-identity-resolution",
+    "sourceBranch": "agent/review-identity-resolution",
+    "sourceSha": "1642f1bbe468383078b659d39d1ef35361bd97d6",
+    "verification": {
+      "typecheck": "passed",
+      "lint": "passed",
+      "unitTests": 98,
+      "browserTests": 132,
+      "browserTestsSkipped": 10,
+      "browserSuite": "passed-desktop-and-mobile",
+      "verifiedRunId": 29201028705
+    }
+  }
+}
