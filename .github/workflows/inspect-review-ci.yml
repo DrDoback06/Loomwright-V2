@@ -1,0 +1,35 @@
+name: Inspect review identity CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/inspect-review-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Capture review CI runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          gh api "repos/$REPO/actions/runs?branch=agent/review-identity-resolution&per_page=20" \
+            --jq '{runs: [.workflow_runs[] | select(.name == "Review Identity CI") | {id, status, conclusion, head_sha, created_at, updated_at, html_url}]}' \
+            > .review-ci-inspection.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .review-ci-inspection.json
+          git commit -m "Record review identity CI inspection" || exit 0
+          git push origin HEAD:main
