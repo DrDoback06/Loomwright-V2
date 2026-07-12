@@ -1,0 +1,100 @@
+name: Diagnose previous Pages deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-pages-history.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+  deployments: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Capture Pages deployment and workflow history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          mkdir -p .loomwright-diagnostics
+          gh api "repos/$REPO/deployments?environment=github-pages&per_page=100" > .loomwright-diagnostics/pages-deployments.json
+          gh api "repos/$REPO/actions/runs?per_page=100" > .loomwright-diagnostics/workflow-runs.json
+          gh api "repos/$REPO/actions/artifacts?per_page=100" > .loomwright-diagnostics/workflow-artifacts.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('.loomwright-diagnostics')
+          deps = json.loads((root / 'pages-deployments.json').read_text())
+          runs = json.loads((root / 'workflow-runs.json').read_text()).get('workflow_runs', [])
+          arts = json.loads((root / 'workflow-artifacts.json').read_text()).get('artifacts', [])
+
+          summary = {
+              'deployments': [
+                  {
+                      'id': d.get('id'),
+                      'sha': d.get('sha'),
+                      'ref': d.get('ref'),
+                      'created_at': d.get('created_at'),
+                      'updated_at': d.get('updated_at'),
+                      'environment': d.get('environment'),
+                      'task': d.get('task'),
+                      'payload': d.get('payload'),
+                  }
+                  for d in deps
+              ],
+              'runs': [
+                  {
+                      'id': r.get('id'),
+                      'name': r.get('name'),
+                      'head_branch': r.get('head_branch'),
+                      'head_sha': r.get('head_sha'),
+                      'event': r.get('event'),
+                      'status': r.get('status'),
+                      'conclusion': r.get('conclusion'),
+                      'created_at': r.get('created_at'),
+                      'updated_at': r.get('updated_at'),
+                      'run_number': r.get('run_number'),
+                      'path': r.get('path'),
+                  }
+                  for r in runs
+                  if ('page' in (r.get('name') or '').lower()
+                      or 'deploy' in (r.get('name') or '').lower()
+                      or r.get('head_branch') == 'gh-pages')
+              ],
+              'artifacts': [
+                  {
+                      'id': a.get('id'),
+                      'name': a.get('name'),
+                      'size_in_bytes': a.get('size_in_bytes'),
+                      'expired': a.get('expired'),
+                      'created_at': a.get('created_at'),
+                      'expires_at': a.get('expires_at'),
+                      'workflow_run': a.get('workflow_run'),
+                  }
+                  for a in arts
+                  if 'page' in (a.get('name') or '').lower()
+              ],
+          }
+          (root / 'pages-history-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+          PY
+
+      - name: Commit diagnostic summary
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .loomwright-diagnostics/pages-history-summary.json
+          git commit -m "Record Pages deployment history" || exit 0
+          git push origin HEAD:main
