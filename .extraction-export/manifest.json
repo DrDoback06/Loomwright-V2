@@ -1,7 +1,7 @@
 {
-  "sourceSha": "e9f7086bbd0f06ae0ebe129dc60113d94e400314",
-  "archiveSha256": "8955fb7d9b9a4c3be846f9e77c27bf2771f0147a61abd8ca201b6720cfbf2c32",
-  "archiveBytes": 394783,
-  "chunkCount": 1,
+  "sourceSha": "8d1e348f3065cf1ed7be1e26a25589d8a0aa8f6a",
+  "archiveSha256": "2e1a22bf99507533161dfec7885f48731a2ab75f0bfd9d40e9e0801eebe5efc1",
+  "archiveBytes": 394775,
+  "chunkCount": 11,
   "chunkPattern": ".extraction-export/part-%03d"
 }
