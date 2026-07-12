@@ -13,10 +13,29 @@ export async function countPendingCandidates(projectId: string): Promise<number>
   return db.candidates.where('[projectId+status]').equals([projectId, 'pending']).count();
 }
 
+/** Remove only unresolved extraction proposals and their provisional mentions.
+ * Manuscript text, accepted/denied decisions, entities, identity lessons and
+ * canonical occurrences are untouched. */
+export async function clearPendingCandidates(projectId: string): Promise<number> {
+  const pending = await listPendingCandidates(projectId);
+  if (!pending.length) return 0;
+  const ids = pending.map((candidate) => candidate.id);
+  await db.transaction('rw', db.candidates, db.occurrences, async () => {
+    await db.occurrences.where('candidateId').anyOf(ids).delete();
+    await db.candidates.bulkDelete(ids);
+  });
+  await logAudit({
+    projectId,
+    action: 'review.clear-pending',
+    target: { table: 'candidates', id: projectId, label: 'Pending extraction queue' },
+    before: { pendingCount: ids.length },
+    after: { pendingCount: 0 },
+  });
+  return ids.length;
+}
+
 /** Apply one queue item through the same graph-safe merge engine used by the
- * full preview. This keeps direct/safe accepts fast while still producing a
- * receipt, learned identity rules, chapter-aware history, location visits,
- * occurrence relinking and cross-tab reference updates. */
+ * full preview. */
 export async function acceptCandidate(id: string): Promise<Entity | null> {
   const candidate = await db.candidates.get(id);
   if (!candidate || candidate.status !== 'pending') return null;
@@ -41,7 +60,6 @@ export async function denyCandidate(id: string): Promise<void> {
   const candidate = await db.candidates.get(id);
   if (!candidate || candidate.status !== 'pending') return;
   await db.candidates.update(id, { status: 'denied' });
-  // Remove the pending mentions tied to this candidate.
   await db.occurrences.where('candidateId').equals(id).delete();
   await logAudit({
     projectId: candidate.projectId,
@@ -51,19 +69,18 @@ export async function denyCandidate(id: string): Promise<void> {
 }
 
 export async function acceptAllCandidates(projectId: string, ids?: string[]): Promise<number> {
-  const pending = ids ?? (await listPendingCandidates(projectId)).map((c) => c.id);
+  const pending = ids ?? (await listPendingCandidates(projectId)).map((candidate) => candidate.id);
   let done = 0;
   for (const id of pending) {
     const entity = await acceptCandidate(id);
-    if (entity) done++;
+    if (entity) done += 1;
   }
   return done;
 }
 
 /** Insert fresh candidates for a chapter, replacing its pending ones. User
  * identity lessons live in their own table, so re-extraction can replace raw
- * rows without forgetting what Graham, Captain Graham, or any other accepted
- * surface means. */
+ * rows without forgetting accepted surfaces. */
 export async function replaceChapterCandidates(
   projectId: string,
   chapterId: string,
@@ -72,13 +89,13 @@ export async function replaceChapterCandidates(
   const priorPending = await db.candidates
     .where('[projectId+chapterId]')
     .equals([projectId, chapterId])
-    .filter((c) => c.status === 'pending')
+    .filter((candidate) => candidate.status === 'pending')
     .toArray();
-  await db.candidates.bulkDelete(priorPending.map((c) => c.id));
+  await db.candidates.bulkDelete(priorPending.map((candidate) => candidate.id));
 
   const now = Date.now();
-  const rows: ReviewCandidate[] = candidates.map((c) => ({
-    ...c,
+  const rows: ReviewCandidate[] = candidates.map((candidate) => ({
+    ...candidate,
     id: newId(),
     projectId,
     chapterId,
