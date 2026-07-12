@@ -1,5 +1,6 @@
 name: Inspect latest review identity CI
 
+# Refresh after corrected browser compatibility verification trigger.
 on:
   push:
     branches: [main]
