@@ -1,6 +1,5 @@
 name: Inspect extraction intelligence release
 
-# Refresh after connector-safe payload restaging.
 on:
   push:
     branches: [main]
@@ -20,16 +19,35 @@ jobs:
         with:
           ref: main
           fetch-depth: 1
-      - name: Capture extraction release state
+      - name: Capture extraction browser failures
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          JOB_ID: "86681296168"
         run: |
           gh api "repos/$REPO/actions/runs?branch=agent/extraction-intelligence&per_page=20" \
             --jq '{runs: [.workflow_runs[] | select(.name == "Apply extraction intelligence release") | {id,name,status,conclusion,head_sha,created_at,updated_at,html_url}]}' \
             > .extraction-run-state.json
+          gh api "repos/$REPO/actions/jobs/$JOB_ID/logs" > /tmp/extraction.log
+          python - <<'PY'
+          from pathlib import Path
+          lines = Path('/tmp/extraction.log').read_text(encoding='utf-8', errors='replace').splitlines()
+          needles = ('##[notice]', '##[error]', 'failed', 'timeout', 'strict mode violation', 'locator:', 'error: expect', 'error: locator', 'assertionerror')
+          hits, used = [], set()
+          for index, line in enumerate(lines):
+              if any(needle.lower() in line.lower() for needle in needles):
+                  for pos in range(max(0, index - 6), min(len(lines), index + 28)):
+                      if pos not in used:
+                          used.add(pos)
+                          hits.append((pos, lines[pos]))
+          hits.sort()
+          Path('.extraction-run-failure.txt').write_text(
+              '\n'.join(f'{pos + 1}: {line}' for pos, line in hits[-2200:]) + '\n',
+              encoding='utf-8',
+          )
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .extraction-run-state.json
-          git commit -m "Record extraction intelligence release state" || exit 0
+          git add .extraction-run-state.json .extraction-run-failure.txt
+          git commit -m "Record extraction browser regression failures" || exit 0
           git push origin HEAD:main
