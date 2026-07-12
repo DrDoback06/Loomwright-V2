@@ -1,0 +1,46 @@
+name: Inspect Loomwright extraction source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/inspect-extraction-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/review-identity-resolution
+          fetch-depth: 1
+      - name: Locate extraction pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '## FILES'
+            find src tests -type f | sort
+            echo
+            echo '## EXTRACTION REFERENCES'
+            grep -RInE "extract|candidate|recurrence|loc-prep|confidenceBand|suggestedAction|canonical|possessive" src tests --include='*.ts' --include='*.tsx' | head -n 5000 || true
+          } > /tmp/extraction-source-report.txt
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: control
+          fetch-depth: 1
+      - name: Commit report
+        shell: bash
+        run: |
+          cp /tmp/extraction-source-report.txt control/.extraction-source-report.txt
+          cd control
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .extraction-source-report.txt
+          git commit -m "Record extraction source map" || exit 0
+          git push origin HEAD:main
