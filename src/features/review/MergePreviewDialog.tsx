@@ -39,6 +39,7 @@ export function MergePreviewDialog() {
   const setPalettePurpose = useUiStore((state) => state.setPalettePurpose);
   const setPaletteOpen = useUiStore((state) => state.setPaletteOpen);
   const setFocus = useFocusStore((state) => state.setFocus);
+  const clearFocusType = useFocusStore((state) => state.clearFocusType);
 
   const [preview, setPreview] = useState<MergePreview | null>(null);
   const [loading, setLoading] = useState(false);
@@ -121,22 +122,32 @@ export function MergePreviewDialog() {
         fieldDecisions: decisions,
       });
       close();
-      setFocus({ id: result.entity.id, type: result.entity.type, name: result.entity.name });
+      // The minor record may have been open in a full-screen mobile dossier.
+      // Clear that stale focus so the canonical roster is visible immediately;
+      // the toast still offers one-click access to the finished dossier.
+      clearFocusType(result.entity.type);
       toast(
         `${result.entity.name} is now the canonical entity. ${preview.affected.occurrenceCount} mention${preview.affected.occurrenceCount === 1 ? '' : 's'} and every linked record were updated.`,
         {
           kind: 'success',
           action: {
-            label: 'Undo merge',
-            run: async () => {
-              const undone = await undoMergeReceipt(result.receipt.id);
-              toast(undone ? 'Merge fully undone.' : 'This merge could not be undone.', {
-                kind: undone ? 'success' : 'error',
-              });
-            },
+            label: 'Open canonical',
+            run: () =>
+              setFocus({ id: result.entity.id, type: result.entity.type, name: result.entity.name }),
           },
         }
       );
+      toast('This merge can be undone from merge history.', {
+        action: {
+          label: 'Undo merge',
+          run: async () => {
+            const undone = await undoMergeReceipt(result.receipt.id);
+            toast(undone ? 'Merge fully undone.' : 'This merge could not be undone.', {
+              kind: undone ? 'success' : 'error',
+            });
+          },
+        },
+      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The merge could not be completed.');
     } finally {

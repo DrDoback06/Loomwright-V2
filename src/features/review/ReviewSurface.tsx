@@ -285,7 +285,7 @@ export function ReviewSurface() {
             return (
               <li
                 key={cluster.id}
-                className={`lw-card lw-identitycard lw-identitycard--${cluster.confidenceBand}${isDrop ? ' lw-identitycard--drop' : ''}`}
+                className={`lw-card lw-qcard lw-identitycard lw-identitycard--${cluster.confidenceBand}${isDrop ? ' lw-identitycard--drop' : ''}`}
                 draggable
                 onDragStart={(event) =>
                   writeDragPayload(event, {

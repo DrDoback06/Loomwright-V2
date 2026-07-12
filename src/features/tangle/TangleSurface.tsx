@@ -83,31 +83,43 @@ export function TangleSurface() {
 
   const place = async (x: number, y: number) => {
     if (!board) return;
-    if (placeTemplate) {
-      const stamped = instantiateBoardTemplate(placeTemplate, { x, y });
-      await db.tangleBoards.update(board.id, {
-        cards: [...board.cards, ...stamped.cards],
-        edges: [...board.edges, ...stamped.edges],
-        updatedAt: Date.now(),
+
+    // Consume the armed placement synchronously before touching IndexedDB.
+    // Without this, a fast second card can be typed while the first write is
+    // still pending, then be cleared when that older promise resolves.
+    const template = placeTemplate;
+    const entity = placeEntity;
+    const note = placeDraft.trim();
+    setPlaceTemplate(null);
+    setPlaceDraft('');
+    setPlaceEntity(null);
+    setMode('select');
+
+    if (template) {
+      const stamped = instantiateBoardTemplate(template, { x, y });
+      await db.transaction('rw', db.tangleBoards, async () => {
+        const latest = await db.tangleBoards.get(board.id);
+        if (!latest) return;
+        await db.tangleBoards.update(board.id, {
+          cards: [...latest.cards, ...stamped.cards],
+          edges: [...latest.edges, ...stamped.edges],
+          updatedAt: Date.now(),
+        });
       });
-      toast(`Stamped “${placeTemplate.name}” (${stamped.cards.length} cards).`, { kind: 'success' });
-      setPlaceTemplate(null);
-      setMode('select');
+      toast(`Stamped “${template.name}” (${stamped.cards.length} cards).`, { kind: 'success' });
       return;
     }
-    const label = placeEntity ? placeEntity.name : placeDraft.trim();
+
+    const label = entity ? entity.name : note;
     if (!label) return;
     await addNode('tangle', board.id, {
       label,
       x,
       y,
-      entity: placeEntity
-        ? { id: placeEntity.id, type: placeEntity.type, name: placeEntity.name }
+      entity: entity
+        ? { id: entity.id, type: entity.type, name: entity.name }
         : undefined,
     });
-    setPlaceDraft('');
-    setPlaceEntity(null);
-    setMode('select');
   };
 
   const connect = async (fromId: string, toId: string) => {
