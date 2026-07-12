@@ -1,5 +1,6 @@
 name: Inspect final patch retry
 
+# Refresh after directory-safe archive validation.
 on:
   push:
     branches: [main]
