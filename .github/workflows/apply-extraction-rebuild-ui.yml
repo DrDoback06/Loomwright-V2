@@ -1,0 +1,102 @@
+name: Apply extraction rebuild controls
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-extraction-rebuild-ui.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/review-identity-resolution
+          fetch-depth: 1
+      - name: Add safe queue rebuild controls
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/features/review/ReviewSurface.tsx')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+            "import { acceptCandidate, denyCandidate, listPendingCandidates } from '@/db/repos/review';",
+            "import { acceptCandidate, clearPendingCandidates, denyCandidate, listPendingCandidates } from '@/db/repos/review';\nimport { db } from '@/db/schema';\nimport { extractChapter } from '@/services/extraction/session';",
+          )
+          text = text.replace(
+            "  const [dragOver, setDragOver] = useState<string | null>(null);",
+            "  const [dragOver, setDragOver] = useState<string | null>(null);\n  const [reextracting, setReextracting] = useState(false);",
+          )
+          anchor = "  const totalReferences = clusters.reduce((sum, cluster) => sum + cluster.evidenceCount, 0);"
+          addition = '''  const rebuildPendingExtraction = async () => {
+    if (!pending.length || reextracting) return;
+    const chapterIds = [...new Set(pending.map((candidate) => candidate.chapterId).filter(Boolean))];
+    const chapters = await db.chapters.bulkGet(chapterIds);
+    const available = chapters.filter((chapter): chapter is NonNullable<typeof chapter> => Boolean(chapter));
+    if (!available.length) {
+      const cleared = await clearPendingCandidates(projectId);
+      toast(`Cleared ${cleared} stale extraction proposal${cleared === 1 ? '' : 's'}.`, { kind: 'success' });
+      return;
+    }
+    const confirmed = window.confirm(
+      `Replace ${pending.length} unresolved extraction proposal${pending.length === 1 ? '' : 's'} by re-reading ${available.length} affected chapter${available.length === 1 ? '' : 's'}? Manuscript text, accepted entities and identity lessons are preserved.`
+    );
+    if (!confirmed) return;
+    setReextracting(true);
+    try {
+      await clearPendingCandidates(projectId);
+      let found = 0;
+      for (const chapter of available) {
+        const summary = await extractChapter(chapter);
+        found += summary.candidateCount;
+      }
+      toast(`Extraction rebuilt: ${found} focused proposal${found === 1 ? '' : 's'} now await review.`, { kind: 'success' });
+    } catch (reason) {
+      toast(reason instanceof Error ? reason.message : 'Could not rebuild extraction.', { kind: 'error' });
+    } finally {
+      setReextracting(false);
+    }
+  };
+
+  const clearPendingOnly = async () => {
+    if (!pending.length || reextracting) return;
+    if (!window.confirm('Clear unresolved extraction proposals only? Manuscript text and accepted Codex data are preserved.')) return;
+    const cleared = await clearPendingCandidates(projectId);
+    toast(`Cleared ${cleared} unresolved extraction proposal${cleared === 1 ? '' : 's'}.`, { kind: 'success' });
+  };
+
+'''
+          assert anchor in text
+          text = text.replace(anchor, addition + anchor, 1)
+          button_anchor = '''          <button
+            type="button"
+            className="lw-btn"
+            onClick={() => {
+              setPalettePurpose('search');'''
+          buttons = '''          {pending.length > 0 ? (
+            <>
+              <button type="button" className="lw-btn lw-btn--primary" disabled={reextracting} onClick={() => void rebuildPendingExtraction()}>
+                {reextracting ? 'Re-reading chapters…' : 'Re-extract affected chapters'}
+              </button>
+              <button type="button" className="lw-btn" disabled={reextracting} onClick={() => void clearPendingOnly()}>
+                Clear unresolved
+              </button>
+            </>
+          ) : null}
+'''
+          assert button_anchor in text
+          text = text.replace(button_anchor, buttons + button_anchor, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/features/review/ReviewSurface.tsx
+          git commit -m "Add safe extraction rebuild controls"
+          git push origin HEAD:agent/review-identity-resolution
