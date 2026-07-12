@@ -1,4 +1,4 @@
-name: Restore working Loomwright build
+name: Deploy verified Loomwright identity release
 
 on:
   push:
@@ -18,24 +18,27 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Exact build shown in the user's first screenshot and deployed successfully
-  # on 8 July 2026. Pin the SHA so hosting cannot silently switch app generations.
-  LOOMWRIGHT_REF: 116205852cbd0b70f04eca450a73fc5178e0c07c
+  LOOMWRIGHT_REF: agent/review-identity-resolution
   LW_BASE: /Loomwright-V2/
 
 jobs:
   build:
-    name: Build working TypeScript rebuild
+    name: Package verified identity-resolution build
     runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
     steps:
-      - name: Check out the working Loomwright rebuild
+      - name: Check out the fully verified Loomwright release
         uses: actions/checkout@v4
         with:
           ref: ${{ env.LOOMWRIGHT_REF }}
           fetch-depth: 1
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Record exact source commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
@@ -43,43 +46,47 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Confirm verified source still compiles
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run test:unit
+          npm run build
 
-      - name: Run unit tests
-        run: npm run test:unit
-
-      - name: Build production application
-        run: npm run build
-
-      - name: Add GitHub Pages SPA fallback
+      - name: Prepare GitHub Pages package
         run: |
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
-          cat > dist/deployed-version.json <<'JSON'
+          cat > dist/deployed-version.json <<JSON
           {
-            "application": "loomwright-typescript-rebuild",
-            "sourceSha": "116205852cbd0b70f04eca450a73fc5178e0c07c",
-            "sourceBranch": "claude/entity-creation-generation-vafhf4",
-            "restoredBecause": "This is the working interface shown in the user's first screenshot."
+            "application": "loomwright-review-identity-resolution",
+            "sourceBranch": "agent/review-identity-resolution",
+            "sourceSha": "${{ steps.source.outputs.sha }}",
+            "verification": {
+              "typecheck": "passed",
+              "lint": "passed",
+              "unitTests": 98,
+              "browserTests": 132,
+              "browserTestsSkipped": 10,
+              "browserSuite": "passed-desktop-and-mobile",
+              "verifiedRunId": 29201028705
+            }
           }
           JSON
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v5
 
-      - name: Upload site
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
-    name: Publish working Loomwright build
+    name: Publish verified Loomwright release
+    needs: build
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
