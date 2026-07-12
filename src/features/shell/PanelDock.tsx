@@ -8,16 +8,18 @@ import { refsInFields } from '@/services/relations';
 import { useFocusStore } from '@/stores/focus';
 import { useLayoutStore } from '@/stores/layout';
 import { useProjectStore } from '@/stores/project';
+import { useUiStore } from '@/stores/ui';
 
-/** The right-hand dock: a strip of codex glyphs (click to open a panel
- * beside whatever you're working on) plus the stacked open panels and,
- * when a lock + same-type focus exist, the pair strip. Desktop only —
- * phones use the full codex surfaces. */
+/** The right-hand dock: an expandable codex rail plus stacked live panels.
+ * Labels are intentionally available on demand so users never have to learn
+ * Loomwright's glyphs by trial and error. */
 export function PanelDock() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const openPanels = useLayoutStore((s) => s.openPanels);
   const openPanel = useLayoutStore((s) => s.openPanel);
   const hydrate = useLayoutStore((s) => s.hydrate);
+  const expanded = useUiStore((s) => s.rightDockExpanded);
+  const toggleRightDock = useUiStore((s) => s.toggleRightDock);
 
   useEffect(() => {
     if (projectId) void hydrate(projectId);
@@ -27,7 +29,10 @@ export function PanelDock() {
   const available = ALL_ENTITY_TYPES.filter((t) => configuredEntityTypes().includes(t));
 
   return (
-    <div className="lw-dock" data-testid="panel-dock">
+    <div
+      className={expanded ? 'lw-dock lw-dock--expanded' : 'lw-dock lw-dock--collapsed'}
+      data-testid="panel-dock"
+    >
       {openPanels.length > 0 && (
         <div className="lw-dock__panels">
           <PairStrip />
@@ -37,6 +42,18 @@ export function PanelDock() {
         </div>
       )}
       <nav className="lw-dock__strip" aria-label="Open codex panel">
+        <div className="lw-dock__head">
+          {expanded ? <strong>Codex panels</strong> : <span aria-hidden>◇</span>}
+          <button
+            type="button"
+            className="lw-iconbtn"
+            onClick={toggleRightDock}
+            aria-label={expanded ? 'Collapse right navigation' : 'Expand right navigation'}
+            title={expanded ? 'Collapse right navigation' : 'Expand right navigation'}
+          >
+            {expanded ? '›' : '‹'}
+          </button>
+        </div>
         {available.map((type) => {
           const meta = ENTITY_TYPE_META[type];
           const isOpen = openPanels.includes(type);
@@ -51,7 +68,8 @@ export function PanelDock() {
               style={isOpen ? { color: meta.deep, background: meta.soft } : undefined}
               onClick={() => openPanel(type, projectId)}
             >
-              {meta.glyph}
+              <span className="lw-dock__glyphmark" aria-hidden>{meta.glyph}</span>
+              {expanded ? <span className="lw-dock__glyphlabel">{meta.plural}</span> : null}
             </button>
           );
         })}

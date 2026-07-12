@@ -3,30 +3,14 @@ import { newId } from '@/lib/id';
 import { logAudit } from '@/db/repos/audit';
 import { replaceChapterCandidates } from '@/db/repos/review';
 import type { Chapter, Occurrence } from '@/db/types';
-import type { KnownEntity } from './known-index';
 import { runLocalExtraction } from './engine';
+import { loadKnownProjectEntities } from './project-known';
 
 export interface ExtractionSummary {
   occurrenceCount: number;
   candidateCount: number;
   /** Known-entity mentions re-confirmed, by entity. */
   knownMentions: { entityId: string; name: string; count: number }[];
-}
-
-async function loadProjectEntities(projectId: string): Promise<KnownEntity[]> {
-  const rows = await db.entities.where('projectId').equals(projectId).toArray();
-  return rows.map((e) => ({
-    id: e.id,
-    type: e.type,
-    name: e.name,
-    aliases: e.aliases,
-    pronouns: typeof e.fields.pronouns === 'string' ? e.fields.pronouns : undefined,
-    gender: typeof e.fields.gender === 'string' ? e.fields.gender : undefined,
-    statPhrases:
-      e.type === 'stats' && Array.isArray(e.fields.extractionRules)
-        ? (e.fields.extractionRules as string[])
-        : undefined,
-  }));
 }
 
 /** Run the offline extraction pass for one chapter and persist the
@@ -47,7 +31,7 @@ export async function extractChapter(chapter: Chapter): Promise<ExtractionSummar
     spans.push({ id: p.id, start, end: fullText.length });
   }
 
-  const entities = await loadProjectEntities(projectId);
+  const entities = await loadKnownProjectEntities(projectId);
   const overrides = await loadDetectorOverrides(projectId);
   const { occurrences, candidates } = runLocalExtraction({
     text: fullText,

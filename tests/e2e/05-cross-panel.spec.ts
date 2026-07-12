@@ -120,7 +120,11 @@ test.describe('cross-panel context', () => {
     await page.getByRole('button', { name: /Ael of Hess/ }).click();
     await page.getByTestId('entity-detail').getByRole('button', { name: 'Merge into…' }).click();
     await page.getByTestId('merge-picker').getByRole('button', { name: 'Merge into Aelinor' }).click();
-    await expect(page.getByText(/merged into Aelinor/)).toBeVisible();
+    const preview = page.getByTestId('merge-preview');
+    await expect(preview).toContainText('Nothing changes until you confirm');
+    await expect(preview).toContainText('Ael of Hess');
+    await preview.getByRole('button', { name: 'Confirm merge everywhere' }).click();
+    await expect(page.getByText(/Aelinor is now the canonical entity/)).toBeVisible();
 
     // The duplicate is gone; Aelinor carries the alias.
     await expect(page.getByRole('button', { name: 'Ael of Hess' })).toHaveCount(0);

@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { countPendingCandidates } from '@/db/repos/review';
+import { countIdentityDecisions } from '@/services/identity-resolution';
 import { configuredEntityTypes } from '@/domain/entity-configs';
 import { ALL_ENTITY_TYPES, ENTITY_TYPE_META } from '@/domain/entity-types';
 import { useProjectStore } from '@/stores/project';
@@ -43,21 +43,38 @@ export function LeftRail() {
   const codexType = useUiStore((s) => s.codexType);
   const setCodexType = useUiStore((s) => s.setCodexType);
   const projectId = useProjectStore((s) => s.currentProjectId);
+  const expanded = useUiStore((s) => s.leftRailExpanded);
+  const toggleLeftRail = useUiStore((s) => s.toggleLeftRail);
   const reviewCount = useLiveQuery(
-    async () => (projectId ? countPendingCandidates(projectId) : 0),
+    async () => (projectId ? countIdentityDecisions(projectId) : 0),
     [projectId],
     0
   );
   const groups: NavEntry['group'][] = ['workspace', 'panels', 'tools', 'utilities'];
 
   return (
-    <nav className="lw-leftrail" aria-label="Workspace">
+    <nav
+      className={expanded ? 'lw-leftrail lw-leftrail--expanded' : 'lw-leftrail lw-leftrail--collapsed'}
+      aria-label="Workspace"
+    >
+      <div className="lw-leftrail__head">
+        {expanded ? <strong>Navigate</strong> : <span aria-hidden>LW</span>}
+        <button
+          type="button"
+          className="lw-iconbtn"
+          onClick={toggleLeftRail}
+          aria-label={expanded ? 'Collapse left navigation' : 'Expand left navigation'}
+          title={expanded ? 'Collapse left navigation' : 'Expand left navigation'}
+        >
+          {expanded ? '‹' : '›'}
+        </button>
+      </div>
       {groups.map((group) => {
         if (group === 'panels') {
           const types = ALL_ENTITY_TYPES.filter((t) => configuredEntityTypes().includes(t));
           return (
             <div key={group}>
-              <div className="lw-leftrail__group">{GROUP_LABELS[group]}</div>
+              {expanded ? <div className="lw-leftrail__group">{GROUP_LABELS[group]}</div> : null}
               {types.map((type) => {
                 const meta = ENTITY_TYPE_META[type];
                 const current = route === 'codex' && codexType === type;
@@ -66,6 +83,8 @@ export function LeftRail() {
                     key={type}
                     type="button"
                     className="lw-navitem"
+                    title={meta.plural}
+                    aria-label={meta.plural}
                     aria-current={current ? 'page' : undefined}
                     onClick={() => {
                       setCodexType(type);
@@ -75,7 +94,7 @@ export function LeftRail() {
                     <span aria-hidden style={{ color: meta.color }}>
                       {meta.glyph}
                     </span>
-                    {meta.plural}
+                    {expanded ? <span className="lw-navitem__label">{meta.plural}</span> : null}
                   </button>
                 );
               })}
@@ -86,17 +105,19 @@ export function LeftRail() {
         if (entries.length === 0) return null;
         return (
           <div key={group}>
-            <div className="lw-leftrail__group">{GROUP_LABELS[group]}</div>
+            {expanded ? <div className="lw-leftrail__group">{GROUP_LABELS[group]}</div> : null}
             {entries.map((entry) => (
               <button
                 key={entry.route}
                 type="button"
                 className="lw-navitem"
+                title={entry.label}
+                aria-label={entry.label}
                 aria-current={route === entry.route ? 'page' : undefined}
                 onClick={() => setRoute(entry.route)}
               >
                 <span aria-hidden>{entry.glyph}</span>
-                {entry.label}
+                {expanded ? <span className="lw-navitem__label">{entry.label}</span> : null}
                 {entry.route === 'review' && reviewCount > 0 ? (
                   <span className="lw-navbadge" aria-label={`${reviewCount} pending`}>
                     {reviewCount}

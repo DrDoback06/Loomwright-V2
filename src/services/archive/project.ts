@@ -3,6 +3,7 @@ import type {
   AtlasMap,
   Chapter,
   Entity,
+  IdentityRule,
   Link,
   Occurrence,
   ParagraphNote,
@@ -35,6 +36,7 @@ export interface ProjectArchive {
     tangleBoards: TangleBoard[];
     randomTables: RandomTable[];
     templates: Template[];
+    identityRules: IdentityRule[];
     settings: SettingsRow[];
   };
   meta: Record<string, number>;
@@ -62,6 +64,7 @@ export async function exportProject(projectId: string): Promise<ProjectArchive> 
     tangleBoards: await byProject<TangleBoard>(db.tangleBoards),
     randomTables: await byProject<RandomTable>(db.randomTables),
     templates: await byProject<Template>(db.templates),
+    identityRules: await byProject<IdentityRule>(db.identityRules),
     settings: (await db.settings.toArray()).filter((row) => row.key.startsWith(`${projectId}:`)),
   };
 
@@ -99,7 +102,7 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
   const allRowLists: { id: string }[][] = [
     t.entities ?? [], t.links ?? [], t.chapters ?? [], t.notes ?? [], t.occurrences ?? [],
     t.candidates ?? [], t.atlasMaps ?? [], t.skillTrees ?? [], t.tangleBoards ?? [],
-    t.randomTables ?? [], t.templates ?? [],
+    t.randomTables ?? [], t.templates ?? [], t.identityRules ?? [],
   ];
   for (const rows of allRowLists) {
     for (const row of rows) idMap.set(row.id, newId());
@@ -109,7 +112,10 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
   const rebase = <R extends { id: string; projectId: string }>(rows: R[] | undefined): R[] =>
     (rows ?? []).map((row) => ({ ...remapRefs(row, idMap), projectId }));
 
-  const entities = rebase(t.entities);
+  const entities = rebase(t.entities).map((entity) => ({
+    ...entity,
+    mergedIntoId: entity.mergedIntoId ? (idMap.get(entity.mergedIntoId) ?? entity.mergedIntoId) : entity.mergedIntoId,
+  }));
   const links = rebase(t.links);
   const chapters = rebase(t.chapters);
   const notes = rebase(t.notes).map((n) => ({ ...n, chapterId: idMap.get(n.chapterId) ?? n.chapterId }));
@@ -131,6 +137,12 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
   const tangleBoards = rebase(t.tangleBoards);
   const randomTables = rebase(t.randomTables);
   const templates = rebase(t.templates);
+  const identityRules = rebase(t.identityRules).map((rule) => ({
+    ...rule,
+    canonicalEntityId: rule.canonicalEntityId
+      ? (idMap.get(rule.canonicalEntityId) ?? rule.canonicalEntityId)
+      : rule.canonicalEntityId,
+  }));
   const oldProjectId = archive.project.id;
   const settings = (t.settings ?? [])
     .filter((row) => row.key.startsWith(`${oldProjectId}:`))
@@ -144,7 +156,7 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
     [
       db.projects, db.entities, db.links, db.chapters, db.notes, db.occurrences,
       db.candidates, db.atlasMaps, db.skillTrees, db.tangleBoards, db.randomTables,
-      db.templates, db.settings,
+      db.templates, db.identityRules, db.settings,
     ],
     async () => {
       await db.projects.add(project);
@@ -159,6 +171,7 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
       await db.tangleBoards.bulkAdd(tangleBoards);
       await db.randomTables.bulkAdd(randomTables);
       await db.templates.bulkAdd(templates);
+      await db.identityRules.bulkAdd(identityRules);
       await db.settings.bulkPut(settings);
     }
   );
@@ -171,6 +184,7 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
       chapters: chapters.length,
       occurrences: occurrences.length,
       candidates: candidates.length,
+      identityRules: identityRules.length,
     },
   };
 }

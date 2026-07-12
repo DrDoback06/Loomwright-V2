@@ -8,7 +8,7 @@ export interface Project {
   updatedAt: number;
 }
 
-export type EntityStatus = 'active' | 'archived';
+export type EntityStatus = 'active' | 'archived' | 'merged';
 
 export interface Entity {
   id: string;
@@ -23,6 +23,9 @@ export interface Entity {
   fields: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
+  /** Set on a source record that has been folded into another canonical entity. */
+  mergedIntoId?: string;
+  mergedAt?: number;
 }
 
 export interface Link {
@@ -103,6 +106,43 @@ export interface ReviewCandidate {
   acceptedEntityId?: string;
   source: 'local' | 'ai' | 'handoff';
   createdAt: number;
+}
+
+
+export type IdentityRuleKind = 'same' | 'different';
+
+/** A user-confirmed identity lesson. `same` rules teach extraction that a
+ * surface form belongs to a canonical entity; `different` rules stop a
+ * rejected pairing from being suggested again. */
+export interface IdentityRule {
+  id: string;
+  projectId: string;
+  entityType: EntityType;
+  kind: IdentityRuleKind;
+  surface: string;
+  otherSurface?: string;
+  canonicalEntityId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface MergeReceipt {
+  id: string;
+  projectId: string;
+  targetEntityId: string;
+  targetCreated: boolean;
+  targetBefore: Entity | null;
+  sourceEntitiesBefore: Entity[];
+  affectedEntitiesBefore: Entity[];
+  linksBefore: Link[];
+  occurrencesBefore: Occurrence[];
+  candidatesBefore: ReviewCandidate[];
+  /** New same-identity rules created by this merge. */
+  identityRuleIds: string[];
+  /** Existing mappings displaced by the canonical decision, restored on undo. */
+  identityRulesBefore?: IdentityRule[];
+  createdAt: number;
+  undoneAt?: number;
 }
 
 export type AuditActor = 'user' | 'extraction' | 'ai' | 'import';

@@ -5,6 +5,7 @@ import { createChapter, saveChapterDoc, appendParagraphToChapter } from '@/db/re
 import { exportProject, importProject } from '@/services/archive/project';
 import { renderWorldBible } from '@/services/archive/world-bible';
 import { saveApiKey } from '@/services/crypto/keys';
+import { rememberSameIdentity } from '@/db/repos/identity';
 
 beforeEach(async () => {
   await Promise.all(db.tables.map((t) => t.clear()));
@@ -49,13 +50,14 @@ async function seedProject() {
 describe('project export/import v2', () => {
   it('round-trips a project with a full id remap and rewritten refs', async () => {
     const { projectId, aelinorId } = await seedProject();
+    await rememberSameIdentity({ projectId, entityType: 'cast', surface: 'Queen Ael', canonicalEntityId: aelinorId });
     const archive = await exportProject(projectId);
     expect(archive.schemaVersion).toBe('loomwright-project-v2');
     expect(archive.meta.entities).toBe(2);
 
     const result = await importProject(JSON.parse(JSON.stringify(archive)));
     expect(result.projectId).not.toBe(projectId);
-    expect(result.counts).toMatchObject({ entities: 2, chapters: 1, occurrences: 1 });
+    expect(result.counts).toMatchObject({ entities: 2, chapters: 1, occurrences: 1, identityRules: 1 });
 
     // Fresh ids everywhere; the field ref follows the remapped entity.
     const imported = await db.entities.where('projectId').equals(result.projectId).toArray();
@@ -70,6 +72,12 @@ describe('project export/import v2', () => {
     expect(occ.entityId).toBe(newAelinor.id);
     const chapters = await db.chapters.where('projectId').equals(result.projectId).toArray();
     expect(occ.chapterId).toBe(chapters[0].id);
+
+    // Learned identity lessons survive export/import and follow the entity id remap.
+    const importedRules = await db.identityRules.where('projectId').equals(result.projectId).toArray();
+    expect(importedRules).toHaveLength(1);
+    expect(importedRules[0].surface).toBe('queen ael');
+    expect(importedRules[0].canonicalEntityId).toBe(newAelinor.id);
 
     // Settings key prefix rewritten.
     const setting = await db.settings.get(`${result.projectId}:extraction`);

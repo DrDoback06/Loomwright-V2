@@ -17,6 +17,7 @@ import { CreateAnythingDialog } from '@/features/generate/CreateAnythingDialog';
 import { StagedBundleBar } from '@/features/generate/StagedBundleBar';
 import { TrashSurface } from '@/features/system/TrashSurface';
 import { ReviewSurface } from '@/features/review/ReviewSurface';
+import { MergePreviewDialog } from '@/features/review/MergePreviewDialog';
 import { WritersRoom } from '@/features/writers-room/WritersRoom';
 import { AtlasSurface } from '@/features/atlas/AtlasSurface';
 import { TangleSurface } from '@/features/tangle/TangleSurface';
@@ -67,6 +68,9 @@ export function App() {
   const paletteOpen = useUiStore((s) => s.paletteOpen);
   const setPaletteOpen = useUiStore((s) => s.setPaletteOpen);
   const helpOpen = useUiStore((s) => s.helpOpen);
+  const leftRailExpanded = useUiStore((s) => s.leftRailExpanded);
+  const rightDockExpanded = useUiStore((s) => s.rightDockExpanded);
+  const setPalettePurpose = useUiStore((s) => s.setPalettePurpose);
   const setHelpOpen = useUiStore((s) => s.setHelpOpen);
 
   // Global Ctrl/Cmd+K opens the command palette anywhere.
@@ -74,17 +78,29 @@ export function App() {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
+        setPalettePurpose('search');
         setPaletteOpen(!useUiStore.getState().paletteOpen);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [setPaletteOpen]);
+  }, [setPaletteOpen, setPalettePurpose]);
 
   return (
     <>
       <ProjectGate>
-        <div className={isMobile ? 'lw-shell lw-shell--mobile' : 'lw-shell lw-shell--docked'}>
+        <div
+          className={
+            isMobile
+              ? 'lw-shell lw-shell--mobile'
+              : [
+                  'lw-shell',
+                  'lw-shell--docked',
+                  leftRailExpanded ? 'lw-shell--left-expanded' : 'lw-shell--left-collapsed',
+                  rightDockExpanded ? 'lw-shell--right-expanded' : 'lw-shell--right-collapsed',
+                ].join(' ')
+          }
+        >
           <TopBar />
           {!isMobile && <LeftRail />}
           <main className="lw-main">
@@ -96,6 +112,7 @@ export function App() {
         <EntityEditorDrawer />
         <CreateAnythingDialog />
         <StagedBundleBar />
+        <MergePreviewDialog />
         {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
         {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
       </ProjectGate>

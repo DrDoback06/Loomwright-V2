@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Entity } from '@/db/types';
 import { listEntities } from '@/db/repos/entities';
-import { mergeEntities } from '@/db/repos/links';
 import { useFocusStore } from '@/stores/focus';
 import { toast } from '@/stores/toasts';
 import { getEntityConfig } from '@/domain/entity-configs';
@@ -13,6 +12,7 @@ import { entityWireString } from '@/services/generate/serialize';
 import { buildGenerationPrompt } from '@/services/generate/wire';
 import { loadKnownEntities } from '@/services/generate/known';
 import { ENTITY_TYPE_META, type EntityRef } from '@/domain/entity-types';
+import { useMergeStore } from '@/stores/merge';
 
 interface EntityDetailProps {
   entity: Entity;
@@ -29,6 +29,7 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
   const lock = useFocusStore((s) => s.lock);
   const toggleLock = useFocusStore((s) => s.toggleLock);
   const isLocked = lock?.id === entity.id;
+  const openMerge = useMergeStore((state) => state.open);
 
   const mergeTargets = useLiveQuery(
     async () =>
@@ -37,14 +38,14 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
     [] as Entity[]
   );
 
-  const doMerge = async (targetId: string) => {
-    const result = await mergeEntities(entity.id, targetId);
+  const previewMerge = (target: Entity) => {
     setMerging(false);
-    if (result) {
-      toast(`${entity.name} merged into ${result.name}. Mentions and references now point at ${result.name}.`, { kind: 'success' });
-    } else {
-      toast('Merge failed — the target may have been deleted.', { kind: 'error' });
-    }
+    openMerge({
+      entityType: entity.type,
+      sourceEntityIds: [entity.id],
+      targetEntityId: target.id,
+      canonicalName: target.name,
+    });
   };
 
   const portrait = typeof entity.fields.portrait === 'string' ? entity.fields.portrait : '';
@@ -144,8 +145,9 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
         <div className="lw-card lw-mergebox" data-testid="merge-picker">
           <p className="lw-mergebox__note">
             Merge <strong>{entity.name}</strong> into another {config?.displayName.toLowerCase() ?? 'record'}.
-            Its name becomes an alias; every mention, reference, and link is rewritten. This cannot
-            be undone.
+            The dropped/source record is the minor version. A full preview will show every alias,
+            field, chapter fact, mention, route, and linked record before anything changes; the merge
+            is reversible.
           </p>
           {mergeTargets.length === 0 ? (
             <p className="lw-empty__note">No other {meta.plural.toLowerCase()} to merge into.</p>
@@ -153,7 +155,7 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
             <ul className="lw-mergebox__list">
               {mergeTargets.map((t) => (
                 <li key={t.id}>
-                  <button type="button" className="lw-btn" onClick={() => void doMerge(t.id)}>
+                  <button type="button" className="lw-btn" onClick={() => previewMerge(t)}>
                     Merge into {t.name}
                   </button>
                 </li>

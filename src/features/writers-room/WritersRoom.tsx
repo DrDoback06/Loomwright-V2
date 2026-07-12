@@ -10,11 +10,13 @@ import {
   getChapter,
   listChapters,
   moveChapter,
+  refreshChapterLabels,
   renameChapter,
   saveChapterDoc,
 } from '@/db/repos/chapters';
 import { db } from '@/db/schema';
 import { extractChapter } from '@/services/extraction/session';
+import { loadKnownProjectEntities } from '@/services/extraction/project-known';
 import { runDeepExtraction } from '@/services/ai/deep-extraction';
 import { getAiSettings, resolveProvider } from '@/services/ai/settings';
 import { useProjectStore } from '@/stores/project';
@@ -230,8 +232,7 @@ export function WritersRoom() {
       const chapter = await getChapter(activeChapterId);
       const config = await resolveProvider(projectId);
       if (!chapter || !config) return;
-      const rows = await db.entities.where('projectId').equals(projectId).toArray();
-      const known = rows.map((e) => ({ id: e.id, type: e.type, name: e.name, aliases: e.aliases }));
+      const known = await loadKnownProjectEntities(projectId);
       const { added } = await runDeepExtraction(chapter, config, known);
       toast(
         added > 0
@@ -281,9 +282,15 @@ export function WritersRoom() {
   const activeChapter = chapters.find((c) => c.id === activeChapterId) ?? null;
   const activeIndex = activeChapter ? chapters.indexOf(activeChapter) : -1;
 
-  const addChapter = async () => {
-    const chapter = await createChapter(projectId);
+  const addChapter = async (afterChapterId?: string | null) => {
+    const chapter = await createChapter(projectId, undefined, afterChapterId);
     setActiveChapterId(chapter.id);
+    toast(
+      afterChapterId
+        ? `Inserted “${chapter.title}”. Linked entity histories were re-indexed locally.`
+        : `Created “${chapter.title}”.`,
+      { kind: 'success' }
+    );
   };
 
   return (
@@ -305,7 +312,7 @@ export function WritersRoom() {
             </span>
           </button>
         ))}
-        <button type="button" className="lw-chaptertab lw-chaptertab--new" onClick={addChapter}>
+        <button type="button" className="lw-chaptertab lw-chaptertab--new" onClick={() => void addChapter()}>
           + New chapter
         </button>
       </div>
@@ -319,8 +326,17 @@ export function WritersRoom() {
                 aria-label="Chapter title"
                 value={activeChapter.title}
                 onChange={(e) => void renameChapter(activeChapter.id, e.target.value)}
+                onBlur={() => void refreshChapterLabels(projectId)}
               />
               <div className="lw-wroom__chapteractions">
+                <button
+                  type="button"
+                  className="lw-btn"
+                  title="Insert a chapter immediately after this one and re-index linked story data"
+                  onClick={() => void addChapter(activeChapter.id)}
+                >
+                  + Insert after
+                </button>
                 <button
                   type="button"
                   className="lw-iconbtn"
@@ -461,7 +477,7 @@ export function WritersRoom() {
         <div className="lw-empty lw-empty--center">
           <p className="lw-empty__title">No chapters yet.</p>
           <p className="lw-empty__note">Create your first chapter to start writing.</p>
-          <button type="button" className="lw-btn lw-btn--primary" onClick={addChapter}>
+          <button type="button" className="lw-btn lw-btn--primary" onClick={() => void addChapter()}>
             + New chapter
           </button>
         </div>

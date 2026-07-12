@@ -7,6 +7,7 @@ import { useFocusStore } from '@/stores/focus';
 import { useGenerationStore } from '@/stores/generation';
 import { useProjectStore } from '@/stores/project';
 import { useUiStore, type RouteId } from '@/stores/ui';
+import { useMergeStore } from '@/stores/merge';
 
 interface Command {
   id: string;
@@ -30,6 +31,10 @@ interface Row {
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const setRoute = useUiStore((s) => s.setRoute);
+  const palettePurpose = useUiStore((s) => s.palettePurpose);
+  const setPalettePurpose = useUiStore((s) => s.setPalettePurpose);
+  const mergeRequest = useMergeStore((s) => s.request);
+  const setMergeTarget = useMergeStore((s) => s.setTargetEntity);
   const setCodexType = useUiStore((s) => s.setCodexType);
   const requestChapter = useUiStore((s) => s.requestChapter);
   const setFocus = useFocusStore((s) => s.setFocus);
@@ -39,6 +44,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [active, setActive] = useState(0);
+  const [searchVersion, setSearchVersion] = useState(0);
   const searchRef = useRef<((q: string, limit?: number) => SearchHit[]) | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -47,19 +53,33 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     if (projectId) {
       void buildSearchIndex(projectId).then((search) => {
         searchRef.current = search;
+        setSearchVersion((version) => version + 1);
       });
     }
   }, [projectId]);
+
+  // Open merge-target search already seeded with the best available name, so
+  // users immediately see likely canonical records instead of an empty drawer.
+  useEffect(() => {
+    if (palettePurpose === 'merge-target') {
+      setQuery(mergeRequest?.canonicalName?.trim() || '');
+    }
+  }, [palettePurpose, mergeRequest?.canonicalName]);
 
   useEffect(() => {
     const q = query.trim();
     setHits(q && searchRef.current ? searchRef.current(q) : []);
     setActive(0);
-  }, [query]);
+  }, [query, searchVersion]);
+
+  const closePalette = () => {
+    setPalettePurpose('search');
+    onClose();
+  };
 
   const go = (route: RouteId) => {
     setRoute(route);
-    onClose();
+    closePalette();
   };
 
   const commands: Command[] = useMemo(
@@ -89,7 +109,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             searchOnly: true,
             run: () => {
               openCreate(type);
-              onClose();
+              closePalette();
             },
           },
           {
@@ -99,7 +119,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             searchOnly: true,
             run: () => {
               openGenerate({ kind: 'entity', entityType: type });
-              onClose();
+              closePalette();
             },
           },
         ];
@@ -110,34 +130,59 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const rows: Row[] = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const commandRows: Row[] = commands
+    const commandRows: Row[] = palettePurpose === 'merge-target'
+      ? []
+      : commands
       .filter((c) => (q ? c.title.toLowerCase().includes(q) || c.subtitle.toLowerCase().includes(q) : !c.searchOnly))
       .map((c) => ({ key: `cmd:${c.id}`, glyph: '›', title: c.title, subtitle: c.subtitle, run: c.run }));
-    const hitRows: Row[] = hits.map((h) => ({
-      key: `${h.kind}:${h.id}`,
-      glyph: h.kind === 'chapter' ? '✎' : (h.entityType && ENTITY_TYPE_META[h.entityType].glyph) || '◈',
-      title: h.title,
-      subtitle:
-        h.kind === 'chapter'
-          ? `Chapter · ${h.subtitle}`
-          : `${h.entityType ? ENTITY_TYPE_META[h.entityType].label : 'Entity'} · ${h.subtitle}`,
-      run: () => {
-        if (h.kind === 'chapter') {
-          requestChapter(h.id);
-          setRoute('writers-room');
-        } else if (h.entityType) {
-          setFocus({ id: h.id, type: h.entityType, name: h.title });
-          setCodexType(h.entityType);
-          setRoute('codex');
-        }
-        onClose();
-      },
-    }));
+    const hitRows: Row[] = hits
+      .filter((h) => {
+        if (palettePurpose !== 'merge-target') return true;
+        return h.kind === 'entity' && h.entityType === mergeRequest?.entityType;
+      })
+      .map((h) => ({
+        key: `${h.kind}:${h.id}`,
+        glyph: h.kind === 'chapter' ? '✎' : (h.entityType && ENTITY_TYPE_META[h.entityType].glyph) || '◈',
+        title: h.title,
+        subtitle:
+          palettePurpose === 'merge-target'
+            ? `Merge into this ${h.entityType ? ENTITY_TYPE_META[h.entityType].label.toLowerCase() : 'entity'} · ${h.subtitle}`
+            : h.kind === 'chapter'
+              ? `Chapter · ${h.subtitle}`
+              : `${h.entityType ? ENTITY_TYPE_META[h.entityType].label : 'Entity'} · ${h.subtitle}`,
+        run: () => {
+          if (palettePurpose === 'merge-target' && h.kind === 'entity') {
+            setMergeTarget(h.id);
+            closePalette();
+            return;
+          }
+          if (h.kind === 'chapter') {
+            requestChapter(h.id);
+            setRoute('writers-room');
+          } else if (h.entityType) {
+            setFocus({ id: h.id, type: h.entityType, name: h.title });
+            setCodexType(h.entityType);
+            setRoute('codex');
+          }
+          closePalette();
+        },
+      }));
     return q ? [...hitRows, ...commandRows].slice(0, 12) : commandRows;
-  }, [commands, hits, query, onClose, requestChapter, setCodexType, setFocus, setRoute]);
+  }, [
+    commands,
+    hits,
+    mergeRequest?.entityType,
+    palettePurpose,
+    query,
+    requestChapter,
+    setCodexType,
+    setFocus,
+    setMergeTarget,
+    setRoute,
+  ]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') onClose();
+    if (e.key === 'Escape') closePalette();
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActive((a) => Math.min(a + 1, rows.length - 1));
@@ -153,7 +198,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="lw-palette-backdrop" role="presentation" onClick={onClose}>
+    <div className="lw-palette-backdrop" role="presentation" onClick={closePalette}>
       <div
         className="lw-palette"
         role="dialog"
@@ -164,12 +209,21 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         <input
           ref={inputRef}
           className="lw-input lw-palette__input"
-          placeholder="Search entities, chapters, commands…"
+          placeholder={
+            palettePurpose === 'merge-target'
+              ? `Find an existing ${mergeRequest ? ENTITY_TYPE_META[mergeRequest.entityType].label.toLowerCase() : 'entity'} to merge into…`
+              : 'Search entities, chapters, commands…'
+          }
           aria-label="Palette search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
         />
+        {palettePurpose === 'merge-target' ? (
+          <p className="lw-palette__mode">
+            Choose the canonical existing entity. The merge preview remains open behind this search.
+          </p>
+        ) : null}
         <ul className="lw-palette__list">
           {rows.length === 0 ? (
             <li className="lw-palette__empty">Nothing matches “{query}”.</li>

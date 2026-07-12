@@ -10,6 +10,8 @@ import type {
   Chapter,
   Entity,
   Link,
+  IdentityRule,
+  MergeReceipt,
   Occurrence,
   ParagraphNote,
   Project,
@@ -41,6 +43,8 @@ export class LoomwrightDB extends Dexie {
   keys!: EntityTable<KeyRow, 'provider'>;
   randomTables!: EntityTable<RandomTable, 'id'>;
   templates!: EntityTable<Template, 'id'>;
+  identityRules!: EntityTable<IdentityRule, 'id'>;
+  mergeReceipts!: EntityTable<MergeReceipt, 'id'>;
 
   constructor() {
     super('loomwright');
@@ -75,6 +79,11 @@ export class LoomwrightDB extends Dexie {
     this.version(6).stores({
       randomTables: 'id, projectId',
       templates: 'id, projectId, [projectId+kind]',
+    });
+    this.version(7).stores({
+      identityRules:
+        'id, projectId, [projectId+kind], [projectId+entityType], canonicalEntityId',
+      mergeReceipts: 'id, projectId, [projectId+createdAt], targetEntityId',
     });
   }
 }

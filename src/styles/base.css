@@ -241,3 +241,101 @@ a {
   color: var(--ink-3);
   margin: 0;
 }
+
+/* ---- Adaptive desktop rails ---- */
+.lw-shell--left-expanded { --leftrail-w: 232px; }
+.lw-shell--left-collapsed { --leftrail-w: 62px; }
+
+.lw-leftrail {
+  width: var(--leftrail-w, 232px);
+  transition: width 180ms ease, padding 180ms ease;
+}
+
+.lw-leftrail--collapsed {
+  padding-inline: var(--sp-3);
+  align-items: stretch;
+}
+
+.lw-leftrail__head {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding-inline: var(--sp-3);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+}
+
+.lw-leftrail--collapsed .lw-leftrail__head {
+  padding-inline: 0;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.lw-leftrail--collapsed .lw-navitem {
+  justify-content: center;
+  padding-inline: 0;
+  position: relative;
+}
+
+.lw-navitem__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lw-navbadge {
+  margin-left: auto;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent, #9a7b3a);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.lw-leftrail--collapsed .lw-navbadge {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  font-size: 8px;
+}
+
+.lw-topbar__review {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-pill);
+  color: var(--ink-2);
+  background: var(--bg-paper-2);
+}
+
+.lw-topbar__review:hover,
+.lw-topbar__review--pending {
+  color: var(--ink-1);
+  border-color: color-mix(in srgb, var(--accent, #9a7b3a) 55%, var(--line-1));
+  background: var(--bg-elev);
+}
+
+.lw-topbar__review .lw-navbadge { margin-left: var(--sp-1); }
+
+@media (max-width: 900px) {
+  .lw-brand__tag { display: none; }
+  .lw-topbar { gap: var(--sp-4); padding-inline: var(--sp-4); }
+}
+
+.lw-shell--mobile .lw-topbar__railtoggle { display: none; }

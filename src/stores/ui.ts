@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { EntityType } from '@/domain/entity-types';
 
 export type Theme = 'parchment-light' | 'midnight-ink';
+export type PalettePurpose = 'search' | 'merge-target';
 
 /** Routes that exist in the rebuilt app. Grows milestone by milestone —
  * a nav entry is only rendered once its surface genuinely works. */
@@ -28,6 +29,9 @@ interface UiState {
   codexType: EntityType;
   /** Command palette (Ctrl/Cmd+K) visibility. */
   paletteOpen: boolean;
+  palettePurpose: PalettePurpose;
+  leftRailExpanded: boolean;
+  rightDockExpanded: boolean;
   /** Onboarding interview wizard visibility. */
   onboardingOpen: boolean;
   /** Per-surface help dialog visibility. */
@@ -40,6 +44,9 @@ interface UiState {
   setRoute: (route: RouteId) => void;
   setCodexType: (type: EntityType) => void;
   setPaletteOpen: (open: boolean) => void;
+  setPalettePurpose: (purpose: PalettePurpose) => void;
+  toggleLeftRail: () => void;
+  toggleRightDock: () => void;
   setOnboardingOpen: (open: boolean) => void;
   setHelpOpen: (open: boolean) => void;
   requestChapter: (chapterId: string) => void;
@@ -47,6 +54,8 @@ interface UiState {
 }
 
 const THEME_KEY = 'lw:theme';
+const LEFT_RAIL_KEY = 'lw:left-rail-expanded';
+const RIGHT_DOCK_KEY = 'lw:right-dock-expanded';
 
 function initialTheme(): Theme {
   try {
@@ -56,6 +65,26 @@ function initialTheme(): Theme {
     /* private mode etc. */
   }
   return 'parchment-light';
+}
+
+
+function storedBoolean(key: string, fallback: boolean): boolean {
+  try {
+    const value = localStorage.getItem(key);
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+function storeBoolean(key: string, value: boolean) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    /* ignore */
+  }
 }
 
 function applyTheme(theme: Theme) {
@@ -83,10 +112,26 @@ export const useUiStore = create<UiState>((set, get) => ({
   setRoute: (route) => set({ route }),
   setCodexType: (type) => set({ codexType: type }),
   paletteOpen: false,
+  palettePurpose: 'search',
+  leftRailExpanded: storedBoolean(LEFT_RAIL_KEY, true),
+  rightDockExpanded: storedBoolean(RIGHT_DOCK_KEY, false),
   onboardingOpen: false,
   helpOpen: false,
   pendingChapterId: null,
   setPaletteOpen: (open) => set({ paletteOpen: open }),
+  setPalettePurpose: (palettePurpose) => set({ palettePurpose }),
+  toggleLeftRail: () =>
+    set((state) => {
+      const leftRailExpanded = !state.leftRailExpanded;
+      storeBoolean(LEFT_RAIL_KEY, leftRailExpanded);
+      return { leftRailExpanded };
+    }),
+  toggleRightDock: () =>
+    set((state) => {
+      const rightDockExpanded = !state.rightDockExpanded;
+      storeBoolean(RIGHT_DOCK_KEY, rightDockExpanded);
+      return { rightDockExpanded };
+    }),
   setOnboardingOpen: (open) => set({ onboardingOpen: open }),
   setHelpOpen: (open) => set({ helpOpen: open }),
   requestChapter: (chapterId) => set({ pendingChapterId: chapterId }),

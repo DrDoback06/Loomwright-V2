@@ -10,12 +10,22 @@ export function toRef(entity: Entity): EntityRef {
 
 export async function listEntities(projectId: string, type: EntityType): Promise<Entity[]> {
   const rows = await db.entities.where('[projectId+type]').equals([projectId, type]).toArray();
-  return rows.sort((a, b) => a.name.localeCompare(b.name));
+  return rows.filter((row) => row.status !== 'merged').sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function getEntity(id: string): Promise<Entity | undefined> {
+  const entity = await db.entities.get(id);
+  if (entity?.status === 'merged' && entity.mergedIntoId) {
+    return (await db.entities.get(entity.mergedIntoId)) ?? entity;
+  }
+  return entity;
+}
+
+/** Raw lookup used by merge/undo screens when the redirect record itself is needed. */
+export async function getEntityRecord(id: string): Promise<Entity | undefined> {
   return db.entities.get(id);
 }
+
 
 interface CreateEntityInput {
   projectId: string;

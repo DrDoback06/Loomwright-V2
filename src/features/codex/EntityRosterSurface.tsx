@@ -16,6 +16,8 @@ import { ReferenceImport } from './ReferenceImport';
 import { TimelineView } from './TimelineView';
 import { RelationshipGraph } from './RelationshipGraph';
 import { useEffect } from 'react';
+import { readDragPayload, writeDragPayload } from '@/services/drag';
+import { useMergeStore } from '@/stores/merge';
 
 /** Full-page roster + detail surface for one entity type. */
 export function EntityRosterSurface({ type }: { type: EntityType }) {
@@ -32,6 +34,8 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
   const consumeFocus = useFocusStore((s) => s.consumeFocus);
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const openMerge = useMergeStore((state) => state.open);
   const timelineCapable = type === 'events' || type === 'timeline';
   const graphCapable = type === 'relationships';
   const [view, setView] = useState<'list' | 'timeline' | 'graph'>('list');
@@ -223,7 +227,50 @@ export function EntityRosterSurface({ type }: { type: EntityType }) {
               </li>
             ))}
             {filtered.map((entity) => (
-              <li key={entity.id}>
+              <li
+                key={entity.id}
+                className={dropTargetId === entity.id ? 'lw-rosterdrop lw-rosterdrop--active' : 'lw-rosterdrop'}
+                draggable
+                onDragStart={(event) =>
+                  writeDragPayload(event, {
+                    kind: 'entity',
+                    entityType: entity.type,
+                    entityId: entity.id,
+                    name: entity.name,
+                  })
+                }
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                  setDropTargetId(entity.id);
+                }}
+                onDragLeave={() => setDropTargetId((id) => (id === entity.id ? null : id))}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDropTargetId(null);
+                  const payload = readDragPayload(event);
+                  if (!payload || payload.entityType !== entity.type) {
+                    toast('Only records of the same entity type can be merged.', { kind: 'error' });
+                    return;
+                  }
+                  if (payload.kind === 'entity') {
+                    if (payload.entityId === entity.id) return;
+                    openMerge({
+                      entityType: entity.type,
+                      sourceEntityIds: [payload.entityId],
+                      targetEntityId: entity.id,
+                      canonicalName: entity.name,
+                    });
+                  } else {
+                    openMerge({
+                      entityType: entity.type,
+                      candidateIds: payload.candidateIds,
+                      targetEntityId: entity.id,
+                      canonicalName: entity.name,
+                    });
+                  }
+                }}
+              >
                 <button
                   type="button"
                   className="lw-rostercard"

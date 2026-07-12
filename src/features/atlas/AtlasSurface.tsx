@@ -9,12 +9,13 @@ import { useCanvas } from '@/features/canvas/useCanvas';
 import { useFocusStore } from '@/stores/focus';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
+import type { ChapterAnchoredFact } from '@/services/chapter-awareness';
 
 const WORLD = 1000; // map-space square
 
 /** The Atlas: a pannable, zoomable world map. Place location pins, drag
  * them, and read derived character travel routes (from each cast
- * member's travelHistory + currentLocation refs). */
+ * member's chapter-anchored travelTimeline (with a legacy history fallback). */
 export function AtlasSurface() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const setFocus = useFocusStore((s) => s.setFocus);
@@ -56,17 +57,25 @@ export function AtlasSurface() {
     const routes: { castName: string; points: AtlasPin[]; color: string }[] = [];
     for (const member of cast) {
       const stops: AtlasPin[] = [];
-      const history = member.fields.travelHistory;
-      if (Array.isArray(history)) {
-        for (const ref of history as EntityRef[]) {
-          const pin = pinByEntity.get(ref?.id);
-          if (pin) stops.push(pin);
+      const timeline = member.fields.travelTimeline;
+      if (Array.isArray(timeline) && timeline.length > 0) {
+        for (const fact of timeline as ChapterAnchoredFact[]) {
+          const pin = fact.location ? pinByEntity.get(fact.location.id) : undefined;
+          if (pin && stops[stops.length - 1]?.id !== pin.id) stops.push(pin);
         }
-      }
-      const current = member.fields.currentLocation as EntityRef | undefined;
-      if (current) {
-        const pin = pinByEntity.get(current.id);
-        if (pin && stops[stops.length - 1]?.id !== pin.id) stops.push(pin);
+      } else {
+        const history = member.fields.travelHistory;
+        if (Array.isArray(history)) {
+          for (const ref of history as EntityRef[]) {
+            const pin = pinByEntity.get(ref?.id);
+            if (pin && stops[stops.length - 1]?.id !== pin.id) stops.push(pin);
+          }
+        }
+        const current = member.fields.currentLocation as EntityRef | undefined;
+        if (current) {
+          const pin = pinByEntity.get(current.id);
+          if (pin && stops[stops.length - 1]?.id !== pin.id) stops.push(pin);
+        }
       }
       if (stops.length >= 2) {
         routes.push({

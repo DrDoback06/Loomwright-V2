@@ -1,7 +1,8 @@
 import Dexie from 'dexie';
 import { db } from '../schema';
 import { logAudit } from './audit';
-import type { Entity, TrashRow } from '../types';
+import type { Chapter, Entity, TrashRow } from '../types';
+import { refreshProjectChapterReferences } from '@/services/chapter-awareness';
 
 export async function listTrash(projectId: string): Promise<TrashRow[]> {
   return db.trash
@@ -11,15 +12,30 @@ export async function listTrash(projectId: string): Promise<TrashRow[]> {
     .toArray();
 }
 
-/** Restore a trashed row back into its table. */
+/** Restore a trashed row back into its table. Chapter restoration preserves
+ * the original stable id and reinserts it at its previous narrative position,
+ * shifting later chapters rather than creating duplicate order values. All
+ * chapter-anchored entity/Atlas/timeline projections are then refreshed locally. */
 export async function restoreFromTrash(id: string): Promise<void> {
   const row = await db.trash.get(id);
   if (!row) return;
+  let restoredChapter = false;
   await db.transaction('rw', [db.trash, db.entities, db.chapters, db.auditLog], async () => {
     if (row.table === 'entities') {
       await db.entities.put(row.payload as Entity);
     } else if (row.table === 'chapters') {
-      await db.chapters.put(row.payload as never);
+      const chapter = row.payload as Chapter;
+      const siblings = await db.chapters
+        .where('[projectId+order]')
+        .between([row.projectId, -Infinity], [row.projectId, Infinity])
+        .toArray();
+      const insertAt = Math.max(0, Math.min(chapter.order, siblings.length));
+      const now = Date.now();
+      for (const sibling of siblings.filter((candidate) => candidate.order >= insertAt)) {
+        await db.chapters.update(sibling.id, { order: sibling.order + 1, updatedAt: now });
+      }
+      await db.chapters.put({ ...chapter, order: insertAt, updatedAt: now });
+      restoredChapter = true;
     } else {
       throw new Error(`Cannot restore rows from table ${row.table}`);
     }
@@ -31,6 +47,7 @@ export async function restoreFromTrash(id: string): Promise<void> {
       after: row.payload,
     });
   });
+  if (restoredChapter) await refreshProjectChapterReferences(row.projectId);
 }
 
 /** Permanently delete a trashed row. The UI must double-confirm. */

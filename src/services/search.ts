@@ -32,6 +32,7 @@ export async function buildSearchIndex(projectId: string) {
 
   const entities = await db.entities.where('projectId').equals(projectId).toArray();
   for (const e of entities) {
+    if (e.status === 'merged') continue;
     docs.push({
       id: `entity:${e.id}`,
       kind: 'entity',

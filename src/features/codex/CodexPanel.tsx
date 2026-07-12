@@ -9,6 +9,9 @@ import { useFocusStore } from '@/stores/focus';
 import { useLayoutStore } from '@/stores/layout';
 import { useProjectStore } from '@/stores/project';
 import { useUiStore } from '@/stores/ui';
+import { useMergeStore } from '@/stores/merge';
+import { readDragPayload, writeDragPayload } from '@/services/drag';
+import { toast } from '@/stores/toasts';
 
 /** A compact docked codex panel. Reacts to cross-panel focus: when an
  * entity of ANOTHER type is focused, the roster filters to records that
@@ -28,6 +31,8 @@ export function CodexPanel({ type }: { type: EntityType }) {
 
   const [query, setQuery] = useState('');
   const [chipDismissedFor, setChipDismissedFor] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const openMerge = useMergeStore((state) => state.open);
 
   const entities = useLiveQuery(
     async () => (projectId ? listEntities(projectId, type) : []),
@@ -147,7 +152,50 @@ export function CodexPanel({ type }: { type: EntityType }) {
           {rows.map((entity) => {
             const isLocked = lock?.id === entity.id;
             return (
-              <li key={entity.id} className="lw-panel__row">
+              <li
+                key={entity.id}
+                className={dropTargetId === entity.id ? 'lw-panel__row lw-panel__row--drop' : 'lw-panel__row'}
+                draggable
+                onDragStart={(event) =>
+                  writeDragPayload(event, {
+                    kind: 'entity',
+                    entityType: entity.type,
+                    entityId: entity.id,
+                    name: entity.name,
+                  })
+                }
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                  setDropTargetId(entity.id);
+                }}
+                onDragLeave={() => setDropTargetId((id) => (id === entity.id ? null : id))}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDropTargetId(null);
+                  const payload = readDragPayload(event);
+                  if (!payload || payload.entityType !== entity.type) {
+                    toast('Only records of the same entity type can be merged.', { kind: 'error' });
+                    return;
+                  }
+                  if (payload.kind === 'entity') {
+                    if (payload.entityId === entity.id) return;
+                    openMerge({
+                      entityType: entity.type,
+                      sourceEntityIds: [payload.entityId],
+                      targetEntityId: entity.id,
+                      canonicalName: entity.name,
+                    });
+                  } else {
+                    openMerge({
+                      entityType: entity.type,
+                      candidateIds: payload.candidateIds,
+                      targetEntityId: entity.id,
+                      canonicalName: entity.name,
+                    });
+                  }
+                }}
+              >
                 <button
                   type="button"
                   className="lw-panel__rowmain"

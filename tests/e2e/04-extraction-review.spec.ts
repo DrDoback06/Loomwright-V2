@@ -62,7 +62,7 @@ test.describe('extraction + review loop', () => {
     // A cast candidate for Maren exists — accept it via the real button.
     const marenCard = page.locator('.lw-qcard', { hasText: 'Maren' }).first();
     await expect(marenCard).toBeVisible();
-    await marenCard.getByRole('button', { name: 'Accept', exact: true }).click();
+    await marenCard.getByRole('button', { name: 'Accept as new', exact: true }).click();
     await expect(page.getByText(/Maren added/)).toBeVisible();
 
     // The entity now exists in the Cast roster — and survives reload.
@@ -115,7 +115,7 @@ test.describe('extraction + review loop', () => {
     // Discovery suggests the item as a new record.
     const itemCard = page.locator('.lw-qcard', { hasText: 'Blackwork Blade' }).first();
     await expect(itemCard).toBeVisible();
-    await itemCard.getByRole('button', { name: 'Accept', exact: true }).click();
+    await itemCard.getByRole('button', { name: 'Accept as new', exact: true }).click();
 
     // Re-extract: now the item is KNOWN, so the transfer detector fires.
     await openWritersRoom(page);
@@ -124,7 +124,10 @@ test.describe('extraction + review loop', () => {
     const transferCard = page.locator('.lw-qcard', { hasText: 'transferred' }).first();
     await expect(transferCard).toBeVisible();
     await expect(transferCard.getByText(/Saren/).first()).toBeVisible();
-    await transferCard.getByRole('button', { name: 'Accept', exact: true }).click();
-    await expect(page.getByText(/Blackwork Blade updated/)).toBeVisible();
+    await transferCard.getByRole('button', { name: 'Preview resolution' }).click();
+    const preview = page.getByTestId('merge-preview');
+    await expect(preview).toContainText('Information to add or reconcile');
+    await preview.getByRole('button', { name: 'Confirm merge everywhere' }).click();
+    await expect(page.getByText(/canonical entity/)).toBeVisible();
   });
 });
