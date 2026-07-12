@@ -1,0 +1,19 @@
+{
+  "application": "loomwright-context-aware-extraction",
+  "sourceBranch": "agent/review-identity-resolution",
+  "sourceSha": "523c74ca96ff3371dbc11475754c3d539cf51a49",
+  "verification": {
+    "typecheck": "passed",
+    "lint": "passed",
+    "unitSuite": "passed",
+    "browserSuite": "passed-desktop-and-mobile",
+    "verifiedRunId": 29209640434
+  },
+  "extractionRelease": {
+    "contextualTypeValidation": true,
+    "junkPhraseRejection": true,
+    "possessiveCanonicalisation": true,
+    "explicitLocationSkillEventCues": true,
+    "conservativeSingleTokenDiscovery": true
+  }
+}
