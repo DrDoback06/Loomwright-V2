@@ -1,4 +1,4 @@
-name: Apply review identity payload
+name: Apply review browser compatibility fixes
 
 on:
   push:
@@ -19,19 +19,19 @@ jobs:
           ref: agent/review-identity-resolution
           fetch-depth: 1
 
-      - name: Verify and apply implementation archive
+      - name: Verify and apply compatibility patch
         shell: bash
         run: |
           set -euo pipefail
-          test "$(find .review-payload -maxdepth 1 -type f -name 'part-*' | wc -l)" -eq 9
-          cat .review-payload/part-* > /tmp/loomwright-review-payload.b64
-          base64 --decode /tmp/loomwright-review-payload.b64 > /tmp/loomwright-review-payload.tar.gz
-          echo "fd61a67be8f059ee97ed9ffc75917012de2e3b4328eebed194b843ce10dfab87  /tmp/loomwright-review-payload.tar.gz" | sha256sum -c -
-          tar -xzf /tmp/loomwright-review-payload.tar.gz
-          rm -rf .review-payload
+          test "$(find .review-fix-payload -maxdepth 1 -type f -name 'part-*' | wc -l)" -eq 1
+          cat .review-fix-payload/part-* > /tmp/loomwright-review-fix.b64
+          base64 --decode /tmp/loomwright-review-fix.b64 > /tmp/loomwright-review-fix.tar.gz
+          echo "b4a6dab41d606954d2076eb28d904ea8da3596b12219b6a269d25fe2a0ed7380  /tmp/loomwright-review-fix.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/loomwright-review-fix.tar.gz
+          rm -rf .review-fix-payload
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Implement smart identity resolution and project-wide merges"
+          git commit -m "Fix review compatibility and rapid canvas placement"
           git push origin HEAD:agent/review-identity-resolution
