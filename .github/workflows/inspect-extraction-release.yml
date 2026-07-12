@@ -1,0 +1,34 @@
+name: Inspect extraction intelligence release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/inspect-extraction-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Capture extraction release state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$REPO/actions/runs?branch=agent/extraction-intelligence&per_page=20" \
+            --jq '{runs: [.workflow_runs[] | select(.name == "Apply extraction intelligence release") | {id,name,status,conclusion,head_sha,created_at,updated_at,html_url}]}' \
+            > .extraction-run-state.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .extraction-run-state.json
+          git commit -m "Record extraction intelligence release state" || exit 0
+          git push origin HEAD:main
