@@ -64,7 +64,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/features/review/ReviewSurface.tsx src/features/codex/EntityEditorDrawer.tsx src/styles/components.css
+          git add src/features/review/ReviewSurface.tsx src/features/review/MergePreviewDialog.tsx src/features/codex/EntityEditorDrawer.tsx src/styles/components.css
           git commit -m "Complete review identity resolution release"
           git push origin HEAD:agent/review-identity-resolution
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
