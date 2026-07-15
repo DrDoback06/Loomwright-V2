@@ -1,6 +1,5 @@
 name: Inspect nuanced extraction verification
 
-# Capture the newest feature run and failure summary when needed.
 on:
   push:
     branches: [main]
@@ -20,7 +19,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 1
-      - name: Capture latest feature verification
+      - name: Capture latest feature verification and failed assertions
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -32,20 +31,11 @@ jobs:
           RUN_ID=$(jq -r '.runs[0].id // empty' .nuanced-extraction-ci.json)
           : > .nuanced-extraction-failure.txt
           if [ -n "$RUN_ID" ]; then
-            JOB_ID=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs" --jq '.jobs[0].id // empty')
-            if [ -n "$JOB_ID" ]; then
-              gh api "repos/$REPO/actions/jobs/$JOB_ID/logs" > /tmp/job.zip || true
-              if file /tmp/job.zip | grep -qi zip; then
-                mkdir -p /tmp/joblogs
-                unzip -qq /tmp/job.zip -d /tmp/joblogs || true
-                grep -RIE "FAIL|AssertionError|error TS|Error:" /tmp/joblogs | tail -n 120 > .nuanced-extraction-failure.txt || true
-              else
-                strings /tmp/job.zip | grep -E "FAIL|AssertionError|error TS|Error:" | tail -n 120 > .nuanced-extraction-failure.txt || true
-              fi
-            fi
+            gh run view "$RUN_ID" --repo "$REPO" --log-failed > /tmp/failed.log 2>&1 || true
+            grep -E "FAIL|AssertionError|expected |Error:|❯ tests/" /tmp/failed.log | tail -n 180 > .nuanced-extraction-failure.txt || true
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .nuanced-extraction-ci.json .nuanced-extraction-failure.txt
-          git commit -m "Inspect final nuanced extraction run" || exit 0
+          git commit -m "Capture nuanced extraction assertion failures" || exit 0
           git push origin HEAD:main
