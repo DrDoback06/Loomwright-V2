@@ -1,0 +1,5 @@
+verify	Run npm run test:unit	2026-07-15T04:04:05.5148096Z ^[[31m     → expected undefined to be 'cast' // Object.is equality^[[39m
+verify	Run npm run test:unit	2026-07-15T04:04:06.5075039Z ^[[41m^[[1m FAIL ^[[22m^[[49m tests/unit/extraction-quality.spec.ts^[[2m > ^[[22mnuanced contextual discovery^[[2m > ^[[22mkeeps real entities and preserves uncertain interpretations at lower confidence
+verify	Run npm run test:unit	2026-07-15T04:04:06.5083537Z ^[[31m^[[1mAssertionError^[[22m: expected undefined to be 'cast' // Object.is equality^[[39m
+verify	Run npm run test:unit	2026-07-15T04:04:06.5176258Z ##[error]AssertionError: expected undefined to be 'cast' // Object.is equality
+verify	Run npm run test:unit	 ❯ tests/unit/extraction-quality.spec.ts:34:63
