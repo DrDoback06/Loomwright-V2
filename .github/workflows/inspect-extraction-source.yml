@@ -19,16 +19,22 @@ jobs:
         with:
           ref: main
           fetch-depth: 1
-      - name: Capture full failed feature log
+      - name: Capture newest feature run
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          RUN_ID: "29388028282"
         run: |
           set -euo pipefail
-          gh run view "$RUN_ID" --repo "$REPO" --log-failed > .nuanced-extraction-failure-full.txt 2>&1 || true
+          gh api "repos/$REPO/actions/runs?branch=agent/review-identity-resolution&per_page=10" \
+            --jq '{runs: [.workflow_runs[] | select(.name == "Review Identity CI") | {id,status,conclusion,head_sha,created_at,updated_at,html_url}]}' \
+            > .nuanced-extraction-ci.json
+          RUN_ID=$(jq -r '.runs[0].id // empty' .nuanced-extraction-ci.json)
+          : > .nuanced-extraction-failure-full.txt
+          if [ -n "$RUN_ID" ]; then
+            gh run view "$RUN_ID" --repo "$REPO" --log-failed > .nuanced-extraction-failure-full.txt 2>&1 || true
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .nuanced-extraction-failure-full.txt
-          git commit -m "Capture full nuanced extraction failure" || exit 0
+          git add .nuanced-extraction-ci.json .nuanced-extraction-failure-full.txt
+          git commit -m "Monitor final nuanced extraction verification" || exit 0
           git push origin HEAD:main
