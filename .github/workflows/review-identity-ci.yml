@@ -1,5 +1,6 @@
 name: Review Identity CI
 
+# Full verification after adding editable low-certainty interpretations.
 on:
   push:
     branches:
