@@ -1,6 +1,6 @@
 name: Review Identity CI
 
-# Definitive verification for editable ambiguous interpretations and raw-surface preservation.
+# Final verification after splitting class prefixes from character identities.
 on:
   push:
     branches:
