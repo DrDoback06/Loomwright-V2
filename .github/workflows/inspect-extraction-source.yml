@@ -1,6 +1,6 @@
 name: Inspect nuanced extraction verification
 
-# Refresh after raw-surface preservation and final CI trigger.
+# Capture the newest feature run and failure summary when needed.
 on:
   push:
     branches: [main]
@@ -25,11 +25,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           gh api "repos/$REPO/actions/runs?branch=agent/review-identity-resolution&per_page=20" \
             --jq '{runs: [.workflow_runs[] | select(.name == "Review Identity CI") | {id,status,conclusion,head_sha,created_at,updated_at,html_url}]}' \
             > .nuanced-extraction-ci.json
+          RUN_ID=$(jq -r '.runs[0].id // empty' .nuanced-extraction-ci.json)
+          : > .nuanced-extraction-failure.txt
+          if [ -n "$RUN_ID" ]; then
+            JOB_ID=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs" --jq '.jobs[0].id // empty')
+            if [ -n "$JOB_ID" ]; then
+              gh api "repos/$REPO/actions/jobs/$JOB_ID/logs" > /tmp/job.zip || true
+              if file /tmp/job.zip | grep -qi zip; then
+                mkdir -p /tmp/joblogs
+                unzip -qq /tmp/job.zip -d /tmp/joblogs || true
+                grep -RIE "FAIL|AssertionError|error TS|Error:" /tmp/joblogs | tail -n 120 > .nuanced-extraction-failure.txt || true
+              else
+                strings /tmp/job.zip | grep -E "FAIL|AssertionError|error TS|Error:" | tail -n 120 > .nuanced-extraction-failure.txt || true
+              fi
+            fi
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .nuanced-extraction-ci.json
-          git commit -m "Refresh nuanced extraction CI" || exit 0
+          git add .nuanced-extraction-ci.json .nuanced-extraction-failure.txt
+          git commit -m "Inspect final nuanced extraction run" || exit 0
           git push origin HEAD:main
