@@ -1,0 +1,21 @@
+{
+  "application": "loomwright-editable-nuanced-extraction",
+  "sourceBranch": "agent/review-identity-resolution",
+  "sourceSha": "5976fa83b586de2a7df7a375fbd2ccb766821215",
+  "verification": {
+    "typecheck": "passed",
+    "lint": "passed",
+    "unitTests": 100,
+    "browserSuite": "passed-desktop-and-mobile",
+    "verifiedRunId": 29388290614
+  },
+  "extractionRelease": {
+    "rankedTypeSuggestions": true,
+    "editableCandidateType": true,
+    "lowCertaintyAmbiguityPreserved": true,
+    "repeatedCommonItemDiscovery": true,
+    "rawSurfacePreservation": true,
+    "classPersonSpanSplitting": true,
+    "possessiveCanonicalisation": true
+  }
+}
