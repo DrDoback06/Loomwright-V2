@@ -145,22 +145,25 @@ export function discoverEntities(
   const minRecurrence = opts.minRecurrence ?? 2;
   const maxCandidates = opts.maxCandidates ?? 120;
   const spans = extractProperNounSpans(text);
-  const groups = new Map<string, { surface: string; occ: ProperNounSpan[] }>();
+  const groups = new Map<string, { surface: string; rawSurface: string; occ: ProperNounSpan[] }>();
   for (const span of spans) {
     const quality = assessCandidateQuality({ text, surface: span.surface, occurrences: [span], entities });
     const key = quality.canonical.toLowerCase();
     if (!key) continue;
-    if (!groups.has(key)) groups.set(key, { surface: quality.canonical, occ: [] });
+    if (!groups.has(key)) groups.set(key, { surface: quality.canonical, rawSurface: span.surface, occ: [] });
     const group = groups.get(key)!;
     group.occ.push(span);
-    if (!span.atSentenceStart) group.surface = quality.canonical;
+    if (!span.atSentenceStart) {
+      group.surface = quality.canonical;
+      group.rawSurface = span.surface;
+    }
   }
 
   for (const group of groups.values()) {
     if (out.length >= maxCandidates) break;
     const quality = assessCandidateQuality({
       text,
-      surface: group.surface,
+      surface: group.rawSurface,
       occurrences: group.occ,
       entities,
     });
