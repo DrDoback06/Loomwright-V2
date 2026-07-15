@@ -1,4 +1,4 @@
-name: Deploy verified Loomwright extraction release
+name: Deploy verified Loomwright nuanced extraction release
 
 on:
   push:
@@ -18,13 +18,13 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Exact source that passed Review Identity CI run 29209640434.
-  LOOMWRIGHT_REF: 523c74ca96ff3371dbc11475754c3d539cf51a49
+  # Exact source that passed Review Identity CI run 29388290614.
+  LOOMWRIGHT_REF: 5976fa83b586de2a7df7a375fbd2ccb766821215
   LW_BASE: /Loomwright-V2/
 
 jobs:
   build:
-    name: Package verified context-aware extraction build
+    name: Package verified nuanced extraction build
     runs-on: ubuntu-latest
     outputs:
       source_sha: ${{ steps.source.outputs.sha }}
@@ -60,22 +60,24 @@ jobs:
           touch dist/.nojekyll
           cat > dist/deployed-version.json <<JSON
           {
-            "application": "loomwright-context-aware-extraction",
+            "application": "loomwright-editable-nuanced-extraction",
             "sourceBranch": "agent/review-identity-resolution",
             "sourceSha": "${{ steps.source.outputs.sha }}",
             "verification": {
               "typecheck": "passed",
               "lint": "passed",
-              "unitSuite": "passed",
+              "unitTests": 100,
               "browserSuite": "passed-desktop-and-mobile",
-              "verifiedRunId": 29209640434
+              "verifiedRunId": 29388290614
             },
             "extractionRelease": {
-              "contextualTypeValidation": true,
-              "junkPhraseRejection": true,
-              "possessiveCanonicalisation": true,
-              "explicitLocationSkillEventCues": true,
-              "conservativeSingleTokenDiscovery": true
+              "rankedTypeSuggestions": true,
+              "editableCandidateType": true,
+              "lowCertaintyAmbiguityPreserved": true,
+              "repeatedCommonItemDiscovery": true,
+              "rawSurfacePreservation": true,
+              "classPersonSpanSplitting": true,
+              "possessiveCanonicalisation": true
             }
           }
           JSON
@@ -87,7 +89,7 @@ jobs:
           path: dist
 
   deploy:
-    name: Publish verified Loomwright extraction release
+    name: Publish verified Loomwright nuanced extraction release
     needs: build
     runs-on: ubuntu-latest
     environment:
