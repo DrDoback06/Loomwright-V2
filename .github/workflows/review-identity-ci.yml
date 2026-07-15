@@ -1,6 +1,6 @@
 name: Review Identity CI
 
-# Full verification after adding editable low-certainty interpretations.
+# Definitive verification for editable ambiguous interpretations and raw-surface preservation.
 on:
   push:
     branches:
