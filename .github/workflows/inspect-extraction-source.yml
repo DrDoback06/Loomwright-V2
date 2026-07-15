@@ -1,5 +1,6 @@
 name: Inspect nuanced extraction verification
 
+# Refresh after raw-surface preservation and final CI trigger.
 on:
   push:
     branches: [main]
@@ -30,5 +31,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .nuanced-extraction-ci.json
-          git commit -m "Record nuanced extraction CI" || exit 0
+          git commit -m "Refresh nuanced extraction CI" || exit 0
           git push origin HEAD:main
