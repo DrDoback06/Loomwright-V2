@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { runLocalExtraction } from '@/services/extraction/engine';
 import type { KnownEntity } from '@/services/extraction/known-index';
 
-const noisyChapter = `
+const nuancedChapter = `
 Blood welled through the torn fabric of the hi-vis vest he'd been wearing since the Jobcentre, back when he'd been Graham Hendricks.
-Seven feet of Dreadknight Berserker, Graham Hendricks still believed you should wear what the system gave you.
+Dreadknight Berserker Graham Hendricks still believed you should wear what the system gave you.
 
 "You're bleeding!" Pipkins was at his side instantly.
 "It's fine," Graham said.
@@ -19,26 +19,37 @@ They had looted Poundland before Gerald Swan found them.
 Darren Fletchley waved from across the road.
 The CLAIMWISE software lit up on the terminal.
 British rain rattled against the windows.
+Graham had once won West Midlands Strongest Man.
+Grimguff raised Council-Tax-Evader and aimed it at the swan.
 `;
 
-describe('contextual discovery quality', () => {
-  it('keeps real people and typed world content while rejecting dialogue fragments, commands and adjectives', () => {
-    const result = runLocalExtraction({ text: noisyChapter, entities: [] });
-    const names = result.candidates.map((candidate) => candidate.name);
-    const byName = new Map(result.candidates.map((candidate) => [candidate.name, candidate]));
+function candidate(result: ReturnType<typeof runLocalExtraction>, name: string) {
+  return result.candidates.find((row) => row.name.toLowerCase() === name.toLowerCase());
+}
 
-    expect(names).toContain('Graham Hendricks');
-    expect(names).toContain('Pipkins');
-    expect(names).toContain('Grimguff');
-    expect(names).toContain('Gerald Swan');
-    expect(names).toContain('Darren Fletchley');
-    expect(byName.get('Gerald Swan')?.entityType).toBe('cast');
-    expect(byName.get('Darren Fletchley')?.entityType).toBe('cast');
-    expect(byName.get('Dreadknight Berserker')?.entityType).toBe('classes');
+describe('nuanced contextual discovery', () => {
+  it('keeps real entities and preserves uncertain interpretations at lower confidence', () => {
+    const result = runLocalExtraction({ text: nuancedChapter, entities: [] });
 
-    for (const forbidden of ["IT'S A SWAN WITH A KNIFE", 'Slap', 'RUN', "I'm", 'British', 'CLAIMWISE']) {
-      expect(names, `should reject ${forbidden}`).not.toContain(forbidden);
-    }
+    expect(candidate(result, 'Graham Hendricks')?.entityType).toBe('cast');
+    expect(candidate(result, 'Pipkins')?.entityType).toBe('cast');
+    expect(candidate(result, 'Grimguff')?.entityType).toBe('cast');
+    expect(candidate(result, 'Gerald Swan')?.entityType).toBe('cast');
+    expect(candidate(result, 'Darren Fletchley')?.entityType).toBe('cast');
+    expect(candidate(result, 'Dreadknight Berserker')?.entityType).toBe('classes');
+    expect(candidate(result, 'Poundland')?.entityType).toBe('locations');
+    expect(candidate(result, 'Knife')?.entityType).toBe('items');
+
+    expect(candidate(result, 'Slap')?.entityType).toBe('skills');
+    expect(candidate(result, 'Slap')?.confidence).toBeLessThan(0.6);
+    expect(candidate(result, 'Run')?.entityType).toBe('skills');
+    expect(candidate(result, "It's a Swan with a Knife")?.entityType).toBe('quests');
+    expect(candidate(result, 'Claimwise')?.entityType).toBe('cast');
+    expect(candidate(result, 'West Midlands Strongest Man')?.interpretation?.kind).toBe('title');
+    expect(candidate(result, 'Council-Tax-Evader')?.typeSuggestions?.some((suggestion) => suggestion.type === 'items')).toBe(true);
+    expect(candidate(result, 'British')?.typeSuggestions?.[0]?.type).toBe('races');
+
+    expect(result.candidates.map((row) => row.name)).not.toContain("I'm");
   });
 
   it('normalises possessives and resolves them to an existing entity', () => {
@@ -49,7 +60,7 @@ describe('contextual discovery quality', () => {
       text: "Grimguff's stomach clenched. Grimguff's coat was torn.",
       entities,
     });
-    expect(result.candidates.map((candidate) => candidate.name)).not.toContain("Grimguff's");
+    expect(result.candidates.map((row) => row.name)).not.toContain("Grimguff's");
     expect(result.occurrences.filter((occurrence) => occurrence.entityId === 'cast-grimguff').length).toBeGreaterThanOrEqual(2);
   });
 });

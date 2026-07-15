@@ -2,6 +2,7 @@ import { db } from '../schema';
 import { newId } from '@/lib/id';
 import { logAudit } from './audit';
 import type { Entity, ReviewCandidate } from '../types';
+import type { EntityType } from '@/domain/entity-types';
 import { buildMergePreview, commitMerge } from './merge';
 
 export async function listPendingCandidates(projectId: string): Promise<ReviewCandidate[]> {
@@ -76,6 +77,33 @@ export async function acceptAllCandidates(projectId: string, ids?: string[]): Pr
     if (entity) done += 1;
   }
   return done;
+}
+
+
+export async function retypeCandidates(ids: string[], entityType: EntityType): Promise<number> {
+  const uniqueIds = [...new Set(ids)];
+  if (!uniqueIds.length) return 0;
+  const rows = (await db.candidates.bulkGet(uniqueIds)).filter((row): row is ReviewCandidate => Boolean(row && row.status === 'pending'));
+  if (!rows.length) return 0;
+  await db.transaction('rw', db.candidates, db.occurrences, async () => {
+    for (const row of rows) {
+      await db.candidates.update(row.id, {
+        entityType,
+        existingEntityId: null,
+        suggestedAction: 'create',
+        matchType: 'new',
+      });
+      await db.occurrences.where('candidateId').equals(row.id).modify({ entityType });
+    }
+  });
+  await logAudit({
+    projectId: rows[0].projectId,
+    action: 'review.retype',
+    target: { table: 'candidates', id: rows[0].id, label: rows.map((row) => row.name).join(', ') },
+    before: { entityTypes: [...new Set(rows.map((row) => row.entityType))] },
+    after: { entityType, candidateIds: rows.map((row) => row.id) },
+  });
+  return rows.length;
 }
 
 /** Insert fresh candidates for a chapter, replacing its pending ones. User

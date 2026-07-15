@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { acceptCandidate, denyCandidate, listPendingCandidates } from '@/db/repos/review';
+import { acceptCandidate, denyCandidate, listPendingCandidates, retypeCandidates } from '@/db/repos/review';
 import { rememberDifferentIdentity } from '@/db/repos/identity';
 import type { ReviewCandidate } from '@/db/types';
-import { ENTITY_TYPE_META } from '@/domain/entity-types';
+import { ALL_ENTITY_TYPES, ENTITY_TYPE_META, type EntityType, type EntityTypeSuggestion } from '@/domain/entity-types';
 import {
   buildIdentityClusters,
   type IdentityCluster,
@@ -93,6 +93,11 @@ export function ReviewSurface() {
     });
     setPalettePurpose('merge-target');
     setPaletteOpen(true);
+  };
+
+  const retypeCluster = async (candidateIds: string[], entityType: EntityType, label: string) => {
+    const changed = await retypeCandidates(candidateIds, entityType);
+    if (changed) toast(`${label} will now be reviewed as ${ENTITY_TYPE_META[entityType].label}.`, { kind: 'success' });
   };
 
   const acceptNew = async (candidate: ReviewCandidate) => {
@@ -313,6 +318,13 @@ export function ReviewSurface() {
                   </span>
                 </div>
 
+
+                <InterpretationControl
+                  currentType={cluster.entityType}
+                  candidates={cluster.candidates}
+                  onChange={(entityType) => void retypeCluster(cluster.candidateIds, entityType, cluster.primaryName)}
+                />
+
                 <div className="lw-identitycard__title">
                   <div>
                     <h2>{cluster.primaryName}</h2>
@@ -460,6 +472,12 @@ export function ReviewSurface() {
                     {BAND_LABEL[candidate.confidenceBand]} · {Math.round(candidate.confidence * 100)}%
                   </span>
                 </div>
+
+                <InterpretationControl
+                  currentType={candidate.entityType}
+                  candidates={[candidate]}
+                  onChange={(entityType) => void retypeCluster([candidate.id], entityType, candidate.name)}
+                />
                 <h2 className="lw-qcard__name">
                   {candidate.name}
                   <span className="lw-qcard__action">{candidate.suggestedAction}</span>
@@ -494,6 +512,60 @@ export function ReviewSurface() {
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+
+function InterpretationControl({
+  currentType,
+  candidates,
+  onChange,
+}: {
+  currentType: EntityType;
+  candidates: ReviewCandidate[];
+  onChange: (entityType: EntityType) => void;
+}) {
+  const byType = new Map<EntityType, EntityTypeSuggestion>();
+  for (const candidate of candidates) {
+    for (const suggestion of candidate.typeSuggestions ?? []) {
+      const prior = byType.get(suggestion.type);
+      if (!prior || suggestion.confidence > prior.confidence) byType.set(suggestion.type, suggestion);
+    }
+  }
+  const suggestions = [...byType.values()].sort((a, b) => b.confidence - a.confidence).slice(0, 4);
+  const notes = [...new Set(candidates.map((candidate) => candidate.interpretation?.note).filter(Boolean))];
+  return (
+    <div className="lw-interpretation" onPointerDown={(event) => event.stopPropagation()}>
+      <label>
+        <span>Interpret as</span>
+        <select
+          className="lw-input"
+          value={currentType}
+          onChange={(event) => onChange(event.target.value as EntityType)}
+          aria-label={`Interpret ${candidates[0]?.name ?? 'candidate'} as entity type`}
+        >
+          {ALL_ENTITY_TYPES.map((entityType) => (
+            <option key={entityType} value={entityType}>{ENTITY_TYPE_META[entityType].label}</option>
+          ))}
+        </select>
+      </label>
+      {suggestions.length ? (
+        <div className="lw-interpretation__suggestions" aria-label="Suggested entity types">
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion.type}
+              type="button"
+              className={suggestion.type === currentType ? 'lw-chip lw-chip--static lw-chip--selected' : 'lw-chip lw-chip--static'}
+              title={suggestion.reason}
+              onClick={() => onChange(suggestion.type)}
+            >
+              {ENTITY_TYPE_META[suggestion.type].label} {Math.round(suggestion.confidence * 100)}%
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {notes.length ? <p>{notes.join(' ')}</p> : null}
     </div>
   );
 }

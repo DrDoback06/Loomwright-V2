@@ -3407,3 +3407,18 @@ select.lw-input {
   color: var(--ink-4);
   font-size: var(--fs-2xs);
 }
+
+
+.lw-interpretation {
+  margin: .55rem 0 .35rem;
+  padding: .55rem .65rem;
+  border: 1px solid color-mix(in srgb, var(--lw-line) 80%, transparent);
+  border-radius: .6rem;
+  background: color-mix(in srgb, var(--lw-paper) 82%, transparent);
+}
+.lw-interpretation > label { display: flex; align-items: center; gap: .55rem; font-size: .72rem; font-weight: 700; }
+.lw-interpretation select { width: auto; min-width: 9rem; padding-block: .3rem; }
+.lw-interpretation__suggestions { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .45rem; }
+.lw-interpretation__suggestions button { cursor: pointer; }
+.lw-interpretation .lw-chip--selected { outline: 2px solid var(--lw-accent); outline-offset: 1px; }
+.lw-interpretation > p { margin: .4rem 0 0; font-size: .72rem; color: var(--lw-muted); }

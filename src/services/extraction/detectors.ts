@@ -1,4 +1,4 @@
-import type { EntityType } from '@/domain/entity-types';
+import type { CandidateInterpretationKind, EntityType, EntityTypeSuggestion } from '@/domain/entity-types';
 import {
   findEntityInSpan,
   findKnownEntityMention,
@@ -24,6 +24,8 @@ export interface ExtractionCandidate {
   relatedEntityIds?: string[];
   summary?: string;
   detector?: string;
+  typeSuggestions?: EntityTypeSuggestion[];
+  interpretation?: { kind: CandidateInterpretationKind; note: string };
   start?: number;
   end?: number;
 }
@@ -717,6 +719,13 @@ export function dedupeCandidates(candidates: ExtractionCandidate[]): ExtractionC
       ...new Set([...(existing.relatedEntityIds ?? []), ...(c.relatedEntityIds ?? [])]),
     ];
     existing.suggestedChanges = { ...(existing.suggestedChanges ?? {}), ...(c.suggestedChanges ?? {}) };
+    const suggestions = new Map((existing.typeSuggestions ?? []).map((suggestion) => [suggestion.type, suggestion]));
+    for (const suggestion of c.typeSuggestions ?? []) {
+      const prior = suggestions.get(suggestion.type);
+      if (!prior || suggestion.confidence > prior.confidence) suggestions.set(suggestion.type, suggestion);
+    }
+    existing.typeSuggestions = [...suggestions.values()].sort((a, b) => b.confidence - a.confidence);
+    if (!existing.interpretation && c.interpretation) existing.interpretation = c.interpretation;
   }
   return [...byKey.values()].map((c) => {
     delete c._seenOffsets;

@@ -1,6 +1,6 @@
 import { buildKnownIndex, resolvePronounsInText, scanTextForKnownEntities, type KnownEntity, type ScanOccurrence } from './known-index';
 import { dedupeCandidates, runLocalDetectors, type ExtractionCandidate } from './detectors';
-import { clusterAliases, discoverEntities } from './discovery';
+import { clusterAliases, discoverCommonItems, discoverEntities } from './discovery';
 import { findRanges } from './text-utils';
 
 export interface ExtractionInput {
@@ -37,7 +37,10 @@ export function runLocalExtraction(input: ExtractionInput): ExtractionResult {
 
   const minRecurrence =
     input.aggressiveness === 'gentle' ? 3 : input.aggressiveness === 'aggressive' ? 1 : 2;
-  const discovered = clusterAliases(discoverEntities(text, entities, { minRecurrence }));
+  const discovered = clusterAliases([
+    ...discoverEntities(text, entities, { minRecurrence }),
+    ...discoverCommonItems(text, entities),
+  ]);
 
   const detectorCandidates = runLocalDetectors({
     text,

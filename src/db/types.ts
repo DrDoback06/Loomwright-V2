@@ -1,4 +1,4 @@
-import type { EntityRef, EntityType } from '@/domain/entity-types';
+import type { CandidateInterpretationKind, EntityRef, EntityType, EntityTypeSuggestion } from '@/domain/entity-types';
 
 export interface Project {
   id: string;
@@ -102,6 +102,8 @@ export interface ReviewCandidate {
   relatedEntityIds?: string[];
   summary?: string;
   detector?: string;
+  typeSuggestions?: EntityTypeSuggestion[];
+  interpretation?: { kind: CandidateInterpretationKind; note: string };
   status: CandidateStatus;
   acceptedEntityId?: string;
   source: 'local' | 'ai' | 'handoff';

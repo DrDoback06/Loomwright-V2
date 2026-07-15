@@ -229,10 +229,61 @@ export function discoverEntities(
         start: representative.start,
         end: representative.end,
         suggestedChanges: aliases.length ? { aliases: [...new Set(aliases)] } : null,
+        typeSuggestions: quality.typeSuggestions,
+        interpretation: quality.interpretation ?? undefined,
         summary: `“${name}” is supported by ${count} contextual mention${count === 1 ? '' : 's'} (${signal}).`,
         detector: `ner:${signal}`,
       })
     );
+  }
+  return out;
+}
+
+
+const COMMON_ITEM_RE = /\b(?:(bread|kitchen|combat|hunting|pocket|butter|ritual|ceremonial|silver|iron|steel|wooden|old|rusted)\s+)?(knife|sword|blade|dagger|axe|hammer|shield|gun|rifle|pistol|bow|spear|staff|wand|ring|key|phone|book|scroll|potion|bottle|bag|coin|card|ticket|badge|helmet|armour|armor|boots|gloves|cloak|vest)\b/gi;
+
+/** Repeated concrete object nouns are useful even when prose does not capitalise
+ * them. This deliberately requires recurrence so ordinary scenery does not flood
+ * Review. The user still receives a low-certainty interpretation and can retype. */
+export function discoverCommonItems(text: string, entities: KnownEntity[]): ExtractionCandidate[] {
+  const groups = new Map<string, { starts: { start: number; end: number; exact: string }[]; aliases: Set<string> }>();
+  let match: RegExpExecArray | null;
+  COMMON_ITEM_RE.lastIndex = 0;
+  while ((match = COMMON_ITEM_RE.exec(text)) !== null) {
+    const noun = match[2].toLowerCase();
+    const exact = match[0];
+    const group = groups.get(noun) ?? { starts: [], aliases: new Set<string>() };
+    group.starts.push({ start: match.index, end: match.index + match[0].length, exact });
+    if (exact.toLowerCase() !== noun) group.aliases.add(exact.toLowerCase());
+    groups.set(noun, group);
+  }
+  const out: ExtractionCandidate[] = [];
+  for (const [noun, group] of groups) {
+    if (group.starts.length < 2) continue;
+    const name = noun[0].toUpperCase() + noun.slice(1);
+    const known = findKnownEntityMention(name, entities.filter((entity) => entity.type === 'items'), { threshold: 0.92 });
+    if (known?.matchType === 'exact' || known?.matchType === 'nickname') continue;
+    const representative = group.starts[0];
+    out.push(buildCandidate({
+      entityType: 'items',
+      name,
+      suggestedAction: known ? 'merge' : 'create',
+      matchType: known ? 'ambiguous' : 'new',
+      existingEntityId: known?.entity.id ?? null,
+      confidence: Math.min(0.52 + group.starts.length * 0.035, 0.66),
+      sourceQuote: makeSourceQuote(text, representative.start, representative.end),
+      sourceQuotes: group.starts.slice(0, 4).map((occurrence) => makeSourceQuote(text, occurrence.start, occurrence.end)),
+      start: representative.start,
+      end: representative.end,
+      suggestedChanges: group.aliases.size ? { aliases: [...group.aliases] } : null,
+      typeSuggestions: [
+        { type: 'items', confidence: 0.64, reason: 'Repeated concrete object noun in the chapter' },
+        { type: 'skills', confidence: 0.2, reason: 'Could be a move name if used figuratively' },
+      ],
+      interpretation: { kind: 'generic-item', note: 'Repeated uncapitalised object retained as a possible tracked item.' },
+      summary: `“${name}” appears ${group.starts.length}× as a concrete object.`,
+      detector: 'ner:repeated-common-item',
+    }));
   }
   return out;
 }

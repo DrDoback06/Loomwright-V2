@@ -60,6 +60,8 @@ export async function extractChapter(chapter: Chapter): Promise<ExtractionSummar
       relatedEntityIds: c.relatedEntityIds,
       summary: c.summary,
       detector: c.detector,
+      typeSuggestions: c.typeSuggestions,
+      interpretation: c.interpretation,
     }))
   );
   const candidateIdByName = new Map(rows.map((r) => [r.name.toLowerCase(), r.id]));

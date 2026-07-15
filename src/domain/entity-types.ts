@@ -19,6 +19,26 @@ export type EntityType =
   | 'timeline'
   | 'references';
 
+export interface EntityTypeSuggestion {
+  type: EntityType;
+  /** 0..1 confidence that this interpretation is the best fit. */
+  confidence: number;
+  reason: string;
+}
+
+export type CandidateInterpretationKind =
+  | 'canonical'
+  | 'title'
+  | 'alias'
+  | 'nickname'
+  | 'command'
+  | 'sound'
+  | 'objective'
+  | 'software'
+  | 'nationality'
+  | 'generic-item'
+  | 'ambiguous';
+
 export interface EntityTypeMeta {
   id: EntityType;
   label: string;
