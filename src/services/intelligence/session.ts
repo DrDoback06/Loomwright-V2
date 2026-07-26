@@ -1,5 +1,9 @@
 import { db } from '@/db/schema';
 import type { Chapter, Entity, SkillTree } from '@/db/types';
+import { newId } from '@/lib/id';
+import type { ExtractionCandidate } from '@/services/extraction/detectors';
+import { runPropagation, type RuleContext } from './rules';
+import { emptyDelta } from './types';
 import { buildStoryDelta } from './engine';
 import { DEFAULT_VOLUME, type SuggestionVolume } from './suggestions';
 import type { DeltaSource, StoryDelta } from './types';
@@ -80,4 +84,44 @@ export async function extractTextToDelta(
     source: options.source ?? 'local',
     onProgress: options.onProgress,
   });
+}
+
+
+/**
+ * Build a delta from candidates an extraction pass ALREADY produced.
+ *
+ * Save & Extract used to run the whole offline scan twice — once through
+ * extractChapter to persist occurrences and candidates, then again through
+ * buildStoryDelta to propagate. Both passes are synchronous and identical, so
+ * on a novel-length chapter against a large codex that was seconds of frozen
+ * UI for no extra information. The scan happens once now and both halves read
+ * its output.
+ */
+export async function deltaFromCandidates(
+  projectId: string,
+  candidates: ExtractionCandidate[],
+  chapterId?: string
+): Promise<StoryDelta> {
+  const { entities, trees, volume } = await loadWorld(projectId);
+  const ctx: RuleContext = {
+    projectId,
+    entities,
+    trees,
+    volume,
+    newUnitId: () => newId(),
+    newLocalId: () => newId(),
+  };
+  const propagated = runPropagation(candidates, ctx);
+  return {
+    ...emptyDelta(newId(), projectId, 'local', chapterId),
+    entities: propagated.entities,
+    patches: propagated.patches,
+    graphPlacements: propagated.graphPlacements,
+    hierarchyPlacements: propagated.hierarchyPlacements,
+    links: propagated.links,
+    suggestions: propagated.suggestions,
+    groups: propagated.groups,
+    warnings: propagated.warnings,
+    createdAt: Date.now(),
+  };
 }

@@ -15,6 +15,7 @@ import { EntityRosterSurface } from '@/features/codex/EntityRosterSurface';
 import { EntityEditorDrawer } from '@/features/codex/EntityEditorDrawer';
 import { CreateAnythingDialog } from '@/features/generate/CreateAnythingDialog';
 import { StagedBundleBar } from '@/features/generate/StagedBundleBar';
+import { StagedDeltaBar } from '@/features/review/StagedDeltaBar';
 import { TrashSurface } from '@/features/system/TrashSurface';
 import { ReviewSurface } from '@/features/review/ReviewSurface';
 import { MergePreviewDialog } from '@/features/review/MergePreviewDialog';
@@ -112,6 +113,7 @@ export function App() {
         <EntityEditorDrawer />
         <CreateAnythingDialog />
         <StagedBundleBar />
+        <StagedDeltaBar />
         <MergePreviewDialog />
         {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
         {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
