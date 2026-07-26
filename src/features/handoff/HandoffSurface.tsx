@@ -7,6 +7,8 @@ import type { Chapter } from '@/db/types';
 import { buildHandoffPack, importHandoffResponse } from '@/services/ai/handoff';
 import { buildMegaPrompt, buildWorldDigest, parseDeltaReply, type DigestDepth } from '@/services/intelligence/digest';
 import { extractTextToDelta } from '@/services/intelligence/session';
+import { digestNoticeSeen, enrichDelta, markDigestNoticeSeen } from '@/services/intelligence/enrich';
+import { resolveProvider } from '@/services/ai/settings';
 import { useIntelligenceStore } from '@/stores/intelligence';
 import type { KnownEntity } from '@/services/extraction/known-index';
 import { useProjectStore } from '@/stores/project';
@@ -34,6 +36,7 @@ export function HandoffSurface() {
   const [reply, setReply] = useState('');
   const [manuscript, setManuscript] = useState('');
   const [reading, setReading] = useState(false);
+  const [enrich, setEnrich] = useState(false);
   const [depth, setDepth] = useState<DigestDepth>('standard');
   const stageDelta = useIntelligenceStore((s) => s.stage);
   const readProgress = useIntelligenceStore((s) => s.progress);
@@ -45,10 +48,42 @@ export function HandoffSurface() {
   const readManuscript = async () => {
     setReading(true);
     try {
-      const delta = await extractTextToDelta(projectId, manuscript, {
+      let delta = await extractTextToDelta(projectId, manuscript, {
         onProgress: (done, total) => setReadProgress(total > 1 ? { done, total } : null),
       });
       setReadProgress(null);
+
+      // AI only ever ADDS to the offline result, and only with a provider
+      // configured — the offline answer is never withheld waiting on a key.
+      if (enrich) {
+        const provider = await resolveProvider(projectId);
+        if (!provider) {
+          toast(
+            'No AI provider configured — showing the offline result. Add a key in Settings to enrich.',
+            {}
+          );
+        } else {
+          if (!(await digestNoticeSeen(projectId))) {
+            const ok = window.confirm(
+              'Enriching sends a digest of your world — names, ownership, place nesting and ' +
+                'the relationship web — plus this text, to your configured AI provider.\n\n' +
+                'This notice is shown once.'
+            );
+            if (!ok) return;
+            await markDigestNoticeSeen(projectId);
+          }
+          try {
+            const result = await enrichDelta(projectId, delta, manuscript, depth);
+            delta = result.delta;
+          } catch (err) {
+            toast(
+              `AI enrichment failed (${err instanceof Error ? err.message : 'unknown error'}) — showing the offline result.`,
+              { kind: 'error' }
+            );
+          }
+        }
+      }
+
       if (!delta.groups.length) {
         toast('Nothing trackable found in that text yet.', {});
         return;
@@ -71,9 +106,7 @@ export function HandoffSurface() {
    * the digest contains and that it goes wherever the author pastes it —
    * shown once, then never again, per the "inform once" decision. */
   const copyMegaPrompt = async () => {
-    const seenKey = `${projectId}:digest-notice-seen`;
-    const seen = await db.settings.get(seenKey);
-    if (!seen) {
+    if (!(await digestNoticeSeen(projectId))) {
       const ok = window.confirm(
         'This copies a digest of your world — character, place and item names, ' +
           'who owns what, how places nest, and the relationship web — along with your ' +
@@ -81,7 +114,7 @@ export function HandoffSurface() {
           'send less.\n\nThis notice is shown once.'
       );
       if (!ok) return;
-      await db.settings.put({ key: seenKey, value: true });
+      await markDigestNoticeSeen(projectId);
     }
     const digest = await buildWorldDigest(projectId, depth);
     const chapter = chapters.find((c) => c.id === chapterId) ?? null;
@@ -167,6 +200,14 @@ export function HandoffSurface() {
           >
             {reading ? 'Reading…' : 'Extract'}
           </button>
+          <label className="lw-fieldnote">
+            <input
+              type="checkbox"
+              checked={enrich}
+              onChange={(e) => setEnrich(e.target.checked)}
+            />{' '}
+            Also enrich with my AI provider
+          </label>
           {readProgress ? (
             <span className="lw-fieldnote" role="status">
               Section {readProgress.done} of {readProgress.total}…
