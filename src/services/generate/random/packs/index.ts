@@ -7,6 +7,9 @@ import { skillsPack } from './skills';
 import { castPack } from './cast';
 import { questsPack } from './quests';
 import { locationsPack } from './locations';
+import { itemsPack } from './items';
+import { bestiaryPack } from './bestiary';
+import { factionsPack } from './factions';
 
 /** One coherent flavor within a pack: "poison", "sorcerer", "holy"…
  * A single archetype (plus a single rng) drives every field of a draft
@@ -86,4 +89,7 @@ registerPack(skillsPack);
 registerPack(castPack);
 registerPack(questsPack);
 registerPack(locationsPack);
+registerPack(itemsPack);
+registerPack(bestiaryPack);
+registerPack(factionsPack);
 DEEP_PACKS.abilities = skillsPack;
