@@ -148,5 +148,7 @@ function signalKey(c: ExtractionCandidate): string {
       return `skill-learned|${s.actorId ?? ''}|${s.skillId ?? s.skillName.toLowerCase()}`;
     case 'relationship':
       return `relationship|${s.fromId}|${s.toId}|${s.bond}`;
+    case 'quest-progress':
+      return `quest-progress|${s.questId ?? s.questName.toLowerCase()}|${s.phase}|${s.step ?? ''}`;
   }
 }

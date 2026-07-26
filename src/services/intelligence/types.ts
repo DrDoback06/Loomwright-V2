@@ -37,7 +37,11 @@ export type PatchMode =
   /** Overwrite — ownership flips, current location, status. */
   | 'replace'
   /** Append to an array field without duplicating — history, inventory, skills. */
-  | 'append';
+  | 'append'
+  /** Drop a member from an array field. Without this, an item that changes
+   * hands is added to the receiver's inventory and never taken out of the
+   * giver's, so after three chapters everyone owns everything. */
+  | 'remove';
 
 /** A field-level change to an EXISTING entity, with the before/after the
  * board renders as an explicit diff. This is the piece `applyBundle` never

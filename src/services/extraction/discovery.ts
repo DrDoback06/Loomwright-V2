@@ -228,8 +228,13 @@ export function discoverEntities(
       confidence = Math.max(quality.confidenceFloor, classified?.confidence ?? 0);
       confidence = Math.min(confidence + 0.025 * Math.max(0, count - 1), quality.confidenceCap);
     } else if (classified) {
-      type = classified.type;
-      signal = classified.signal;
+      // A single-occurrence cue picked this type; the vote read the whole
+      // chapter. When they disagree and the vote is not close, the vote wins —
+      // one "to Vex" must not outrank three sentences Vex is the subject of.
+      const voted = quality.evidence.leader;
+      const overrule = voted && voted !== classified.type && quality.evidence.margin >= 2;
+      type = overrule ? (voted as EntityType) : classified.type;
+      signal = overrule ? `evidence:${voted}` : classified.signal;
       confidence = Math.min(classified.confidence + 0.025 * Math.max(0, count - 1), quality.confidenceCap);
     } else {
       if (count < minRecurrence) continue;

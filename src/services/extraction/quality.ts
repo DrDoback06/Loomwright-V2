@@ -5,6 +5,13 @@ import type {
 } from '@/domain/entity-types';
 import type { KnownEntity } from './known-index';
 import { NER_STOPWORDS } from './ner-lexicon';
+import {
+  collectRoleEvidence,
+  evidenceSuggestions,
+  roleAtLeastTies,
+  roleLeads,
+  type RoleEvidence,
+} from './role-evidence';
 
 export interface QualityOccurrence { start: number; end: number; atSentenceStart: boolean }
 export interface CandidateQuality {
@@ -17,6 +24,9 @@ export interface CandidateQuality {
   confidenceCap: number;
   typeSuggestions: EntityTypeSuggestion[];
   interpretation: { kind: CandidateInterpretationKind; note: string } | null;
+  /** Weighted role votes gathered across every occurrence. Exposed so the
+   * review board can explain *why* a name was typed the way it was. */
+  evidence: RoleEvidence;
 }
 
 const CONTRACTIONS = new Set(["i'm","i've","i'll","i'd","you're","you've","you'll","we're","we've","we'll","they're","they've","they'll","he's","she's","it's","that's","there's","here's","what's","who's","don't","doesn't","didn't","can't","won't","wouldn't","couldn't","shouldn't"]);
@@ -81,7 +91,16 @@ export function assessCandidateQuality(input: { text: string; surface: string; o
   const joined = contexts.map((context) => `${context.before} ${context.after}`).join(' ');
   const immediateHuman = contexts.some(({ before, after }) => /\b(?:said|asked|called|named)\s*$/i.test(before) || /^\s*(?:said|asked|replied|shouted|whispered|hissed|muttered|was|is|had|has|looked|stood|ran|walked|nodded|grabbed|held|wore|believed|thought|knew|felt)\b/i.test(after));
   const vocative = contexts.some(({ before, after }) => /[,"“]\s*$/u.test(before) || /^\s*[,!?."”]/u.test(after));
-  const locationCue = contexts.some(({ before }) => /\b(?:city|town|village|keep|castle|fortress|river|forest|district|street|road|port|island|realm|kingdom)\s+of\s+$|\b(?:to|into|at|inside|outside|near|beyond|through|across|past|reached|entered|returned\s+to|arrived\s+at|visited|looted|raided)\s+$/i.test(before));
+  // Weighted role votes across EVERY occurrence. The classifier below is
+  // still an ordered chain, but the cues that a person and a place genuinely
+  // share now have to win the vote before they are allowed to decide.
+  const evidence = collectRoleEvidence(input.text, original, input.occurrences);
+
+  // A bare movement preposition ("handed it to Vex") is the single weakest
+  // place cue there is — people are travelled to as often as towns are. It
+  // may only carry the classification when nothing else outranks it.
+  const rawLocationCue = contexts.some(({ before }) => /\b(?:city|town|village|keep|castle|fortress|river|forest|district|street|road|port|island|realm|kingdom)\s+of\s+$|\b(?:to|into|at|inside|outside|near|beyond|through|across|past|reached|entered|returned\s+to|arrived\s+at|visited|looted|raided)\s+$/i.test(before));
+  const locationCue = rawLocationCue && roleAtLeastTies(evidence, 'locations');
   const skillCue = contexts.some(({ before }) => /\b(?:skill|spell|ability|technique|power|talent|art|incantation|maneuver|manoeuvre)\s+(?:(?:called|named|known\s+as)\s+)?$/i.test(before));
   const eventCue = contexts.some(({ after }) => /^\s+(?:began|started|ended|occurred|happened|erupted|fell|rose)\b/i.test(after));
   const displayCue = contexts.some(({ before }) => /\b(?:screen|display|terminal|interface|single word|command|prompt)\b[^.!?]{0,48}:?\s*$/i.test(before));
@@ -99,6 +118,7 @@ export function assessCandidateQuality(input: { text: string; surface: string; o
     confidenceCap: 0.92,
     typeSuggestions: [],
     interpretation: null,
+    evidence,
   };
 
   if (!canonical || canonical.length < 2) result.rejectReason = 'empty-or-short';
@@ -236,7 +256,14 @@ export function assessCandidateQuality(input: { text: string; surface: string; o
     result.typeSuggestions = [{ type: 'locations', confidence: 0.74, reason: 'Name has a place-form ending' }];
     return result;
   }
-  if (likelyPersonName(canonical)) {
+  // "Two capitalised words" is a shape, not a fact. It has to yield when the
+  // chapter argues clearly for something else — "Vex learned Venom Strike"
+  // names a skill, and filing it as a character costs the skill cascade, the
+  // tree placement and every suggestion that hangs off them.
+  const contradicted = Boolean(
+    evidence.leader && evidence.leader !== 'cast' && evidence.margin >= 3
+  );
+  if (likelyPersonName(canonical) && !contradicted) {
     result.forcedType = 'cast'; result.signal = 'person-name-shape'; result.confidenceFloor = immediateHuman ? 0.82 : 0.72;
     result.typeSuggestions = [{ type: 'cast', confidence: result.confidenceFloor, reason: 'Multi-word human name in character context' }];
     return result;
@@ -255,8 +282,19 @@ export function assessCandidateQuality(input: { text: string; surface: string; o
     return result;
   }
 
+  // Nothing named this outright, so let the document decide. A clear margin
+  // is required: this is the branch that used to be a coin-toss on recurrence
+  // alone, and a wrong type here costs every cascade downstream.
+  if (evidence.leader && evidence.margin >= 3) {
+    result.forcedType = evidence.leader;
+    result.signal = `evidence:${evidence.leader}`;
+    result.confidenceFloor = evidence.leader === 'cast' ? 0.74 : 0.68;
+    result.typeSuggestions = evidenceSuggestions(evidence);
+    return result;
+  }
+
   if (tokenList.length === 1) {
-    if (immediateHuman || (vocative && input.occurrences.length >= 2)) {
+    if (immediateHuman || (vocative && input.occurrences.length >= 2) || roleLeads(evidence, 'cast')) {
       result.forcedType = 'cast'; result.signal = 'named-person-context'; result.confidenceFloor = 0.76;
       result.typeSuggestions = [{ type: 'cast', confidence: 0.8, reason: 'Used as a speaking or addressed character name' }];
     } else if (input.occurrences.length < 3) {

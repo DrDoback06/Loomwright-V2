@@ -153,12 +153,61 @@ export function suggestForSkill(
 }
 
 /**
+ * What the ending of a quest opens up.
+ *
+ * The quests pack already writes outcome lines — "Failure: the prize is lost,
+ * and doors close all over Vraska" — as part of generating a quest. Once a
+ * quest actually closes on the page, those same grammars become the honest
+ * offline answer to "so what happens now": a handful of finished consequences
+ * the author can accept, refuse, or ignore. No model involved.
+ */
+export function suggestQuestOutcome(
+  questName: string,
+  questRef: EntityRef,
+  phase: 'completed' | 'failed',
+  volume: SuggestionVolume
+): DeltaSuggestion[] {
+  const pack = deepPackFor('quests');
+  if (!pack) return [];
+  const cap = CAP[volume];
+  const out: DeltaSuggestion[] = [];
+  try {
+    const rng = createRng(seedFrom(`${questName}|${phase}`));
+    const theme = resolveTheme(rng);
+    const arch = matchArchetype(rng, pack, theme, questName);
+    const draft = pack.generate(rng, arch, { theme, hint: questName, known: [] });
+    const outcomes = (draft.fields.outcomes as string[] | undefined) ?? [];
+    // A completed quest wants consequences of winning; a failed one wants the
+    // fallout. The pack labels its own lines, so read them rather than guess.
+    const wanted = outcomes.filter((line) =>
+      phase === 'completed' ? !/^failure/i.test(line) : !/^success/i.test(line)
+    );
+    for (const line of (wanted.length ? wanted : outcomes).slice(0, cap)) {
+      const title = line.split(/[—:.]/)[0].trim().slice(0, 80) || `After ${questName}`;
+      out.push(
+        makeSuggestion(
+          'quest-outcome',
+          `${questName}: ${title}`,
+          line,
+          questRef,
+          phase === 'completed' ? 0.6 : 0.56
+        )
+      );
+    }
+  } catch {
+    return out.slice(0, cap);
+  }
+  return out.slice(0, cap);
+}
+
+/**
  * Arc candidates read off the relationship web: characters bonded to someone
  * who just changed, rivals with unresolved business, allies who share a
  * faction. Pure graph traversal — no model, no keys.
  */
 export function suggestFromRelationshipWeb(
-  subject: Entity,
+  /** Only identity is read, so a delta draft works as well as a stored row. */
+  subject: EntityRef,
   entities: Entity[],
   volume: SuggestionVolume,
   context: { learnedSkill?: string } = {}

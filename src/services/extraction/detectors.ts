@@ -25,7 +25,9 @@ import { NER_STOPWORDS } from './ner-lexicon';
 export type ExtractionSignal =
   | {
       kind: 'item-transfer';
-      itemId: string;
+      /** Null when the prose named an item the codex has never seen. The
+       * bootstrap pass resolves it to the draft discovery just created. */
+      itemId: string | null;
       itemName: string;
       fromId: string | null;
       fromName: string | null;
@@ -34,7 +36,7 @@ export type ExtractionSignal =
     }
   | {
       kind: 'item-loss';
-      itemId: string;
+      itemId: string | null;
       itemName: string;
       destroyed: boolean;
     }
@@ -61,6 +63,17 @@ export type ExtractionSignal =
       toId: string;
       toName: string;
       bond: string;
+    }
+  | {
+      kind: 'quest-progress';
+      questId: string | null;
+      questName: string;
+      /** Which way the quest moved. `started` also covers a first mention. */
+      phase: 'started' | 'advanced' | 'completed' | 'failed';
+      /** The step text the prose described, when it named one. */
+      step: string | null;
+      actorId: string | null;
+      actorName: string | null;
     };
 
 /** Candidate shape produced by every detector — ported from the legacy
@@ -86,6 +99,37 @@ export interface ExtractionCandidate {
   /** Role-labelled reading of the event, when the detector can name the
    * participants. Consumed by the propagation rules in services/intelligence. */
   signal?: ExtractionSignal;
+  /** Set on brand-new discoveries: the stand-in id this name carries through
+   * the bootstrap pass and into the delta as its draft `localId`. */
+  provisionalId?: string;
+}
+
+/**
+ * Identity of the EVENT a signal describes, independent of how well its
+ * participants happened to resolve.
+ *
+ * Keyed on names rather than ids on purpose: the same "Vex learned Venom
+ * Strike" is read once with `skillId: null` and again, after the bootstrap
+ * pass, with the skill resolved to a stand-in. Those are one event described
+ * twice, and keying on ids would let both survive into the review board as
+ * two identical cascades.
+ */
+export function signalEventKey(signal: ExtractionSignal): string {
+  const n = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
+  switch (signal.kind) {
+    case 'item-transfer':
+      return `item-transfer|${n(signal.itemName)}|${n(signal.fromName)}|${n(signal.toName)}`;
+    case 'item-loss':
+      return `item-loss|${n(signal.itemName)}|${signal.destroyed}`;
+    case 'travel':
+      return `travel|${n(signal.actorName)}|${n(signal.placeName)}`;
+    case 'skill-learned':
+      return `skill-learned|${n(signal.actorName)}|${n(signal.skillName)}`;
+    case 'relationship':
+      return `relationship|${n(signal.fromName)}|${n(signal.toName)}|${n(signal.bond)}`;
+    case 'quest-progress':
+      return `quest-progress|${n(signal.questName)}|${signal.phase}|${n(signal.step)}`;
+  }
 }
 
 type CandidateInput = Omit<ExtractionCandidate, 'confidenceBand'> & { confidenceBand?: ConfidenceBand };
@@ -112,6 +156,7 @@ export const DETECTOR_BASE_CONFIDENCE: Record<string, number> = {
   relationships: 0.74,
   statChange: 0.7,
   questProgression: 0.66,
+  questProgress: 0.74,
   events: 0.7,
   lore: 0.62,
   dialogueAttribution: 0.78,
@@ -126,6 +171,8 @@ export interface DetectorContext {
   entities: KnownEntity[];
   /** Settings ▸ Extraction per-detector confidence overrides. */
   confidenceOverrides?: Record<string, number>;
+  /** Settings ▸ Extraction author-taught verbs, keyed by detector id. */
+  extraVerbs?: Record<string, string[]>;
   /** Project-defined stat names (stats entities) extend the built-in
    * stat vocabulary for the stat-change detector. */
   extraStatNames?: string[];
@@ -157,6 +204,26 @@ const COMMON_STATS = ['resolve', 'fear', 'hope', 'strength', 'wit', 'grief', 'co
 
 function inner(re: RegExp): string {
   return re.source.slice(1, -1);
+}
+
+/**
+ * A detector's verb list, widened by whatever the author added in
+ * Settings ▸ Extraction.
+ *
+ * Every verb list here is a closed set of about a dozen words, which is fine
+ * for high-fantasy register and useless for anything else: "nicked", "palmed",
+ * "slipped him", "legged it to" are ordinary English that the engine simply
+ * could not see. Authors know their own vocabulary — this lets them teach it.
+ * Entries are escaped and shape-checked, so a stray character cannot turn a
+ * verb list into a catastrophic regex.
+ */
+function verbSource(ctx: DetectorContext, detectorId: string, base: RegExp): string {
+  const extra = (ctx.extraVerbs?.[detectorId] ?? [])
+    .map((verb) => verb.trim())
+    .filter((verb) => /^[\p{L}][\p{L}\s'’-]{1,39}$/u.test(verb))
+    .map((verb) => verb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const source = inner(base);
+  return extra.length ? `${source}|${[...new Set(extra)].join('|')}` : source;
 }
 
 /**
@@ -195,7 +262,7 @@ export function detectItemTransfers(ctx: DetectorContext): ExtractionCandidate[]
   const { text, index } = ctx;
   if (!text) return [];
   const out: ExtractionCandidate[] = [];
-  const verbRe = new RegExp(`(${inner(ITEM_TRANSFER_VERBS)})`, 'gi');
+  const verbRe = new RegExp(`(${verbSource(ctx, 'itemTransfer', ITEM_TRANSFER_VERBS)})`, 'gi');
   let m: RegExpExecArray | null;
   while ((m = verbRe.exec(text)) !== null) {
     const verbStart = m.index;
@@ -205,7 +272,14 @@ export function detectItemTransfers(ctx: DetectorContext): ExtractionCandidate[]
     const giver = findEntityInSpan(text, left, index, ['cast']);
     const item = findEntityInSpan(text, right, index, ['items']);
     const receiver = findEntityInSpan(text, right, index, ['cast']);
-    if (!item) continue;
+    // "Marrow handed the Saltbrand to Vex" is a transfer whether or not the
+    // Saltbrand is already in the codex. Naming the direct object ourselves —
+    // the way the skill detector already names an unheard-of technique — is
+    // what lets a first-ever paste track an item introduced on the same page.
+    const namedItem = item ? null : findUnknownItemName(text, right, index);
+    if (!item && !namedItem) continue;
+    const itemName = item ? item.name : namedItem!.name;
+    const itemOffset = item ? item.offset : namedItem!.offset;
     const suggestedChanges: Record<string, unknown> = {};
     if (receiver) {
       suggestedChanges.currentOwner = { id: receiver.id, name: receiver.name, type: 'cast' };
@@ -214,24 +288,24 @@ export function detectItemTransfers(ctx: DetectorContext): ExtractionCandidate[]
     out.push(
       buildCandidate({
         entityType: 'items',
-        name: item.name,
-        existingEntityId: item.id,
-        suggestedAction: 'update',
+        name: itemName,
+        existingEntityId: item?.id ?? null,
+        suggestedAction: item ? 'update' : 'create',
         suggestedChanges,
         confidence: detectorConfidence(ctx, 'itemTransfer', {
-          proximity: Math.abs((item.offset || 0) - verbStart),
+          proximity: Math.abs((itemOffset || 0) - verbStart),
         }),
-        matchType: 'exact',
+        matchType: item ? 'exact' : 'new',
         sourceQuote: makeSourceQuote(text, verbStart, verbEnd),
-        start: item.offset,
-        end: item.offset + item.matchText.length,
+        start: itemOffset,
+        end: itemOffset + itemName.length,
         relatedEntityIds: [giver?.id, receiver?.id].filter(Boolean) as string[],
-        summary: `Item ${item.name} transferred${receiver ? ' to ' + receiver.name : ''}${giver ? ' by ' + giver.name : ''}.`,
+        summary: `Item ${itemName} transferred${receiver ? ' to ' + receiver.name : ''}${giver ? ' by ' + giver.name : ''}.`,
         detector: 'itemTransfer',
         signal: {
           kind: 'item-transfer',
-          itemId: item.id,
-          itemName: item.name,
+          itemId: item?.id ?? null,
+          itemName,
           fromId: giver?.id ?? null,
           fromName: giver?.name ?? null,
           toId: receiver?.id ?? null,
@@ -247,7 +321,7 @@ export function detectItemLoss(ctx: DetectorContext): ExtractionCandidate[] {
   const { text, index } = ctx;
   if (!text) return [];
   const out: ExtractionCandidate[] = [];
-  const verbRe = new RegExp(`(${inner(ITEM_LOSS_VERBS)})`, 'gi');
+  const verbRe = new RegExp(`(${verbSource(ctx, 'itemLoss', ITEM_LOSS_VERBS)})`, 'gi');
   let m: RegExpExecArray | null;
   while ((m = verbRe.exec(text)) !== null) {
     const verbStart = m.index;
@@ -255,28 +329,31 @@ export function detectItemLoss(ctx: DetectorContext): ExtractionCandidate[] {
     const verbWord = m[0].toLowerCase();
     const right = { start: verbEnd, end: sentenceEnd(text, verbEnd, 160) };
     const item = findEntityInSpan(text, right, index, ['items']);
-    if (!item) continue;
+    const namedItem = item ? null : findUnknownItemName(text, right, index);
+    if (!item && !namedItem) continue;
+    const itemName = item ? item.name : namedItem!.name;
+    const itemOffset = item ? item.offset : namedItem!.offset;
     const changes: Record<string, unknown> = {};
     if (/lost|left behind|dropped|abandoned/.test(verbWord)) changes.lost = true;
     if (/broke|shattered|destroyed/.test(verbWord)) changes.destroyed = true;
     out.push(
       buildCandidate({
         entityType: 'items',
-        name: item.name,
-        existingEntityId: item.id,
-        suggestedAction: 'update',
+        name: itemName,
+        existingEntityId: item?.id ?? null,
+        suggestedAction: item ? 'update' : 'create',
         suggestedChanges: changes,
         confidence: 0.72,
-        matchType: 'exact',
+        matchType: item ? 'exact' : 'new',
         sourceQuote: makeSourceQuote(text, verbStart, verbEnd),
-        start: item.offset,
-        end: item.offset + item.matchText.length,
-        summary: `Item ${item.name} ${changes.destroyed ? 'destroyed' : 'lost'}.`,
+        start: itemOffset,
+        end: itemOffset + itemName.length,
+        summary: `Item ${itemName} ${changes.destroyed ? 'destroyed' : 'lost'}.`,
         detector: 'itemLoss',
         signal: {
           kind: 'item-loss',
-          itemId: item.id,
-          itemName: item.name,
+          itemId: item?.id ?? null,
+          itemName,
           destroyed: Boolean(changes.destroyed),
         },
       })
@@ -285,11 +362,60 @@ export function detectItemLoss(ctx: DetectorContext): ExtractionCandidate[] {
   return out;
 }
 
+/** Object nouns a determiner can front, for the "the bread knife" case where
+ * prose never capitalises the thing being handed over. */
+const ITEM_HEAD_NOUN =
+  'sword|blade|dagger|knife|axe|bow|spear|lance|mace|hammer|flail|club|whip|ring|amulet|crown|circlet|cloak|robe|staff|wand|rod|sceptre|scepter|shield|tome|grimoire|chalice|goblet|orb|gauntlets|gauntlet|helm|helmet|pendant|necklace|locket|relic|key|crystal|gem|jewel|stone|elixir|potion|scroll|banner|horn|bell|mirror|talisman|charm|armour|armor|boots|gloves|belt|brooch|lantern|compass|map|ledger|purse|letter|package|parcel|bundle';
+
+/**
+ * The direct object of a transfer or loss verb, when the codex has never heard
+ * of it.
+ *
+ * English marks it plainly: a determiner followed by either a capitalised
+ * proper name ("the Saltbrand") or an object noun ("the bread knife"). What it
+ * must never return is the *recipient* — "gave Vex the letter" has two noun
+ * phrases and only one of them is the thing — so known cast and place names
+ * are excluded, and so is anything sitting after a "to"/"from" preposition.
+ */
+function findUnknownItemName(
+  text: string,
+  span: { start: number; end: number },
+  index: KnownIndex
+): { name: string; offset: number } | null {
+  const window = text.slice(span.start, span.end);
+  const re = new RegExp(
+    `\\b(?:the|a|an|his|her|their|its|my|your|our)\\s+((?:[a-z]+\\s+){0,2}(?:${ITEM_HEAD_NOUN})\\b|[A-Z][A-Za-z'’-]+(?:\\s+[A-Z][A-Za-z'’-]+){0,2})`,
+    'g'
+  );
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(window)) !== null) {
+    const raw = m[1].trim();
+    if (!raw || raw.length < 3) continue;
+    if (NER_STOPWORDS.has(raw.toLowerCase())) continue;
+    const offset = span.start + m.index + m[0].indexOf(raw);
+
+    // A determiner cannot front a recipient in English ("to the Vex" is not a
+    // sentence), but a known person or place may still be named this way in
+    // apposition — skip those rather than inventing a duplicate item.
+    const clash =
+      findEntityInSpan(text, { start: offset, end: offset + raw.length }, index, [
+        'cast',
+        'locations',
+        'factions',
+      ]) !== null;
+    if (clash) continue;
+
+    const name = /^[a-z]/.test(raw) ? raw[0].toUpperCase() + raw.slice(1) : raw;
+    return { name, offset };
+  }
+  return null;
+}
+
 export function detectTravel(ctx: DetectorContext): ExtractionCandidate[] {
   const { text, index } = ctx;
   if (!text) return [];
   const out: ExtractionCandidate[] = [];
-  const verbRe = new RegExp(`(${inner(TRAVEL_VERBS)})`, 'gi');
+  const verbRe = new RegExp(`(${verbSource(ctx, 'travel', TRAVEL_VERBS)})`, 'gi');
   let m: RegExpExecArray | null;
   while ((m = verbRe.exec(text)) !== null) {
     const verbStart = m.index;
@@ -385,7 +511,7 @@ export function detectRelationships(ctx: DetectorContext): ExtractionCandidate[]
   const { text, index } = ctx;
   if (!text) return [];
   const out: ExtractionCandidate[] = [];
-  const verbRe = new RegExp(`(${inner(RELATIONSHIP_VERBS)})`, 'gi');
+  const verbRe = new RegExp(`(${verbSource(ctx, 'relationships', RELATIONSHIP_VERBS)})`, 'gi');
   let m: RegExpExecArray | null;
   while ((m = verbRe.exec(text)) !== null) {
     const verbStart = m.index;
@@ -437,7 +563,7 @@ export function detectStatChanges(ctx: DetectorContext): ExtractionCandidate[] {
       .filter((n) => /^[a-z][a-z -]{1,30}$/.test(n)),
   ];
   const re = new RegExp(
-    `([A-Z][A-Za-z]+)(?:'s)\\s+(${[...new Set(statNames)].join('|')})\\s+(${inner(STAT_VERBS)})`,
+    `([A-Z][A-Za-z]+)(?:'s)\\s+(${[...new Set(statNames)].join('|')})\\s+(${verbSource(ctx, 'statChange', STAT_VERBS)})`,
     'gi'
   );
   let m: RegExpExecArray | null;
@@ -501,6 +627,80 @@ export function detectQuestProgression(ctx: DetectorContext): ExtractionCandidat
         detector: 'questProgression',
       })
     );
+  }
+  return out;
+}
+
+const QUEST_COMPLETE =
+  /(completed|finished|fulfilled|concluded|closed|won|achieved|delivered on|saw\s+\w+\s+through|made good on)/i;
+const QUEST_FAIL = /(failed|abandoned|gave up on|forsook|called off|lost|broke)/i;
+const QUEST_ADVANCE =
+  /(pressed on with|continued|advanced|resumed|made progress on|took up|set out on|swore to|accepted|began|started|renewed|turned back to)/i;
+
+/**
+ * A quest the codex already knows *moved*.
+ *
+ * The existing quest detector reports that a quest EXISTS — "the hunt for the
+ * Saltbrand" — which is a discovery, not a progression, and it is why quest
+ * propagation shipped with nothing to propagate. This one binds a status verb
+ * to a quest already on the board, so "they finally completed the Hunt for the
+ * Saltbrand" moves the status pill and closes out the open steps.
+ */
+export function detectQuestProgress(ctx: DetectorContext): ExtractionCandidate[] {
+  const { text, index } = ctx;
+  if (!text) return [];
+  const quests = index.quests ?? [];
+  if (!quests.length) return [];
+  const out: ExtractionCandidate[] = [];
+
+  for (const quest of quests) {
+    if (!quest.regex) continue;
+    quest.regex.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = quest.regex.exec(text)) !== null) {
+      const at = m.index;
+      const from = sentenceStart(text, at, 200);
+      const to = sentenceEnd(text, at + m[0].length, 200);
+      const sentence = text.slice(from, to);
+      // Only the words on the quest's own side of the sentence decide the
+      // phase — a later clause about something else must not flip a status.
+      const before = text.slice(from, at);
+
+      let phase: Extract<ExtractionSignal, { kind: 'quest-progress' }>['phase'] | null = null;
+      if (QUEST_COMPLETE.test(before)) phase = 'completed';
+      else if (QUEST_FAIL.test(before)) phase = 'failed';
+      else if (QUEST_ADVANCE.test(before)) phase = 'advanced';
+      if (!phase) continue;
+
+      const actor = findEntityInSpan(text, { start: from, end: at }, index, ['cast']);
+      const step = sentence.replace(/\s+/g, ' ').trim().slice(0, 160) || null;
+      out.push(
+        buildCandidate({
+          entityType: 'quests',
+          name: quest.name,
+          existingEntityId: quest.id,
+          suggestedAction: 'update',
+          matchType: 'exact',
+          confidence: detectorConfidence(ctx, 'questProgress'),
+          sourceQuote: makeSourceQuote(text, from, to),
+          start: at,
+          end: at + m[0].length,
+          relatedEntityIds: actor ? [actor.id] : [],
+          summary: `${quest.name} ${phase}.`,
+          detector: 'questProgress',
+          signal: {
+            kind: 'quest-progress',
+            questId: quest.id,
+            questName: quest.name,
+            phase,
+            step,
+            actorId: actor?.id ?? null,
+            actorName: actor?.name ?? null,
+          },
+        })
+      );
+      if (m.index === quest.regex.lastIndex) quest.regex.lastIndex++;
+    }
   }
   return out;
 }
@@ -847,7 +1047,7 @@ export function detectSkillLearning(ctx: DetectorContext): ExtractionCandidate[]
   const { text, index } = ctx;
   if (!text) return [];
   const out: ExtractionCandidate[] = [];
-  const verbRe = new RegExp(`(${inner(SKILL_LEARN_VERBS)})`, 'gi');
+  const verbRe = new RegExp(`(${verbSource(ctx, 'skillLearned', SKILL_LEARN_VERBS)})`, 'gi');
   let m: RegExpExecArray | null;
   while ((m = verbRe.exec(text)) !== null) {
     const verbStart = m.index;
@@ -922,6 +1122,7 @@ export function runLocalDetectors(ctx: DetectorContext): ExtractionCandidate[] {
     ...detectRelationships(ctx),
     ...detectStatChanges(ctx),
     ...detectQuestProgression(ctx),
+    ...detectQuestProgress(ctx),
     ...detectEvents(ctx),
     ...detectLore(ctx),
     ...detectDialogueAttribution(ctx),

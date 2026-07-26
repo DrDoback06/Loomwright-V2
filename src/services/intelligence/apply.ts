@@ -41,23 +41,35 @@ function union(a: string[], b: string[]): string[] {
   return [...a, ...b.filter((v) => !seen.has(v.toLowerCase()))];
 }
 
-/** Append without duplicating. Handles the two array shapes fields use:
+/** Identity of an array member. Handles the two array shapes fields use:
  * plain strings (chips) and `{id}` refs (related-multi). */
+function memberKey(value: unknown): string {
+  if (value && typeof value === 'object' && 'id' in value) return String((value as { id: unknown }).id);
+  return String(value).toLowerCase();
+}
+
+function asList(before: unknown): unknown[] {
+  return Array.isArray(before) ? [...before] : before == null ? [] : [before];
+}
+
+/** Append without duplicating. */
 function appendUnique(before: unknown, addition: unknown): unknown {
-  const list = Array.isArray(before) ? [...before] : before == null ? [] : [before];
+  const list = asList(before);
   const additions = Array.isArray(addition) ? addition : [addition];
-  const keyOf = (v: unknown): string => {
-    if (v && typeof v === 'object' && 'id' in v) return String((v as { id: unknown }).id);
-    return String(v).toLowerCase();
-  };
-  const seen = new Set(list.map(keyOf));
+  const seen = new Set(list.map(memberKey));
   for (const item of additions) {
-    const key = keyOf(item);
+    const key = memberKey(item);
     if (seen.has(key)) continue;
     seen.add(key);
     list.push(item);
   }
   return list;
+}
+
+/** Drop members by identity, leaving everything else in place and in order. */
+function removeMembers(before: unknown, removal: unknown): unknown {
+  const removals = new Set((Array.isArray(removal) ? removal : [removal]).map(memberKey));
+  return asList(before).filter((item) => !removals.has(memberKey(item)));
 }
 
 /**
@@ -188,10 +200,15 @@ export async function applyDelta(
           : await loadForPatch(id);
         if (!row) continue;
         const after = remapRefs(patch.after, idMap);
+        const current = row.fields[patch.fieldId];
         row.fields = {
           ...row.fields,
           [patch.fieldId]:
-            patch.mode === 'append' ? appendUnique(row.fields[patch.fieldId], after) : after,
+            patch.mode === 'append'
+              ? appendUnique(current, after)
+              : patch.mode === 'remove'
+                ? removeMembers(current, after)
+                : after,
         };
         row.updatedAt = now;
       }

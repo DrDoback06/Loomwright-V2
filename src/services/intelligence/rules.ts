@@ -1,11 +1,16 @@
 import type { Entity, SkillTree } from '@/db/types';
-import type { EntityRef } from '@/domain/entity-types';
+import { ENTITY_TYPE_META, type EntityRef, type EntityType } from '@/domain/entity-types';
 import type { ExtractionCandidate, ExtractionSignal } from '@/services/extraction/detectors';
 import { confidenceBand } from '@/services/extraction/text-utils';
 import { findKnownEntityMention, type KnownEntity } from '@/services/extraction/known-index';
 import { deepPackFor, matchArchetype, resolveTheme } from '@/services/generate/random/packs';
 import { createRng } from '@/services/generate/random/rng';
-import { suggestForSkill, suggestFromRelationshipWeb, type SuggestionVolume } from './suggestions';
+import {
+  suggestForSkill,
+  suggestFromRelationshipWeb,
+  suggestQuestOutcome,
+  type SuggestionVolume,
+} from './suggestions';
 import type {
   DeltaConflict,
   DeltaEntityCreate,
@@ -30,6 +35,9 @@ export interface RuleOutput {
   /** One cascade per rule firing — the board renders each as a group. */
   groups: DeltaGroup[];
   warnings: string[];
+  /** Provisional ids this rule leaned on, so their create unit can follow it
+   * into the same group. */
+  usedProvisional?: string[];
 }
 
 export interface RuleContext {
@@ -45,6 +53,35 @@ export interface RuleContext {
   newLocalId: () => string;
 }
 
+/**
+ * Something a rule can read state off and write patches against: either a row
+ * that already exists, or a draft this same delta is about to create.
+ *
+ * Rules used to take `Entity | undefined` and give up when the lookup missed,
+ * which is why a fresh project produced nothing — every participant missed.
+ * A target hides the difference, and `applyDelta` swaps draft ids for real
+ * ones at accept time, so a patch written against a name discovered thirty
+ * seconds ago lands on the row that name became.
+ */
+interface RuleTarget {
+  id: string;
+  type: EntityType;
+  name: string;
+  fields: Record<string, unknown>;
+  /** True when `id` is a draft local id rather than a database id. */
+  isNew: boolean;
+}
+
+/** Internal context: the public one plus whatever the introductions phase
+ * discovered. Kept private so existing callers construct RuleContext as before. */
+interface RuleRun extends RuleContext {
+  /** Drafts created this run, by provisional id. */
+  provisional: Map<string, RuleTarget>;
+  /** Provisional ids a consequence cascade depends on — their create unit
+   * moves into that cascade so a per-group toggle stays coherent. */
+  claimed: Map<string, string>;
+}
+
 function emptyOutput(): RuleOutput {
   return {
     entities: [],
@@ -55,6 +92,7 @@ function emptyOutput(): RuleOutput {
     suggestions: [],
     groups: [],
     warnings: [],
+    usedProvisional: [],
   };
 }
 
@@ -69,6 +107,7 @@ function mergeOutputs(outputs: RuleOutput[]): RuleOutput {
     out.suggestions.push(...o.suggestions);
     out.groups.push(...o.groups);
     out.warnings.push(...o.warnings);
+    out.usedProvisional!.push(...(o.usedProvisional ?? []));
   }
   return out;
 }
@@ -78,7 +117,7 @@ function mergeOutputs(outputs: RuleOutput[]): RuleOutput {
  * trustworthy as its shakiest step. */
 function closeGroup(
   out: RuleOutput,
-  ctx: RuleContext,
+  ctx: RuleRun,
   subject: DeltaGroup['subject'],
   headline: string
 ): RuleOutput {
@@ -92,8 +131,12 @@ function closeGroup(
   ];
   if (!units.length) return out;
   const confidence = units.reduce((min, u) => Math.min(min, u.confidence), 1);
+  const groupId = ctx.newUnitId();
+  for (const id of out.usedProvisional ?? []) {
+    if (!ctx.claimed.has(id)) ctx.claimed.set(id, groupId);
+  }
   out.groups.push({
-    id: ctx.newUnitId(),
+    id: groupId,
     subject,
     headline,
     unitIds: units.map((u) => u.unitId),
@@ -105,7 +148,7 @@ function closeGroup(
 }
 
 /** The DeltaUnit envelope every unit shares. */
-function envelope(ctx: RuleContext, confidence: number, sourceQuote: string, origin: string): DeltaUnit {
+function envelope(ctx: RuleRun, confidence: number, sourceQuote: string, origin: string): DeltaUnit {
   return {
     unitId: ctx.newUnitId(),
     confidence,
@@ -115,26 +158,54 @@ function envelope(ctx: RuleContext, confidence: number, sourceQuote: string, ori
   };
 }
 
-function refOf(entity: Entity | KnownEntity): EntityRef {
+function refOf(entity: Entity | KnownEntity | RuleTarget): EntityRef {
   return { id: entity.id, type: entity.type, name: entity.name };
 }
 
-function findEntity(ctx: RuleContext, id: string | null): Entity | undefined {
-  return id ? ctx.entities.find((e) => e.id === id) : undefined;
+function targetOf(entity: Entity): RuleTarget {
+  return { id: entity.id, type: entity.type, name: entity.name, fields: entity.fields ?? {}, isNew: false };
 }
 
-function knownList(ctx: RuleContext): KnownEntity[] {
-  return ctx.entities.map((e) => ({ id: e.id, type: e.type, name: e.name, aliases: e.aliases }));
+/**
+ * Resolve an id to a target: a real row first, then a draft this run created.
+ * Recording the hit in `claimed` is what keeps the board honest — the create
+ * and the consequences that depend on it end up in the same toggle group.
+ */
+function findTarget(ctx: RuleRun, id: string | null): RuleTarget | undefined {
+  if (!id) return undefined;
+  const real = ctx.entities.find((e) => e.id === id);
+  if (real) return targetOf(real);
+  return ctx.provisional.get(id);
 }
 
-/** Resolve a bare name against the project, restricted to one type. */
-function resolveByName(ctx: RuleContext, name: string, type: Entity['type']): Entity | undefined {
+/** Note that `out` depends on a draft, so `closeGroup` can pull the draft's
+ * create unit into the same cascade. */
+function dependOn(out: RuleOutput, target: RuleTarget | undefined): void {
+  if (target?.isNew && !out.usedProvisional!.includes(target.id)) {
+    out.usedProvisional!.push(target.id);
+  }
+}
+
+function knownList(ctx: RuleRun): KnownEntity[] {
+  return [
+    ...ctx.entities.map((e) => ({ id: e.id, type: e.type, name: e.name, aliases: e.aliases })),
+    ...[...ctx.provisional.values()].map((t) => ({ id: t.id, type: t.type, name: t.name, aliases: [] })),
+  ];
+}
+
+/** Resolve a bare name against the project (and this run's drafts), one type. */
+function resolveByName(ctx: RuleRun, name: string, type: Entity['type']): RuleTarget | undefined {
   const match = findKnownEntityMention(
     name,
     knownList(ctx).filter((e) => e.type === type),
     { threshold: 0.85 }
   );
-  return match ? ctx.entities.find((e) => e.id === match.entity.id) : undefined;
+  return match ? findTarget(ctx, match.entity.id) : undefined;
+}
+
+/** A related-multi field's members, whatever shape the bag holds. */
+function asMemberList(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : value == null ? [] : [value];
 }
 
 /** A ref field's current value as a comparable id, whatever shape it's in. */
@@ -161,12 +232,13 @@ function refIdOf(value: unknown): string | null {
 function ruleItemTransfer(
   signal: Extract<ExtractionSignal, { kind: 'item-transfer' }>,
   candidate: ExtractionCandidate,
-  ctx: RuleContext
+  ctx: RuleRun
 ): RuleOutput {
   const out = emptyOutput();
-  const item = findEntity(ctx, signal.itemId);
+  const item = findTarget(ctx, signal.itemId);
   if (!item) return out;
-  const receiver = findEntity(ctx, signal.toId);
+  dependOn(out, item);
+  const receiver = findTarget(ctx, signal.toId);
   if (!receiver) {
     out.warnings.push(
       `"${signal.itemName}" changes hands but the new owner was not named — no owner change applied.`
@@ -174,13 +246,14 @@ function ruleItemTransfer(
     return out;
   }
 
+  dependOn(out, receiver);
   const quote = candidate.sourceQuote;
   const recordedOwnerId = refIdOf(item.fields.currentOwner);
-  const recordedOwner = findEntity(ctx, recordedOwnerId);
+  const recordedOwner = findTarget(ctx, recordedOwnerId);
 
   let conflict: DeltaConflict | undefined;
   if (signal.fromId && recordedOwnerId && recordedOwnerId !== signal.fromId) {
-    const giver = findEntity(ctx, signal.fromId);
+    const giver = findTarget(ctx, signal.fromId);
     conflict = {
       reason: `${signal.itemName} is recorded as ${recordedOwner?.name ?? 'someone else'}'s, but ${
         signal.fromName ?? 'another character'
@@ -239,6 +312,29 @@ function ruleItemTransfer(
     mode: 'append',
   });
 
+  // ...and the giver stops having it. Appending to the receiver without
+  // removing from the giver is how a codex ends up with three people holding
+  // the same sword by chapter nine.
+  const giverTarget = findTarget(ctx, signal.fromId);
+  if (giverTarget && giverTarget.id !== receiver.id) {
+    const held = asMemberList(giverTarget.fields.inventory).some(
+      (entry) => refIdOf(entry) === item.id
+    );
+    if (held) {
+      out.patches.push({
+        ...envelope(ctx, confidence, quote, 'itemTransfer'),
+        entityId: giverTarget.id,
+        entityType: 'cast',
+        entityName: giverTarget.name,
+        fieldId: 'inventory',
+        fieldLabel: 'Inventory',
+        before: giverTarget.fields.inventory ?? [],
+        after: refOf(item),
+        mode: 'remove',
+      });
+    }
+  }
+
   return closeGroup(
     out,
     ctx,
@@ -256,11 +352,12 @@ function ruleItemTransfer(
 function ruleItemLoss(
   signal: Extract<ExtractionSignal, { kind: 'item-loss' }>,
   candidate: ExtractionCandidate,
-  ctx: RuleContext
+  ctx: RuleRun
 ): RuleOutput {
   const out = emptyOutput();
-  const item = findEntity(ctx, signal.itemId);
+  const item = findTarget(ctx, signal.itemId);
   if (!item) return out;
+  dependOn(out, item);
   const status = signal.destroyed ? 'destroyed' : 'lost';
   if (item.fields.status === status) return out; // already recorded
 
@@ -308,19 +405,22 @@ function ruleItemLoss(
 function ruleTravel(
   signal: Extract<ExtractionSignal, { kind: 'travel' }>,
   candidate: ExtractionCandidate,
-  ctx: RuleContext
+  ctx: RuleRun
 ): RuleOutput {
   const out = emptyOutput();
-  const actor = findEntity(ctx, signal.actorId);
+  const actor = findTarget(ctx, signal.actorId);
   if (!actor) return out;
+  dependOn(out, actor);
   const quote = candidate.sourceQuote;
 
   // Resolve the destination: known id → fuzzy name match → a new draft.
   let placeRef: EntityRef;
   let placeIsNew = false;
-  const known = findEntity(ctx, signal.placeId) ?? resolveByName(ctx, signal.placeName, 'locations');
+  const known = findTarget(ctx, signal.placeId) ?? resolveByName(ctx, signal.placeName, 'locations');
   if (known) {
     placeRef = refOf(known);
+    placeIsNew = known.isNew;
+    dependOn(out, known);
   } else {
     const localId = ctx.newLocalId();
     placeIsNew = true;
@@ -334,7 +434,10 @@ function ruleTravel(
         aliases: [],
         summary: `First reached in this chapter.`,
         tags: [],
-        fields: { kind: 'Settlement' },
+        // 'Settlement' was not one of the locations config's `kind` options,
+        // so every place the engine created arrived with an invalid pill the
+        // editor could not render as selected.
+        fields: { kind: 'Other' },
       },
     });
   }
@@ -416,17 +519,19 @@ function ruleTravel(
 function ruleSkillLearned(
   signal: Extract<ExtractionSignal, { kind: 'skill-learned' }>,
   candidate: ExtractionCandidate,
-  ctx: RuleContext
+  ctx: RuleRun
 ): RuleOutput {
   const out = emptyOutput();
-  const actor = findEntity(ctx, signal.actorId);
+  const actor = findTarget(ctx, signal.actorId);
+  dependOn(out, actor);
   const quote = candidate.sourceQuote;
 
   let skillRef: EntityRef;
   const knownSkill =
-    findEntity(ctx, signal.skillId) ?? resolveByName(ctx, signal.skillName, 'skills');
+    findTarget(ctx, signal.skillId) ?? resolveByName(ctx, signal.skillName, 'skills');
   if (knownSkill) {
     skillRef = refOf(knownSkill);
+    dependOn(out, knownSkill);
   } else {
     const localId = ctx.newLocalId();
     skillRef = { id: localId, type: 'skills', name: signal.skillName };
@@ -520,6 +625,83 @@ function skillSheetFor(name: string): Record<string, unknown> {
   }
 }
 
+/** Item type inferred from the noun the name ends in. Every value here is a
+ * literal from the items config's `itemType` option list. */
+const ITEM_TYPE_BY_NOUN: [RegExp, string][] = [
+  [/\b(?:sword|blade|dagger|knife|axe|bow|spear|lance|mace|hammer|flail|club|whip|gun|rifle|pistol)$/i, 'Weapon'],
+  [/\b(?:armour|armor|plate|mail|shield|helm|helmet|gauntlets?|boots|gloves|vest)$/i, 'Armour'],
+  [/\b(?:cloak|robe|belt|brooch)$/i, 'Clothing'],
+  [/\b(?:staff|wand|rod|sceptre|scepter|orb|crystal|talisman|charm)$/i, 'Magical'],
+  [/\b(?:ring|amulet|crown|circlet|pendant|necklace|locket|relic|jewel|gem|stone)$/i, 'Relic'],
+  [/\b(?:tome|grimoire|book|ledger)$/i, 'Book'],
+  [/\b(?:scroll|map|letter|deed)$/i, 'Document'],
+  [/\b(?:potion|elixir|bottle)$/i, 'Consumable'],
+  [/\b(?:key)$/i, 'Key'],
+  [/\b(?:lantern|compass|tool|kit)$/i, 'Tool'],
+];
+
+/**
+ * The scaffolding a brand-new entry arrives with.
+ *
+ * The line this holds deliberately: **structure is inferred, biography never
+ * is.** A skill gets a cost and an effect because the app owns what a skill
+ * sheet looks like and the prose almost never spells it out — that precedent
+ * already shipped for skills learned on the page. An item gets a type because
+ * the name itself says so ("the Saltbrand" ends in nothing, "Ash Dagger" ends
+ * in a weapon noun). A character gets nothing invented at all: making up a
+ * personality for someone the author just wrote is how a codex fills with
+ * confident fiction the author never agreed to.
+ */
+function starterSheetFor(type: EntityType, name: string): Record<string, unknown> {
+  if (type === 'skills' || type === 'abilities') return skillSheetFor(name);
+  if (type === 'items') {
+    const hit = ITEM_TYPE_BY_NOUN.find(([re]) => re.test(name));
+    return hit ? { itemType: hit[1] } : {};
+  }
+  if (type === 'locations') return { kind: 'Other' };
+  return {};
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Rule: entity introduced
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * A name the prose introduced that the codex has never seen.
+ *
+ * These are the findings the board used to throw away. Propagation only ever
+ * looked at candidates carrying a signal, and a discovery carries none — so a
+ * whole-book paste into a fresh project reported "nothing trackable found"
+ * while holding forty new characters in its hand. Every discovery now becomes
+ * a create unit, which also gives the consequence rules something to point at:
+ * the draft's `localId` IS the provisional id the bootstrap pass used.
+ */
+function ruleEntityIntroduced(
+  candidate: ExtractionCandidate,
+  ctx: RuleRun
+): DeltaEntityCreate | null {
+  const localId = candidate.provisionalId;
+  if (!localId) return null;
+  const aliases = ((candidate.suggestedChanges?.aliases as string[] | undefined) ?? [])
+    .filter((a): a is string => typeof a === 'string' && a.trim().length > 0)
+    .map((a) => a.trim());
+  const quote = candidate.sourceQuote?.trim() ?? '';
+  return {
+    ...envelope(ctx, candidate.confidence, quote, candidate.detector ?? 'discovery'),
+    draft: {
+      localId,
+      type: candidate.entityType,
+      // Evidence, not invention: the summary quotes the page rather than
+      // guessing at who this is.
+      summary: quote ? `First appears in this text: “${quote.slice(0, 160)}”` : 'First appears in this text.',
+      name: candidate.name,
+      aliases: [...new Set(aliases)],
+      tags: [],
+      fields: starterSheetFor(candidate.entityType, candidate.name),
+    },
+  };
+}
+
 /** Stable seed from a name so the same skill always rolls the same sheet. */
 function hashName(name: string): number {
   let h = 2166136261;
@@ -537,7 +719,7 @@ function hashName(name: string): number {
  * No match anywhere → no placement, rather than a wrong one.
  */
 function placeOnTree(
-  ctx: RuleContext,
+  ctx: RuleRun,
   skillName: string,
   skillRef: EntityRef,
   confidence: number,
@@ -632,12 +814,14 @@ const BOND_BY_VERB: Record<string, { bondType: string; valence: string }> = {
 function ruleRelationship(
   signal: Extract<ExtractionSignal, { kind: 'relationship' }>,
   candidate: ExtractionCandidate,
-  ctx: RuleContext
+  ctx: RuleRun
 ): RuleOutput {
   const out = emptyOutput();
-  const from = findEntity(ctx, signal.fromId);
-  const to = findEntity(ctx, signal.toId);
+  const from = findTarget(ctx, signal.fromId);
+  const to = findTarget(ctx, signal.toId);
   if (!from || !to) return out;
+  dependOn(out, from);
+  dependOn(out, to);
   const bond = BOND_BY_VERB[signal.bond] ?? { bondType: 'other', valence: 'mixed' };
   const quote = candidate.sourceQuote;
 
@@ -716,6 +900,116 @@ function ruleRelationship(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Rule: quest progress
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Detector phase → the quests config's own `status` vocabulary. */
+const QUEST_STATUS_BY_PHASE: Record<string, string> = {
+  started: 'Active',
+  advanced: 'Active',
+  completed: 'Completed',
+  failed: 'Failed',
+};
+
+/** Steps the prose closed out, by phase. A completed quest has no pending
+ * steps left; a failed one keeps its steps but stops being active. */
+type StepRow = { text?: string; status?: string };
+
+/**
+ * A quest moved. Set the status pill, log the beat as a step, and — when it
+ * closed — offer what the ending opens up.
+ *
+ * This is the propagation the last milestone shipped without: the old quest
+ * detector reported that a quest existed, which is a discovery, so there was
+ * never any step-level information to act on.
+ */
+function ruleQuestProgress(
+  signal: Extract<ExtractionSignal, { kind: 'quest-progress' }>,
+  candidate: ExtractionCandidate,
+  ctx: RuleRun
+): RuleOutput {
+  const out = emptyOutput();
+  const quest = findTarget(ctx, signal.questId);
+  if (!quest) return out;
+  dependOn(out, quest);
+  const quote = candidate.sourceQuote;
+  const status = QUEST_STATUS_BY_PHASE[signal.phase] ?? 'Active';
+
+  if (quest.fields.status !== status) {
+    out.patches.push({
+      ...envelope(ctx, candidate.confidence, quote, 'questProgress'),
+      entityId: quest.id,
+      entityType: 'quests',
+      entityName: quest.name,
+      fieldId: 'status',
+      fieldLabel: 'Status',
+      before: quest.fields.status ?? null,
+      after: status,
+      mode: 'replace',
+    });
+  }
+
+  // The beat itself becomes a step, marked the way the prose left it.
+  if (signal.step) {
+    const existing = asMemberList(quest.fields.steps) as StepRow[];
+    const already = existing.some(
+      (row) => (row?.text ?? '').trim().toLowerCase() === signal.step!.trim().toLowerCase()
+    );
+    if (!already) {
+      out.patches.push({
+        ...envelope(ctx, Math.min(candidate.confidence, 0.7), quote, 'questProgress'),
+        entityId: quest.id,
+        entityType: 'quests',
+        entityName: quest.name,
+        fieldId: 'steps',
+        fieldLabel: 'Steps',
+        before: quest.fields.steps ?? [],
+        after: {
+          text: signal.step,
+          status: signal.phase === 'completed' ? 'done' : signal.phase === 'failed' ? 'skipped' : 'active',
+        },
+        mode: 'append',
+      });
+    }
+  }
+
+  const actor = findTarget(ctx, signal.actorId);
+  if (actor) {
+    dependOn(out, actor);
+    out.patches.push({
+      ...envelope(ctx, Math.min(candidate.confidence, 0.68), quote, 'questProgress'),
+      entityId: quest.id,
+      entityType: 'quests',
+      entityName: quest.name,
+      fieldId: 'participants',
+      fieldLabel: 'Participants',
+      before: quest.fields.participants ?? [],
+      after: refOf(actor),
+      mode: 'append',
+    });
+  }
+
+  if (signal.phase === 'completed' || signal.phase === 'failed') {
+    out.suggestions.push(
+      ...suggestQuestOutcome(quest.name, refOf(quest), signal.phase, ctx.volume)
+    );
+  }
+
+  const verb =
+    signal.phase === 'completed'
+      ? 'completed'
+      : signal.phase === 'failed'
+        ? 'failed'
+        : 'moved forward';
+  return closeGroup(
+    out,
+    ctx,
+    { id: quest.id, type: 'quests', name: quest.name },
+    `${quest.name} ${verb}${actor ? ` — ${actor.name}` : ''}`
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 
 /**
  * Run every propagation rule over a chapter's candidates.
@@ -725,29 +1019,112 @@ function ruleRelationship(
  * propagates state works with zero AI keys, and AI only enriches on top.
  */
 export function runPropagation(candidates: ExtractionCandidate[], ctx: RuleContext): RuleOutput {
+  const run: RuleRun = { ...ctx, provisional: new Map(), claimed: new Map() };
+
+  // Phase 1 — introductions. Every brand-new name becomes a draft BEFORE any
+  // consequence rule runs, because a consequence needs something to point at:
+  // "Marrow handed the Saltbrand to Vex" is only a cascade once all three
+  // names exist, even if none of them existed a moment ago.
+  // Keyed on the provisional id, NOT on "has no signal": one sentence can
+  // both introduce a thing and do something with it, and those must not be
+  // treated as alternatives.
+  const introductions: DeltaEntityCreate[] = [];
+  for (const candidate of candidates) {
+    if (!candidate.provisionalId) continue;
+    const create = ruleEntityIntroduced(candidate, run);
+    if (!create) continue;
+    introductions.push(create);
+    run.provisional.set(create.draft.localId, {
+      id: create.draft.localId,
+      type: create.draft.type,
+      name: create.draft.name,
+      fields: create.draft.fields ?? {},
+      isNew: true,
+    });
+  }
+
+  // Phase 2 — consequences, now able to resolve either kind of participant.
   const outputs: RuleOutput[] = [];
   for (const candidate of candidates) {
     const signal = candidate.signal;
     if (!signal) continue;
     switch (signal.kind) {
       case 'item-transfer':
-        outputs.push(ruleItemTransfer(signal, candidate, ctx));
+        outputs.push(ruleItemTransfer(signal, candidate, run));
         break;
       case 'item-loss':
-        outputs.push(ruleItemLoss(signal, candidate, ctx));
+        outputs.push(ruleItemLoss(signal, candidate, run));
         break;
       case 'travel':
-        outputs.push(ruleTravel(signal, candidate, ctx));
+        outputs.push(ruleTravel(signal, candidate, run));
         break;
       case 'skill-learned':
-        outputs.push(ruleSkillLearned(signal, candidate, ctx));
+        outputs.push(ruleSkillLearned(signal, candidate, run));
         break;
       case 'relationship':
-        outputs.push(ruleRelationship(signal, candidate, ctx));
+        outputs.push(ruleRelationship(signal, candidate, run));
+        break;
+      case 'quest-progress':
+        outputs.push(ruleQuestProgress(signal, candidate, run));
         break;
     }
   }
-  return dedupePatches(mergeOutputs(outputs));
+
+  const merged = dedupePatches(mergeOutputs(outputs));
+
+  // Phase 3 — file the introductions. One that a cascade leaned on joins that
+  // cascade, so toggling "Vex learned Venom Strike" off also withholds the
+  // Venom Strike that only exists to serve it. The rest roll up per type, so a
+  // book that introduces forty characters is one line on the board, not forty.
+  const claimedCreates: DeltaEntityCreate[] = [];
+  const unclaimed: DeltaEntityCreate[] = [];
+  for (const create of introductions) {
+    const groupId = run.claimed.get(create.draft.localId);
+    if (!groupId) {
+      unclaimed.push(create);
+      continue;
+    }
+    const group = merged.groups.find((g) => g.id === groupId);
+    if (!group) {
+      unclaimed.push(create);
+      continue;
+    }
+    // Creates render first: the cascade reads "New character Vex → Vex learned…".
+    group.unitIds.unshift(create.unitId);
+    group.confidence = Math.min(group.confidence, create.confidence);
+    group.confidenceBand = confidenceBand(group.confidence);
+    claimedCreates.push(create);
+  }
+
+  merged.entities.unshift(...claimedCreates, ...unclaimed);
+
+  const byType = new Map<EntityType, DeltaEntityCreate[]>();
+  for (const create of unclaimed) {
+    const list = byType.get(create.draft.type) ?? [];
+    list.push(create);
+    byType.set(create.draft.type, list);
+  }
+  for (const [type, list] of byType) {
+    const meta = ENTITY_TYPE_META[type];
+    const confidence = list.reduce((min, c) => Math.min(min, c.confidence), 1);
+    merged.groups.unshift({
+      id: ctx.newUnitId(),
+      subject: { id: list[0].draft.localId, type, name: list[0].draft.name },
+      headline:
+        list.length === 1
+          ? `New ${meta.label.toLowerCase()}: ${list[0].draft.name}`
+          : `${list.length} new ${meta.plural.toLowerCase()}: ${list
+              .slice(0, 3)
+              .map((c) => c.draft.name)
+              .join(', ')}${list.length > 3 ? `, +${list.length - 3} more` : ''}`,
+      unitIds: list.map((c) => c.unitId),
+      confidence,
+      confidenceBand: confidenceBand(confidence),
+      flagged: false,
+    });
+  }
+
+  return merged;
 }
 
 /**
