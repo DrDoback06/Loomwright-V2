@@ -234,6 +234,40 @@ describe('intelligence/applyDelta', () => {
     expect(reverted!.edges).toHaveLength(0);
   });
 
+  it('stacks two placements onto one tree without losing the first', async () => {
+    await db.skillTrees.add({
+      id: 'tree1',
+      projectId: 'p1',
+      name: 'Serpent Path',
+      nodes: [{ id: 'n0', label: 'Root', x: 0, y: 0 }],
+      edges: [],
+      updatedAt: 1,
+    });
+
+    const place = (unitId: string, nodeId: string, label: string) => ({
+      ...unit(unitId, 'skill-learned'),
+      graphId: 'tree1',
+      graphKind: 'skilltree' as const,
+      graphName: 'Serpent Path',
+      node: { id: nodeId, label, x: 0, y: 100 },
+      edges: [{ id: `e-${nodeId}`, from: 'n0', to: nodeId }],
+    });
+
+    const result = await applyDelta(
+      deltaWith({ graphPlacements: [place('u1', 'n1', 'Venom Strike'), place('u2', 'n2', 'Corrosive Edge')] })
+    );
+
+    const tree = await db.skillTrees.get('tree1');
+    expect(tree!.nodes.map((n) => n.label)).toEqual(['Root', 'Venom Strike', 'Corrosive Edge']);
+    expect(tree!.edges).toHaveLength(2);
+
+    // And the snapshot is still the true original, not the state between them.
+    expect(await undoAuditEntry(result.auditId)).toBe(true);
+    const reverted = await db.skillTrees.get('tree1');
+    expect(reverted!.nodes).toHaveLength(1);
+    expect(reverted!.edges).toHaveLength(0);
+  });
+
   it('persists suggestions as pending and removes them on undo', async () => {
     const vex = await createEntity({ projectId: 'p1', type: 'cast', name: 'Vex' });
 

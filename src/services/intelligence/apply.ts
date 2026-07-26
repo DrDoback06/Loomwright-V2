@@ -234,13 +234,17 @@ export async function applyDelta(
 
       // 4. Graph placements — append a node (+ its edges) to an existing
       //    tree or board. Positions were computed by layout.ts, never a model.
-      const graphBefore = new Map<string, SkillTree | TangleBoard>();
+      // The running copy and the undo snapshot MUST be separate objects. Using
+      // one map for both meant a second placement onto the same tree re-read
+      // the pre-first-placement snapshot and silently dropped the first node —
+      // two skills learned in one chapter, one of them lost.
+      const graphWorking = new Map<string, SkillTree | TangleBoard>();
       for (const placement of graphPlacements) {
         const table = placement.graphKind === 'skilltree' ? db.skillTrees : db.tangleBoards;
-        const current = graphBefore.get(placement.graphId) ?? (await table.get(placement.graphId));
+        const current = graphWorking.get(placement.graphId) ?? (await table.get(placement.graphId));
         if (!current) continue;
-        if (!graphBefore.has(placement.graphId)) {
-          graphBefore.set(placement.graphId, structuredClone(current));
+        if (!graphWorking.has(placement.graphId)) {
+          graphWorking.set(placement.graphId, current);
           record.patchedGraphs.push({
             id: placement.graphId,
             kind: placement.graphKind,
