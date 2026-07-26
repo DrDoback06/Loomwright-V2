@@ -5,7 +5,7 @@ import { undoAuditEntry } from '@/db/repos/undo';
 import type { Entity } from '@/db/types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { applyDelta } from '@/services/intelligence/apply';
-import { deltaTitle, type DeltaGroup, type StoryDelta } from '@/services/intelligence/types';
+import { deltaTitle, filterDelta, type DeltaGroup, type StoryDelta } from '@/services/intelligence/types';
 import { useIntelligenceStore } from '@/stores/intelligence';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
@@ -185,7 +185,8 @@ export function CascadeBoard() {
     setBusy(true);
     try {
       const result = await applyDelta(staged, { enabledUnitIds: enabled });
-      const summary = deltaTitle(staged);
+      // Describe what was actually applied, not everything that was found.
+      const summary = deltaTitle(filterDelta(staged, enabled));
       discard();
       toast(`Applied: ${summary}.`, {
         kind: 'success',

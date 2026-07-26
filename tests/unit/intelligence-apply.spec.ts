@@ -3,7 +3,7 @@ import { db } from '@/db/schema';
 import { createEntity } from '@/db/repos/entities';
 import { undoAuditEntry } from '@/db/repos/undo';
 import { applyDelta } from '@/services/intelligence/apply';
-import { emptyDelta, type StoryDelta } from '@/services/intelligence/types';
+import { deltaTitle, emptyDelta, filterDelta, type StoryDelta } from '@/services/intelligence/types';
 
 function deltaWith(overrides: Partial<StoryDelta>): StoryDelta {
   return { ...emptyDelta('d1', 'p1', 'local'), createdAt: 1, ...overrides };
@@ -331,5 +331,69 @@ describe('intelligence/applyDelta', () => {
     expect(applies[0].reversible).toBe(true);
     expect(await undoAuditEntry(result.auditId)).toBe(true);
     expect(await db.entities.count()).toBe(0);
+  });
+});
+
+describe('filterDelta', () => {
+  it('describes only what will actually be applied', () => {
+    const d = deltaWith({
+      patches: [
+        {
+          ...unit('keep'),
+          entityId: 'e1',
+          entityType: 'items',
+          entityName: 'Saltbrand',
+          fieldId: 'status',
+          fieldLabel: 'Status',
+          before: null,
+          after: 'lost',
+          mode: 'replace',
+        },
+        {
+          ...unit('drop'),
+          entityId: 'e1',
+          entityType: 'items',
+          entityName: 'Saltbrand',
+          fieldId: 'condition',
+          fieldLabel: 'Condition',
+          before: null,
+          after: 'Broken',
+          mode: 'replace',
+        },
+      ],
+      groups: [
+        {
+          id: 'g1',
+          subject: { id: 'e1', type: 'items', name: 'Saltbrand' },
+          headline: 'Saltbrand was lost',
+          unitIds: ['keep', 'drop'],
+          confidence: 0.8,
+          confidenceBand: 'green',
+          flagged: false,
+        },
+      ],
+    });
+
+    expect(deltaTitle(d)).toContain('2 updates');
+    const narrowed = filterDelta(d, new Set(['keep']));
+    expect(deltaTitle(narrowed)).toContain('1 update');
+    expect(narrowed.groups[0].unitIds).toEqual(['keep']);
+  });
+
+  it('drops a group whose every unit was switched off', () => {
+    const d = deltaWith({
+      groups: [
+        {
+          id: 'g1',
+          subject: { id: 'e1', type: 'items', name: 'Saltbrand' },
+          headline: 'x',
+          unitIds: ['a', 'b'],
+          confidence: 0.8,
+          confidenceBand: 'green',
+          flagged: false,
+        },
+      ],
+    });
+    expect(filterDelta(d, new Set()).groups).toHaveLength(0);
   });
 });

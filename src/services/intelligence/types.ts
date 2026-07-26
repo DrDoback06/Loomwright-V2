@@ -235,6 +235,26 @@ export function isDeltaEmpty(delta: StoryDelta): boolean {
   return deltaUnits(delta).length === 0;
 }
 
+/** The delta narrowed to a set of enabled units. Used so status messages
+ * describe what will actually be applied rather than everything that was
+ * found — a toast that overstates the change is a lying status. */
+export function filterDelta(delta: StoryDelta, enabled: Set<string>): StoryDelta {
+  const on = <T extends { unitId: string }>(u: T) => enabled.has(u.unitId);
+  return {
+    ...delta,
+    entities: delta.entities.filter(on),
+    patches: delta.patches.filter(on),
+    graphPlacements: delta.graphPlacements.filter(on),
+    hierarchyPlacements: delta.hierarchyPlacements.filter(on),
+    links: delta.links.filter(on),
+    chapters: delta.chapters.filter(on),
+    suggestions: delta.suggestions.filter(on),
+    groups: delta.groups
+      .map((g) => ({ ...g, unitIds: g.unitIds.filter((id) => enabled.has(id)) }))
+      .filter((g) => g.unitIds.length > 0),
+  };
+}
+
 /** One-line summary for toasts and the accept bar. */
 export function deltaTitle(delta: StoryDelta): string {
   const parts: string[] = [];
