@@ -3,10 +3,15 @@ name: Verify & Deploy to GitHub Pages
 on:
   push:
     # `main` is the app: the TS rebuild, not the old .jsx prototype (archived
-    # at `legacy-jsx-prototype-archive`). The CURRENT working branch also
-    # builds so a deploy can be tried before it lands — there is one Pages
-    # site, so only one working branch belongs here at a time.
-    branches: [main, claude/writing-extraction-ai-capability-ht7duk]
+    # at `legacy-jsx-prototype-archive`).
+    #
+    # Only `main` publishes, and that is enforced twice over: the `github-pages`
+    # environment restricts deployments to the default branch, so a working
+    # branch listed here passes the whole verify gate and then fails the deploy
+    # job in one second with no logs. Adding a branch here without also adding
+    # it under Settings → Environments → github-pages → Deployment branches
+    # just buys a confusing red run.
+    branches: [main]
   workflow_dispatch:
 
 permissions:

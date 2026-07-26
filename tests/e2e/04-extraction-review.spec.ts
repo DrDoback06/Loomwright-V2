@@ -54,7 +54,8 @@ test.describe('extraction + review loop', () => {
       '"We ride at dawn," said Maren. Lord Brennan only nodded. Later, Maren found Brennan waiting by the gate. "You are late," said Maren.'
     );
     await page.getByRole('button', { name: 'Save & Extract' }).click();
-    await expect(page.getByText(/candidate|change/)).toBeVisible();
+    // The durable staged bar, not the toast that destroys itself after 6s.
+    await expect(page.getByTestId('staged-delta-bar')).toContainText(/change/);
 
     await openNav(page, /Review/);
     await expect(page.getByTestId('surface-review')).toBeVisible();
