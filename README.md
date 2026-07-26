@@ -70,9 +70,17 @@ never appear anywhere. The extraction engine is pinned by 16 golden fixtures in
 
 ## Deploy
 
-Pushes to `claude/loomwright-rebuild-h5da7r` run the verify suite and publish `dist/` to
-GitHub Pages via `.github/workflows/deploy.yml`. (One-time repo setting: Pages → Source →
-GitHub Actions.)
+Live at **https://drdoback06.github.io/Loomwright-V2/**
+
+`.github/workflows/deploy.yml` runs the full verify suite — typecheck, lint, unit tests,
+and Playwright on desktop *and* mobile — and only publishes `dist/` if all of it passes.
+It triggers on `main` plus **one** working branch, because there is a single Pages site
+and two branches would race each other for it; update that branch name in the workflow
+when you start a new one. (One-time repo setting: Pages → Source → GitHub Actions.)
+
+Everything runs client-side, so the deployed build is the whole app: projects live in
+your browser's IndexedDB, and API keys — if you add any — are encrypted on your device
+and never leave it except as a request to the provider you chose.
 
 ## Repository map
 
