@@ -2,9 +2,10 @@ name: Verify & Deploy to GitHub Pages
 
 on:
   push:
-    # The branch this app actually ships from. `claude/loomwright-rebuild-h5da7r`
-    # was the original rebuild branch and no longer receives work.
-    branches: [claude/writing-extraction-review-84loqt]
+    # `main` is the app: the TS rebuild, not the old .jsx prototype (archived
+    # at `legacy-jsx-prototype-archive`). The working branch also builds so a
+    # deploy can be verified before it lands.
+    branches: [main, claude/writing-extraction-review-84loqt]
   workflow_dispatch:
 
 permissions:

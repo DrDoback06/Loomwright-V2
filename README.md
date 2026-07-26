@@ -6,9 +6,10 @@ relationships, timelines, factions, classes, races, skills, stats, bestiary, lor
 references — fed by an extraction pipeline that turns your prose into a cross-linked
 codex, with optional bring-your-own-key AI.
 
-**This branch is the completed ground-up rebuild.** The previous prototype lives in
+**This is the app.** The previous single-file prototype lives in
 [`legacy/`](legacy/) (reference only — do not edit) and its design documentation in
-[`docs/legacy/`](docs/legacy/). The rebuild's rule: **no surface ships unless every
+[`docs/legacy/`](docs/legacy/). That prototype was also what `main` used to hold; its
+history is preserved on the `legacy-jsx-prototype-archive` branch. The rebuild's rule: **no surface ships unless every
 visible control genuinely works**, proven by Playwright tests that click real rendered
 buttons and re-assert after a reload. The full control-by-control inventory is
 [`docs/rebuild/SURFACE_CHECKLIST.md`](docs/rebuild/SURFACE_CHECKLIST.md).
