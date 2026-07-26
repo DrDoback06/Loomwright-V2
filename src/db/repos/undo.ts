@@ -100,6 +100,7 @@ export async function undoAuditEntry(entryId: string): Promise<boolean> {
           db.chapters,
           db.links,
           db.suggestions,
+          db.candidates,
           db.auditLog,
         ],
         async () => {
@@ -116,6 +117,11 @@ export async function undoAuditEntry(entryId: string): Promise<boolean> {
           await db.chapters.bulkDelete(record.chapterIds);
           await db.links.bulkDelete(record.linkIds);
           await db.suggestions.bulkDelete(record.suggestionIds);
+          // Candidates the accept closed out go back to pending: the entity
+          // they described no longer exists, so they are outstanding again.
+          for (const id of record.resolvedCandidateIds ?? []) {
+            await db.candidates.update(id, { status: 'pending', existingEntityId: null });
+          }
           await logAudit({
             projectId: entry.projectId,
             action: 'intelligence.undo',

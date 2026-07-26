@@ -368,6 +368,122 @@ describe('intelligence/applyDelta', () => {
   });
 });
 
+describe('the two review lanes do not each create the same thing', () => {
+  beforeEach(async () => {
+    await Promise.all(db.tables.map((t) => t.clear()));
+  });
+
+  /** A pending row in the flat queue, the shape `extractChapter` writes. */
+  async function pendingCandidate(name: string) {
+    const id = `cand-${name.toLowerCase()}`;
+    await db.candidates.add({
+      id,
+      projectId: 'p1',
+      entityType: 'cast',
+      name,
+      suggestedAction: 'create',
+      matchType: 'new',
+      existingEntityId: null,
+      suggestedChanges: null,
+      confidence: 0.8,
+      confidenceBand: 'green',
+      sourceQuote: '…',
+      sourceQuotes: ['…'],
+      relatedEntityIds: [],
+      summary: '',
+      detector: 'ner',
+      status: 'pending',
+      source: 'local',
+      createdAt: 1,
+    } as never);
+    return id;
+  }
+
+  it('closes the flat-queue candidate that a cascade already created', async () => {
+    // Both lanes see the same extraction. Accepting on the board and then in
+    // the queue used to make a second Maren — the queue's accept path has no
+    // name-based duplicate guard.
+    const candidateId = await pendingCandidate('Maren');
+    await applyDelta(
+      deltaWith({
+        entities: [
+          {
+            ...unit('u1', 'discovery'),
+            draft: {
+              localId: 'l1',
+              type: 'cast',
+              name: 'Maren',
+              aliases: [],
+              summary: '',
+              tags: [],
+              fields: {},
+            },
+          },
+        ],
+      })
+    );
+
+    const after = await db.candidates.get(candidateId);
+    expect(after?.status).toBe('accepted');
+    // And it points at the row that actually exists now.
+    const maren = await db.entities.where('projectId').equals('p1').toArray();
+    expect(maren).toHaveLength(1);
+    expect(after?.existingEntityId).toBe(maren[0].id);
+  });
+
+  it('re-opens it on undo, because the entity it described is gone again', async () => {
+    const candidateId = await pendingCandidate('Maren');
+    const result = await applyDelta(
+      deltaWith({
+        entities: [
+          {
+            ...unit('u1', 'discovery'),
+            draft: {
+              localId: 'l1',
+              type: 'cast',
+              name: 'Maren',
+              aliases: [],
+              summary: '',
+              tags: [],
+              fields: {},
+            },
+          },
+        ],
+      })
+    );
+    expect((await db.candidates.get(candidateId))?.status).toBe('accepted');
+
+    await undoAuditEntry(result.auditId);
+    const after = await db.candidates.get(candidateId);
+    expect(after?.status).toBe('pending');
+    expect(after?.existingEntityId).toBeNull();
+    expect(await db.entities.where('projectId').equals('p1').count()).toBe(0);
+  });
+
+  it('leaves unrelated candidates alone', async () => {
+    const other = await pendingCandidate('Tobbin');
+    await applyDelta(
+      deltaWith({
+        entities: [
+          {
+            ...unit('u1', 'discovery'),
+            draft: {
+              localId: 'l1',
+              type: 'cast',
+              name: 'Maren',
+              aliases: [],
+              summary: '',
+              tags: [],
+              fields: {},
+            },
+          },
+        ],
+      })
+    );
+    expect((await db.candidates.get(other))?.status).toBe('pending');
+  });
+});
+
 describe('filterDelta', () => {
   it('describes only what will actually be applied', () => {
     const d = deltaWith({

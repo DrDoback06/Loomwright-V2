@@ -18,6 +18,8 @@ export interface DeltaApplyRecord {
   chapterIds: string[];
   linkIds: string[];
   suggestionIds: string[];
+  /** Flat-queue candidates this accept satisfied, so undo can re-open them. */
+  resolvedCandidateIds: string[];
 }
 
 export interface DeltaApplyResult {
@@ -133,6 +135,7 @@ export async function applyDelta(
     chapterIds: [],
     linkIds: [],
     suggestionIds: [],
+    resolvedCandidateIds: [],
   };
   const created: EntityRef[] = [];
   const updatedById = new Map<string, EntityRef>();
@@ -140,7 +143,16 @@ export async function applyDelta(
 
   await db.transaction(
     'rw',
-    [db.entities, db.skillTrees, db.tangleBoards, db.chapters, db.links, db.suggestions, db.auditLog],
+    [
+      db.entities,
+      db.skillTrees,
+      db.tangleBoards,
+      db.chapters,
+      db.links,
+      db.suggestions,
+      db.candidates,
+      db.auditLog,
+    ],
     async () => {
       // Working set of entities we mutate. Snapshotting here — once per id,
       // on first touch — is what makes undo correct when several patches in
@@ -359,6 +371,35 @@ export async function applyDelta(
         };
         await db.suggestions.add(row);
         record.suggestionIds.push(row.id);
+      }
+
+      // 8. Close out the flat review queue.
+      //
+      // The queue and the cascade board are two lanes over the same
+      // extraction, and the board became the busier one the moment
+      // discoveries started reaching it. Accepting "Maren" as a cascade used
+      // to leave "Maren" sitting in the queue as a pending create, and
+      // accepting it there too made a second Maren — the queue's accept path
+      // has no name-based duplicate guard. Anything this transaction just
+      // created or updated is no longer outstanding, whichever lane it came
+      // from, so it is marked accepted rather than left to be applied twice.
+      const touched = new Map<string, string>();
+      for (const ref of created) touched.set(`${ref.type}|${ref.name.toLowerCase()}`, ref.id);
+      for (const ref of updatedById.values()) touched.set(`${ref.type}|${ref.name.toLowerCase()}`, ref.id);
+      if (touched.size) {
+        const pending = await db.candidates
+          .where('[projectId+status]')
+          .equals([projectId, 'pending'])
+          .toArray();
+        for (const candidate of pending) {
+          const hit = touched.get(`${candidate.entityType}|${candidate.name.toLowerCase()}`);
+          if (!hit) continue;
+          await db.candidates.update(candidate.id, {
+            status: 'accepted',
+            existingEntityId: hit,
+          });
+          record.resolvedCandidateIds.push(candidate.id);
+        }
       }
 
       const entry = await logAudit({
