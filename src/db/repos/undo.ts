@@ -2,6 +2,7 @@ import { db } from '../schema';
 import { getAuditEntry, logAudit } from './audit';
 import type { Entity } from '../types';
 import type { GenerateApplyRecord } from '@/services/generate/apply';
+import type { DeltaApplyRecord } from '@/services/intelligence/apply';
 
 /** Undo a reversible audit entry by writing its `before` snapshot back
  * (or removing the record for a create). Logs a fresh audit entry —
@@ -79,6 +80,45 @@ export async function undoAuditEntry(entryId: string): Promise<boolean> {
           await logAudit({
             projectId: entry.projectId,
             action: 'generate.undo',
+            target: entry.target,
+            before: record,
+            reversible: false,
+          });
+        }
+      );
+      return true;
+    }
+    case 'intelligence.apply': {
+      const record = entry.after as DeltaApplyRecord | null;
+      if (!record) return false;
+      await db.transaction(
+        'rw',
+        [
+          db.entities,
+          db.skillTrees,
+          db.tangleBoards,
+          db.chapters,
+          db.links,
+          db.suggestions,
+          db.auditLog,
+        ],
+        async () => {
+          await db.entities.bulkDelete(record.entityIds);
+          // Each snapshot was taken before the cascade's first patch touched
+          // that row, so writing it back reverts every patch at once.
+          for (const patched of record.patchedEntities) {
+            await db.entities.put(patched.before);
+          }
+          for (const patched of record.patchedGraphs) {
+            const table = patched.kind === 'skilltree' ? db.skillTrees : db.tangleBoards;
+            await table.put(patched.before as never);
+          }
+          await db.chapters.bulkDelete(record.chapterIds);
+          await db.links.bulkDelete(record.linkIds);
+          await db.suggestions.bulkDelete(record.suggestionIds);
+          await logAudit({
+            projectId: entry.projectId,
+            action: 'intelligence.undo',
             target: entry.target,
             before: record,
             reversible: false,

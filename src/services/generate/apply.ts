@@ -31,7 +31,7 @@ function union(a: string[], b: string[]): string[] {
   return [...a, ...b.filter((v) => !seen.has(v.toLowerCase()))];
 }
 
-function chapterDoc(draft: BundleChapterDraft): {
+export function chapterDocFromDraft(draft: BundleChapterDraft): {
   doc: unknown;
   paragraphs: { id: string; text: string }[];
   wordCount: number;
@@ -177,7 +177,7 @@ export async function applyBundle(bundle: GenerationBundle): Promise<ApplyResult
         : 0;
       for (const [i, draft] of bundle.chapters.entries()) {
         const id = idMap.get(draft.localId)!;
-        const { doc, paragraphs, wordCount } = chapterDoc(draft);
+        const { doc, paragraphs, wordCount } = chapterDocFromDraft(draft);
         const chapter: Chapter = {
           id,
           projectId,

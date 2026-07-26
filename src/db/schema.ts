@@ -20,6 +20,9 @@ import type {
   TrashRow,
   UiStateRow,
 } from './types';
+// Type-only (erased at compile time), so this does not create an import cycle
+// with services/ — the same pattern repos/undo.ts already uses.
+import type { SuggestionRecord } from '@/services/intelligence/types';
 
 /** The single Loomwright database. Every domain table is project-scoped
  * via a `projectId` column + compound indexes. Version bumps must be
@@ -45,6 +48,7 @@ export class LoomwrightDB extends Dexie {
   templates!: EntityTable<Template, 'id'>;
   identityRules!: EntityTable<IdentityRule, 'id'>;
   mergeReceipts!: EntityTable<MergeReceipt, 'id'>;
+  suggestions!: EntityTable<SuggestionRecord, 'id'>;
 
   constructor() {
     super('loomwright');
@@ -84,6 +88,10 @@ export class LoomwrightDB extends Dexie {
       identityRules:
         'id, projectId, [projectId+kind], [projectId+entityType], canonicalEntityId',
       mergeReceipts: 'id, projectId, [projectId+createdAt], targetEntityId',
+    });
+    // Extraction 2.0 — the persistent per-entity Suggestions inbox.
+    this.version(8).stores({
+      suggestions: 'id, projectId, [projectId+status], [projectId+createdAt], targetEntityId',
     });
   }
 }
