@@ -159,6 +159,25 @@ function inner(re: RegExp): string {
   return re.source.slice(1, -1);
 }
 
+/**
+ * Start of the sentence containing `pos`, clamped to `window` characters back.
+ *
+ * The subject of a verb is in the SAME sentence as the verb. Scanning a flat
+ * 80-character window reaches back across sentence boundaries, so in
+ * "Vex learned Venom Strike. Aelinor reached Ashen Ford" — where Aelinor is not
+ * yet a known character — the travel detector found Vex in the previous
+ * sentence and attributed the journey to the wrong person. Silently wrong
+ * attribution is worse than no candidate at all.
+ */
+function sentenceStart(text: string, pos: number, window: number): number {
+  const floor = Math.max(0, pos - window);
+  for (let i = pos - 1; i > floor; i--) {
+    const ch = text[i];
+    if (ch === '.' || ch === '!' || ch === '?' || ch === '\n') return i + 1;
+  }
+  return floor;
+}
+
 export function detectItemTransfers(ctx: DetectorContext): ExtractionCandidate[] {
   const { text, index } = ctx;
   if (!text) return [];
@@ -168,7 +187,7 @@ export function detectItemTransfers(ctx: DetectorContext): ExtractionCandidate[]
   while ((m = verbRe.exec(text)) !== null) {
     const verbStart = m.index;
     const verbEnd = m.index + m[0].length;
-    const left = { start: Math.max(0, verbStart - 80), end: verbStart };
+    const left = { start: sentenceStart(text, verbStart, 80), end: verbStart };
     const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 160) };
     const giver = findEntityInSpan(text, left, index, ['cast']);
     const item = findEntityInSpan(text, right, index, ['items']);
@@ -262,7 +281,7 @@ export function detectTravel(ctx: DetectorContext): ExtractionCandidate[] {
   while ((m = verbRe.exec(text)) !== null) {
     const verbStart = m.index;
     const verbEnd = verbStart + m[0].length;
-    const left = { start: Math.max(0, verbStart - 80), end: verbStart };
+    const left = { start: sentenceStart(text, verbStart, 80), end: verbStart };
     const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 160) };
     const actor = findEntityInSpan(text, left, index, ['cast']);
     if (!actor) continue;
@@ -359,7 +378,7 @@ export function detectRelationships(ctx: DetectorContext): ExtractionCandidate[]
     const verbStart = m.index;
     const verbEnd = verbStart + m[0].length;
     const verbWord = m[0].toLowerCase().replace(/\s+/g, '-');
-    const left = { start: Math.max(0, verbStart - 80), end: verbStart };
+    const left = { start: sentenceStart(text, verbStart, 80), end: verbStart };
     const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 120) };
     const subject = findEntityInSpan(text, left, index, ['cast']);
     const object = findEntityInSpan(text, right, index, ['cast']);
@@ -820,7 +839,7 @@ export function detectSkillLearning(ctx: DetectorContext): ExtractionCandidate[]
   while ((m = verbRe.exec(text)) !== null) {
     const verbStart = m.index;
     const verbEnd = verbStart + m[0].length;
-    const left = { start: Math.max(0, verbStart - 80), end: verbStart };
+    const left = { start: sentenceStart(text, verbStart, 80), end: verbStart };
     const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 120) };
 
     const actor = findEntityInSpan(text, left, index, ['cast']);

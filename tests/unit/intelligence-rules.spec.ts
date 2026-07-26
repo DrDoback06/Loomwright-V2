@@ -177,6 +177,24 @@ describe('intelligence/propagation — consequences, not just nouns', () => {
       expect(delta.groups[0].headline).toContain('nested under Vraska');
     });
 
+    it('does not attribute a journey to whoever appeared in the previous sentence', () => {
+      // Aelinor is not a known character, so the only cast name in range is Vex
+      // — one sentence earlier. Reaching across the full stop to grab a subject
+      // silently credits the wrong person, which is worse than no candidate.
+      const vex = entity('cast', 'Vex');
+      const vraska = entity('locations', 'Vraska');
+
+      const delta = build(
+        'Vex learned Venom Strike before the tide turned. Aelinor reached Ashen Ford, a town in the Vraska region, before dusk.',
+        [vex, vraska]
+      );
+
+      expect(patchFor(delta, vex.id, 'currentLocation')).toBeUndefined();
+      expect(patchFor(delta, vex.id, 'travelHistory')).toBeUndefined();
+      // The skill cascade from the FIRST sentence is unaffected.
+      expect(patchFor(delta, vex.id, 'skills')).toBeTruthy();
+    });
+
     it('leaves an unresolvable parent as a low-confidence picker rather than dropping it', () => {
       const aelinor = entity('cast', 'Aelinor');
 
