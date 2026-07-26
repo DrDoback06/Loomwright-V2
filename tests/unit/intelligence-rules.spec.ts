@@ -259,7 +259,7 @@ describe('intelligence/propagation — consequences, not just nouns', () => {
         text,
         entities: [marrow, vex, sword],
         trees: [],
-        onProgress: (done, total) => progress.push(total),
+        onProgress: (_done, total) => progress.push(total),
       });
 
       expect(progress.length).toBeGreaterThan(1);

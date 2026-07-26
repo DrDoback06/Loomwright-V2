@@ -16,7 +16,7 @@ async function loadWorld(projectId: string): Promise<{ entities: Entity[]; trees
   ]);
   return {
     // Merged-away rows would resolve to stale targets; skip them.
-    entities: entities.filter((e) => e.status !== 'deleted' && !e.mergedIntoId),
+    entities: entities.filter((e) => e.status !== 'merged' && !e.mergedIntoId),
     trees,
   };
 }

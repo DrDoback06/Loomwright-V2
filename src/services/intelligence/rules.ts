@@ -492,8 +492,9 @@ function skillSheetFor(name: string): Record<string, unknown> {
   if (!pack) return { skillType: 'active' };
   try {
     const rng = createRng(hashName(name));
-    const arch = matchArchetype(rng, pack, resolveTheme(rng), name);
-    const draft = pack.generate(rng, arch, { known: [], siblings: [] });
+    const theme = resolveTheme(rng);
+    const arch = matchArchetype(rng, pack, theme, name);
+    const draft = pack.generate(rng, arch, { theme, hint: name, known: [] });
     return { skillType: 'active', ...draft.fields };
   } catch {
     return { skillType: 'active' };
