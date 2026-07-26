@@ -122,6 +122,25 @@ describe('intelligence/propagation — consequences, not just nouns', () => {
       expect(patchFor(delta, vex.id, 'inventory')?.mode).toBe('append');
     });
 
+    it('does not take the receiver from the following sentence', () => {
+      // "…to Vex at the gate. Aelinor reached…" — the forward window used to
+      // run past the full stop and hand the sword to Aelinor instead.
+      const marrow = entity('cast', 'Marrow');
+      const vex = entity('cast', 'Vex');
+      const aelinor = entity('cast', 'Aelinor');
+      const sword = entity('items', 'Saltbrand');
+
+      const delta = build(
+        'Marrow gave Saltbrand to Vex at the gate. Aelinor reached the far shore.',
+        [marrow, vex, aelinor, sword]
+      );
+
+      const owner = patchFor(delta, sword.id, 'currentOwner');
+      expect((owner?.after as { name: string }).name).toBe('Vex');
+      expect(patchFor(delta, vex.id, 'inventory')).toBeTruthy();
+      expect(patchFor(delta, aelinor.id, 'inventory')).toBeUndefined();
+    });
+
     it('flags a continuity conflict when the recorded owner is not the giver', () => {
       const marrow = entity('cast', 'Marrow');
       const vex = entity('cast', 'Vex');

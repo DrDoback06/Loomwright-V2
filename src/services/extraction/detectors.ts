@@ -178,6 +178,19 @@ function sentenceStart(text: string, pos: number, window: number): number {
   return floor;
 }
 
+/** End of the sentence containing `pos`, clamped to `window` characters on.
+ * The mirror of sentenceStart: the object of a verb is in the verb's own
+ * sentence, so a forward window that runs past the full stop will happily
+ * pick a participant out of the NEXT sentence. */
+function sentenceEnd(text: string, pos: number, window: number): number {
+  const ceiling = Math.min(text.length, pos + window);
+  for (let i = pos; i < ceiling; i++) {
+    const ch = text[i];
+    if (ch === '.' || ch === '!' || ch === '?' || ch === '\n') return i;
+  }
+  return ceiling;
+}
+
 export function detectItemTransfers(ctx: DetectorContext): ExtractionCandidate[] {
   const { text, index } = ctx;
   if (!text) return [];
@@ -188,7 +201,7 @@ export function detectItemTransfers(ctx: DetectorContext): ExtractionCandidate[]
     const verbStart = m.index;
     const verbEnd = m.index + m[0].length;
     const left = { start: sentenceStart(text, verbStart, 80), end: verbStart };
-    const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 160) };
+    const right = { start: verbEnd, end: sentenceEnd(text, verbEnd, 160) };
     const giver = findEntityInSpan(text, left, index, ['cast']);
     const item = findEntityInSpan(text, right, index, ['items']);
     const receiver = findEntityInSpan(text, right, index, ['cast']);
@@ -240,7 +253,7 @@ export function detectItemLoss(ctx: DetectorContext): ExtractionCandidate[] {
     const verbStart = m.index;
     const verbEnd = verbStart + m[0].length;
     const verbWord = m[0].toLowerCase();
-    const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 160) };
+    const right = { start: verbEnd, end: sentenceEnd(text, verbEnd, 160) };
     const item = findEntityInSpan(text, right, index, ['items']);
     if (!item) continue;
     const changes: Record<string, unknown> = {};
@@ -282,7 +295,7 @@ export function detectTravel(ctx: DetectorContext): ExtractionCandidate[] {
     const verbStart = m.index;
     const verbEnd = verbStart + m[0].length;
     const left = { start: sentenceStart(text, verbStart, 80), end: verbStart };
-    const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 160) };
+    const right = { start: verbEnd, end: sentenceEnd(text, verbEnd, 160) };
     const actor = findEntityInSpan(text, left, index, ['cast']);
     if (!actor) continue;
 
@@ -379,7 +392,7 @@ export function detectRelationships(ctx: DetectorContext): ExtractionCandidate[]
     const verbEnd = verbStart + m[0].length;
     const verbWord = m[0].toLowerCase().replace(/\s+/g, '-');
     const left = { start: sentenceStart(text, verbStart, 80), end: verbStart };
-    const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 120) };
+    const right = { start: verbEnd, end: sentenceEnd(text, verbEnd, 120) };
     const subject = findEntityInSpan(text, left, index, ['cast']);
     const object = findEntityInSpan(text, right, index, ['cast']);
     if (!subject || !object || subject.id === object.id) continue;
@@ -840,7 +853,7 @@ export function detectSkillLearning(ctx: DetectorContext): ExtractionCandidate[]
     const verbStart = m.index;
     const verbEnd = verbStart + m[0].length;
     const left = { start: sentenceStart(text, verbStart, 80), end: verbStart };
-    const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 120) };
+    const right = { start: verbEnd, end: sentenceEnd(text, verbEnd, 120) };
 
     const actor = findEntityInSpan(text, left, index, ['cast']);
     const knownSkill = findEntityInSpan(text, right, index, ['skills']);

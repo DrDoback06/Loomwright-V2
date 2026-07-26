@@ -103,15 +103,23 @@ export function findEntityInSpan(
 ): SpanHit | null {
   if (!index || !span || span.end <= span.start) return null;
   const slice = text.slice(span.start, span.end);
+  // Nearest in READING ORDER, not first in index order. Returning whichever
+  // entity happened to sit earliest in the index made the winner arbitrary:
+  // in "gave Saltbrand to Vex … Aelinor reached …" the receiver came out as
+  // Aelinor purely because of index position. The participant closest to the
+  // verb is the one the sentence is actually about.
+  let best: SpanHit | null = null;
   for (const type of types ?? (Object.keys(index) as EntityType[])) {
     for (const ent of index[type] ?? []) {
       if (!ent.regex) continue;
       ent.regex.lastIndex = 0;
       const m = ent.regex.exec(slice);
-      if (m) return { ...ent, matchText: m[0], offset: span.start + m.index };
+      if (!m) continue;
+      const offset = span.start + m.index;
+      if (!best || offset < best.offset) best = { ...ent, matchText: m[0], offset };
     }
   }
-  return null;
+  return best;
 }
 
 export interface ScanOccurrence {
