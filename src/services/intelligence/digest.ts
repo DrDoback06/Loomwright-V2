@@ -5,6 +5,8 @@ import type { ExtractionCandidate, ExtractionSignal } from '@/services/extractio
 import { confidenceBand } from '@/services/extraction/text-utils';
 import { findKnownEntityMention, type KnownEntity } from '@/services/extraction/known-index';
 import { ENTITY_TYPE_META, type EntityType } from '@/domain/entity-types';
+import { buildDeltaPrompt } from '@/services/ai/prompts/delta';
+import type { ModelTier } from '@/services/ai/prompts';
 import { runPropagation, type RuleContext } from './rules';
 import { DEFAULT_VOLUME } from './suggestions';
 import { emptyDelta, type DeltaSuggestion, type StoryDelta, type SuggestionKind } from './types';
@@ -134,41 +136,18 @@ export async function buildWorldDigest(projectId: string, depth: DigestDepth): P
 /**
  * The mega-prompt. Asks for facts AND suggestions in a shape our own rules
  * can consume, and is explicit that names — never ids — travel on the wire.
+ *
+ * The prompt body lives in `services/ai/prompts/delta.ts` so that the same
+ * contract is stated identically whether it is copied to an external AI or
+ * sent to a configured provider, and so a small model can be given a narrower
+ * version of the same job rather than a worse version of the whole one.
  */
-export function buildMegaPrompt(digest: string, manuscript: string): string {
-  return `You are helping an author keep a story bible in sync with their manuscript.
-
-Below is a digest of everything currently recorded, followed by new manuscript text.
-Read the manuscript and report what CHANGED, plus concrete forward-looking suggestions.
-
-Reply with ONE JSON object and nothing else:
-
-{
-  "facts": [
-    { "kind": "item-transfer", "item": "NAME", "from": "NAME", "to": "NAME", "quote": "..." },
-    { "kind": "item-loss", "item": "NAME", "destroyed": true, "quote": "..." },
-    { "kind": "travel", "character": "NAME", "place": "NAME", "parent": "REGION or null", "quote": "..." },
-    { "kind": "skill-learned", "character": "NAME", "skill": "NAME", "quote": "..." },
-    { "kind": "relationship", "from": "NAME", "to": "NAME", "bond": "ally|enemy|lover|rival|mentor|family|debt|oath", "quote": "..." }
-  ],
-  "suggestions": [
-    { "kind": "skill-next-tier", "target": "NAME", "title": "Short card title", "body": "One concrete sentence." }
-  ]
-}
-
-Rules:
-- Use NAMES exactly as they appear in the digest when the thing already exists.
-- "quote" must be a short verbatim span from the manuscript that justifies the fact.
-- Only report what the manuscript actually states. Do not invent events.
-- Suggestions must be finished, ready-to-accept artifacts — a specific card with a
-  title and one concrete sentence, never an open question.
-- Suggestion "kind" is one of: skill-sibling, skill-next-tier, quest-outcome,
-  story-arc, relationship, item-synergy, cast-candidate.
-
-${digest}
-
-# New manuscript text
-${manuscript}`;
+export function buildMegaPrompt(
+  digest: string,
+  manuscript: string,
+  options: { tier?: ModelTier; suggestions?: boolean } = {}
+): string {
+  return buildDeltaPrompt(digest, manuscript, options);
 }
 
 const SUGGESTION_KINDS: SuggestionKind[] = [

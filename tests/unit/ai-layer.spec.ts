@@ -83,9 +83,13 @@ describe('handoff', () => {
       known: KNOWN,
       chapter: { title: 'Ch 1', paragraphs: [{ id: 'p1', text: 'Aelinor walked the wall.' }] },
     });
-    expect(pack).toContain('Known cast: Aelinor');
+    expect(pack).toContain('cast: Aelinor');
     expect(pack).toContain('Aelinor walked the wall.');
     expect(pack).toContain('"relationships"');
+    // The contract an external AI has to follow must survive the round-trip
+    // into the pack, or a free-tier model has nothing to comply with.
+    expect(pack).toContain('OUTPUT RULES');
+    expect(pack).toContain('WORKED EXAMPLE');
   });
 
   it('paste-back lands candidates in the pending queue with dedupe', async () => {

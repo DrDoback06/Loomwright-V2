@@ -144,6 +144,9 @@ export function SettingsSurface() {
                     <span>
                       <strong>{meta.label}</strong>{' '}
                       <span className="lw-fieldnote-inline">({meta.defaultModel})</span>
+                      {/* "Bring your own key" reads as "bring your own bill"
+                          unless the free options are named as such. */}
+                      {meta.freeTier ? <span className="lw-provider__free">Free tier</span> : null}
                     </span>
                   </label>
                   {hasKey ? (
@@ -154,6 +157,14 @@ export function SettingsSurface() {
                     <span className="lw-provider__keyed">no key needed</span>
                   )}
                 </div>
+                {meta.note ? <p className="lw-fieldnote">{meta.note}</p> : null}
+                {meta.keyUrl ? (
+                  <p className="lw-fieldnote">
+                    <a href={meta.keyUrl} target="_blank" rel="noreferrer noopener">
+                      {meta.needsKey ? 'Get a key' : 'Install it'} ↗
+                    </a>
+                  </p>
+                ) : null}
                 {meta.needsKey && (
                   <div className="lw-chips__add">
                     <input

@@ -1,5 +1,6 @@
 import { db } from '@/db/schema';
-import { complete } from '@/services/ai/providers';
+import { completeJson } from '@/services/ai/json';
+import { fitToBudget, TIER_BUDGET, tierForModel } from '@/services/ai/prompts';
 import { getAiSettings, resolveProvider } from '@/services/ai/settings';
 import { buildMegaPrompt, buildWorldDigest, parseDeltaReply, type DigestDepth } from './digest';
 import type { StoryDelta } from './types';
@@ -33,23 +34,43 @@ export async function enrichDelta(
   const config = await resolveProvider(projectId);
   if (!config) return { delta: base, added: 0 };
 
-  const digest = await buildWorldDigest(projectId, depth);
-  const reply = await complete(config, {
+  // The digest and the passage are both trimmed to what this model can hold.
+  // A 4k-context free model handed a full-depth digest returns nothing useful
+  // and looks broken; handed a lean one it does the job.
+  const tier = tierForModel(config);
+  const budget = TIER_BUDGET[tier];
+  const effectiveDepth: DigestDepth = tier === 'small' && depth === 'full' ? 'standard' : depth;
+  const digest = fitToBudget(await buildWorldDigest(projectId, effectiveDepth), budget.digestChars);
+  const passage = fitToBudget(manuscript, budget.chunkChars);
+
+  const result = await completeJson(config, {
     system: 'You extract structured story facts. Reply with one JSON object and nothing else.',
-    prompt: buildMegaPrompt(digest, manuscript),
-    maxTokens: 4000,
+    prompt: buildMegaPrompt(digest.text, passage.text, { tier }),
+    maxTokens: budget.maxTokens,
   });
 
-  const enriched = await parseDeltaReply(projectId, reply);
-  if ('error' in enriched) {
-    // A malformed reply must not cost the author the offline result.
-    return {
-      delta: { ...base, warnings: [...base.warnings, `AI enrichment skipped: ${enriched.error}`] },
-      added: 0,
-    };
+  const warnings = [...base.warnings];
+  if (passage.trimmed) {
+    warnings.push(
+      `AI enrichment only read the first ${Math.round(budget.chunkChars / 1000)}k characters — your model’s context is the limit, not the offline pass.`
+    );
+  }
+  if (digest.trimmed) {
+    warnings.push('The world digest was shortened to fit this model. Offline results are unaffected.');
   }
 
-  return { delta: mergeDeltas(base, enriched), added: countUnits(enriched) };
+  if (!result.value) {
+    // A malformed reply must not cost the author the offline result.
+    return { delta: { ...base, warnings: [...warnings, `AI enrichment skipped: ${result.error}`] }, added: 0 };
+  }
+
+  const enriched = await parseDeltaReply(projectId, JSON.stringify(result.value));
+  if ('error' in enriched) {
+    return { delta: { ...base, warnings: [...warnings, `AI enrichment skipped: ${enriched.error}`] }, added: 0 };
+  }
+
+  const merged = mergeDeltas({ ...base, warnings }, enriched);
+  return { delta: merged, added: countUnits(enriched) };
 }
 
 /** True when an in-app AI call needs the privacy prompt first. */

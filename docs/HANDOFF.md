@@ -1,6 +1,6 @@
 # HANDOFF — App-Wide "Create Anything" Generation System
 
-**Branch:** `claude/writing-extraction-review-84loqt` · **Status:** **X1–X6 (Extraction 2.0, §10) BUILT AND TESTED — see §11.** Generation milestones G1–G3 complete & tested; G4/G5 mostly done; G6 half-done; G7/G8 not started (X1–X6 were brought forward ahead of them at the repo owner's request).
+**Branch:** `claude/writing-extraction-ai-capability-ht7duk` · **Status:** **§12 (offline depth + free-tier AI parity) SHIPPED.** Previously: **X1–X6 (Extraction 2.0, §10) BUILT AND TESTED — see §11.** Generation milestones G1–G3 complete & tested; G4/G5 mostly done; G6 half-done; G7/G8 not started (X1–X6 were brought forward ahead of them at the repo owner's request).
 **For:** one agent/session continuing sequentially. Read this file top to bottom before touching code. The approved plan lives in the repo owner's session notes; this document supersedes it as the source of truth for remaining work.
 
 ---
@@ -276,3 +276,103 @@ repo owner's request ("the full one-button vision"). Everything below works with
   inventory but does not remove it from the giver's; `DeltaPatch` has no `remove`
   mode. Add one before claiming inventory is authoritative.
 - G4–G8 remain as described in §5.
+
+
+---
+
+## 12. Offline depth + free-tier AI parity — SHIPPED
+
+Built on branch `claude/writing-extraction-ai-capability-ht7duk`, answering the
+repo owner's brief: *the app should do the bulk of the work itself, especially
+extraction; and a free-tier key should follow Opus-5-level instructions well
+enough to get the same result.*
+
+### The three things that capped the offline engine
+
+All three showed as one symptom — paste a book into a new project, get
+"nothing trackable found" back while the engine held a chapter full of people.
+
+1. **Typing was first-cue-wins.** `assessCandidateQuality` is an ordered chain
+   of early returns, so a single `"handed the blade to Vex"` outranked three
+   sentences Vex was the subject of and filed the protagonist under Locations.
+   `extraction/role-evidence.ts` now weighs cues across every occurrence; the
+   cues a person and a place share must win that vote before they may decide.
+2. **One pass, so the codex could not bootstrap itself.** Detectors bind verbs
+   to *known* entities, and discovery ran beside them without ever feeding
+   them. `runLocalExtraction` now runs a second detector pass with pass-1
+   discoveries standing in as provisional entities (`prov:` ids), and the
+   propagation rules resolve either kind of participant via `RuleTarget`.
+3. **Propagation skipped signal-less candidates** — i.e. every discovery — and
+   the paste path only ever built a delta. `ruleEntityIntroduced` turns them
+   into create units, filed into the cascade that depends on them (so a toggle
+   stays coherent) or rolled up per type.
+
+Measured on four sentences with an empty codex: **1 cascade before, 4 after**.
+
+### Also closed
+
+- Item detectors can name an item the codex has never seen (`findUnknownItemName`),
+  mirroring what the skill detector already did for techniques.
+- A name typed two ways in one run defers to the detector that bound it to a
+  verb (`arbitrateTypes`) — "Venom Strike" was becoming a character.
+- `DeltaPatch` gained `remove`; a transfer takes the item off the giver.
+- Quest progress: `detectQuestProgress` + `ruleQuestProgress` + offline
+  outcome cards. (This was the "deliberately NOT done" item in §11.)
+- Detector verb lists are extensible per project — "nicked" is ordinary English.
+- New places were created with `kind: 'Settlement'`, which is not one of the
+  locations config's options.
+- `itemsPack` had been written, exported and never registered since G4; every
+  generated item fell through to the generic filler. Registered, plus new
+  `bestiary.ts` and `factions.ts`. `tests/unit/packs.spec.ts` now walks every
+  pack against the real config — `entity.fields` is untyped, so nothing else
+  stopped a pack writing an unknown field id or an out-of-list pill value.
+- Provisional ids were leaking into `db.candidates`, where `existingEntityId`
+  means a row you can update.
+- Audit `at` is monotonic; two entries in one millisecond sorted arbitrarily,
+  so Undo could offer the wrong action.
+
+### Free-tier parity
+
+**The premise:** the gap between a frontier model and a free one is rarely
+reasoning about fiction. It is compliance — a large model treats "return only
+JSON" as a constraint and infers the rest of the contract; a small one treats
+it as a suggestion and guesses at everything unstated. So nothing is unstated.
+
+- `services/ai/providers.ts` — JSON enforced at the API level per provider
+  (`response_format`, `responseMimeType`, Ollama `format`, Anthropic assistant
+  prefill), `temperature`, and truncation surfaced from every provider's own
+  stop reason. OpenAI-compatible calls retry once without `response_format`
+  when a model rejects it, because OpenRouter fronts hundreds that do.
+  New presets: Groq, Together, DeepSeek, Mistral, each flagged for free tier.
+- `services/ai/json.ts` — one JSON path with local mending (trailing commas,
+  smart quotes) and **one repair round-trip**. A truncated reply is reported,
+  never re-asked: it would truncate in the same place.
+- `services/ai/prompts/` — role line, hard output contract restated at the
+  tail, config-derived field guidance, **one worked example with real
+  content**, a negative example, and an explicit omission rule. `tierForModel`
+  reads the size out of the model id and narrows the *scope* of the job
+  (fewer categories, smaller chunks, leaner digest) rather than its quality.
+- `services/ai/canon.ts` — canon travels out with the writing brief (who owns
+  what, who is where, who is bonded to whom) and the generated draft is read
+  back by the same offline engine before Insert. Contradictions, changes and
+  new names are shown. Costs nothing, needs no key.
+- The Compose brief gained tense, POV discipline, dialogue rules, a word
+  target, anti-patterns, and the author's own measured `StyleProfile`.
+
+### Verification
+
+`npx tsc --noEmit` ✅ · `npm run build` (`tsc -b`) ✅ · `npm run lint` ✅ ·
+`npx vitest run` **215** ✅ · full Playwright suite **140 passed, 10 skipped,
+0 failed** on BOTH desktop and mobile ✅
+
+### Still open
+
+- The flat review queue and the cascade board both render findings from the
+  same extraction. That was fine when cascades were rare; now that discovery
+  reaches the board, the two lanes overlap and the flat list should probably
+  become the "everything else" lane rather than a parallel view.
+- `buildExtractionPrompt` derives its field guidance by hand rather than from
+  `promptFieldLines(type)`. The generation prompts already do it properly;
+  unifying them would let the extraction schema follow the configs too.
+- Suggestion volume is read for cascades but not yet for quest outcomes at the
+  per-surface level.

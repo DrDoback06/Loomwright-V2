@@ -19,7 +19,7 @@ import { extractChapter } from '@/services/extraction/session';
 import { extractChapterToDelta } from '@/services/intelligence/session';
 import { useIntelligenceStore } from '@/stores/intelligence';
 import { loadKnownProjectEntities } from '@/services/extraction/project-known';
-import { runDeepExtraction } from '@/services/ai/deep-extraction';
+import { describeDeepExtraction, runDeepExtraction } from '@/services/ai/deep-extraction';
 import { getAiSettings, resolveProvider } from '@/services/ai/settings';
 import { useProjectStore } from '@/stores/project';
 import { useFocusStore } from '@/stores/focus';
@@ -281,14 +281,17 @@ export function WritersRoom() {
       const config = await resolveProvider(projectId);
       if (!chapter || !config) return;
       const known = await loadKnownProjectEntities(projectId);
-      const { added } = await runDeepExtraction(chapter, config, known);
+      const result = await runDeepExtraction(chapter, config, known);
+      // Report what actually happened. A truncated or unreadable reply used to
+      // be indistinguishable from a model that genuinely found nothing, which
+      // is the difference between "your chapter is thin" and "ask for less".
       toast(
-        added > 0
-          ? `AI deep pass found ${added} new candidate${added === 1 ? '' : 's'}.`
-          : 'AI deep pass found nothing beyond the local scan.',
-        added > 0
+        describeDeepExtraction(result),
+        result.added > 0
           ? { kind: 'success', action: { label: 'Review', run: () => setRoute('review') } }
-          : {}
+          : result.failedChunks || result.truncatedChunks
+            ? { kind: 'error' }
+            : {}
       );
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Deep extraction failed.', { kind: 'error' });

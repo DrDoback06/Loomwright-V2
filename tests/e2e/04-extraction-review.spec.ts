@@ -54,10 +54,14 @@ test.describe('extraction + review loop', () => {
       '"We ride at dawn," said Maren. Lord Brennan only nodded. Later, Maren found Brennan waiting by the gate. "You are late," said Maren.'
     );
     await page.getByRole('button', { name: 'Save & Extract' }).click();
-    await expect(page.getByText(/candidate/)).toBeVisible();
+    await expect(page.getByText(/candidate|change/)).toBeVisible();
 
     await openNav(page, /Review/);
     await expect(page.getByTestId('surface-review')).toBeVisible();
+
+    // A fresh project's discoveries now reach the cascade board as well as
+    // the flat queue — that is the whole point of the bootstrap pass.
+    await expect(page.getByTestId('cascade-board')).toContainText(/2 new cast/i);
 
     // A cast candidate for Maren exists — accept it via the real button.
     const marenCard = page.locator('.lw-qcard', { hasText: 'Maren' }).first();
@@ -113,7 +117,14 @@ test.describe('extraction + review loop', () => {
     await openNav(page, /Review/);
 
     // Discovery suggests the item as a new record.
-    const itemCard = page.locator('.lw-qcard', { hasText: 'Blackwork Blade' }).first();
+    // The transfer detector can now name an item the codex has never seen, so
+    // the same blade appears twice: once as a new record, once as the handover.
+    // Target the create explicitly rather than whichever renders first.
+    const itemCard = page
+      .locator('.lw-qcard')
+      .filter({ hasText: 'Blackwork Blade' })
+      .filter({ has: page.getByRole('button', { name: 'Accept as new', exact: true }) })
+      .first();
     await expect(itemCard).toBeVisible();
     await itemCard.getByRole('button', { name: 'Accept as new', exact: true }).click();
 

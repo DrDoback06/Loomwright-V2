@@ -79,6 +79,47 @@ test.describe('AI layer (mocked providers)', () => {
     await expect(page.getByLabel('Manuscript body')).toContainText('colour of old coin');
   });
 
+  test('compose: the draft is checked against the codex before it can be inserted', async ({
+    page,
+  }) => {
+    // The mocked model writes a scene that contradicts recorded ownership.
+    await mockAnthropic(
+      page,
+      'Saren handed the Auger of Hess to Aelinor without a word, and the gate closed behind them.'
+    );
+    await bootWithProject(page);
+    await configureAnthropic(page);
+    await createCastMember(page, { name: 'Aelinor' });
+    await createCastMember(page, { name: 'Saren' });
+
+    // An item the codex records as Aelinor's.
+    await openNav(page, 'Items');
+    await page.getByRole('button', { name: /Create item/ }).first().click();
+    const drawer = page.getByRole('dialog');
+    await drawer.getByLabel('Name *').fill('Auger of Hess');
+    await drawer.getByRole('button', { name: /Create item/ }).click();
+    await expect(drawer).toBeHidden();
+
+    await openNav(page, "Writer's Room");
+    await page
+      .getByRole('tablist', { name: 'Chapters' })
+      .getByRole('button', { name: '+ New chapter' })
+      .click();
+    await page.getByRole('button', { name: 'Compose', exact: true }).click();
+
+    // The new form controls are real: tense and voice-matching both drive the brief.
+    await page.getByLabel('Tense').selectOption('present');
+    await expect(page.getByLabel(/Match my voice/)).toBeChecked();
+
+    await page.getByRole('button', { name: 'Generate with AI' }).click();
+    await page.getByRole('button', { name: 'Send once' }).click();
+
+    // The offline canon check reads the draft before the author accepts it.
+    const check = page.getByTestId('canon-check');
+    await expect(check).toBeVisible();
+    await expect(check).toContainText(/Auger of Hess/);
+  });
+
   test('deep extraction feeds the review queue from a mocked JSON reply', async ({ page }) => {
     await mockAnthropic(
       page,
@@ -116,7 +157,9 @@ test.describe('AI layer (mocked providers)', () => {
     await openNav(page, 'AI Handoff');
     await page.getByRole('button', { name: 'Build pack' }).click();
     const pack = page.getByLabel('Handoff pack');
-    await expect(pack).toContainText('Known cast: Aelinor');
+    await expect(pack).toContainText('cast: Aelinor');
+    // The contract a free-tier model has to follow must survive into the pack.
+    await expect(pack).toContainText('OUTPUT RULES');
 
     await page
       .getByLabel('AI reply')

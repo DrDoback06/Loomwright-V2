@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
+import type { Entity } from '@/db/types';
 import { ENTITY_TYPE_META, type EntityRef } from '@/domain/entity-types';
 import { complete } from '@/services/ai/providers';
+import { buildProseBrief } from '@/services/ai/prompts/prose';
+import { tierForModel } from '@/services/ai/prompts';
+import { buildCanonFacts, checkDraftAgainstCanon, type CanonIssue } from '@/services/ai/canon';
+import { analyzeStyle, type StyleProfile } from '@/services/style-analysis';
 import { getAiSettings, resolveProvider } from '@/services/ai/settings';
 import { PrivacyConfirm } from '@/features/generate/PrivacyConfirm';
 import { useFocusStore } from '@/stores/focus';
@@ -11,7 +16,18 @@ import { toast } from '@/stores/toasts';
 
 const MODES = ['scene', 'chapter opening', 'dialogue', 'description', 'transition'] as const;
 const POVS = ['third limited', 'third omniscient', 'first person', 'second person'] as const;
+const TENSES = ['past', 'present'] as const;
 const LENGTHS = ['a few paragraphs', 'half a chapter', 'a full chapter'] as const;
+
+/** How much manuscript to measure the author's voice from. Enough to be
+ * representative, capped so a long book does not stall the panel. */
+const STYLE_SAMPLE_CHARS = 40_000;
+
+const ISSUE_GLYPH: Record<CanonIssue['kind'], string> = {
+  contradiction: '⚠',
+  change: '↻',
+  introduction: '＋',
+};
 
 interface ComposePanelProps {
   /** Insert the planning brief (renders as a blockquote note). */
@@ -32,18 +48,49 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
 
   const [mode, setMode] = useState<(typeof MODES)[number]>('scene');
   const [pov, setPov] = useState<(typeof POVS)[number]>('third limited');
+  const [tense, setTense] = useState<(typeof TENSES)[number]>('past');
   const [length, setLength] = useState<(typeof LENGTHS)[number]>('a few paragraphs');
   const [instruction, setInstruction] = useState('');
   const [dropped, setDropped] = useState<EntityRef[]>([]);
   const [aiReady, setAiReady] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState('');
+  const [issues, setIssues] = useState<CanonIssue[]>([]);
   const [confirming, setConfirming] = useState(false);
+  const [matchVoice, setMatchVoice] = useState(true);
 
   useEffect(() => {
     if (!projectId) return;
     void resolveProvider(projectId).then((c) => setAiReady(!!c));
   }, [projectId]);
+
+  /** Every live entity — the canon check needs the whole world, not just what
+   * is in context, or it cannot tell a new name from a known one. */
+  const world = useLiveQuery(
+    async () => (projectId ? db.entities.where('projectId').equals(projectId).toArray() : []),
+    [projectId],
+    [] as Entity[]
+  );
+
+  /** The author's own voice, measured from their own pages. Never guessed,
+   * never asked for — it is already computable and was simply never sent. */
+  const style = useLiveQuery<StyleProfile | null, StyleProfile | null>(
+    async () => {
+      if (!projectId) return null;
+      const chapters = await db.chapters.where('projectId').equals(projectId).toArray();
+      let sample = '';
+      for (const chapter of chapters) {
+        for (const paragraph of chapter.paragraphs) {
+          sample += `${paragraph.text}\n\n`;
+          if (sample.length > STYLE_SAMPLE_CHARS) break;
+        }
+        if (sample.length > STYLE_SAMPLE_CHARS) break;
+      }
+      return analyzeStyle(sample);
+    },
+    [projectId],
+    null
+  );
 
   const contextRefs: EntityRef[] = (() => {
     const map = new Map<string, EntityRef>();
@@ -64,22 +111,33 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
 
   const removable = (id: string) => dropped.some((d) => d.id === id);
 
-  const buildBrief = (): string => {
-    const lines: string[] = [];
-    lines.push(`Write ${mode === 'scene' ? 'a scene' : mode} — ${pov}, ${length}.`);
-    for (const e of details) {
-      const meta = ENTITY_TYPE_META[e.type];
-      const bits = [e.summary].filter(Boolean);
-      const voice = typeof e.fields.speechStyle === 'string' ? e.fields.speechStyle : '';
-      const persona = typeof e.fields.personality === 'string' ? e.fields.personality : '';
-      if (persona) bits.push(`personality: ${persona}`);
-      if (voice) bits.push(`voice: ${voice.split('\n')[0]}`);
-      lines.push(`• ${meta.label}: ${e.name}${bits.length ? ` — ${bits.join('; ')}` : ''}`);
-    }
-    if (instruction.trim()) lines.push(`Direction: ${instruction.trim()}`);
-    lines.push('Stay consistent with the codex; do not contradict established canon.');
-    return lines.join('\n');
-  };
+  /**
+   * The brief.
+   *
+   * "Stay consistent with the codex" was the whole of the canon instruction,
+   * addressed to a model that has never seen the codex. It now carries the
+   * actual recorded state of everyone in the scene, the author's measured
+   * voice, and an explicit form contract — because everything a small model
+   * gets wrong here is something the old brief left it to infer.
+   */
+  const buildBrief = (options: { tier?: 'small' | 'large' } = {}): string =>
+    buildProseBrief({
+      mode,
+      pov,
+      tense,
+      length,
+      instruction,
+      cast: details.map((e) => {
+        const bits = [e.summary].filter(Boolean);
+        const persona = typeof e.fields.personality === 'string' ? e.fields.personality : '';
+        const voice = typeof e.fields.speechStyle === 'string' ? e.fields.speechStyle : '';
+        if (persona) bits.push(`personality: ${persona}`);
+        if (voice) bits.push(`voice: ${voice.split('\n')[0]}`);
+        return { label: ENTITY_TYPE_META[e.type].label, name: e.name, detail: bits.join('; ') };
+      }),
+      style: matchVoice ? style : null,
+      facts: buildCanonFacts(details, world),
+    }, options);
 
   const runGenerate = async () => {
     if (!projectId) return;
@@ -89,14 +147,22 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
       return;
     }
     setGenerating(true);
+    setIssues([]);
     try {
       const text = await complete(config, {
         system:
           'You are a fiction co-writer. Write polished prose following the brief exactly. Return only the prose — no preamble, no notes.',
-        prompt: buildBrief(),
+        prompt: buildBrief({ tier: tierForModel(config) }),
+        // Prose is the one place a high temperature is right. Everything else
+        // in the app runs at 0; a scene generated at 0 reads like a synopsis.
+        temperature: 0.85,
         maxTokens: 1800,
       });
-      setDraft(text.trim());
+      const cleaned = text.trim();
+      setDraft(cleaned);
+      // The draft is read by the same engine that reads the manuscript, before
+      // the author is offered the Insert button. Nothing used to check it.
+      setIssues(checkDraftAgainstCanon(cleaned, world));
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Generation failed.', { kind: 'error' });
     } finally {
@@ -170,6 +236,22 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
         ))}
       </select>
 
+      <label className="lw-field__label" htmlFor="compose-tense">
+        Tense
+      </label>
+      <select
+        id="compose-tense"
+        className="lw-input"
+        value={tense}
+        onChange={(e) => setTense(e.target.value as (typeof TENSES)[number])}
+      >
+        {TENSES.map((t) => (
+          <option key={t} value={t}>
+            {t} tense
+          </option>
+        ))}
+      </select>
+
       <label className="lw-field__label" htmlFor="compose-length">
         Length
       </label>
@@ -195,6 +277,18 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
         value={instruction}
         onChange={(e) => setInstruction(e.target.value)}
       />
+
+      <label className="lw-fieldnote">
+        <input
+          type="checkbox"
+          checked={matchVoice}
+          onChange={(e) => setMatchVoice(e.target.checked)}
+        />{' '}
+        Match my voice
+        {style
+          ? ` — measured: ${style.register}, ${style.pacing}, ~${Math.round(style.avgSentenceLength)}-word sentences`
+          : ' — write a little more first and this fills in'}
+      </label>
 
       <div className="lw-compose__actions">
         {aiReady && !draft && !confirming && (
@@ -235,7 +329,35 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
               aria-label="AI draft"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => setIssues(checkDraftAgainstCanon(draft, world))}
             />
+
+            {/* Read by the same offline engine that reads the manuscript, so
+                the author sees what this passage does to their canon BEFORE
+                it becomes their canon. Costs nothing and needs no key. */}
+            {issues.length > 0 && (
+              <div className="lw-compose__canon" data-testid="canon-check" role="status">
+                <p className="lw-fieldnote">
+                  Checked against your codex — {issues.length} note
+                  {issues.length === 1 ? '' : 's'}:
+                </p>
+                <ul className="lw-compose__issues">
+                  {issues.map((issue, i) => (
+                    <li key={i} className={`lw-compose__issue lw-compose__issue--${issue.kind}`}>
+                      <span aria-hidden>{ISSUE_GLYPH[issue.kind]}</span>{' '}
+                      <span>{issue.message}</span>
+                      {issue.quote ? <em className="lw-compose__issuequote">“{issue.quote}”</em> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {issues.length === 0 && (
+              <p className="lw-fieldnote" data-testid="canon-check">
+                Checked against your codex — nothing contradicts what you have recorded.
+              </p>
+            )}
+
             <div className="lw-chips__add">
               <button
                 type="button"
@@ -243,12 +365,20 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
                 onClick={() => {
                   onInsertProse(draft);
                   setDraft('');
+                  setIssues([]);
                   toast('Draft inserted — it reads as your manuscript now.', { kind: 'success' });
                 }}
               >
                 Insert draft
               </button>
-              <button type="button" className="lw-btn" onClick={() => setDraft('')}>
+              <button
+                type="button"
+                className="lw-btn"
+                onClick={() => {
+                  setDraft('');
+                  setIssues([]);
+                }}
+              >
                 Discard
               </button>
             </div>

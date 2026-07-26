@@ -1762,6 +1762,21 @@ select.lw-input {
   color: #4f8045;
 }
 
+/* Names the providers an author can use without paying anything. */
+.lw-provider__free {
+  display: inline-block;
+  margin-left: var(--sp-2);
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in srgb, #4f8045 18%, transparent);
+  color: #3d6636;
+  font-size: var(--fs-3xs, 0.65rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
 .lw-provider__nokey {
   font-size: var(--fs-2xs);
   color: var(--ink-4);
@@ -1819,6 +1834,50 @@ select.lw-input {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+}
+
+/* Offline canon check on a generated draft: what this passage does to the
+   codex, shown before it becomes the codex. */
+.lw-compose__canon {
+  border-left: 3px solid var(--band-orange, #c98a2e);
+  padding-left: var(--sp-4);
+}
+
+.lw-compose__issues {
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.lw-compose__issue {
+  font-size: var(--fs-2xs);
+  line-height: 1.5;
+  display: grid;
+  grid-template-columns: 1.25em 1fr;
+  gap: var(--sp-2);
+}
+
+.lw-compose__issue--contradiction {
+  color: var(--band-red, #b4452f);
+  font-weight: 600;
+}
+
+.lw-compose__issue--change {
+  color: var(--ink-2, #5b4d3f);
+}
+
+.lw-compose__issue--introduction {
+  color: var(--ink-3, #7d6f60);
+}
+
+.lw-compose__issuequote {
+  grid-column: 2;
+  display: block;
+  opacity: 0.75;
+  font-style: italic;
 }
 
 /* ---- Command palette (Ctrl/Cmd+K) ---- */

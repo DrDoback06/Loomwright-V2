@@ -67,7 +67,8 @@ describe('intelligence/world digest + mega-prompt round trip', () => {
     expect(prompt).toContain('Marrow gave Saltbrand to Vex.');
     expect(prompt).toContain('"facts"');
     expect(prompt).toContain('"suggestions"');
-    expect(prompt).toContain('never an open question');
+    expect(prompt).toContain('Never a question');
+    expect(prompt).toContain('No quote, no fact');
   });
 
   describe('reply verification', () => {

@@ -289,10 +289,15 @@ export function ReviewSurface() {
             const meta = ENTITY_TYPE_META[cluster.entityType];
             const isExpanded = expanded.has(cluster.id);
             const isDrop = dragOver === cluster.id;
+            // "Unambiguously a new thing" is about whether anything points at
+            // an existing row — not about how many records back it. Two
+            // records for one new item ("it exists" and "it changed hands")
+            // is MORE evidence, and gating the one-click accept on a count
+            // turned that extra evidence into an obstacle.
             const directNew =
-              cluster.candidateIds.length === 1 &&
               !cluster.suggestedEntity &&
-              cluster.candidates[0]?.suggestedAction === 'create';
+              cluster.candidates.some((c) => c.suggestedAction === 'create') &&
+              cluster.candidates.every((c) => !c.existingEntityId);
             return (
               <li
                 key={cluster.id}

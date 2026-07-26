@@ -3,37 +3,73 @@ import { newId } from '@/lib/id';
 import type { Chapter, ReviewCandidate } from '@/db/types';
 import { chunkText } from '@/services/extraction/text-utils';
 import type { KnownEntity } from '@/services/extraction/known-index';
-import { complete, type ProviderConfig } from './providers';
-import { extractJsonBlock, extractionPrompt, mapAiPayload } from './ai-candidates';
+import { type ProviderConfig } from './providers';
+import { completeJson } from './json';
+import { TIER_BUDGET, tierForModel } from './prompts';
+import { buildExtractionPrompt } from './prompts/extraction';
+import { mapAiPayload, type AiExtractionPayload } from './ai-candidates';
 
-/** The AI deep pass: chunk the chapter, ask the provider for structured
- * entities, and add the results to the SAME review queue as the local
- * pass (deduped against pending). Never auto-applies anything. */
+export interface DeepExtractionResult {
+  added: number;
+  /** Chunks the model could not be made to answer in JSON for. */
+  failedChunks: number;
+  /** Chunks whose reply was cut off — the passage was too long for the model. */
+  truncatedChunks: number;
+  /** How many chunks needed a repair round-trip to parse. */
+  repairedChunks: number;
+}
+
+/**
+ * The AI deep pass: chunk the chapter, ask the provider for structured
+ * entities, and add the results to the SAME review queue as the local pass
+ * (deduped against pending). Never auto-applies anything.
+ *
+ * Three things changed to make this work on a free key. The request now forces
+ * JSON at the API level and runs at temperature 0, so the same chapter gives
+ * the same answer twice. A reply that will not parse gets one repair
+ * round-trip instead of being silently dropped. And chunk size follows the
+ * model's tier — an 8B model handed 5,000 characters returns a summary of the
+ * chunk rather than an extraction of it.
+ */
 export async function runDeepExtraction(
   chapter: Chapter,
   config: ProviderConfig,
   known: KnownEntity[]
-): Promise<{ added: number }> {
+): Promise<DeepExtractionResult> {
   const projectId = chapter.projectId;
   const fullText = chapter.paragraphs.map((p) => p.text).join('\n\n');
-  if (!fullText.trim()) return { added: 0 };
+  const empty = { added: 0, failedChunks: 0, truncatedChunks: 0, repairedChunks: 0 };
+  if (!fullText.trim()) return empty;
 
-  const knownNames = (['cast', 'locations', 'items', 'factions'] as const).map((type) => ({
+  const tier = tierForModel(config);
+  const budget = TIER_BUDGET[tier];
+
+  const knownNames = (['cast', 'locations', 'items', 'factions', 'skills'] as const).map((type) => ({
     type,
     names: known.filter((k) => k.type === type).map((k) => k.name),
   }));
-  const system = extractionPrompt(knownNames);
+  const system = buildExtractionPrompt(knownNames, { tier, namesPerType: budget.namesPerType });
 
-  const chunks = chunkText(fullText, 5000, 500);
+  // Overlap scales with the window so a sentence never straddles a cut.
+  const chunks = chunkText(fullText, budget.chunkChars, Math.round(budget.chunkChars / 10));
   const collected = [];
+  let failedChunks = 0;
+  let truncatedChunks = 0;
+  let repairedChunks = 0;
+
   for (const chunk of chunks) {
-    const text = await complete(config, {
+    const result = await completeJson(config, {
       system,
-      prompt: `Chapter chunk ${chunk.index + 1}/${chunks.length}:\n\n${chunk.text}`,
-      maxTokens: 2000,
+      prompt: `Passage ${chunk.index + 1} of ${chunks.length}:\n\n${chunk.text}`,
+      maxTokens: budget.maxTokens,
     });
-    const payload = extractJsonBlock(text);
-    if (payload) collected.push(...mapAiPayload(payload, known, 'ai'));
+    if (result.repaired && result.value) repairedChunks++;
+    if (result.truncated) truncatedChunks++;
+    if (!result.value) {
+      failedChunks++;
+      continue;
+    }
+    collected.push(...mapAiPayload(result.value as AiExtractionPayload, known, 'ai'));
   }
 
   // Dedupe against each other AND against existing pending candidates.
@@ -72,5 +108,25 @@ export async function runDeepExtraction(
     });
   }
   if (rows.length) await db.candidates.bulkAdd(rows);
-  return { added: rows.length };
+  return { added: rows.length, failedChunks, truncatedChunks, repairedChunks };
+}
+
+/** A one-line honest account of a deep pass, for the toast. */
+export function describeDeepExtraction(result: DeepExtractionResult): string {
+  const parts: string[] = [
+    result.added > 0
+      ? `AI deep pass found ${result.added} new candidate${result.added === 1 ? '' : 's'}.`
+      : 'AI deep pass found nothing beyond the local scan.',
+  ];
+  if (result.truncatedChunks) {
+    parts.push(
+      `${result.truncatedChunks} section${result.truncatedChunks === 1 ? '' : 's'} were cut off — the model ran out of output room.`
+    );
+  }
+  if (result.failedChunks) {
+    parts.push(
+      `${result.failedChunks} section${result.failedChunks === 1 ? ' reply was' : ' replies were'} unreadable.`
+    );
+  }
+  return parts.join(' ');
 }

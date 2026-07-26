@@ -1,6 +1,8 @@
 import type { EntityType } from '@/domain/entity-types';
 import { buildCandidate, type ExtractionCandidate } from '@/services/extraction/detectors';
 import { findKnownEntityMention, type KnownEntity } from '@/services/extraction/known-index';
+import { buildExtractionPrompt } from './prompts/extraction';
+import type { ModelTier } from './prompts';
 
 /** The JSON shape we ask AI passes (deep extraction + handoff paste-back)
  * to produce. Tolerant parsing: anything missing is skipped. */
@@ -151,25 +153,16 @@ export function mapAiPayload(
 }
 
 /** The prompt both AI paths share (deep pass sends it per chunk; the
- * handoff pack embeds it for the external AI). */
-export function extractionPrompt(knownNames: { type: string; names: string[] }[]): string {
-  const knownBlock = knownNames
-    .filter((k) => k.names.length)
-    .map((k) => `Known ${k.type}: ${k.names.slice(0, 40).join(', ')}`)
-    .join('\n');
-  return [
-    'You are a story-canon extraction system. Read the chapter text and extract narrative entities.',
-    knownBlock ? `\n${knownBlock}\n(Use these exact names when the text refers to them.)` : '',
-    '\nReturn ONLY a JSON object with this shape (omit empty arrays):',
-    '{"characters":[{"name":"","role":"","traits":[],"summary":""}],',
-    ' "locations":[{"name":"","kind":"","summary":""}],',
-    ' "items":[{"name":"","type":"","owner":"","summary":""}],',
-    ' "quests":[{"name":"","status":"","summary":""}],',
-    ' "events":[{"name":"","when":"","summary":""}],',
-    ' "factions":[{"name":"","summary":""}],',
-    ' "skills":[{"name":"","summary":""}],',
-    ' "lore":[{"title":"","body":""}],',
-    ' "relationships":[{"from":"","to":"","type":"","summary":""}]}',
-    '\nBe conservative: only include entities the text actually establishes.',
-  ].join('\n');
+ * handoff pack embeds it for the external AI).
+ *
+ * The prompt itself now lives in `prompts/extraction.ts`, which states the
+ * whole contract — worked example, negative example, per-field guidance,
+ * omission rule — instead of the fifteen-line shape sketch this used to be.
+ * That sketch was enough for a frontier model to infer the rest from and not
+ * nearly enough for a free one, which is the gap the library exists to close. */
+export function extractionPrompt(
+  knownNames: { type: string; names: string[] }[],
+  options: { tier?: ModelTier; namesPerType?: number } = {}
+): string {
+  return buildExtractionPrompt(knownNames, options);
 }

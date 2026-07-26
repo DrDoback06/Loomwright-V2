@@ -3,7 +3,7 @@ import { newId } from '@/lib/id';
 import { logAudit } from '@/db/repos/audit';
 import { replaceChapterCandidates } from '@/db/repos/review';
 import type { Chapter, Occurrence } from '@/db/types';
-import { runLocalExtraction } from './engine';
+import { isProvisionalId, runLocalExtraction } from './engine';
 import { loadKnownProjectEntities } from './project-known';
 
 export interface ExtractionSummary {
@@ -43,15 +43,21 @@ export async function extractChapter(chapter: Chapter): Promise<ExtractionSummar
   await db.occurrences.where('[projectId+chapterId]').equals([projectId, chapter.id]).delete();
 
   // Persist candidates first so candidate occurrences can point at them.
+  //
+  // Provisional ids are stripped on the way in. They are a delta-lane concept
+  // — a stand-in for a row that does not exist yet, which `applyDelta` swaps
+  // for a real id at accept time. In this table `existingEntityId` means "a
+  // row you can go and update", so a provisional id here would send Accept
+  // looking for an entity that was never created.
   const rows = await replaceChapterCandidates(
     projectId,
     chapter.id,
     candidates.map((c) => ({
       entityType: c.entityType,
       name: c.name,
-      suggestedAction: c.suggestedAction,
-      matchType: c.matchType,
-      existingEntityId: c.existingEntityId ?? null,
+      suggestedAction: isProvisionalId(c.existingEntityId) ? 'create' : c.suggestedAction,
+      matchType: isProvisionalId(c.existingEntityId) ? 'new' : c.matchType,
+      existingEntityId: isProvisionalId(c.existingEntityId) ? null : c.existingEntityId ?? null,
       suggestedChanges: c.suggestedChanges ?? null,
       confidence: c.confidence,
       confidenceBand: c.confidenceBand,

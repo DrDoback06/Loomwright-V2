@@ -375,3 +375,15 @@ offline engine already produced.
 | Dossier suggestion chip: Accept | Applies the card's payload delta with its own Undo | unit `intelligence-suggestions.spec.ts` |
 | Dossier suggestion chip: Dismiss | Removes it permanently; capped at 200/project, pending never pruned | unit `intelligence-suggestions.spec.ts` |
 | Settings ▸ Extraction: Suggestions volume | quiet / balanced / abundant, read through to the engine | unit `intelligence-suggestions.spec.ts` |
+
+### Offline extraction depth + free-tier AI parity
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Compose: Tense | past / present, stated explicitly in the brief | `09-ai.spec.ts` |
+| Compose: Match my voice | Sends the style profile measured from the author's own pages; shows what was measured | `09-ai.spec.ts` |
+| Compose: canon check panel | Reads the generated draft with the offline engine and reports contradictions, changes and new names before Insert | `09-ai.spec.ts`, unit `ai-prompts.spec.ts` |
+| Settings ▸ providers: Free tier badge | Marks providers usable with no bill (OpenRouter, Gemini, Groq, Together, Mistral, Ollama) | rendered from `PROVIDERS`, unit-covered via `ai-prompts.spec.ts` tiering |
+| Settings ▸ providers: Get a key ↗ | Opens the provider's own key page in a new tab | link, no app state |
+| Review ▸ cascade board: new-entry roll-up | Discoveries reach the board as create units, grouped per type | `04-extraction-review.spec.ts` |
+| Review ▸ smart card: Accept as new (multi-record) | A new thing backed by several records still accepts in one click | `04-extraction-review.spec.ts` |

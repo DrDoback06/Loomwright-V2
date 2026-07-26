@@ -21,13 +21,32 @@ function projectRange(projectId: string) {
     .between([projectId, Dexie.minKey], [projectId, Dexie.maxKey]);
 }
 
+/**
+ * The last timestamp handed out, so two entries in one millisecond still get
+ * distinct, increasing ones.
+ *
+ * `at` is the sort key for the whole history. Two actions inside the same
+ * millisecond — which is ordinary, a create followed by an update happens in
+ * well under one — produced equal keys, and IndexedDB then ordered them by
+ * primary key, which is random. The visible cost is that the newest entry is
+ * not reliably first, so "Undo" offered the wrong action. Nudging forward is
+ * a lie of at most a few milliseconds and buys a total order.
+ */
+let lastStamp = 0;
+
+function monotonicNow(): number {
+  const now = Date.now();
+  lastStamp = now > lastStamp ? now : lastStamp + 1;
+  return lastStamp;
+}
+
 /** Append an audit entry. Callers pass full before/after snapshots for
  * reversible actions; undo simply writes `before` back through the repo. */
 export async function logAudit(input: LogInput): Promise<AuditEntry> {
   const entry: AuditEntry = {
     id: newId(),
     projectId: input.projectId,
-    at: Date.now(),
+    at: monotonicNow(),
     actor: input.actor ?? 'user',
     action: input.action,
     target: input.target,
