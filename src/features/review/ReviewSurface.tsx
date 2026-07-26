@@ -15,6 +15,7 @@ import { useUiStore } from '@/stores/ui';
 import { useFocusStore } from '@/stores/focus';
 import { useMergeStore } from '@/stores/merge';
 import { toast } from '@/stores/toasts';
+import { CascadeBoard } from './CascadeBoard';
 
 const BAND_LABEL: Record<ReviewCandidate['confidenceBand'], string> = {
   blue: 'Auto-add grade',
@@ -233,6 +234,11 @@ export function ReviewSurface() {
           </button>
         </div>
       </div>
+
+      {/* A freshly extracted delta takes the top of the board — the cascades
+          are the answer to "what did that chapter change?", and the identity
+          queue below stays available for everything already persisted. */}
+      <CascadeBoard />
 
       <div className="lw-reviewcentre__controls">
         <div className="lw-viewtoggle" role="radiogroup" aria-label="Review view">

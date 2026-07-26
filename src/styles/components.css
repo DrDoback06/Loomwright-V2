@@ -3422,3 +3422,206 @@ select.lw-input {
 .lw-interpretation__suggestions button { cursor: pointer; }
 .lw-interpretation .lw-chip--selected { outline: 2px solid var(--lw-accent); outline-offset: 1px; }
 .lw-interpretation > p { margin: .4rem 0 0; font-size: .72rem; color: var(--lw-muted); }
+
+/* =====================================================================
+   Cascade board — Extraction 2.0 grouped relational changes.
+   One group = one story ("Vex learned Venom Strike → Serpent Path ▸ Toxins")
+   that toggles, flags and expands as a unit. One column on phones.
+   ===================================================================== */
+
+.lw-cascadeboard {
+  margin-bottom: var(--sp-10);
+  padding: var(--sp-8);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+}
+
+.lw-cascadeboard__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-8);
+}
+
+.lw-cascadeboard__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  margin: 0;
+}
+
+.lw-cascadeboard__actions {
+  display: flex;
+  gap: var(--sp-4);
+  flex-shrink: 0;
+}
+
+.lw-cascadeboard__progress {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  margin: 0 0 var(--sp-6);
+}
+
+.lw-cascadeboard__warnings {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  margin-bottom: var(--sp-6);
+}
+
+.lw-cascadeboard__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.lw-cascade {
+  border: 1px solid var(--line-1);
+  border-left: 3px solid var(--line-2);
+  border-radius: 10px;
+  padding: var(--sp-6);
+  background: var(--bg-1);
+  transition: opacity 120ms ease;
+}
+
+.lw-cascade--blue   { border-left-color: #2e5fa8; }
+.lw-cascade--green  { border-left-color: #4f8045; }
+.lw-cascade--orange { border-left-color: #b06f1c; }
+.lw-cascade--red    { border-left-color: #9c3a2e; }
+
+/* A flagged cascade still applies on Accept-all — the mark says "look at
+   this one", not "this is blocked". */
+.lw-cascade--flagged {
+  background: color-mix(in srgb, #b06f1c 6%, var(--bg-1));
+}
+
+.lw-cascade--off {
+  opacity: 0.45;
+}
+
+.lw-cascade__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+}
+
+.lw-cascade__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  flex: 1 1 260px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.lw-cascade__headline {
+  font-weight: 600;
+  font-size: var(--fs-md);
+  min-width: 0;
+}
+
+.lw-cascade__band {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.lw-cascade__units {
+  list-style: none;
+  margin: var(--sp-6) 0 0;
+  padding: 0 0 0 var(--sp-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  border-left: 1px dashed var(--line-1);
+}
+
+.lw-cascade__unit {
+  font-size: var(--fs-sm);
+}
+
+.lw-cascade__unittoggle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  cursor: pointer;
+}
+
+.lw-cascade__verb {
+  display: inline-block;
+  font-size: var(--fs-3xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px var(--sp-3);
+  border-radius: var(--r-1);
+  background: var(--line-1);
+  color: var(--ink-2);
+}
+
+.lw-cascade__verb--idea {
+  background: color-mix(in srgb, var(--accent, #9a7b3a) 25%, transparent);
+  color: var(--ink-1);
+}
+
+.lw-cascade__diff {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+}
+
+.lw-cascade__before {
+  text-decoration: line-through;
+  color: var(--ink-3, var(--ink-2));
+}
+
+.lw-cascade__after {
+  font-weight: 600;
+}
+
+.lw-cascade__conflict {
+  margin: var(--sp-4) 0 var(--sp-4) var(--sp-9);
+  padding: var(--sp-5);
+  border-radius: 8px;
+  background: color-mix(in srgb, #b06f1c 10%, var(--bg-elev));
+}
+
+.lw-cascade__conflictreason {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-xs);
+}
+
+.lw-cascade__pickers {
+  display: flex;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .lw-cascadeboard {
+    padding: var(--sp-6);
+  }
+  .lw-cascadeboard__actions {
+    width: 100%;
+  }
+  .lw-cascadeboard__actions .lw-btn {
+    flex: 1;
+  }
+  /* Keep the diff readable rather than squeezing it onto one line. */
+  .lw-cascade__diff {
+    display: block;
+    margin-top: var(--sp-2);
+  }
+  .lw-cascade__units {
+    padding-left: var(--sp-5);
+  }
+  .lw-cascade__conflict {
+    margin-left: 0;
+  }
+}

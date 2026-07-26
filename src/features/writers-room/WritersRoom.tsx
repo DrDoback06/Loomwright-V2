@@ -16,6 +16,8 @@ import {
 } from '@/db/repos/chapters';
 import { db } from '@/db/schema';
 import { extractChapter } from '@/services/extraction/session';
+import { extractChapterToDelta } from '@/services/intelligence/session';
+import { useIntelligenceStore } from '@/stores/intelligence';
 import { loadKnownProjectEntities } from '@/services/extraction/project-known';
 import { runDeepExtraction } from '@/services/ai/deep-extraction';
 import { getAiSettings, resolveProvider } from '@/services/ai/settings';
@@ -52,6 +54,8 @@ export function WritersRoom() {
     () => !window.matchMedia('(max-width: 720px)').matches
   );
   const [extracting, setExtracting] = useState(false);
+  const stageDelta = useIntelligenceStore((s) => s.stage);
+  const setDeltaProgress = useIntelligenceStore((s) => s.setProgress);
   const [composeOpen, setComposeOpen] = useState(false);
   const [aiReady, setAiReady] = useState(false);
   const [deepConfirming, setDeepConfirming] = useState(false);
@@ -203,25 +207,41 @@ export function WritersRoom() {
       const chapter = await getChapter(activeChapterId);
       if (!chapter) return;
       const summary = await extractChapter(chapter);
+
+      // Same chapter, second reading: what do these events MEAN for the rest
+      // of the codex? The delta is staged in memory and rendered as cascades
+      // on the review board; nothing is written until the author accepts.
+      const delta = await extractChapterToDelta(chapter, (done, total) =>
+        setDeltaProgress(total > 1 ? { done, total } : null)
+      );
+      setDeltaProgress(null);
+      if (delta.groups.length) stageDelta(delta);
+
       const known = summary.knownMentions
         .slice(0, 3)
         .map((k) => `${k.name} ×${k.count}`)
         .join(', ');
+      const cascades = delta.groups.length;
       toast(
-        summary.candidateCount > 0
-          ? `Found ${summary.candidateCount} candidate${summary.candidateCount === 1 ? '' : 's'} to review` +
+        cascades > 0
+          ? `${cascades} change${cascades === 1 ? '' : 's'} to review` +
               (known ? ` · re-confirmed ${known}` : '')
-          : summary.occurrenceCount > 0
-            ? `No new candidates · re-confirmed ${known || summary.occurrenceCount + ' mentions'}`
-            : 'Nothing recognisable yet — extraction learns as your codex grows.',
-        summary.candidateCount > 0
+          : summary.candidateCount > 0
+            ? `Found ${summary.candidateCount} candidate${summary.candidateCount === 1 ? '' : 's'} to review` +
+                (known ? ` · re-confirmed ${known}` : '')
+            : summary.occurrenceCount > 0
+              ? `No new candidates · re-confirmed ${known || summary.occurrenceCount + ' mentions'}`
+              : 'Nothing recognisable yet — extraction learns as your codex grows.',
+        cascades > 0 || summary.candidateCount > 0
           ? { kind: 'success', action: { label: 'Review', run: () => setRoute('review') } }
           : {}
       );
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Extraction failed.', { kind: 'error' });
     } finally {
       setExtracting(false);
     }
-  }, [editor, activeChapterId, flushSave, setRoute]);
+  }, [editor, activeChapterId, flushSave, setRoute, stageDelta, setDeltaProgress]);
 
   const runDeep = useCallback(async () => {
     if (!editor || !activeChapterId || !projectId) return;
