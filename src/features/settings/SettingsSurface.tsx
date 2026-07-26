@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import { DETECTOR_BASE_CONFIDENCE } from '@/services/extraction/detectors';
+import { DEFAULT_VOLUME, type SuggestionVolume } from '@/services/intelligence/suggestions';
 import { PROVIDERS, testConnection, type ProviderId } from '@/services/ai/providers';
 import { getAiSettings, saveAiSettings, type AiSettings } from '@/services/ai/settings';
 import { exportProject, importProject } from '@/services/archive/project';
@@ -43,8 +44,26 @@ export function SettingsSurface() {
     [projectId],
     {} as Record<string, number>
   );
+  const volume = useLiveQuery(
+    async () => {
+      if (!projectId) return DEFAULT_VOLUME;
+      const row = await db.settings.get(`${projectId}:extraction`);
+      return ((row?.value as { suggestionVolume?: SuggestionVolume })?.suggestionVolume ?? DEFAULT_VOLUME);
+    },
+    [projectId],
+    DEFAULT_VOLUME as SuggestionVolume
+  );
 
   if (!projectId || !ai) return null;
+
+  const setVolume = async (value: SuggestionVolume) => {
+    const row = await db.settings.get(`${projectId}:extraction`);
+    const current = (row?.value as Record<string, unknown>) ?? {};
+    await db.settings.put({
+      key: `${projectId}:extraction`,
+      value: { ...current, suggestionVolume: value },
+    });
+  };
 
   const patchAi = async (patch: Partial<AiSettings>) => {
     await saveAiSettings(projectId, patch);
@@ -275,6 +294,20 @@ export function SettingsSurface() {
           Per-detector confidence. Lower = more candidates (more noise); higher = fewer,
           surer ones.
         </p>
+        <label className="lw-detector lw-detector--volume">
+          <span className="lw-detector__name">Suggestions</span>
+          <select
+            className="lw-input"
+            aria-label="Suggestion volume"
+            value={volume}
+            onChange={(e) => void setVolume(e.target.value as SuggestionVolume)}
+          >
+            <option value="quiet">Quiet — one idea per change</option>
+            <option value="balanced">Balanced — a few</option>
+            <option value="abundant">Abundant — everything the packs can think of</option>
+          </select>
+        </label>
+
         <div className="lw-detectors">
           {Object.entries(DETECTOR_BASE_CONFIDENCE).map(([id, base]) => {
             const value = extraction[id] ?? base;

@@ -5,6 +5,7 @@ import { confidenceBand } from '@/services/extraction/text-utils';
 import { findKnownEntityMention, type KnownEntity } from '@/services/extraction/known-index';
 import { deepPackFor, matchArchetype, resolveTheme } from '@/services/generate/random/packs';
 import { createRng } from '@/services/generate/random/rng';
+import { suggestForSkill, suggestFromRelationshipWeb, type SuggestionVolume } from './suggestions';
 import type {
   DeltaConflict,
   DeltaEntityCreate,
@@ -13,6 +14,7 @@ import type {
   DeltaHierarchyPlacement,
   DeltaLink,
   DeltaPatch,
+  DeltaSuggestion,
   DeltaUnit,
 } from './types';
 
@@ -24,6 +26,7 @@ export interface RuleOutput {
   graphPlacements: DeltaGraphPlacement[];
   hierarchyPlacements: DeltaHierarchyPlacement[];
   links: DeltaLink[];
+  suggestions: DeltaSuggestion[];
   /** One cascade per rule firing — the board renders each as a group. */
   groups: DeltaGroup[];
   warnings: string[];
@@ -35,6 +38,8 @@ export interface RuleContext {
   entities: Entity[];
   /** Existing skill trees, for placement matching. */
   trees: SkillTree[];
+  /** How chatty the suggestions lane is (Settings ▸ Extraction). */
+  volume: SuggestionVolume;
   /** Deterministic id factories — seeded in tests for stable fixtures. */
   newUnitId: () => string;
   newLocalId: () => string;
@@ -47,6 +52,7 @@ function emptyOutput(): RuleOutput {
     graphPlacements: [],
     hierarchyPlacements: [],
     links: [],
+    suggestions: [],
     groups: [],
     warnings: [],
   };
@@ -60,6 +66,7 @@ function mergeOutputs(outputs: RuleOutput[]): RuleOutput {
     out.graphPlacements.push(...o.graphPlacements);
     out.hierarchyPlacements.push(...o.hierarchyPlacements);
     out.links.push(...o.links);
+    out.suggestions.push(...o.suggestions);
     out.groups.push(...o.groups);
     out.warnings.push(...o.warnings);
   }
@@ -81,6 +88,7 @@ function closeGroup(
     ...out.graphPlacements,
     ...out.hierarchyPlacements,
     ...out.links,
+    ...out.suggestions,
   ];
   if (!units.length) return out;
   const confidence = units.reduce((min, u) => Math.min(min, u.confidence), 1);
@@ -467,6 +475,17 @@ function ruleSkillLearned(
   const placement = placeOnTree(ctx, signal.skillName, skillRef, candidate.confidence, quote);
   if (placement) out.graphPlacements.push(placement);
 
+  // The ripple: what this skill grows into, what sits beside it, and who else
+  // in the relationship web could plausibly learn it. All offline.
+  out.suggestions.push(...suggestForSkill(skillRef.name, skillRef, ctx.volume));
+  if (actor) {
+    out.suggestions.push(
+      ...suggestFromRelationshipWeb(actor, ctx.entities, ctx.volume, {
+        learnedSkill: skillRef.name,
+      })
+    );
+  }
+
   const subject = actor
     ? { id: actor.id, type: 'cast' as const, name: actor.name }
     : { id: skillRef.id, type: 'skills' as const, name: skillRef.name };
@@ -768,6 +787,7 @@ function dedupePatches(output: RuleOutput): RuleOutput {
     ...output.graphPlacements,
     ...output.hierarchyPlacements,
     ...output.links,
+    ...output.suggestions,
   ].map((u) => u.unitId));
   output.groups = output.groups
     .map((g) => ({ ...g, unitIds: g.unitIds.filter((id) => live.has(id)) }))

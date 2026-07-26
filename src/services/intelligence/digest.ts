@@ -6,6 +6,7 @@ import { confidenceBand } from '@/services/extraction/text-utils';
 import { findKnownEntityMention, type KnownEntity } from '@/services/extraction/known-index';
 import { ENTITY_TYPE_META, type EntityType } from '@/domain/entity-types';
 import { runPropagation, type RuleContext } from './rules';
+import { DEFAULT_VOLUME } from './suggestions';
 import { emptyDelta, type DeltaSuggestion, type StoryDelta, type SuggestionKind } from './types';
 
 export type DigestDepth = 'lean' | 'standard' | 'full';
@@ -404,6 +405,7 @@ export async function parseDeltaReply(
     projectId,
     entities: live,
     trees,
+    volume: DEFAULT_VOLUME,
     newUnitId: () => newId(),
     newLocalId: () => newId(),
   };
@@ -441,7 +443,7 @@ export async function parseDeltaReply(
     graphPlacements: propagated.graphPlacements,
     hierarchyPlacements: propagated.hierarchyPlacements,
     links: propagated.links,
-    suggestions,
+    suggestions: [...propagated.suggestions, ...suggestions],
     groups: propagated.groups,
     warnings: [...warnings, ...propagated.warnings],
     createdAt: Date.now(),

@@ -1,6 +1,7 @@
 import { db } from '@/db/schema';
 import type { Chapter, Entity, SkillTree } from '@/db/types';
 import { buildStoryDelta } from './engine';
+import { DEFAULT_VOLUME, type SuggestionVolume } from './suggestions';
 import type { DeltaSource, StoryDelta } from './types';
 
 /** Join a chapter's paragraphs the same way the extraction session does, so
@@ -9,15 +10,29 @@ export function chapterText(chapter: Chapter): string {
   return chapter.paragraphs.map((p) => p.text).join('\n\n');
 }
 
-async function loadWorld(projectId: string): Promise<{ entities: Entity[]; trees: SkillTree[] }> {
-  const [entities, trees] = await Promise.all([
+interface World {
+  entities: Entity[];
+  trees: SkillTree[];
+  volume: SuggestionVolume;
+  confidenceOverrides: Record<string, number>;
+}
+
+async function loadWorld(projectId: string): Promise<World> {
+  const [entities, trees, settings] = await Promise.all([
     db.entities.where('projectId').equals(projectId).toArray(),
     db.skillTrees.where('projectId').equals(projectId).toArray(),
+    db.settings.get(`${projectId}:extraction`),
   ]);
+  const tuning = (settings?.value ?? {}) as {
+    suggestionVolume?: SuggestionVolume;
+    detectorConfidence?: Record<string, number>;
+  };
   return {
     // Merged-away rows would resolve to stale targets; skip them.
     entities: entities.filter((e) => e.status !== 'merged' && !e.mergedIntoId),
     trees,
+    volume: tuning.suggestionVolume ?? DEFAULT_VOLUME,
+    confidenceOverrides: tuning.detectorConfidence ?? {},
   };
 }
 
@@ -30,12 +45,14 @@ export async function extractChapterToDelta(
   chapter: Chapter,
   onProgress?: (done: number, total: number) => void
 ): Promise<StoryDelta> {
-  const { entities, trees } = await loadWorld(chapter.projectId);
+  const { entities, trees, volume, confidenceOverrides } = await loadWorld(chapter.projectId);
   return buildStoryDelta({
     projectId: chapter.projectId,
     text: chapterText(chapter),
     entities,
     trees,
+    volume,
+    confidenceOverrides,
     chapterId: chapter.id,
     source: 'local',
     onProgress,
@@ -52,12 +69,14 @@ export async function extractTextToDelta(
   text: string,
   options: { source?: DeltaSource; onProgress?: (done: number, total: number) => void } = {}
 ): Promise<StoryDelta> {
-  const { entities, trees } = await loadWorld(projectId);
+  const { entities, trees, volume, confidenceOverrides } = await loadWorld(projectId);
   return buildStoryDelta({
     projectId,
     text,
     entities,
     trees,
+    volume,
+    confidenceOverrides,
     source: options.source ?? 'local',
     onProgress: options.onProgress,
   });

@@ -3625,3 +3625,102 @@ select.lw-input {
     margin-left: 0;
   }
 }
+
+/* =====================================================================
+   Suggestions inbox — per-entity dossier chips. Each is a finished card
+   the author can accept outright, never an open question.
+   ===================================================================== */
+
+.lw-suggestions {
+  margin: var(--sp-8) 0;
+  padding: var(--sp-6);
+  border: 1px solid var(--line-1);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent, #9a7b3a) 5%, var(--bg-1));
+}
+
+.lw-suggestions__title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin: 0 0 var(--sp-5);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-2);
+}
+
+.lw-suggestions__count {
+  padding: 0 var(--sp-4);
+  border-radius: 999px;
+  background: var(--line-1);
+  font-size: var(--fs-2xs);
+}
+
+.lw-suggestions__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.lw-suggestion {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  padding: var(--sp-5);
+  border: 1px solid var(--line-1);
+  border-radius: 8px;
+  background: var(--bg-elev);
+}
+
+.lw-suggestion__body {
+  min-width: 0;
+}
+
+.lw-suggestion__kind {
+  display: inline-block;
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-3xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-2);
+}
+
+.lw-suggestion__title {
+  display: block;
+  font-size: var(--fs-md);
+}
+
+.lw-suggestion__text {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.lw-suggestion__actions {
+  display: flex;
+  gap: var(--sp-4);
+  flex-shrink: 0;
+}
+
+.lw-detector--volume {
+  margin-bottom: var(--sp-6);
+}
+
+@media (max-width: 720px) {
+  .lw-suggestion {
+    flex-direction: column;
+  }
+  .lw-suggestion__actions {
+    width: 100%;
+  }
+  .lw-suggestion__actions .lw-btn {
+    flex: 1;
+  }
+}

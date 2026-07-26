@@ -5,6 +5,7 @@ import type { ExtractionCandidate } from '@/services/extraction/detectors';
 import type { KnownEntity } from '@/services/extraction/known-index';
 import { chunkText } from '@/services/extraction/text-utils';
 import { runPropagation, type RuleContext } from './rules';
+import { DEFAULT_VOLUME, type SuggestionVolume } from './suggestions';
 import { emptyDelta, type DeltaSource, type StoryDelta } from './types';
 
 export interface BuildDeltaInput {
@@ -17,6 +18,8 @@ export interface BuildDeltaInput {
   source?: DeltaSource;
   aggressiveness?: 'gentle' | 'balanced' | 'aggressive';
   confidenceOverrides?: Record<string, number>;
+  /** Suggestions volume — quiet / balanced / abundant. */
+  volume?: SuggestionVolume;
   /** Reported per chunk so a whole-book paste can show real progress. */
   onProgress?: (done: number, total: number) => void;
 }
@@ -44,6 +47,7 @@ export function buildStoryDelta(input: BuildDeltaInput): StoryDelta {
     source = 'local',
     aggressiveness,
     confidenceOverrides,
+    volume = DEFAULT_VOLUME,
     onProgress,
   } = input;
 
@@ -82,6 +86,7 @@ export function buildStoryDelta(input: BuildDeltaInput): StoryDelta {
     projectId,
     entities,
     trees,
+    volume,
     newUnitId: () => newId(),
     newLocalId: () => newId(),
   };
@@ -94,6 +99,7 @@ export function buildStoryDelta(input: BuildDeltaInput): StoryDelta {
     graphPlacements: propagated.graphPlacements,
     hierarchyPlacements: propagated.hierarchyPlacements,
     links: propagated.links,
+    suggestions: propagated.suggestions,
     groups: propagated.groups,
     warnings: propagated.warnings,
     createdAt: Date.now(),

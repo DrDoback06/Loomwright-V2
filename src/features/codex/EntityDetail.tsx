@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Entity } from '@/db/types';
 import { listEntities } from '@/db/repos/entities';
+import { SuggestionChips } from './SuggestionChips';
 import { useFocusStore } from '@/stores/focus';
 import { toast } from '@/stores/toasts';
 import { getEntityConfig } from '@/domain/entity-configs';
@@ -140,6 +141,9 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
           )}
         </div>
       </header>
+
+      {/* Pending ideas for this entity, as ready-to-accept cards. */}
+      <SuggestionChips projectId={entity.projectId} entityId={entity.id} />
 
       {merging && (
         <div className="lw-card lw-mergebox" data-testid="merge-picker">
