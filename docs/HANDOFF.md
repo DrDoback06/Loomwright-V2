@@ -1,6 +1,6 @@
 # HANDOFF — App-Wide "Create Anything" Generation System
 
-**Branch:** `claude/entity-creation-generation-vafhf4` · **Status:** G1–G3 complete & tested; G4/G5 mostly done; G6 half-done; G7/G8 not started; **X1–X6 (Extraction 2.0, §10) spec'd, not started — comes after G8.**
+**Branch:** `claude/writing-extraction-review-84loqt` · **Status:** **X1–X6 (Extraction 2.0, §10) BUILT AND TESTED — see §11.** Generation milestones G1–G3 complete & tested; G4/G5 mostly done; G6 half-done; G7/G8 not started (X1–X6 were brought forward ahead of them at the repo owner's request).
 **For:** one agent/session continuing sequentially. Read this file top to bottom before touching code. The approved plan lives in the repo owner's session notes; this document supersedes it as the source of truth for remaining work.
 
 ---
@@ -198,3 +198,81 @@ New module `src/services/intelligence/`. The generation system was built to be t
 
 - Copying the digest to the clipboard is user-initiated and needs no per-copy guard (the one-time notice covers it); **in-app** AI calls keep the existing `PrivacyConfirm` gate. Digest targets ≤ ~8k tokens at full depth; over budget it auto-degrades (summaries → names-only) and says so in the prompt header.
 - Suggestion records cap at ~200/project (oldest dismissed first) to keep the inbox honest.
+
+
+---
+
+## 11. Extraction 2.0 — SHIPPED (X1–X6)
+
+Built on branch `claude/writing-extraction-review-84loqt`, ahead of G4–G8 at the
+repo owner's request ("the full one-button vision"). Everything below works with
+**zero AI keys**; AI only ever adds to a result the offline engine already produced.
+
+| # | Milestone | State | Where |
+|---|---|---|---|
+| X1 | StoryDelta + applyDelta | ✅ | `src/services/intelligence/types.ts`, `apply.ts`; Dexie v8; undo case `intelligence.apply` |
+| X2 | Offline propagation rules | ✅ | `src/services/intelligence/rules.ts`, `engine.ts`; signals in `extraction/detectors.ts` |
+| X3 | Smart cascade review board | ✅ | `src/features/review/CascadeBoard.tsx`, `src/stores/intelligence.ts` |
+| X4 | Suggestions + inbox | ✅ | `src/services/intelligence/suggestions.ts`, `src/db/repos/suggestions.ts`, `src/features/codex/SuggestionChips.tsx` |
+| X5 | Mega-prompt round-trip + whole-book intake | ✅ | `src/services/intelligence/digest.ts`, `session.ts`, `src/features/handoff/HandoffSurface.tsx` |
+| X6 | One engine every input + AI enrichment | ✅ | `src/services/intelligence/enrich.ts`; Save & Extract in `WritersRoom.tsx` |
+
+### The load-bearing design decisions
+
+- **`StoryDelta` is a superset of `GenerationBundle`.** The generation system was
+  built as this engine's chassis and is reused, not duplicated — same draft shape,
+  same coercion, same packs. The one thing it lacked was field-level patches: a
+  whole-bag field merge cannot express "the owner changed from Marrow to Vex",
+  because the spread silently keeps whichever value wins. `DeltaPatch` carries an
+  explicit before/after and a `replace|append` mode.
+- **Detectors emit typed `ExtractionSignal`s.** They always knew who did what to
+  whom, but flattened it into a prose summary and an unordered `relatedEntityIds`.
+  Keeping the roles is what makes the continuity flag possible: you can only say
+  "the recorded owner is not who handed it over" if you know which participant was
+  the giver.
+- **Every unit carries a `unitId`; groups reference them.** A per-group toggle on
+  the board becomes one `enabledUnitIds` filter at apply time — no parallel state.
+- **One snapshot per entity, on first touch.** Several patches in one cascade can
+  hit the same row; snapshotting once is what makes a single Undo restore the true
+  original rather than the state between two patches.
+- **External claims run through the SAME rules.** `parseDeltaReply` resolves a
+  pasted (or in-app) AI reply to real entities by name, converts it into the exact
+  signal shape the local detectors emit, and feeds it to `runPropagation`. A model
+  cannot make the app write anything the offline engine would not have written —
+  it can only point at what to look at.
+- **Offline wins collisions.** `mergeDeltas` keeps the locally-derived patch when
+  both passes found the same field, because it came from a deterministic rule
+  reading the actual prose.
+
+### Two detector corrections made along the way
+
+- `detectTravel` took the first known location anywhere in its 160-char window, so
+  *"reached Ashen Ford, a town in the Vraska region"* moved the character to Vraska
+  and lost the town entirely. Destination now resolves by proximity to the verb.
+- Its `suggestedChanges.location` is a bare id under a field id `cast` does not
+  have (the real field is `currentLocation`, an `EntityRef`). The golden fixtures
+  pin that key as the legacy contract, so it stays as-is; the signal carries the
+  correct write. **Do not "fix" it in the detector — fixture 05 asserts it.**
+
+### Schema additions
+
+- Dexie **version 8**: `suggestions` table (`id, projectId, [projectId+status],
+  [projectId+createdAt], targetEntityId`).
+- `items` config gains `ownershipHistory` (row-list) — the spec calls for appending
+  chain of custody and there was nowhere to put it.
+
+### Verification
+
+`npx tsc --noEmit` ✅ · `tsc -b` (the build; catches `noUnusedLocals` that
+`--noEmit` does not) ✅ · `npm run lint` ✅ · `npx vitest run` **149** ✅ ·
+`tests/e2e/18-story-intelligence.spec.ts` **4/4 on BOTH desktop and mobile** ✅
+
+### What is deliberately NOT done
+
+- **Quest-progress propagation.** The `questProgression` detector does not yet emit
+  a signal — it reports a quest *exists*, not that a step advanced, so there is no
+  step-level information to propagate. Needs a step-aware detector first.
+- **Giver inventory pruning.** An item transfer appends to the receiver's
+  inventory but does not remove it from the giver's; `DeltaPatch` has no `remove`
+  mode. Add one before claiming inventory is authoritative.
+- G4–G8 remain as described in §5.

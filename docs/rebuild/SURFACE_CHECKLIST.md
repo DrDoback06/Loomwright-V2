@@ -338,3 +338,40 @@ Engine contract: all 16 golden fixtures in `tests/fixtures/extraction/` pass via
 | Skill Trees: Auto-arrange | Re-lays the CURRENT tree by tier/branch (one write) | `16-generate.spec.ts` |
 | Skill Trees: Fit to view | Frames every node in the viewport | `16-generate.spec.ts` |
 | Skill Trees: branch legend | Color-coded group chips from node.group | `16-generate.spec.ts` |
+
+## Extraction 2.0 — Story Intelligence (X1–X6)
+
+Every control below works with **zero AI keys**. AI only ever adds to a result the
+offline engine already produced.
+
+### Cascade review board (X3)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Board group checkbox | Toggles the whole cascade on/off; indeterminate when partly selected | `18-story-intelligence.spec.ts` |
+| Group expander (`N changes`) | Reveals each unit with its before → after diff | `18-story-intelligence.spec.ts` |
+| Unit checkbox | Includes/excludes one change within a cascade | `18-story-intelligence.spec.ts` |
+| Conflict correction picker | Applies the chosen value, clears the flag, restores confidence | unit `intelligence-rules.spec.ts` (conflict shape) + store |
+| Unresolved-parent picker | Chooses a parent location for a new place | unit `intelligence-apply.spec.ts` (unresolved left un-nested) |
+| Accept all | Applies only enabled units in one transaction, one Undo toast | `18-story-intelligence.spec.ts` |
+| Discard | Drops the staged delta — Dexie never touched | `18-story-intelligence.spec.ts` (accept disabled when empty) |
+| Warnings disclosure | Lists claims that could not be resolved | unit `intelligence-digest.spec.ts` |
+
+### Writer's Room + Import & Extract (X5, X6)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Save & Extract | Flushes the editor, extracts, stages cascades, routes to Review | `18-story-intelligence.spec.ts` |
+| Import & Extract: Manuscript text + Extract | Whole-book chunked intake merged into one board, with progress | `18-story-intelligence.spec.ts` |
+| Import & Extract: Also enrich with my AI provider | Adds to the offline delta; without a provider says so and keeps the offline result | unit `intelligence-enrich.spec.ts` |
+| Import & Extract: World digest depth | lean / standard / full; over budget degrades and says so | unit `intelligence-digest.spec.ts` |
+| Import & Extract: Copy mega-prompt | Copies digest + prompt after a one-time privacy notice | unit `intelligence-digest.spec.ts` (prompt shape) |
+| Import & Extract: Paste reply → Import | Verifies external facts through the offline rules, stages cascades | unit `intelligence-digest.spec.ts` |
+
+### Suggestions (X4)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Dossier suggestion chip: Accept | Applies the card's payload delta with its own Undo | unit `intelligence-suggestions.spec.ts` |
+| Dossier suggestion chip: Dismiss | Removes it permanently; capped at 200/project, pending never pruned | unit `intelligence-suggestions.spec.ts` |
+| Settings ▸ Extraction: Suggestions volume | quiet / balanced / abundant, read through to the engine | unit `intelligence-suggestions.spec.ts` |
