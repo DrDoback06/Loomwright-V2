@@ -392,3 +392,12 @@
     box-shadow: var(--shadow-3, -12px 0 32px rgba(42, 34, 24, 0.2));
   }
 }
+
+/* A failed manuscript save must read as an alarm, not a status. The text is
+   still in the editor at this point — the badge's job is to get the author to
+   copy it out before they navigate away. */
+.lw-writers__savestate[data-save-state='error'],
+[data-save-state='error'] {
+  color: #9c3a2e;
+  font-weight: 700;
+}

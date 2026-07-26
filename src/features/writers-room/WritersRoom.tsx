@@ -44,7 +44,7 @@ export function WritersRoom() {
   );
 
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'idle'>('idle');
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'idle' | 'error'>('idle');
   // Monotonic count of COMPLETED saves — a deterministic signal for tests
   // and future sync features ("has everything since X been written?").
   const [saveSeq, setSaveSeq] = useState(0);
@@ -92,13 +92,28 @@ export function WritersRoom() {
         const paragraphs = paragraphsFromDoc(doc);
         const words = countWords(paragraphs);
         saveTimer.current = null;
-        void saveChapterDoc(chapterId, doc, paragraphs, words).then(() => {
-          setWordCount(words);
-          // Only report "saved" if no newer edit re-armed the debounce —
-          // an in-flight save must not mask a pending one.
-          if (!saveTimer.current) setSaveState('saved');
-          setSaveSeq((n) => n + 1);
-        });
+        void saveChapterDoc(chapterId, doc, paragraphs, words).then(
+          () => {
+            setWordCount(words);
+            // Only report "saved" if no newer edit re-armed the debounce —
+            // an in-flight save must not mask a pending one.
+            if (!saveTimer.current) setSaveState('saved');
+            setSaveSeq((n) => n + 1);
+          },
+          (err: unknown) => {
+            // A rejected write (quota exhausted on a novel-length manuscript
+            // is the realistic case) previously left the badge on "Saving…"
+            // forever with the rejection unhandled. Say so, loudly, while the
+            // text is still in the editor and can be copied out.
+            setSaveState('error');
+            toast(
+              `Could not save this chapter: ${
+                err instanceof Error ? err.message : 'the browser refused the write'
+              }. Your text is still on screen — copy it somewhere safe.`,
+              { kind: 'error' }
+            );
+          }
+        );
       }, 600);
     },
     []
@@ -112,7 +127,20 @@ export function WritersRoom() {
     const doc = editor.getJSON();
     const paragraphs = paragraphsFromDoc(doc);
     const words = countWords(paragraphs);
-    await saveChapterDoc(chapterId, doc, paragraphs, words);
+    try {
+      await saveChapterDoc(chapterId, doc, paragraphs, words);
+    } catch (err) {
+      // Callers include tab-hide and pagehide handlers that fire this with
+      // `void`, so an uncaught rejection here loses the text in silence.
+      setSaveState('error');
+      toast(
+        `Could not save this chapter: ${
+          err instanceof Error ? err.message : 'the browser refused the write'
+        }. Your text is still on screen — copy it somewhere safe.`,
+        { kind: 'error' }
+      );
+      return;
+    }
     setWordCount(words);
     setSaveState('saved');
     setSaveSeq((n) => n + 1);
@@ -446,9 +474,11 @@ export function WritersRoom() {
               <span>
                 {saveState === 'saving'
                   ? 'Saving…'
-                  : saveState === 'saved'
-                    ? `Saved ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                    : 'Start writing — saves automatically'}
+                  : saveState === 'error'
+                    ? '⚠ Not saved — copy your text'
+                    : saveState === 'saved'
+                      ? `Saved ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : 'Start writing — saves automatically'}
               </span>
               <span className="lw-wroom__local">Local only</span>
             </div>
