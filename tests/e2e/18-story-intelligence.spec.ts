@@ -35,9 +35,10 @@ test.describe('story intelligence — consequences, not just nouns', () => {
     await writeChapter(page, 'Marrow gave Saltbrand to Vex at the gate.');
     await page.getByRole('button', { name: 'Save & Extract' }).click();
 
-    // The toast reports cascades, and Review takes us to the board.
-    await expect(page.getByText(/change(s)? to review/)).toBeVisible();
-    await openNav(page, 'Review');
+    // A durable staged bar appears (the toast expires; the bar must not).
+    const bar = page.getByTestId('staged-delta-bar');
+    await expect(bar).toContainText(/change(s)? to review/);
+    await bar.getByTestId('staged-delta-review').click();
 
     const board = page.getByTestId('cascade-board');
     await expect(board).toBeVisible();
@@ -68,7 +69,7 @@ test.describe('story intelligence — consequences, not just nouns', () => {
 
     await writeChapter(page, 'Vex learned Venom Strike before the tide turned.');
     await page.getByRole('button', { name: 'Save & Extract' }).click();
-    await expect(page.getByText(/change(s)? to review/)).toBeVisible();
+    await expect(page.getByTestId('staged-delta-bar')).toBeVisible();
 
     await openNav(page, 'Review');
     await expect(page.getByTestId('cascade-board')).toContainText(/Venom Strike/);
@@ -92,7 +93,7 @@ test.describe('story intelligence — consequences, not just nouns', () => {
       .fill('Aelinor crossed Vraska Pass at first light.');
     await page.getByTestId('handoff-extract-paste').click();
 
-    await expect(page.getByText(/change(s)? to review/)).toBeVisible();
+    await expect(page.getByTestId('staged-delta-bar')).toBeVisible();
     await openNav(page, 'Review');
     await expect(page.getByTestId('cascade-board')).toContainText(/Aelinor/);
   });
@@ -105,7 +106,7 @@ test.describe('story intelligence — consequences, not just nouns', () => {
 
     await writeChapter(page, 'Marrow gave Saltbrand to Vex at the gate.');
     await page.getByRole('button', { name: 'Save & Extract' }).click();
-    await expect(page.getByText(/change(s)? to review/)).toBeVisible();
+    await expect(page.getByTestId('staged-delta-bar')).toBeVisible();
     await openNav(page, 'Review');
 
     // Untick the whole cascade, then accept — nothing should apply.

@@ -16,6 +16,7 @@ import { useFocusStore } from '@/stores/focus';
 import { useMergeStore } from '@/stores/merge';
 import { toast } from '@/stores/toasts';
 import { CascadeBoard } from './CascadeBoard';
+import { useIntelligenceStore } from '@/stores/intelligence';
 
 const BAND_LABEL: Record<ReviewCandidate['confidenceBand'], string> = {
   blue: 'Auto-add grade',
@@ -43,6 +44,7 @@ export function ReviewSurface() {
   const setFocus = useFocusStore((state) => state.setFocus);
   const openMerge = useMergeStore((state) => state.open);
 
+  const stagedDelta = useIntelligenceStore((s) => s.staged);
   const [view, setView] = useState<ReviewView>('smart');
   const [sort, setSort] = useState<ReviewSort>('smart');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -275,7 +277,7 @@ export function ReviewSurface() {
         ) : null}
       </div>
 
-      {pending.length === 0 ? (
+      {pending.length === 0 && !stagedDelta ? (
         <div className="lw-card lw-empty lw-empty--center">
           <p className="lw-empty__title">The review queue is clear.</p>
           <p className="lw-empty__note">

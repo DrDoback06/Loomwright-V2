@@ -27,7 +27,33 @@ export const useIntelligenceStore = create<IntelligenceState>((set) => ({
   progress: null,
 
   stage: (delta) =>
-    set({ staged: delta, enabled: new Set(deltaUnits(delta).map((u) => u.unitId)), progress: null }),
+    set((state) => {
+      // Extracting a second chapter used to REPLACE the first chapter's
+      // cascades outright — nothing had been written to Dexie yet, so that
+      // work simply vanished. Merge instead; the board groups by subject
+      // anyway, and Accept still applies exactly what is ticked.
+      const prior = state.staged;
+      const merged =
+        prior && prior.projectId === delta.projectId
+          ? {
+              ...delta,
+              entities: [...prior.entities, ...delta.entities],
+              patches: [...prior.patches, ...delta.patches],
+              graphPlacements: [...prior.graphPlacements, ...delta.graphPlacements],
+              hierarchyPlacements: [...prior.hierarchyPlacements, ...delta.hierarchyPlacements],
+              links: [...prior.links, ...delta.links],
+              chapters: [...prior.chapters, ...delta.chapters],
+              suggestions: [...prior.suggestions, ...delta.suggestions],
+              groups: [...prior.groups, ...delta.groups],
+              warnings: [...prior.warnings, ...delta.warnings],
+            }
+          : delta;
+      return {
+        staged: merged,
+        enabled: new Set(deltaUnits(merged).map((u) => u.unitId)),
+        progress: null,
+      };
+    }),
 
   discard: () => set({ staged: null, enabled: new Set(), progress: null }),
 

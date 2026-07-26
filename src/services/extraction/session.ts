@@ -4,6 +4,7 @@ import { logAudit } from '@/db/repos/audit';
 import { replaceChapterCandidates } from '@/db/repos/review';
 import type { Chapter, Occurrence } from '@/db/types';
 import { runLocalExtraction } from './engine';
+import type { ExtractionCandidate } from './detectors';
 import { loadKnownProjectEntities } from './project-known';
 
 export interface ExtractionSummary {
@@ -11,6 +12,10 @@ export interface ExtractionSummary {
   candidateCount: number;
   /** Known-entity mentions re-confirmed, by entity. */
   knownMentions: { entityId: string; name: string; count: number }[];
+  /** The candidates this pass produced. Returned so callers that also want a
+   * StoryDelta can propagate from them instead of re-scanning the same prose
+   * with a second engine — the scan is the expensive half. */
+  candidates: ExtractionCandidate[];
 }
 
 /** Run the offline extraction pass for one chapter and persist the
@@ -118,6 +123,7 @@ export async function extractChapter(chapter: Chapter): Promise<ExtractionSummar
     occurrenceCount: occurrenceRows.length,
     candidateCount: rows.length,
     knownMentions,
+    candidates,
   };
 }
 

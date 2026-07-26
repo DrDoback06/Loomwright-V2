@@ -16,7 +16,7 @@ import {
 } from '@/db/repos/chapters';
 import { db } from '@/db/schema';
 import { extractChapter } from '@/services/extraction/session';
-import { extractChapterToDelta } from '@/services/intelligence/session';
+import { deltaFromCandidates } from '@/services/intelligence/session';
 import { useIntelligenceStore } from '@/stores/intelligence';
 import { loadKnownProjectEntities } from '@/services/extraction/project-known';
 import { runDeepExtraction } from '@/services/ai/deep-extraction';
@@ -30,6 +30,11 @@ import { MentionHighlights } from './mention-highlights';
 import { Toolbar } from './Toolbar';
 import { NotesMargin } from './NotesMargin';
 import { ComposePanel } from './ComposePanel';
+
+/** Hard ceiling on how long typed text may sit unwritten. The 600ms debounce
+ * still governs the common case (a pause commits immediately); this only binds
+ * when someone types steadily enough to keep resetting it. */
+const MAX_UNSAVED_MS = 3000;
 
 export function WritersRoom() {
   const projectId = useProjectStore((s) => s.currentProjectId);
@@ -55,7 +60,6 @@ export function WritersRoom() {
   );
   const [extracting, setExtracting] = useState(false);
   const stageDelta = useIntelligenceStore((s) => s.stage);
-  const setDeltaProgress = useIntelligenceStore((s) => s.setProgress);
   const [composeOpen, setComposeOpen] = useState(false);
   const [aiReady, setAiReady] = useState(false);
   const [deepConfirming, setDeepConfirming] = useState(false);
@@ -64,6 +68,10 @@ export function WritersRoom() {
   }, [projectId]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedChapterRef = useRef<string | null>(null);
+  /** When the current unsaved burst started. A debounce that re-arms on every
+   * keystroke never fires while someone is actually typing, so this is the
+   * ceiling that guarantees a write. */
+  const burstStartedAt = useRef<number | null>(null);
 
   // Adopt the first chapter (or clear) when the list changes. A pending
   // request from the palette / Today (consume-once) wins over the default.
@@ -87,11 +95,28 @@ export function WritersRoom() {
     (editor: Editor, chapterId: string) => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       setSaveState('saving');
+      if (burstStartedAt.current == null) burstStartedAt.current = Date.now();
+      // Steady typing resets a 600ms debounce before it can ever fire, so an
+      // uninterrupted writing burst would otherwise reach IndexedDB exactly
+      // never. Cap the wait: after MAX_UNSAVED_MS the next keystroke commits.
+      const elapsed = Date.now() - burstStartedAt.current;
+      const delay = elapsed >= MAX_UNSAVED_MS ? 0 : Math.min(600, MAX_UNSAVED_MS - elapsed);
       saveTimer.current = setTimeout(() => {
+        saveTimer.current = null;
+        burstStartedAt.current = null;
+        // The document is read HERE, 600ms after the keystroke that armed the
+        // timer, but `chapterId` was captured back then. If the editor has been
+        // re-pointed at another chapter in between, writing now would stamp the
+        // new chapter's text onto the old chapter's row — unrecoverably, since
+        // saveChapterDoc keeps no audit entry. Drop the write instead; the
+        // chapter-load effect already flushed anything genuinely pending.
+        if (loadedChapterRef.current !== chapterId) {
+          setSaveState('saved');
+          return;
+        }
         const doc = editor.getJSON();
         const paragraphs = paragraphsFromDoc(doc);
         const words = countWords(paragraphs);
-        saveTimer.current = null;
         void saveChapterDoc(chapterId, doc, paragraphs, words).then(
           () => {
             setWordCount(words);
@@ -114,7 +139,7 @@ export function WritersRoom() {
             );
           }
         );
-      }, 600);
+      }, delay);
     },
     []
   );
@@ -124,6 +149,13 @@ export function WritersRoom() {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
+    burstStartedAt.current = null;
+    // Same identity guard as persist. Callers pass `activeChapterId`, which
+    // changes the instant a tab is clicked — while the editor still holds the
+    // previous chapter's document until the async load completes. Writing then
+    // stamps the wrong (or, on a fresh mount, an empty) doc onto a real
+    // chapter with no audit entry to recover from.
+    if (loadedChapterRef.current !== chapterId) return;
     const doc = editor.getJSON();
     const paragraphs = paragraphsFromDoc(doc);
     const words = countWords(paragraphs);
@@ -197,11 +229,21 @@ export function WritersRoom() {
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') flushNow();
     };
+    // A reload or tab close inside the debounce window would otherwise drop
+    // the burst silently: pagehide fires too late to await an IndexedDB write.
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!saveTimer.current) return;
+      flushNow();
+      event.preventDefault();
+      event.returnValue = '';
+    };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', flushNow);
+    window.addEventListener('beforeunload', onBeforeUnload);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', flushNow);
+      window.removeEventListener('beforeunload', onBeforeUnload);
       flushNow();
     };
   }, [flushSave]);
@@ -229,6 +271,13 @@ export function WritersRoom() {
 
   const runExtraction = useCallback(async () => {
     if (!editor || !activeChapterId) return;
+    // The editor may still be showing the previous chapter while the async
+    // load runs. Extracting now would scan the wrong text, and flushSave
+    // correctly refuses to write — so say so rather than act on stale prose.
+    if (loadedChapterRef.current !== activeChapterId) {
+      toast('Still loading that chapter — try again in a moment.', {});
+      return;
+    }
     setExtracting(true);
     try {
       await flushSave(editor, activeChapterId);
@@ -239,10 +288,10 @@ export function WritersRoom() {
       // Same chapter, second reading: what do these events MEAN for the rest
       // of the codex? The delta is staged in memory and rendered as cascades
       // on the review board; nothing is written until the author accepts.
-      const delta = await extractChapterToDelta(chapter, (done, total) =>
-        setDeltaProgress(total > 1 ? { done, total } : null)
-      );
-      setDeltaProgress(null);
+      // Propagate from the candidates that pass already produced — scanning
+      // the same prose a second time was seconds of frozen UI on a real
+      // chapter and produced nothing extra.
+      const delta = await deltaFromCandidates(chapter.projectId, summary.candidates, chapter.id);
       if (delta.groups.length) stageDelta(delta);
 
       const known = summary.knownMentions
@@ -269,10 +318,14 @@ export function WritersRoom() {
     } finally {
       setExtracting(false);
     }
-  }, [editor, activeChapterId, flushSave, setRoute, stageDelta, setDeltaProgress]);
+  }, [editor, activeChapterId, flushSave, setRoute, stageDelta]);
 
   const runDeep = useCallback(async () => {
     if (!editor || !activeChapterId || !projectId) return;
+    if (loadedChapterRef.current !== activeChapterId) {
+      toast('Still loading that chapter — try again in a moment.', {});
+      return;
+    }
     setDeepConfirming(false);
     setExtracting(true);
     try {

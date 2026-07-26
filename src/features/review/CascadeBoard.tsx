@@ -218,6 +218,14 @@ export function CascadeBoard() {
     return { on, all: on === group.unitIds.length, none: on === 0 };
   };
 
+  // group.flagged was computed when the delta was built, so it stayed on after
+  // the author resolved the conflict — the cascade kept saying "Needs a look"
+  // with nothing left to look at. Derive it from the CURRENT patches instead.
+  const groupUnits = new Map(staged.patches.map((p) => [p.unitId, p]));
+  const isFlagged = (group: DeltaGroup) =>
+    group.unitIds.some((id) => groupUnits.get(id)?.conflict) ||
+    staged.hierarchyPlacements.some((h) => group.unitIds.includes(h.unitId) && !h.parentId);
+
   return (
     <section className="lw-cascadeboard" data-testid="cascade-board" aria-label="Extraction results">
       <header className="lw-cascadeboard__head">
@@ -240,7 +248,18 @@ export function CascadeBoard() {
           >
             Accept all
           </button>
-          <button type="button" className="lw-btn" disabled={busy} onClick={discard}>
+          <button
+            type="button"
+            className="lw-btn"
+            disabled={busy}
+            onClick={() => {
+              // A whole-book extraction can be minutes of reading. Losing it to
+              // a stray click with no undo is not a recoverable mistake.
+              const n = staged.groups.length;
+              if (n > 1 && !window.confirm(`Discard all ${n} changes without applying them?`)) return;
+              discard();
+            }}
+          >
             Discard
           </button>
         </div>
@@ -280,7 +299,7 @@ export function CascadeBoard() {
             <li
               key={group.id}
               className={`lw-cascade lw-cascade--${group.confidenceBand}${
-                group.flagged ? ' lw-cascade--flagged' : ''
+                isFlagged(group) ? ' lw-cascade--flagged' : ''
               }${state.none ? ' lw-cascade--off' : ''}`}
               data-testid="cascade-group"
             >
@@ -300,7 +319,7 @@ export function CascadeBoard() {
                   <span className="lw-cascade__headline">{group.headline}</span>
                 </label>
                 <span className={`lw-cascade__band lw-band--${group.confidenceBand}`}>
-                  {group.flagged ? '⚑ Needs a look' : BAND_LABEL[group.confidenceBand]}
+                  {isFlagged(group) ? '⚑ Needs a look' : BAND_LABEL[group.confidenceBand]}
                 </span>
                 <button
                   type="button"

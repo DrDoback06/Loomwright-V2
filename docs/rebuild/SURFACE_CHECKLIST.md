@@ -348,13 +348,15 @@ offline engine already produced.
 
 | Control | Action | Spec |
 | --- | --- | --- |
+| Staged bar: Review (global, any surface) | Routes to the cascade board; survives the toast expiring | `18-story-intelligence.spec.ts` |
+| Staged bar: Discard | Drops the staged delta — Dexie never touched | `18-story-intelligence.spec.ts` |
 | Board group checkbox | Toggles the whole cascade on/off; indeterminate when partly selected | `18-story-intelligence.spec.ts` |
 | Group expander (`N changes`) | Reveals each unit with its before → after diff | `18-story-intelligence.spec.ts` |
 | Unit checkbox | Includes/excludes one change within a cascade | `18-story-intelligence.spec.ts` |
 | Conflict correction picker | Applies the chosen value, clears the flag, restores confidence | unit `intelligence-rules.spec.ts` (conflict shape) + store |
 | Unresolved-parent picker | Chooses a parent location for a new place | unit `intelligence-apply.spec.ts` (unresolved left un-nested) |
 | Accept all | Applies only enabled units in one transaction, one Undo toast | `18-story-intelligence.spec.ts` |
-| Discard | Drops the staged delta — Dexie never touched | `18-story-intelligence.spec.ts` (accept disabled when empty) |
+| Discard | Confirms first when more than one cascade is staged, then drops it — Dexie never touched | `18-story-intelligence.spec.ts` (accept disabled when empty) |
 | Warnings disclosure | Lists claims that could not be resolved | unit `intelligence-digest.spec.ts` |
 
 ### Writer's Room + Import & Extract (X5, X6)
