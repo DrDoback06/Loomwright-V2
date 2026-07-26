@@ -54,6 +54,15 @@ export const itemsConfig: EntityConfig = {
         { id: 'slot', label: 'Equipment slot', kind: 'pills', options: EQUIPMENT_SLOTS },
         { id: 'carried', label: 'Carried', kind: 'toggle' },
         { id: 'equipped', label: 'Equipped', kind: 'toggle' },
+        // Extraction appends a row here each time the item changes hands, so
+        // `currentOwner` can be overwritten without losing the chain of custody.
+        {
+          id: 'ownershipHistory',
+          label: 'Ownership history',
+          kind: 'row-list',
+          hint: 'Who held it, and when it changed hands. Extraction appends here.',
+          span: 2,
+        },
       ],
     },
     {

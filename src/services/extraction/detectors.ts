@@ -8,6 +8,61 @@ import {
 import { confidenceBand, makeSourceQuote, type ConfidenceBand } from './text-utils';
 import { NER_STOPWORDS } from './ner-lexicon';
 
+/**
+ * A typed, role-labelled reading of a detected event.
+ *
+ * Detectors already work out *who did what to whom* — the item transfer
+ * detector knows the giver and the receiver — but they flatten that into a
+ * prose `summary` and an unordered `relatedEntityIds`, so a downstream rule
+ * cannot tell the giver from the receiver without re-parsing the sentence.
+ * Signals keep the roles, which is what propagation (X2) consumes: you can
+ * only conflict-flag "the recorded owner is not who handed it over" if you
+ * know which participant was the giver.
+ *
+ * `null` ids mean "named in the prose but not a known entity yet" — the rule
+ * decides whether to create it or ask.
+ */
+export type ExtractionSignal =
+  | {
+      kind: 'item-transfer';
+      itemId: string;
+      itemName: string;
+      fromId: string | null;
+      fromName: string | null;
+      toId: string | null;
+      toName: string | null;
+    }
+  | {
+      kind: 'item-loss';
+      itemId: string;
+      itemName: string;
+      destroyed: boolean;
+    }
+  | {
+      kind: 'travel';
+      actorId: string;
+      actorName: string;
+      placeId: string | null;
+      placeName: string;
+      /** Containment cue from the sentence: "a town in the Vraska region". */
+      parentHint: string | null;
+    }
+  | {
+      kind: 'skill-learned';
+      actorId: string | null;
+      actorName: string;
+      skillId: string | null;
+      skillName: string;
+    }
+  | {
+      kind: 'relationship';
+      fromId: string;
+      fromName: string;
+      toId: string;
+      toName: string;
+      bond: string;
+    };
+
 /** Candidate shape produced by every detector — ported from the legacy
  * buildCandidate contract that the fixtures assert against. */
 export interface ExtractionCandidate {
@@ -28,6 +83,9 @@ export interface ExtractionCandidate {
   interpretation?: { kind: CandidateInterpretationKind; note: string };
   start?: number;
   end?: number;
+  /** Role-labelled reading of the event, when the detector can name the
+   * participants. Consumed by the propagation rules in services/intelligence. */
+  signal?: ExtractionSignal;
 }
 
 type CandidateInput = Omit<ExtractionCandidate, 'confidenceBand'> & { confidenceBand?: ConfidenceBand };
@@ -50,6 +108,7 @@ export const DETECTOR_BASE_CONFIDENCE: Record<string, number> = {
   itemTransfer: 0.78,
   itemLoss: 0.72,
   travel: 0.8,
+  skillLearned: 0.76,
   relationships: 0.74,
   statChange: 0.7,
   questProgression: 0.66,
@@ -137,6 +196,15 @@ export function detectItemTransfers(ctx: DetectorContext): ExtractionCandidate[]
         relatedEntityIds: [giver?.id, receiver?.id].filter(Boolean) as string[],
         summary: `Item ${item.name} transferred${receiver ? ' to ' + receiver.name : ''}${giver ? ' by ' + giver.name : ''}.`,
         detector: 'itemTransfer',
+        signal: {
+          kind: 'item-transfer',
+          itemId: item.id,
+          itemName: item.name,
+          fromId: giver?.id ?? null,
+          fromName: giver?.name ?? null,
+          toId: receiver?.id ?? null,
+          toName: receiver?.name ?? null,
+        },
       })
     );
   }
@@ -173,6 +241,12 @@ export function detectItemLoss(ctx: DetectorContext): ExtractionCandidate[] {
         end: item.offset + item.matchText.length,
         summary: `Item ${item.name} ${changes.destroyed ? 'destroyed' : 'lost'}.`,
         detector: 'itemLoss',
+        signal: {
+          kind: 'item-loss',
+          itemId: item.id,
+          itemName: item.name,
+          destroyed: Boolean(changes.destroyed),
+        },
       })
     );
   }
@@ -191,29 +265,88 @@ export function detectTravel(ctx: DetectorContext): ExtractionCandidate[] {
     const left = { start: Math.max(0, verbStart - 80), end: verbStart };
     const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 160) };
     const actor = findEntityInSpan(text, left, index, ['cast']);
-    const place = findEntityInSpan(text, right, index, ['locations']);
-    if (!actor || !place) continue;
+    if (!actor) continue;
+
+    // A place the project has never heard of still moves the character and
+    // still wants nesting — "reached Ashen Ford, a town in the Vraska region".
+    // Offline discovery creates the location candidate itself; here we only
+    // need the destination's name so the travel rule can match it.
+    const knownPlace = findEntityInSpan(text, right, index, ['locations']);
+    const unknownPlace = findUnknownPlaceName(text, right);
+
+    // The destination is whatever follows the verb, so proximity decides. In
+    // the sentence above the known entity ("Vraska") sits inside the trailing
+    // containment cue and is the *parent*, not the destination — taking it
+    // would move the character to the region and lose the town entirely.
+    const place =
+      knownPlace && (!unknownPlace || knownPlace.offset <= unknownPlace.offset)
+        ? knownPlace
+        : null;
+    if (!place && !unknownPlace) continue;
+
+    const placeName = place ? place.name : unknownPlace!.name;
     out.push(
       buildCandidate({
         entityType: 'cast',
         name: actor.name,
         existingEntityId: actor.id,
         suggestedAction: 'update',
-        suggestedChanges: { location: place.id },
+        // `location` (bare id) is the legacy key the golden fixtures pin.
+        // The real cast field is `currentLocation` and takes an EntityRef —
+        // the travel propagation rule writes that from the signal below.
+        suggestedChanges: place ? { location: place.id } : {},
         confidence: detectorConfidence(ctx, 'travel', {
-          proximity: Math.abs((place.offset || 0) - verbEnd),
+          proximity: Math.abs((place?.offset || 0) - verbEnd),
         }),
         matchType: 'exact',
         sourceQuote: makeSourceQuote(text, verbStart, verbEnd),
         start: actor.offset,
         end: actor.offset + actor.matchText.length,
-        relatedEntityIds: [place.id],
-        summary: `${actor.name} travelled to ${place.name}.`,
+        relatedEntityIds: place ? [place.id] : [],
+        summary: `${actor.name} travelled to ${placeName}.`,
         detector: 'travel',
+        signal: {
+          kind: 'travel',
+          actorId: actor.id,
+          actorName: actor.name,
+          placeId: place?.id ?? null,
+          placeName,
+          parentHint: findContainmentHint(text, right.start, right.end),
+        },
       })
     );
   }
   return out;
+}
+
+/** A capitalised proper noun immediately after a travel verb, skipping
+ * leading articles/prepositions. Deliberately narrow — discovery owns
+ * general NER; this only names a travel destination. */
+function findUnknownPlaceName(
+  text: string,
+  span: { start: number; end: number }
+): { name: string; offset: number } | null {
+  const window = text.slice(span.start, span.end);
+  const m = /^\s*(?:in|into|to|at|for|toward|towards|upon)?\s*(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/.exec(
+    window
+  );
+  if (!m) return null;
+  const name = m[1].trim();
+  if (NER_STOPWORDS.has(name.toLowerCase())) return null;
+  return { name, offset: span.start + window.indexOf(name) };
+}
+
+/** Containment cue naming a parent place: "a town in the Vraska region",
+ * "a village of the Reach". Returns the parent's bare name. */
+function findContainmentHint(text: string, start: number, end: number): string | null {
+  const window = text.slice(start, Math.min(text.length, end + 60));
+  const m =
+    /\b(?:a|an|the)\s+\w+(?:\s+\w+)?\s+(?:in|of|within|inside)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/.exec(
+      window
+    );
+  if (!m) return null;
+  // Trim a trailing common noun the cue swept up ("Vraska region" → "Vraska").
+  return m[1].replace(/\s+(region|province|realm|territory|lands?|valley|reach)$/i, '').trim();
 }
 
 export function detectRelationships(ctx: DetectorContext): ExtractionCandidate[] {
@@ -247,6 +380,14 @@ export function detectRelationships(ctx: DetectorContext): ExtractionCandidate[]
         suggestedChanges: { fromId: subject.id, toId: object.id, relationshipType: verbWord },
         summary: `${subject.name} ${m[0]} ${object.name}.`,
         detector: 'relationships',
+        signal: {
+          kind: 'relationship',
+          fromId: subject.id,
+          fromName: subject.name,
+          toId: object.id,
+          toName: object.name,
+          bond: verbWord,
+        },
       })
     );
   }
@@ -659,11 +800,93 @@ export function detectFactionAllegiance(ctx: DetectorContext): ExtractionCandida
   return out;
 }
 
+const SKILL_LEARN_VERBS =
+  /(learned|mastered|studied|practised|practiced|was taught|taught herself|taught himself|taught themselves|picked up|perfected)/i;
+
+/**
+ * "Vex learned Venom Strike" — the headline case for propagation. The skill
+ * may be known or brand new; either way the rule attaches it to the character,
+ * places it on a tree, and offers what it grows into.
+ *
+ * Quoted skill names win over bare capitalised ones because prose commonly
+ * writes them as 'the Serpent's Coil' or "Venom Strike".
+ */
+export function detectSkillLearning(ctx: DetectorContext): ExtractionCandidate[] {
+  const { text, index } = ctx;
+  if (!text) return [];
+  const out: ExtractionCandidate[] = [];
+  const verbRe = new RegExp(`(${inner(SKILL_LEARN_VERBS)})`, 'gi');
+  let m: RegExpExecArray | null;
+  while ((m = verbRe.exec(text)) !== null) {
+    const verbStart = m.index;
+    const verbEnd = verbStart + m[0].length;
+    const left = { start: Math.max(0, verbStart - 80), end: verbStart };
+    const right = { start: verbEnd, end: Math.min(text.length, verbEnd + 120) };
+
+    const actor = findEntityInSpan(text, left, index, ['cast']);
+    const knownSkill = findEntityInSpan(text, right, index, ['skills']);
+    const skillName = knownSkill ? knownSkill.name : findSkillName(text, right);
+    if (!actor && !skillName) continue;
+    if (!skillName) continue;
+
+    out.push(
+      buildCandidate({
+        entityType: 'skills',
+        name: skillName,
+        existingEntityId: knownSkill?.id ?? null,
+        suggestedAction: knownSkill ? 'update' : 'create',
+        matchType: knownSkill ? 'exact' : 'new',
+        suggestedChanges: actor
+          ? { assignedCast: [{ id: actor.id, type: 'cast', name: actor.name }] }
+          : {},
+        confidence: detectorConfidence(ctx, 'skillLearned', {
+          proximity: Math.abs((knownSkill?.offset ?? verbEnd) - verbEnd),
+        }),
+        sourceQuote: makeSourceQuote(text, verbStart, verbEnd),
+        start: verbStart,
+        end: verbEnd,
+        relatedEntityIds: actor ? [actor.id] : [],
+        summary: actor
+          ? `${actor.name} learned ${skillName}.`
+          : `${skillName} was learned.`,
+        detector: 'skillLearned',
+        signal: {
+          kind: 'skill-learned',
+          actorId: actor?.id ?? null,
+          actorName: actor?.name ?? '',
+          skillId: knownSkill?.id ?? null,
+          skillName,
+        },
+      })
+    );
+  }
+  return out;
+}
+
+/** A skill name after a learning verb: quoted first, then a capitalised
+ * phrase, skipping the articles prose puts in the way. */
+function findSkillName(text: string, span: { start: number; end: number }): string | null {
+  const window = text.slice(span.start, span.end);
+  const quoted = /^[^.?!]{0,40}?['"“‘]([^'"”’]{3,40})['"”’]/.exec(window);
+  if (quoted) return quoted[1].trim();
+  const bare =
+    /^\s*(?:the\s+|a\s+|an\s+|how\s+to\s+|to\s+)?([A-Z][a-z]+(?:['’][a-z]+)?(?:\s+[A-Z][a-z]+){0,2})/.exec(
+      window
+    );
+  if (!bare) return null;
+  const name = bare[1].trim();
+  if (NER_STOPWORDS.has(name.toLowerCase())) return null;
+  // A single common word is far more likely to be prose than a skill.
+  if (!name.includes(' ') && name.length < 5) return null;
+  return name;
+}
+
 export function runLocalDetectors(ctx: DetectorContext): ExtractionCandidate[] {
   return [
     ...detectItemTransfers(ctx),
     ...detectItemLoss(ctx),
     ...detectTravel(ctx),
+    ...detectSkillLearning(ctx),
     ...detectRelationships(ctx),
     ...detectStatChanges(ctx),
     ...detectQuestProgression(ctx),
