@@ -3,9 +3,10 @@ name: Verify & Deploy to GitHub Pages
 on:
   push:
     # `main` is the app: the TS rebuild, not the old .jsx prototype (archived
-    # at `legacy-jsx-prototype-archive`). The working branch also builds so a
-    # deploy can be verified before it lands.
-    branches: [main, claude/writing-extraction-review-84loqt]
+    # at `legacy-jsx-prototype-archive`). The CURRENT working branch also
+    # builds so a deploy can be tried before it lands — there is one Pages
+    # site, so only one working branch belongs here at a time.
+    branches: [main, claude/writing-extraction-ai-capability-ht7duk]
   workflow_dispatch:
 
 permissions:
