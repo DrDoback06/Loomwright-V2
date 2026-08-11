@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N5b · step 4 of 7 (steps 0–3 done)
-**Last verified green:** N5b steps 2–3 — lint ✅ tsc ✅ build ✅ vitest 262 ✅ playwright 214 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N5b · step 5 of 7 (steps 0–4 done)
+**Last verified green:** N5b step 4 — lint ✅ tsc ✅ build ✅ vitest 273 ✅ playwright 221 passed / 10 skipped / 1 failed (`14-offline` desktop — the known parallel-load flake; green in isolation, recorded since N1)
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -14,7 +14,7 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N3 | Acts › Chapters › Scenes + snapshots | 8 | ✅ 8/8 |
 | N4 | Plan: Outline / Board / Matrix / Timeline | 7 | ✅ 7/7 |
 | N5a | Scene beats | 7 | ✅ 7/7 |
-| N5b | AI visibility, acts, sections, rewrite, focus | 7 | 🔄 4/7 |
+| N5b | AI visibility, acts, sections, rewrite, focus | 7 | 🔄 5/7 |
 | N6 | Typed `@` mentions | 4 | ⬜ |
 | N7 | Context engine + policy + tracking + budget rail | 7 | ⬜ |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
@@ -147,8 +147,8 @@ same filter; the half-built fields ride along.
 - [x] 1. **Acts, reachable.** `+ Act`, rename, ↑/↓, Delete act and a per-chapter act picker in `OutlineView`; **Act** as a Board grouping (rendered only once an act exists) and as a band across the Matrix rows. New repo functions: `renameAct`, `moveAct`, `setChapterAct`. 4 unit tests + `22-plan.spec.ts` (1 × 2 projects).
 - [x] 2. `section.ts` + `SectionView.tsx` — a colourable wrapper node (`content: 'block+'`) with independent `hiddenFromAi` / `hiddenFromWordCount`, six named colours mapped onto semantic tokens, `/note ` and `/section ` wrapping input rules, `Mod+Shift+N`, a toolbar button, and Remove section (unwrap, never delete).
 - [x] 3. **The two derivations diverged.** `paragraphsFromDoc(doc, skip)` now takes a predicate *or* the old array; `deriveScene(doc)` returns both numbers so no writer can derive one and reuse it for the other. Wired through `persist`, `flushSave`, `restoreSnapshot` and `appendParagraphToChapter`. **The trap was real and is closed:** `reanchorOccurrences` and `usePlanData.sceneOfParagraph` derive ids from the **unfiltered** `scene.doc`. Speed reader filters by count only; search filters by nothing.
-- [ ] 4. `RewriteBubble.tsx` — Expand / Rephrase / Shorten on ≥4 selected words + `prompts/rewrite.ts`. **`@tiptap/react` v3's `BubbleMenu` moved to `@tiptap/react/menus` and drags in `@floating-ui/dom`** — position by hand off `posToDOMRect` (viewport coords: subtract the canvas rect, add its `scrollTop`). **`.lw-wroom__canvas` has no `position: relative`** today. Scope the locator: `Expand` collides with `CodexPanel` and `SceneBeatView`.  ← IN PROGRESS
-- [ ] 5. Focus mode: chrome fade after 3s typing, sentence/line/paragraph dimming, typewriter at 45%, all gated on `prefersReducedMotion()`. The `focus` tweak is **stored but never stamped** — add `data-focus` to `applyTweaks` AND the pre-paint script in `index.html`. The scroll container is `.lw-wroom__canvas`, not the window. The dimming plugin must rebuild on **selection change**, not only `docChanged`.
+- [x] 4. **`RewriteBubble.tsx` + `prompts/rewrite.ts`.** Expand / Rephrase / Shorten on ≥4 selected words, positioned by hand off `posToDOMRect` (no `BubbleMenu`, no `@floating-ui/dom`); `.lw-wroom__canvas` is now `position: relative` and the bubble flips below the selection when there is no room above. Rephrase carries POV / tense / as-dialogue. Offline it copies the prompt and takes a paste, and the three AI buttons are absent from the tree. `gatherSceneContext` / `manuscriptStyleSample` extracted to `ai-context.ts` so beats and rewrites share one context source — **N7 replaces that one file, not two**. 11 unit tests + `25-rewrite.spec.ts` (4 × 2 projects).
+- [ ] 5. ← IN PROGRESS · Focus mode: chrome fade after 3s typing, sentence/line/paragraph dimming, typewriter at 45%, all gated on `prefersReducedMotion()`. The `focus` tweak is **stored but never stamped** — add `data-focus` to `applyTweaks` AND the pre-paint script in `index.html`. The scroll container is `.lw-wroom__canvas`, not the window. The dimming plugin must rebuild on **selection change**, not only `docChanged`.
 - [ ] 6. `Scene.labels` chips + `attachedRefs` entity picker in `ScenePanel`; give `--density-pad` / `--density-gap` consumers or delete them; SURFACE_CHECKLIST rows; finish `24-sections.spec.ts`
 
 ## N6 — Typed `@` mentions
@@ -235,7 +235,13 @@ same filter; the half-built fields ride along.
 
 ## Notes for the next run
 
-N1–N4, N5a and N5b steps 0–3 are done and pushed. Start N5b step 4 — the rewrite bubble.
+N1–N4, N5a and N5b steps 0–4 are done and pushed. Start N5b step 5 — focus mode.
+
+**Never select text in an e2e with a triple click or with Ctrl+A on a container.** A triple
+click inherits the browser's multi-click counter from whatever was clicked before it, so after
+a button press it lands on a double-click and selects one word — an hour of debugging, and it
+looked exactly like a product bug. Ctrl+A clicks the container's centre, which can be a popover
+left open by an earlier step. Click the paragraph, then `Home`, then `Shift+End`.
 
 **`countWords(scene.paragraphs)` now legitimately disagrees with `scene.wordCount`.** They are
 two filters over one document — `deriveScene(doc)` in `lib/prose.ts` returns both, and every

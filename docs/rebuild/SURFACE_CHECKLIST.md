@@ -502,4 +502,13 @@ out of extraction, and out of every export in one omission.
 | Section: Let AI read this | Off ⇒ the block is absent from `scene.paragraphs`, the substrate every AI path reads — **independent of the word count** | `24-sections.spec.ts`, unit `paragraphs.spec.ts` |
 | Section: Count these words | Off ⇒ the block is absent from `scene.wordCount` — **independent of what a model is shown** | `24-sections.spec.ts`, unit `paragraphs.spec.ts` |
 | Section: Remove section | Unwraps: the blocks inside come back out as ordinary prose. Never a delete, so it needs no confirmation | `24-sections.spec.ts` |
+| Rewrite bubble | Appears on a selection of ≥4 words and nowhere else; flips below the selection when there is no room above | `25-rewrite.spec.ts` |
+| Rewrite: Expand / Rephrase / Shorten | Privacy gate → generate → draft preview, with a `pre-ai` snapshot taken first. **Absent from the tree with no provider**, where the operation is chosen from a select instead | `25-rewrite.spec.ts`, unit `rewrite-prompt.spec.ts` |
+| Rewrite: Keep POV / Keep tense / As dialogue | Rephrase only — each adds an explicit instruction to the prompt | unit `rewrite-prompt.spec.ts` |
+| Rewrite: Copy prompt | Always present, key or no key. Copies the exact prompt and shows it as selectable text if the clipboard refuses | `25-rewrite.spec.ts` |
+| Rewrite: Pasted rewrite → Use this | Takes prose rewritten elsewhere through the same canon and lost-name checks | `25-rewrite.spec.ts` |
+| Rewrite draft: Apply | **Replaces the selection** in one transaction — one undo, one save | `25-rewrite.spec.ts` |
+| Rewrite draft: Retry / Discard | Asks again / clears; the manuscript is untouched until Apply | `25-rewrite.spec.ts` |
+| Rewrite draft: missing names warning | Proper nouns present in the original and absent from the rewrite, reported to read rather than used to block | unit `rewrite-prompt.spec.ts` |
+| Rewrite: Close rewrite | Dismisses the bubble without touching the selection | rendered handler; the bubble specs cover its lifecycle |
 | Settings ▸ Appearance: Prose width | **Now genuinely changes the manuscript measure** — `.lw-manuscript` reads `--measure` | `19-studio.spec.ts` |

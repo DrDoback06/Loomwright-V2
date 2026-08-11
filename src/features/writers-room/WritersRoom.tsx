@@ -35,6 +35,7 @@ import { NotesMargin } from './NotesMargin';
 import { ComposePanel } from './ComposePanel';
 import { SceneHead, SceneStrip } from './SceneStrip';
 import { ScenePanel } from './ScenePanel';
+import { RewriteBubble } from './RewriteBubble';
 
 /** Hard ceiling on how long typed text may sit unwritten. The 600ms debounce
  * still governs the common case (a pause commits immediately); this only binds
@@ -293,6 +294,9 @@ export function WritersRoom() {
   // typed text.
   const editorRef = useRef<Editor | null>(null);
   const activeSceneRef = useRef<string | null>(null);
+  /** The scroll container the rewrite bubble positions against — and, in
+   * the next step, the one typewriter scrolling moves. Not the window. */
+  const canvasRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const flushNow = () => {
       if (saveTimer.current && editorRef.current && activeSceneRef.current) {
@@ -321,20 +325,24 @@ export function WritersRoom() {
     };
   }, [flushSave]);
 
+  /** Write anything sitting in the autosave debounce, right now. Read
+   * through refs at call time so it can never act on a stale closure — the
+   * class of bug that cost a red run in N3. Shared by the beat node view
+   * and the rewrite bubble, both of which snapshot before they generate. */
+  const flushEditorNow = useCallback(async () => {
+    const id = loadedSceneRef.current;
+    if (editorRef.current && id) await flushSave(editorRef.current, id);
+  }, [flushSave]);
+
   // Publish what a beat node view needs to act: which scene it is in, and
-  // how to flush the autosave debounce before snapshotting. Read through
-  // refs at click time so a control can never act on a stale closure —
-  // the class of bug that cost a red run in N3.
+  // how to flush before snapshotting.
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     const storage = editor.storage.sceneBeat;
     storage.projectId = projectId;
     storage.sceneId = activeSceneId;
-    storage.flush = async () => {
-      const id = loadedSceneRef.current;
-      if (editorRef.current && id) await flushSave(editorRef.current, id);
-    };
-  }, [editor, projectId, activeSceneId, flushSave]);
+    storage.flush = flushEditorNow;
+  }, [editor, projectId, activeSceneId, flushEditorNow]);
 
   // Live entity-mention highlights from persisted occurrences.
   const occurrences = useLiveQuery(
@@ -634,8 +642,18 @@ export function WritersRoom() {
             <Toolbar editor={editor} />
             {/* Delegated click-to-open for mention highlights; keyboard
                 users reach entities via the codex surfaces. */}
-            <div className="lw-wroom__canvas" onClick={onCanvasClick}>
+            <div className="lw-wroom__canvas" ref={canvasRef} onClick={onCanvasClick}>
               <EditorContent editor={editor} />
+              {/* A sibling of the editor rather than a ProseMirror plugin:
+                  it positions itself off the selection and must not fight
+                  the editor for the scroll container. */}
+              <RewriteBubble
+                editor={editor}
+                projectId={projectId}
+                sceneId={activeSceneId}
+                canvasRef={canvasRef}
+                flush={flushEditorNow}
+              />
             </div>
 
             <div

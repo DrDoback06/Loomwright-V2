@@ -1,83 +1,18 @@
 import { db } from '@/db/schema';
-import { getScene, snapshotScene } from '@/db/repos/scenes';
+import { snapshotScene } from '@/db/repos/scenes';
 import type { Entity } from '@/db/types';
-import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { completeDetailed } from '@/services/ai/providers';
 import { resolveProvider } from '@/services/ai/settings';
 import { tierForModel } from '@/services/ai/prompts';
 import { buildBeatPrompt, PRECEDING_PROSE_CHARS, type BeatMode } from '@/services/ai/prompts/beat';
-import { buildCanonFacts, checkDraftAgainstCanon, type CanonIssue } from '@/services/ai/canon';
+import { checkDraftAgainstCanon, type CanonIssue } from '@/services/ai/canon';
 import { analyzeStyle } from '@/services/style-analysis';
-import { useFocusStore } from '@/stores/focus';
-
-/** How much manuscript to measure the author's voice from — the same
- * budget ComposePanel uses, for the same reason. */
-const STYLE_SAMPLE_CHARS = 40_000;
+import { gatherSceneContext, manuscriptStyleSample } from './ai-context';
 
 export interface BeatDraft {
   prose: string;
   issues: CanonIssue[];
   truncated: boolean;
-}
-
-/** Everything the beat needs to describe itself to a model.
- *
- * Context is assembled here from the scene's own POV/location/characters
- * plus whatever is in cross-panel focus — the same sources ComposePanel
- * uses today. N7 replaces this function's body with
- * `buildSceneContext()`; nothing above it changes. */
-async function gatherContext(
-  projectId: string,
-  sceneId: string
-): Promise<{
-  scene: { title: string; summary: string; povName: string | null; povType: string | null };
-  context: string;
-  facts: string[];
-  subjects: Entity[];
-  world: Entity[];
-}> {
-  const scene = await getScene(sceneId);
-  const world = (await db.entities.where('projectId').equals(projectId).toArray()).filter(
-    (e) => e.status === 'active'
-  );
-  const byId = new Map(world.map((e) => [e.id, e]));
-
-  const ids = new Set<string>();
-  if (scene?.pov) ids.add(scene.pov);
-  if (scene?.locationId) ids.add(scene.locationId);
-  for (const id of scene?.characterIds ?? []) ids.add(id);
-  for (const ref of scene?.attachedRefs ?? []) ids.add(ref.id);
-  for (const ref of Object.values(useFocusStore.getState().focusedByType)) {
-    if (ref) ids.add(ref.id);
-  }
-
-  const subjects = [...ids].map((id) => byId.get(id)).filter((e): e is Entity => !!e);
-
-  const context = subjects
-    .map((entity) => {
-      const bits = [entity.summary].filter(Boolean);
-      const persona = typeof entity.fields.personality === 'string' ? entity.fields.personality : '';
-      const voice = typeof entity.fields.speechStyle === 'string' ? entity.fields.speechStyle : '';
-      if (persona) bits.push(`personality: ${persona}`);
-      if (voice) bits.push(`voice: ${voice.split('\n')[0]}`);
-      return `- ${ENTITY_TYPE_META[entity.type].label} ${entity.name}${
-        bits.length ? ` — ${bits.join('; ')}` : ''
-      }`;
-    })
-    .join('\n');
-
-  return {
-    scene: {
-      title: scene?.title ?? '',
-      summary: scene?.summary ?? '',
-      povName: scene?.pov ? (byId.get(scene.pov)?.name ?? null) : null,
-      povType: scene?.povType ?? null,
-    },
-    context,
-    facts: buildCanonFacts(subjects, world),
-    subjects,
-    world,
-  };
 }
 
 /** Build the prompt a beat would send. Used by both the in-app path and
@@ -92,12 +27,8 @@ export async function buildBeatRequest(input: {
   precedingProse: string;
   tier?: 'small' | 'large';
 }): Promise<{ system: string; prompt: string; world: Entity[] }> {
-  const gathered = await gatherContext(input.projectId, input.sceneId);
-
-  const manuscript = (await db.chapters.where('projectId').equals(input.projectId).toArray())
-    .flatMap((chapter) => chapter.paragraphs.map((p) => p.text))
-    .join('\n\n')
-    .slice(0, STYLE_SAMPLE_CHARS);
+  const gathered = await gatherSceneContext(input.projectId, input.sceneId);
+  const manuscript = await manuscriptStyleSample(input.projectId);
 
   const built = buildBeatPrompt({
     beat: input.beat,

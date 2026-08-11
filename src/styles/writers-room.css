@@ -168,6 +168,11 @@
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  /* The rewrite bubble is absolutely positioned inside this element and
+     scrolls with the prose, so this has to be its offset parent. Without
+     it the bubble resolves against whichever ancestor happens to be
+     positioned, which is not the one it measured against. */
+  position: relative;
 }
 
 .lw-manuscript {
@@ -628,6 +633,82 @@
 }
 .lw-beat__prose p { margin: 0 0 var(--sp-5); }
 .lw-beat__actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+
+/* ---------------------------------------------------------------------
+   Rewrite bubble (N5b)
+   Anchored above the selection on a desktop; pinned to the bottom of the
+   canvas on a phone, where a floating popover over a soft keyboard is
+   unusable and can land off-screen entirely.
+   --------------------------------------------------------------------- */
+.lw-rewrite {
+  position: absolute;
+  top: var(--rewrite-top, 0px);
+  left: var(--rewrite-left, 0px);
+  z-index: 3;
+  transform: translate(-50%, var(--sp-3));
+  max-width: min(34rem, calc(100% - var(--sp-8)));
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-5);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+}
+/* Above the selection when there is room for it, below when there is not —
+   anchored to the first line of a chapter it would otherwise render off the
+   top of the canvas and under the header. */
+.lw-rewrite[data-place='above'] { transform: translate(-50%, calc(-100% - var(--sp-3))); }
+.lw-rewrite__bar,
+.lw-rewrite__tweaks,
+.lw-rewrite__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.lw-rewrite__control { display: inline-flex; }
+.lw-rewrite__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.lw-rewrite__paste,
+.lw-rewrite__draft {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line-1);
+}
+.lw-rewrite__prose {
+  font-family: var(--font-serif);
+  font-size: var(--fs-md);
+  line-height: var(--lh-prose);
+  color: var(--ink-1);
+  max-height: 34vh;
+  overflow-y: auto;
+}
+.lw-rewrite__prose p { margin: 0 0 var(--sp-4); }
+
+@media (max-width: 720px) {
+  .lw-rewrite {
+    position: fixed;
+    left: var(--sp-4);
+    right: var(--sp-4);
+    top: auto;
+    bottom: calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
+    max-width: none;
+    transform: none;
+  }
+  .lw-rewrite[data-place='above'] { transform: none; }
+  .lw-rewrite__actions .lw-btn { flex: 1; }
+}
 
 /* ---------------------------------------------------------------------
    Sections (N5b)
