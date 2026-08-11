@@ -18,10 +18,10 @@ interface NavEntry {
  * Settings, Trash, Import & Extract and the three tools are reached from
  * the command palette and Settings ▸ Tools: deferred, never hidden.
  *
- * Plan joins this list in N4, once scenes exist for it to plan. A rail
- * entry appears when its surface genuinely works, and not before. */
+ * A rail entry appears when its surface genuinely works, and not before. */
 export const NAV_ENTRIES: NavEntry[] = [
   { route: 'write', label: 'Write', glyph: '✎', hint: 'The manuscript' },
+  { route: 'plan', label: 'Plan', glyph: '▦', hint: 'Outline, Board, Matrix, Timeline' },
   { route: 'codex', label: 'Codex', glyph: '◈', hint: 'Everything your story knows' },
   { route: 'insights', label: 'Insights', glyph: '◔', hint: 'Overview, Today, Review' },
   { route: 'worlds', label: 'Worlds', glyph: '◇', hint: 'Atlas, Tangle, Skill Trees' },

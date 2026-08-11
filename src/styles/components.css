@@ -3954,3 +3954,279 @@ select.lw-input {
   justify-content: center;
   margin-top: var(--sp-6);
 }
+
+/* Available to a screen reader, invisible on screen. Used where a control
+   needs a name but the surrounding layout already reads as its label. */
+.lw-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.lw-input--sm {
+  height: 24px;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-2xs);
+}
+
+/* ---------------------------------------------------------------------
+   Plan (N4)
+   Four views over one set of scenes. Nothing here holds state; every
+   control writes back through the scenes repo.
+   --------------------------------------------------------------------- */
+.lw-plan__body { padding: var(--sp-8); }
+.lw-plan__timeline { min-height: 0; }
+
+/* Outline — the shape of the book, with counts at every level. */
+.lw-outline { display: flex; flex-direction: column; gap: var(--sp-9); }
+.lw-outline__total {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.lw-outline__chapter {
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-4);
+  background: var(--bg-paper-2);
+  box-shadow: var(--shadow-stamp);
+  overflow: hidden;
+}
+.lw-outline__chapterhead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: 1px solid var(--line-1);
+  background: var(--bg-paper);
+}
+.lw-outline__num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-2xs);
+  color: var(--ink-4);
+}
+.lw-outline__title { flex: 1; margin: 0; font-size: var(--fs-lg); font-weight: var(--fw-semi); }
+.lw-outline__words {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-2xs);
+  color: var(--ink-4);
+  min-width: 6ch;
+  text-align: right;
+}
+.lw-outline__scenes { list-style: none; margin: 0; padding: 0; }
+.lw-outline__scene {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-6);
+  border-top: 1px solid var(--line-1);
+}
+.lw-outline__scene:first-child { border-top: 0; }
+.lw-outline__status { color: var(--ink-4); }
+.lw-outline__scenetitle {
+  width: 20ch;
+  flex-shrink: 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: none;
+  color: var(--ink-1);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+.lw-outline__scenetitle:hover { border-bottom-color: var(--line-2); }
+.lw-outline__scenetitle:focus { border-bottom-color: var(--accent); outline: none; }
+.lw-outline__summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+/* Board — scenes as cards in columns. */
+.lw-board { display: flex; flex-direction: column; gap: var(--sp-8); min-height: 0; }
+.lw-board__controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); }
+.lw-board__controls .lw-fieldnote { margin: 0; flex-basis: 100%; }
+.lw-board__columns {
+  display: flex;
+  gap: var(--sp-6);
+  overflow-x: auto;
+  align-items: flex-start;
+  padding-bottom: var(--sp-4);
+}
+.lw-boardcol {
+  flex: 0 0 260px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-4);
+  background: var(--bg-sunken);
+}
+.lw-boardcol__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--line-1);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tr-eyebrow);
+  color: var(--ink-3);
+}
+.lw-boardcol__count { font-variant-numeric: tabular-nums; color: var(--ink-4); }
+.lw-boardcol__cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  min-height: 80px;
+}
+.lw-boardcol__empty { margin: 0; font-size: var(--fs-xs); color: var(--ink-5); }
+
+.lw-scenecard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-3);
+  background: var(--bg-paper-2);
+  box-shadow: var(--shadow-1);
+}
+.lw-scenecard[draggable='true'] { cursor: grab; }
+.lw-scenecard__open {
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-med);
+  color: var(--ink-1);
+  cursor: pointer;
+}
+.lw-scenecard__open:hover { color: var(--accent); }
+.lw-scenecard__summary {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lw-scenecard__meta { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.lw-scenecard__words {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+}
+
+/* Matrix — scenes down, codex entries across. */
+.lw-matrix { display: flex; flex-direction: column; gap: var(--sp-8); min-height: 0; }
+.lw-matrix__scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--line-1); border-radius: var(--r-4); }
+.lw-matrix__grid { border-collapse: separate; border-spacing: 0; }
+.lw-matrix__corner,
+.lw-matrix__colhead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-paper);
+  border-bottom: 1px solid var(--line-2);
+  padding: var(--sp-4) var(--sp-3);
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tr-eyebrow);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.lw-matrix__corner { left: 0; z-index: 3; text-align: left; min-width: 200px; }
+.lw-matrix__colhead { text-align: center; min-width: 40px; }
+.lw-matrix__colname {
+  display: block;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lw-matrix__rowhead {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-paper-2);
+  border-right: 1px solid var(--line-2);
+  border-bottom: 1px solid var(--line-1);
+  padding: 0;
+  text-align: left;
+  font-weight: var(--fw-body);
+}
+.lw-matrix__scenebtn {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: var(--sp-3) var(--sp-5);
+  border: 0;
+  background: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  color: var(--ink-1);
+}
+.lw-matrix__scenebtn:hover { background: var(--bg-tint); }
+.lw-matrix__scenename { font-size: var(--fs-xs); }
+.lw-matrix__scenechapter { font-size: var(--fs-3xs); color: var(--ink-4); }
+.lw-matrix__cell {
+  border-bottom: 1px solid var(--line-1);
+  padding: 0;
+  text-align: center;
+}
+.lw-matrix__mark {
+  width: 100%;
+  height: 28px;
+  min-width: 32px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  transition: opacity var(--motion-fast) var(--ease-move);
+}
+.lw-matrix__mark::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: var(--r-2);
+  background: inherit;
+}
+.lw-matrix__mark:not([data-source='none']) { background-clip: padding-box; }
+/* Colour alone never carries the meaning: opacity plus an underline
+   distinguish the three sources, and every cell states its source in its
+   accessible name. */
+.lw-matrix__mark--asserted { opacity: 1; }
+.lw-matrix__mark--summary { opacity: 0.8; }
+.lw-matrix__mark--summary::after { border-bottom: 2px solid var(--ink-1); }
+.lw-matrix__mark--extracted { opacity: 0.42; }
+.lw-matrix__mark--extracted::after { outline: 1px dashed var(--line-strong); outline-offset: -1px; }
+.lw-matrix__mark[data-source='none'] { background: transparent !important; }
+.lw-matrix__mark[data-source='none']:hover::after { background: var(--line-2); }
+
+@media (max-width: 720px) {
+  .lw-plan__body { padding: var(--sp-6); }
+  .lw-outline__scene { flex-wrap: wrap; }
+  .lw-outline__scenetitle { width: 100%; }
+  .lw-outline__summary { flex-basis: 100%; white-space: normal; }
+  .lw-boardcol { flex-basis: 82vw; }
+  .lw-matrix__corner { min-width: 130px; }
+  .lw-matrix__scroll { max-height: 60vh; }
+}

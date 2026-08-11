@@ -361,3 +361,28 @@ describe('scenes: the v8 → v9 migration', () => {
     expect(chapter.paragraphs[0].text).toBe('The harbour bells rang the short peal.');
   });
 });
+
+describe('scenes: status', () => {
+  it('promotes an outline scene to draft on its first real words, and only once', async () => {
+    const chapter = await seed();
+    const scene = (await listScenesInChapter(chapter.id))[0];
+    expect(scene.status).toBe('outline');
+
+    await saveSceneDoc(scene.id, doc('Words at last.', 'd1'), [
+      { id: 'd1', text: 'Words at last.' },
+    ], 3);
+    expect((await db.scenes.get(scene.id))!.status).toBe('draft');
+
+    // A hand-set status is never overwritten by a later save.
+    await updateSceneMeta(scene.id, { status: 'final' });
+    await saveSceneDoc(scene.id, doc('More words.', 'd2'), [{ id: 'd2', text: 'More words.' }], 2);
+    expect((await db.scenes.get(scene.id))!.status).toBe('final');
+  });
+
+  it('leaves an empty scene alone', async () => {
+    const chapter = await seed();
+    const scene = (await listScenesInChapter(chapter.id))[0];
+    await saveSceneDoc(scene.id, null, [], 0);
+    expect((await db.scenes.get(scene.id))!.status).toBe('outline');
+  });
+});

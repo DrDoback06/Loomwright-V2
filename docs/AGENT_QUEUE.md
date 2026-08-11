@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N4 · step 1 of 7
-**Last verified green:** N3 complete — lint ✅ tsc ✅ build ✅ vitest 233 ✅ playwright 176 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N5 · step 1 of 8
+**Last verified green:** N4 complete — lint ✅ tsc ✅ build ✅ vitest 235 ✅ playwright 190 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -12,8 +12,8 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N1 | Studio design system | 6 | ✅ 6/6 |
 | N2 | Four destinations + palette + empty states | 6 | ✅ 6/6 |
 | N3 | Acts › Chapters › Scenes + snapshots | 8 | ✅ 8/8 |
-| N4 | Plan: Outline / Board / Matrix / Timeline | 7 | 🔄 0/7 |
-| N5 | Beats, inline AI, sections, focus mode | 8 | ⬜ |
+| N4 | Plan: Outline / Board / Matrix / Timeline | 7 | ✅ 7/7 |
+| N5 | Beats, inline AI, sections, focus mode | 8 | 🔄 0/8 |
 | N6 | Typed `@` mentions | 4 | ⬜ |
 | N7 | Context engine + policy + tracking + budget rail | 7 | ⬜ |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
@@ -86,19 +86,31 @@ surface genuinely works. Plan joins the rail in N4.
    characters in the scene summary and making the AI-visibility checkbox appear dead.
    `ScenePanel` keeps an optimistic draft, re-synced only on scene id change.
 
-## N4 — Plan
+## N4 — Plan ✅
 
-- [ ] 1. `usePlanData.ts` — the single shared query + derived indexes  ← IN PROGRESS
-- [ ] 2. `OutlineView.tsx` (tree, rename, drag-reorder, per-level word counts)
-- [ ] 3. `BoardView.tsx` (kanban by status / act / POV)
-- [ ] 4. `MatrixView.tsx` — Show axis switcher, sticky header + first column, arrow-key nav
-- [ ] 5. Matrix three-source cells: author-asserted solid / summary-matched underlined / **extraction-derived at 55%, click to promote**
-- [ ] 6. `TimelineView.tsx` reusing `features/codex/TimelineView.tsx`
-- [ ] 7. Mobile fallbacks; SURFACE_CHECKLIST; e2e `22-plan.spec.ts`
+- [x] 1. `usePlanData.ts` — one query, derived indexes, and the presence map every view reads
+- [x] 2. `OutlineView.tsx` — chapter/scene tree, inline rename, per-level word counts
+- [x] 3. `BoardView.tsx` — group by status / chapter / POV; only status accepts drops
+- [x] 4. `MatrixView.tsx` — Show axis switcher, sticky header + first column, arrow-key navigation
+- [x] 5. Matrix three-source cells: asserted solid / summary underlined / **extracted faint + dashed, click to promote**
+- [x] 6. Timeline reuses `features/codex/TimelineView.tsx` unchanged
+- [x] 7. Mobile fallbacks; SURFACE_CHECKLIST rows; e2e `22-plan.spec.ts` 14/14 on both projects
+
+**Two deliberate design calls:**
+1. **Reordering is move buttons, not drag alone.** Drag works on the Board (status only),
+   but Outline reorders with ↑/↓ because those work with a keyboard, on a phone, and with
+   a screen reader. A drag handle on its own would put the whole view out of reach.
+2. **Grouping by chapter or POV does not accept drops.** Those columns are a lens, not an
+   editor — a card that looks draggable and silently does nothing is worse than one that
+   plainly is not.
+
+**One behaviour change:** `saveSceneDoc` promotes an `outline` scene to `draft` on its
+first real words. Without it the Board is a single column of "Outline" that everyone has
+to hand-correct. It fires once and never demotes; a hand-set status is never overwritten.
 
 ## N5 — Beats, inline AI, sections, focus
 
-- [ ] 1. `scene-beat.ts` TipTap node + `/beat` input rule + `Mod-Enter` / `Mod-Shift-b`
+- [ ] 1. `scene-beat.ts` TipTap node + `/beat` input rule + `Mod-Enter` / `Mod-Shift-b`  ← IN PROGRESS
 - [ ] 2. `services/ai/prompts/beat.ts` built on `prompts/prose.ts`
 - [ ] 3. `expandBeat()`: `pre-ai` snapshot → `complete()` → `checkDraftAgainstCanon()` → insert; Apply / Retry / Discard / As-section
 - [ ] 4. Offline path: copy a fully-formed prompt + paste box (mirror `PasteTab`)
@@ -191,7 +203,7 @@ surface genuinely works. Plan joins the rail in N4.
 
 ## Notes for the next run
 
-N1, N2 and N3 are done and pushed. Start N4 step 1 — `usePlanData.ts`.
+N1–N4 are done and pushed. Start N5 step 1 — the `sceneBeat` TipTap node.
 
 Hard-won facts, in rough order of how much time they cost:
 
@@ -218,8 +230,15 @@ Hard-won facts, in rough order of how much time they cost:
   this is what made chapter switching write into the wrong scene.
 - When you add a `useCallback` that reads new state, **check the dependency array**. A
   stale `activeSceneId` cost a red run.
-- For N4: `Plan` must be added to the rail (`NAV_ENTRIES` in `LeftRail.tsx`), to
-  `RouteId`, to `MainSurface`, and to `SURFACE_HOME` in `tests/e2e/helpers.ts`.
-  `listScenes(projectId)` already returns scenes in `globalOrder` — that is the x-axis.
-- The Matrix's third cell source is `db.occurrences`, joined to scenes by `paragraphId`
-  (an occurrence stores `chapterId`, not `sceneId`, so join through the scene's paragraphs).
+- **Adding a destination touches five places**: `RouteId` and its view type in
+  `stores/ui.ts`, `NAV_ENTRIES` in `LeftRail.tsx`, `MainSurface` in `App.tsx`, the palette
+  command list (and the Alt+N shortcuts shift — `20-shell.spec.ts` asserts them), `HELP`
+  in `HelpDialog.tsx`, and `SURFACE_HOME` in `tests/e2e/helpers.ts`.
+- For N5: **`ScenePanel`'s optimistic-draft pattern and the editor's `reloadToken` both
+  matter here.** Inserting AI prose replaces the document underneath the editor exactly
+  the way a snapshot restore does — call `onProseReplaced`/bump the token, or the next
+  keystroke writes the pre-insertion text back over it.
+- `snapshotScene(sceneId, 'pre-ai')` already exists and is never pruned. Call it before
+  every AI insertion; that is the whole safety net for beats.
+- The presence map in `usePlanData.ts` is where a new "scene knows about entity X" source
+  goes — it already ranks asserted > summary > extracted.

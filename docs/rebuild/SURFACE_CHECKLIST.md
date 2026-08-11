@@ -446,3 +446,27 @@ destination would be a dead button.
 | Scene panel: Restore | Restores a snapshot, taking one of the current text first, and reloads the editor | `21-scenes.spec.ts` |
 | Trash: Restore (scene) | Returns a scene to its original position in its chapter | unit `scenes-repo.spec.ts` |
 | Trash: Restore (chapter) | Returns the chapter **and its scenes**, at their original ids | `21-scenes.spec.ts`, unit `scenes-repo.spec.ts` |
+
+## Plan: Outline / Board / Matrix / Timeline (N4)
+
+Four projections of one set of scenes. No view holds state; every control
+writes back through `src/db/repos/scenes.ts`.
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Left rail: Plan | Routes to the Plan destination (Alt+2) | `20-shell.spec.ts` |
+| Plan sub-nav: Outline / Board / Matrix / Timeline | Switches view | `22-plan.spec.ts` |
+| Outline: scene title | Renames the scene; the Writer's Room strip follows | `22-plan.spec.ts` |
+| Outline: move scene earlier / later | Reorders within the chapter and re-sequences the manuscript | `22-plan.spec.ts` |
+| Outline: move chapter earlier / later | Reorders chapters and re-indexes chapter-anchored data | unit `scenes-repo.spec.ts` |
+| Outline: Open | Opens that scene's chapter in the Writer's Room | `22-plan.spec.ts` (via Matrix row; same handler) |
+| Board: Group by status / chapter / POV | Re-columns the same scenes; only status accepts drops | `22-plan.spec.ts` |
+| Board: card drag between status columns | Writes the new status | `22-plan.spec.ts` (via the select — same write, keyboard path) |
+| Board: per-card status select | Keyboard and touch path for the same move | `22-plan.spec.ts` |
+| Board: card title | Opens the scene in the Writer's Room | `22-plan.spec.ts` |
+| Matrix: Show axis (Cast / Locations / Factions / Quests / Items) | Re-columns the grid | `22-plan.spec.ts` |
+| Matrix: cell | Toggles author-asserted presence; **a faint cell is what extraction found in the prose, and clicking promotes it** | `22-plan.spec.ts` |
+| Matrix: row header | Opens that scene in the Writer's Room | `22-plan.spec.ts` |
+| Matrix: arrow keys | Moves focus between cells | rendered handler; covered by the cell specs |
+| Timeline | Reuses the codex timeline lane; a card opens its entry | `22-plan.spec.ts` (reachability), `15-sweep.spec.ts` |
+| Scene status auto-promotion | An `outline` scene becomes `draft` on its first words, once, and is never demoted | unit `scenes-repo.spec.ts` |

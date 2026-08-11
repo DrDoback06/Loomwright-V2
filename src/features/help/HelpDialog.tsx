@@ -35,6 +35,15 @@ const HELP: Record<HelpRouteId, HelpEntry> = {
       'Compose builds a brief from your codex; with a provider key it can draft prose you can insert.',
     ],
   },
+  plan: {
+    title: 'Plan',
+    points: [
+      'Four views over the same scenes — nothing here is a separate copy of your book.',
+      'Outline is the shape; Board sorts by status, act or POV; Matrix shows who and what is in every scene.',
+      'A faint Matrix cell is something extraction found in your prose. Click it to make it yours.',
+      'Every scene opens in the Writer\u2019s Room from any view.',
+    ],
+  },
   codex: {
     title: 'Codex',
     points: [

@@ -17,6 +17,9 @@ export async function bootWithProject(page: Page, name = 'The Hollow Crown') {
  * suite survive the navigation change untouched. */
 const SURFACE_HOME: { name: string; dest: string; sub: string }[] = [
   { name: "Writer's Room", dest: 'Write', sub: '' },
+  { name: 'Outline', dest: 'Plan', sub: 'Outline' },
+  { name: 'Board', dest: 'Plan', sub: 'Board' },
+  { name: 'Matrix', dest: 'Plan', sub: 'Matrix' },
   { name: 'Home', dest: 'Insights', sub: 'Overview' },
   { name: 'Today', dest: 'Insights', sub: 'Today' },
   { name: 'Review', dest: 'Insights', sub: 'Review' },

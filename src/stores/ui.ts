@@ -34,12 +34,11 @@ export type PalettePurpose = 'search' | 'merge-target';
  * palette commands, toast actions and specs name them. `setRoute`
  * normalises a legacy id into its destination plus sub-view, so nothing
  * had to be rewritten to move a surface.
- *
- * `plan` is deliberately absent until N4: scenes do not exist yet, so a
- * Plan destination would be a dead button. */
+ */
 export type RouteId =
   // destinations
   | 'write'
+  | 'plan'
   | 'codex'
   | 'insights'
   | 'worlds'
@@ -60,6 +59,7 @@ export type RouteId =
 
 /** Sub-views inside the gathering destinations. */
 export type WorldsView = 'atlas' | 'tangle' | 'trees';
+export type PlanView = 'outline' | 'board' | 'matrix' | 'timeline';
 export type InsightsView = 'overview' | 'today' | 'review';
 
 /** Legacy route → the destination that now owns it. Routes absent from
@@ -83,6 +83,7 @@ interface UiState {
   route: RouteId;
   worldsView: WorldsView;
   insightsView: InsightsView;
+  planView: PlanView;
   /** Which entity type the 'codex' route shows. */
   codexType: EntityType;
   /** Command palette (Ctrl/Cmd+K) visibility. */
@@ -101,6 +102,7 @@ interface UiState {
   toggleTheme: () => void;
   setRoute: (route: RouteId) => void;
   setWorldsView: (view: WorldsView) => void;
+  setPlanView: (view: PlanView) => void;
   setInsightsView: (view: InsightsView) => void;
   setCodexType: (type: EntityType) => void;
   setPaletteOpen: (open: boolean) => void;
@@ -161,6 +163,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   route: 'insights',
   worldsView: 'atlas',
   insightsView: 'overview',
+  planView: 'outline',
   codexType: 'cast',
   setTheme: (theme) => {
     applyTheme(theme);
@@ -185,6 +188,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ route: alias.dest });
   },
   setWorldsView: (worldsView) => set({ route: 'worlds', worldsView }),
+  setPlanView: (planView) => set({ route: 'plan', planView }),
   setInsightsView: (insightsView) => set({ route: 'insights', insightsView }),
   setCodexType: (type) => set({ codexType: type }),
   paletteOpen: false,

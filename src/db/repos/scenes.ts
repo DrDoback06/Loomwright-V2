@@ -156,7 +156,18 @@ export async function saveSceneDoc(
   const scene = await db.scenes.get(id);
   if (!scene) return;
   await maybeIntervalSnapshot(scene);
-  await db.scenes.update(id, { doc, paragraphs, wordCount, updatedAt: Date.now() });
+  await db.scenes.update(id, {
+    doc,
+    paragraphs,
+    wordCount,
+    // A scene with prose in it is not an outline any more. Promote once,
+    // on the first real words, and never again: this is the only status
+    // transition the app makes on the author's behalf, and it exists so
+    // the Board is useful on day one rather than a column of "Outline"
+    // that everyone has to hand-correct. Nothing is ever demoted.
+    ...(scene.status === 'outline' && wordCount > 0 ? { status: 'draft' as const } : {}),
+    updatedAt: Date.now(),
+  });
   await chapterRollup(scene.chapterId);
 }
 

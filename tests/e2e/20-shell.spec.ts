@@ -7,7 +7,7 @@ import { bootWithProject, openNav } from './helpers';
 // the canvases are sub-views, and everything else is one palette away —
 // on the phone as well as the desktop.
 
-const DESTINATIONS = ['Write', 'Codex', 'Insights', 'Worlds'];
+const DESTINATIONS = ['Write', 'Plan', 'Codex', 'Insights', 'Worlds'];
 
 test.describe('shell: destinations', () => {
   test('the four destinations are reachable and mark themselves current', async ({ page }) => {
@@ -69,11 +69,11 @@ test.describe('shell: destinations', () => {
     await expect(page.getByRole('heading', { name: /Locations/i }).first()).toBeVisible();
   });
 
-  test('Alt+1..4 jump between destinations', async ({ page }) => {
+  test('Alt+1..5 jump between destinations', async ({ page }) => {
     await bootWithProject(page);
     const nav = page.getByRole('navigation', { name: 'Workspace' });
 
-    await page.keyboard.press('Alt+4');
+    await page.keyboard.press('Alt+5');
     await expect(nav.getByRole('button', { name: 'Worlds', exact: true })).toHaveAttribute(
       'aria-current',
       'page'
@@ -115,7 +115,7 @@ test.describe('shell: command palette modes', () => {
     await page.keyboard.press('ControlOrMeta+k');
     const palette = page.getByTestId('command-palette');
     await palette.getByLabel('Palette search').fill('>Go to Worlds');
-    await expect(palette.locator('kbd', { hasText: 'Alt+4' })).toBeVisible();
+    await expect(palette.locator('kbd', { hasText: 'Alt+5' })).toBeVisible();
   });
 
   test('a title match outranks a subtitle match', async ({ page }) => {

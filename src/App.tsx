@@ -10,6 +10,7 @@ import { useUiStore } from '@/stores/ui';
 import { CommandPalette } from '@/features/search/CommandPalette';
 import { HelpDialog } from '@/features/help/HelpDialog';
 import { CodexSurface } from '@/features/codex/CodexSurface';
+import { PlanSurface } from '@/features/plan/PlanSurface';
 import { InsightsSurface } from '@/features/insights/InsightsSurface';
 import { WorldsSurface } from '@/features/worlds/WorldsSurface';
 import { EntityEditorDrawer } from '@/features/codex/EntityEditorDrawer';
@@ -36,6 +37,8 @@ function MainSurface() {
     case 'write':
     case 'writers-room':
       return <WritersRoom />;
+    case 'plan':
+      return <PlanSurface />;
     case 'codex':
       return <CodexSurface />;
     case 'insights':
