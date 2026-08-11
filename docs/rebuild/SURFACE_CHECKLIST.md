@@ -425,3 +425,24 @@ destination would be a dead button.
 | Palette recents | Idle palette floats the last six run commands to the top | localStorage-backed; covered by the mode spec's idle assertion |
 | Write empty state: Paste a chapter → | Routes to Import & Extract; states no AI key is needed | `20-shell.spec.ts`, `03-writers-room.spec.ts` |
 | Write empty state: + Start from blank | Creates the first chapter | `03-writers-room.spec.ts` |
+
+## Acts › Chapters › Scenes (N3)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Scene strip: scene tab | Switches the editor to that scene; shows its status glyph and word count | `21-scenes.spec.ts` |
+| Scene strip: + Scene | Appends a scene to the chapter and opens it | `21-scenes.spec.ts` |
+| Scene head: title | Renames the scene, live | `21-scenes.spec.ts` (via the strip label) |
+| Scene head: + Insert scene | Inserts immediately after this one, shifting siblings | unit `scenes-repo.spec.ts` |
+| Scene head: Delete scene | Moves the scene to trash; disabled on a chapter's last scene | `21-scenes.spec.ts` |
+| Writer's Room: Scene | Toggles the scene details panel (a sheet over the prose on phones) | `21-scenes.spec.ts` |
+| Scene panel: Summary | Saves the scene summary — the unit `storySoFar()` will send instead of prose | `21-scenes.spec.ts` |
+| Scene panel: Status | outline / draft / revised / final; the Board's default columns | `21-scenes.spec.ts` |
+| Scene panel: POV character / POV mode | Sets the POV the Matrix axis and the balance chart read | unit `scenes-repo.spec.ts` |
+| Scene panel: Location | Sets the scene's place | unit `scenes-repo.spec.ts` |
+| Scene panel: Word target | Per-scene target for the progress rings in N13 | `21-scenes.spec.ts` |
+| Scene panel: Let AI read this scene | Excludes the scene from every AI context when off | `21-scenes.spec.ts` |
+| Scene panel: Save point | Takes a manual snapshot | `21-scenes.spec.ts` |
+| Scene panel: Restore | Restores a snapshot, taking one of the current text first, and reloads the editor | `21-scenes.spec.ts` |
+| Trash: Restore (scene) | Returns a scene to its original position in its chapter | unit `scenes-repo.spec.ts` |
+| Trash: Restore (chapter) | Returns the chapter **and its scenes**, at their original ids | `21-scenes.spec.ts`, unit `scenes-repo.spec.ts` |

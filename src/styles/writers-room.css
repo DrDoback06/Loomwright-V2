@@ -401,3 +401,160 @@
   color: #9c3a2e;
   font-weight: 700;
 }
+
+/* ---------------------------------------------------------------------
+   Scenes (N3)
+   A chapter is a container; the prose lives in its scenes. The strip
+   sits under the chapter tabs so the hierarchy reads top-down:
+   chapter, then scene, then the page.
+   --------------------------------------------------------------------- */
+.lw-scenestrip {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-8);
+  border-bottom: 1px solid var(--line-1);
+  background: var(--bg-app);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.lw-scenestrip::-webkit-scrollbar { display: none; }
+
+.lw-scenetab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--density-control);
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-pill);
+  background: var(--bg-paper-2);
+  color: var(--ink-3);
+  font: inherit;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-move),
+              color var(--motion-fast) var(--ease-move),
+              border-color var(--motion-fast) var(--ease-move);
+}
+.lw-scenetab:hover { background: var(--bg-tint); color: var(--ink-1); }
+.lw-scenetab--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink-1);
+}
+.lw-scenetab__num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+}
+.lw-scenetab--active .lw-scenetab__num { color: var(--ink-2); }
+.lw-scenetab__title { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
+.lw-scenetab__status { color: var(--ink-4); }
+.lw-scenetab__words {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+}
+.lw-scenetab--new { border-style: dashed; color: var(--ink-4); }
+
+.lw-scenehead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-8) 0;
+  flex-wrap: wrap;
+}
+.lw-scenehead__pos {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tr-eyebrow);
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.lw-scenehead__title {
+  flex: 1;
+  min-width: 12ch;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: none;
+  color: var(--ink-1);
+  font: inherit;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-med);
+  padding: var(--sp-2) 0;
+}
+.lw-scenehead__title:hover { border-bottom-color: var(--line-2); }
+.lw-scenehead__title:focus { border-bottom-color: var(--accent); outline: none; }
+
+/* The scene details panel sits beside the manuscript, like the notes
+   rail — same column model, so the two can be open together. */
+.lw-scenepanel {
+  width: var(--panel-w-default);
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: var(--sp-6) var(--sp-8);
+  border-left: 1px solid var(--line-1);
+  background: var(--bg-paper-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+.lw-scenepanel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.lw-scenepanel__historyhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.lw-snapshots {
+  list-style: none;
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.lw-snapshot {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--sp-1) var(--sp-4);
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-3);
+  background: var(--bg-paper);
+}
+.lw-snapshot__label { font-size: var(--fs-xs); color: var(--ink-1); }
+.lw-snapshot__meta {
+  grid-column: 1;
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.lw-snapshot .lw-btn { grid-row: 1 / span 2; grid-column: 2; }
+
+@media (max-width: 720px) {
+  /* On a phone the panel is a sheet over the manuscript rather than a
+     column beside it: there is no width to spare, and half-covering the
+     prose leaves the editor reachable but unusable. */
+  .lw-scenepanel {
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    width: 100%;
+    z-index: var(--z-panel);
+    border-left: 0;
+    border-top: 1px solid var(--line-1);
+    padding-bottom: calc(var(--sp-14) + env(safe-area-inset-bottom));
+  }
+  .lw-scenehead { padding: var(--sp-4) var(--sp-6) 0; }
+  .lw-scenestrip { padding: var(--sp-3) var(--sp-6); }
+}

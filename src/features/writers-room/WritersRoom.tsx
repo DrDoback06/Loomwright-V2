@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import type { Content } from '@tiptap/core';
-import type { Chapter } from '@/db/types';
+import type { Chapter, Scene } from '@/db/types';
 import StarterKit from '@tiptap/starter-kit';
 import {
   createChapter,
@@ -12,8 +12,8 @@ import {
   moveChapter,
   refreshChapterLabels,
   renameChapter,
-  saveChapterDoc,
 } from '@/db/repos/chapters';
+import { createScene, getScene, listScenesInChapter, saveSceneDoc } from '@/db/repos/scenes';
 import { db } from '@/db/schema';
 import { extractChapter } from '@/services/extraction/session';
 import { deltaFromCandidates } from '@/services/intelligence/session';
@@ -30,6 +30,8 @@ import { MentionHighlights } from './mention-highlights';
 import { Toolbar } from './Toolbar';
 import { NotesMargin } from './NotesMargin';
 import { ComposePanel } from './ComposePanel';
+import { SceneHead, SceneStrip } from './SceneStrip';
+import { ScenePanel } from './ScenePanel';
 
 /** Hard ceiling on how long typed text may sit unwritten. The 600ms debounce
  * still governs the common case (a pause commits immediately); this only binds
@@ -49,6 +51,14 @@ export function WritersRoom() {
   );
 
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
+  const scenes = useLiveQuery(
+    async () => (activeChapterId ? listScenesInChapter(activeChapterId) : ([] as Scene[])),
+    [activeChapterId],
+    null
+  );
+  const activeScene = scenes?.find((s) => s.id === activeSceneId) ?? null;
+  const [metaOpen, setMetaOpen] = useState(false);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'idle' | 'error'>('idle');
   // Monotonic count of COMPLETED saves — a deterministic signal for tests
   // and future sync features ("has everything since X been written?").
@@ -67,7 +77,11 @@ export function WritersRoom() {
     if (projectId) void resolveProvider(projectId).then((c) => setAiReady(!!c));
   }, [projectId]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loadedChapterRef = useRef<string | null>(null);
+  const loadedSceneRef = useRef<string | null>(null);
+  /** Bumped when the active scene's prose is replaced from outside the
+   * editor (a snapshot restore today; AI insertion in N5). */
+  const [reloadToken, setReloadToken] = useState(0);
+  const loadedTokenRef = useRef(0);
   /** When the current unsaved burst started. A debounce that re-arms on every
    * keystroke never fires while someone is actually typing, so this is the
    * ceiling that guarantees a write. */
@@ -91,8 +105,33 @@ export function WritersRoom() {
     }
   }, [chapters, activeChapterId, pendingChapterId]);
 
+  // Let go of the scene the instant the chapter changes.
+  //
+  // `useLiveQuery` returns its PREVIOUS value while re-running, so for a
+  // moment after switching chapters the scene list still describes the old
+  // chapter — and the old scene id is legitimately in it. Without this,
+  // the editor stayed pointed at the previous chapter's scene and anything
+  // typed in that window was written into it. Clearing here means the
+  // adoption effect below is the only thing that ever chooses a scene.
+  useEffect(() => {
+    setActiveSceneId(null);
+  }, [activeChapterId]);
+
+  // Adopt the first scene of the chapter. A chapter always has at least
+  // one — `createChapter` makes it and `ensureScenesForProject` backfills
+  // anything older — so this never leaves the editor with nowhere to write.
+  useEffect(() => {
+    if (!scenes || !activeChapterId) return;
+    // Ignore a list that still belongs to the chapter we just left.
+    if (scenes.length && scenes[0].chapterId !== activeChapterId) return;
+    if (scenes.length === 0) return;
+    if (!activeSceneId || !scenes.some((s) => s.id === activeSceneId)) {
+      setActiveSceneId(scenes[0].id);
+    }
+  }, [scenes, activeSceneId, activeChapterId]);
+
   const persist = useCallback(
-    (editor: Editor, chapterId: string) => {
+    (editor: Editor, sceneId: string) => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       setSaveState('saving');
       if (burstStartedAt.current == null) burstStartedAt.current = Date.now();
@@ -105,19 +144,20 @@ export function WritersRoom() {
         saveTimer.current = null;
         burstStartedAt.current = null;
         // The document is read HERE, 600ms after the keystroke that armed the
-        // timer, but `chapterId` was captured back then. If the editor has been
-        // re-pointed at another chapter in between, writing now would stamp the
-        // new chapter's text onto the old chapter's row — unrecoverably, since
-        // saveChapterDoc keeps no audit entry. Drop the write instead; the
-        // chapter-load effect already flushed anything genuinely pending.
-        if (loadedChapterRef.current !== chapterId) {
+        // timer, but `sceneId` was captured back then. If the editor has been
+        // re-pointed at another scene in between, writing now would stamp the
+        // new scene's text onto the old scene's row — and while snapshots make
+        // that recoverable, they only fire once per interval, so it could still
+        // cost real work. Drop the write instead; the scene-load effect already
+        // flushed anything genuinely pending.
+        if (loadedSceneRef.current !== sceneId) {
           setSaveState('saved');
           return;
         }
         const doc = editor.getJSON();
         const paragraphs = paragraphsFromDoc(doc);
         const words = countWords(paragraphs);
-        void saveChapterDoc(chapterId, doc, paragraphs, words).then(
+        void saveSceneDoc(sceneId, doc, paragraphs, words).then(
           () => {
             setWordCount(words);
             // Only report "saved" if no newer edit re-armed the debounce —
@@ -132,7 +172,7 @@ export function WritersRoom() {
             // text is still in the editor and can be copied out.
             setSaveState('error');
             toast(
-              `Could not save this chapter: ${
+              `Could not save this scene: ${
                 err instanceof Error ? err.message : 'the browser refused the write'
               }. Your text is still on screen — copy it somewhere safe.`,
               { kind: 'error' }
@@ -144,29 +184,28 @@ export function WritersRoom() {
     []
   );
 
-  const flushSave = useCallback(async (editor: Editor, chapterId: string) => {
+  const flushSave = useCallback(async (editor: Editor, sceneId: string) => {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
     burstStartedAt.current = null;
-    // Same identity guard as persist. Callers pass `activeChapterId`, which
+    // Same identity guard as persist. Callers pass `activeSceneId`, which
     // changes the instant a tab is clicked — while the editor still holds the
-    // previous chapter's document until the async load completes. Writing then
-    // stamps the wrong (or, on a fresh mount, an empty) doc onto a real
-    // chapter with no audit entry to recover from.
-    if (loadedChapterRef.current !== chapterId) return;
+    // previous scene's document until the async load completes. Writing then
+    // stamps the wrong (or, on a fresh mount, an empty) doc onto a real scene.
+    if (loadedSceneRef.current !== sceneId) return;
     const doc = editor.getJSON();
     const paragraphs = paragraphsFromDoc(doc);
     const words = countWords(paragraphs);
     try {
-      await saveChapterDoc(chapterId, doc, paragraphs, words);
+      await saveSceneDoc(sceneId, doc, paragraphs, words);
     } catch (err) {
       // Callers include tab-hide and pagehide handlers that fire this with
       // `void`, so an uncaught rejection here loses the text in silence.
       setSaveState('error');
       toast(
-        `Could not save this chapter: ${
+        `Could not save this scene: ${
           err instanceof Error ? err.message : 'the browser refused the write'
         }. Your text is still on screen — copy it somewhere safe.`,
         { kind: 'error' }
@@ -187,43 +226,54 @@ export function WritersRoom() {
       },
     },
     onUpdate: ({ editor }) => {
-      if (loadedChapterRef.current) persist(editor, loadedChapterRef.current);
+      if (loadedSceneRef.current) persist(editor, loadedSceneRef.current);
     },
   });
 
-  // Load the active chapter's document into the editor. Owns
-  // loadedChapterRef exclusively; flushes the outgoing chapter's pending
-  // save before content swaps so no keystroke is ever dropped.
+  // Load the active SCENE's document into the editor. Owns loadedSceneRef
+  // exclusively; flushes the outgoing scene's pending save before content
+  // swaps so no keystroke is ever dropped.
   useEffect(() => {
-    if (!editor || !activeChapterId) return;
-    if (loadedChapterRef.current === activeChapterId) return;
+    if (!editor) return;
+    if (!activeSceneId) {
+      // Between chapters. Drop the pointer so `onUpdate` cannot persist
+      // into the scene we have just navigated away from.
+      loadedSceneRef.current = null;
+      return;
+    }
+    // A reload token forces a re-read of the SAME scene. Restoring a
+    // snapshot replaces the row underneath the editor; without this the
+    // editor kept showing the newer text and the next keystroke wrote it
+    // straight back, quietly undoing the restore.
+    if (loadedSceneRef.current === activeSceneId && loadedTokenRef.current === reloadToken) return;
+    loadedTokenRef.current = reloadToken;
     let cancelled = false;
     void (async () => {
-      const outgoing = loadedChapterRef.current;
+      const outgoing = loadedSceneRef.current;
       if (outgoing && saveTimer.current) {
         await flushSave(editor, outgoing);
       }
-      const chapter = await getChapter(activeChapterId);
-      if (cancelled || !chapter || !editor || editor.isDestroyed) return;
-      loadedChapterRef.current = activeChapterId;
-      editor.commands.setContent((chapter.doc as Content) ?? '');
-      setWordCount(chapter.wordCount);
-      setSaveState(chapter.doc ? 'saved' : 'idle');
+      const scene = await getScene(activeSceneId);
+      if (cancelled || !scene || !editor || editor.isDestroyed) return;
+      loadedSceneRef.current = activeSceneId;
+      editor.commands.setContent((scene.doc as Content) ?? '');
+      setWordCount(scene.wordCount);
+      setSaveState(scene.doc ? 'saved' : 'idle');
     })();
     return () => {
       cancelled = true;
     };
-  }, [editor, activeChapterId, flushSave]);
+  }, [editor, activeSceneId, reloadToken, flushSave]);
 
   // Flush pending save when leaving — and on tab hide/close, so a
   // reload or phone app-switch inside the debounce window never loses
   // typed text.
   const editorRef = useRef<Editor | null>(null);
-  const activeChapterRef = useRef<string | null>(null);
+  const activeSceneRef = useRef<string | null>(null);
   useEffect(() => {
     const flushNow = () => {
-      if (saveTimer.current && editorRef.current && activeChapterRef.current) {
-        void flushSave(editorRef.current, activeChapterRef.current);
+      if (saveTimer.current && editorRef.current && activeSceneRef.current) {
+        void flushSave(editorRef.current, activeSceneRef.current);
       }
     };
     const onVisibility = () => {
@@ -274,13 +324,13 @@ export function WritersRoom() {
     // The editor may still be showing the previous chapter while the async
     // load runs. Extracting now would scan the wrong text, and flushSave
     // correctly refuses to write — so say so rather than act on stale prose.
-    if (loadedChapterRef.current !== activeChapterId) {
+    if (!activeSceneId || loadedSceneRef.current !== activeSceneId) {
       toast('Still loading that chapter — try again in a moment.', {});
       return;
     }
     setExtracting(true);
     try {
-      await flushSave(editor, activeChapterId);
+      await flushSave(editor, activeSceneId);
       const chapter = await getChapter(activeChapterId);
       if (!chapter) return;
       const summary = await extractChapter(chapter);
@@ -318,18 +368,18 @@ export function WritersRoom() {
     } finally {
       setExtracting(false);
     }
-  }, [editor, activeChapterId, flushSave, setRoute, stageDelta]);
+  }, [editor, activeChapterId, activeSceneId, flushSave, setRoute, stageDelta]);
 
   const runDeep = useCallback(async () => {
     if (!editor || !activeChapterId || !projectId) return;
-    if (loadedChapterRef.current !== activeChapterId) {
+    if (!activeSceneId || loadedSceneRef.current !== activeSceneId) {
       toast('Still loading that chapter — try again in a moment.', {});
       return;
     }
     setDeepConfirming(false);
     setExtracting(true);
     try {
-      await flushSave(editor, activeChapterId);
+      await flushSave(editor, activeSceneId);
       const chapter = await getChapter(activeChapterId);
       const config = await resolveProvider(projectId);
       if (!chapter || !config) return;
@@ -351,7 +401,7 @@ export function WritersRoom() {
     } finally {
       setExtracting(false);
     }
-  }, [editor, activeChapterId, projectId, flushSave, setRoute]);
+  }, [editor, activeChapterId, activeSceneId, projectId, flushSave, setRoute]);
 
   const deepClick = useCallback(async () => {
     if (!projectId) return;
@@ -379,7 +429,7 @@ export function WritersRoom() {
   );
 
   editorRef.current = editor;
-  activeChapterRef.current = activeChapterId;
+  activeSceneRef.current = activeSceneId;
 
   if (!projectId || chapters === null) return null;
 
@@ -421,9 +471,32 @@ export function WritersRoom() {
         </button>
       </div>
 
+      {activeChapter && scenes && scenes.length > 0 ? (
+        <SceneStrip
+          projectId={projectId}
+          chapterId={activeChapter.id}
+          scenes={scenes}
+          activeSceneId={activeSceneId}
+          onSelect={setActiveSceneId}
+        />
+      ) : null}
+
       {activeChapter && editor ? (
         <div className="lw-wroom__body">
           <div className="lw-wroom__editorcol">
+            {activeScene && scenes ? (
+              <SceneHead
+                scene={activeScene}
+                index={scenes.findIndex((s) => s.id === activeScene.id)}
+                sceneCount={scenes.length}
+                onAddAfter={() => {
+                  void createScene(projectId, activeChapter.id, undefined, activeScene.id).then(
+                    (scene) => setActiveSceneId(scene.id)
+                  );
+                }}
+                onDeleted={() => setActiveSceneId(null)}
+              />
+            ) : null}
             <div className="lw-wroom__chapterhead">
               <input
                 className="lw-wroom__title"
@@ -504,6 +577,14 @@ export function WritersRoom() {
                 <button
                   type="button"
                   className="lw-btn"
+                  aria-pressed={metaOpen}
+                  onClick={() => setMetaOpen((o) => !o)}
+                >
+                  Scene
+                </button>
+                <button
+                  type="button"
+                  className="lw-btn"
                   aria-pressed={notesOpen}
                   onClick={() => setNotesOpen((o) => !o)}
                 >
@@ -573,6 +654,13 @@ export function WritersRoom() {
                   .run();
                 setComposeOpen(false);
               }}
+            />
+          )}
+          {metaOpen && activeScene && (
+            <ScenePanel
+              scene={activeScene}
+              onClose={() => setMetaOpen(false)}
+              onProseReplaced={() => setReloadToken((n) => n + 1)}
             />
           )}
           {notesOpen && (

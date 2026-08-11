@@ -5,6 +5,7 @@ import { getOrCreateMap, placePin } from '@/db/repos/atlas';
 import { createGraph, addNode, addEdge } from '@/db/repos/graphs';
 import { buildChapterDoc } from '@/services/manuscript-import';
 import { extractChapter } from '@/services/extraction/session';
+import { ensureScenesForProject } from '@/db/repos/scenes';
 import type { Chapter } from '@/db/types';
 import { newId } from '@/lib/id';
 
@@ -115,6 +116,9 @@ export async function createSampleProject(): Promise<string> {
     await db.chapters.add(chapter);
     await extractChapter(chapter);
   }
+  // Chapters written in bulk skip createChapter, so give them their
+  // scenes here rather than waiting for the next project load.
+  await ensureScenesForProject(projectId);
 
   return projectId;
 }

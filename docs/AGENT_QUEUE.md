@@ -3,16 +3,16 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N3 · step 6 of 8
-**Last verified green:** N2 complete — lint ✅ tsc ✅ build ✅ vitest 218 ✅ playwright 164 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N4 · step 1 of 7
+**Last verified green:** N3 complete — lint ✅ tsc ✅ build ✅ vitest 233 ✅ playwright 176 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
 |---|---|---|---|
 | N1 | Studio design system | 6 | ✅ 6/6 |
 | N2 | Four destinations + palette + empty states | 6 | ✅ 6/6 |
-| N3 | Acts › Chapters › Scenes + snapshots | 8 | 🔄 5/8 |
-| N4 | Plan: Outline / Board / Matrix / Timeline | 7 | ⬜ |
+| N3 | Acts › Chapters › Scenes + snapshots | 8 | ✅ 8/8 |
+| N4 | Plan: Outline / Board / Matrix / Timeline | 7 | 🔄 0/7 |
 | N5 | Beats, inline AI, sections, focus mode | 8 | ⬜ |
 | N6 | Typed `@` mentions | 4 | ⬜ |
 | N7 | Context engine + policy + tracking + budget rail | 7 | ⬜ |
@@ -62,20 +62,33 @@ surface genuinely works. Plan joins the rail in N4.
 3. `openNav` was matching a regex label by stringifying it. It now tests the regex against
    a table of known surface names, which is what makes `/Import & Extract|Handoff/` work.
 
-## N3 — Acts › Chapters › Scenes
+## N3 — Acts › Chapters › Scenes ✅
 
 - [x] 1. `Act` / `Scene` / `SceneSnapshot` types in `src/db/types.ts`; `Chapter.actId`
 - [x] 2. Dexie v9 + the chapter→scene upgrade (chapter `doc` left in place, so a rollback loses no text)
 - [x] 3. `src/db/repos/scenes.ts` — acts, scenes, ordering, `moveScene` (incl. re-anchoring occurrences across chapters), trash, audit
 - [x] 4. Snapshot policy: one `interval` per 3-min window, always `pre-ai` / `pre-import`, keep last 20 + one per day; `pre-ai`/`pre-import` never pruned; restore takes its own snapshot first
 - [x] 5. `chapterRollup()` + `ensureScenesForProject()` backfill on project load
-- [ ] 6. Writer's Room: scene list, scene switcher, scene metadata drawer, snapshot history  ← IN PROGRESS
-- [ ] 7. Ripple: extraction/session, chapter-awareness, search, archive (v3, accepts v2), world-bible, manuscript-import, generate/apply
-- [ ] 8. `tests/unit/scenes-repo.spec.ts` incl. the v8→v9 migration on a seeded DB; e2e `21-scenes.spec.ts`
+- [x] 6. Writer's Room: `SceneStrip`, `SceneHead`, `ScenePanel` (summary, status, POV, location, target, AI visibility, snapshot history). The editor is pointed at a **scene**; all the existing save-safety machinery was re-keyed rather than rewritten.
+- [x] 7. Ripple: `chapterRollup` meant extraction, chapter-awareness, search, world-bible and the speed reader needed **no changes at all**. Archive is v3 and still imports v2. The five bulk chapter writers (sample project, onboarding, generate/apply, intelligence/apply, project load) call `ensureScenesForProject`.
+- [x] 8. `tests/unit/scenes-repo.spec.ts` — 14 tests including a genuine v8→v9 upgrade built from a hand-made v8 database; e2e `21-scenes.spec.ts` 12/12 on both projects
+
+**Four real bugs the work surfaced, all fixed:**
+1. **Switching chapters could write into the wrong scene.** `useLiveQuery` returns its
+   previous value while re-running, so the old chapter's scene id was still legitimately
+   in the list for a moment. The scene is now released the instant the chapter changes.
+2. **A stale closure.** `runExtraction`/`runDeep` used `activeSceneId` without it being in
+   the dependency array, so Save & Extract read `null` and refused to run.
+3. **Restoring a snapshot did not reload the editor** — the old text stayed on screen and
+   the next keystroke wrote it straight back, silently undoing the restore. A reload token
+   now forces a re-read of the same scene. **N5 needs this for AI insertion too.**
+4. **Controlled inputs fed by a live query reverted between keystrokes**, dropping
+   characters in the scene summary and making the AI-visibility checkbox appear dead.
+   `ScenePanel` keeps an optimistic draft, re-synced only on scene id change.
 
 ## N4 — Plan
 
-- [ ] 1. `usePlanData.ts` — the single shared query + derived indexes
+- [ ] 1. `usePlanData.ts` — the single shared query + derived indexes  ← IN PROGRESS
 - [ ] 2. `OutlineView.tsx` (tree, rename, drag-reorder, per-level word counts)
 - [ ] 3. `BoardView.tsx` (kanban by status / act / POV)
 - [ ] 4. `MatrixView.tsx` — Show axis switcher, sticky header + first column, arrow-key nav
@@ -178,7 +191,7 @@ surface genuinely works. Plan joins the rail in N4.
 
 ## Notes for the next run
 
-N1 and N2 are done and pushed. Start N3 step 1 — the scenes schema.
+N1, N2 and N3 are done and pushed. Start N4 step 1 — `usePlanData.ts`.
 
 Hard-won facts, in rough order of how much time they cost:
 
@@ -197,6 +210,16 @@ Hard-won facts, in rough order of how much time they cost:
   canary for any structural change — run it early, not last.
 - Appearance is stamped by `index.html` pre-paint **and** `applyTweaks()` in `main.tsx`. A
   new preference must go in both or it flashes on boot.
-- For N3 specifically: `Chapter.doc` must stay untouched by the v9 migration for one
-  release. `chapterRollup()` is what keeps extraction, search, world-bible export and the
-  speed reader working while scenes take over as the source of truth.
+- **A controlled input fed by `useLiveQuery` will fight the person typing into it.** The
+  value renders back from the database between keystrokes. Any new form panel needs the
+  optimistic-draft pattern in `ScenePanel.tsx`.
+- **`useLiveQuery` returns its previous value while re-running.** Any derived selection
+  keyed off one of its rows needs to check the row still belongs to the current parent —
+  this is what made chapter switching write into the wrong scene.
+- When you add a `useCallback` that reads new state, **check the dependency array**. A
+  stale `activeSceneId` cost a red run.
+- For N4: `Plan` must be added to the rail (`NAV_ENTRIES` in `LeftRail.tsx`), to
+  `RouteId`, to `MainSurface`, and to `SURFACE_HOME` in `tests/e2e/helpers.ts`.
+  `listScenes(projectId)` already returns scenes in `globalOrder` — that is the x-axis.
+- The Matrix's third cell source is `db.occurrences`, joined to scenes by `paragraphId`
+  (an occurrence stores `chapterId`, not `sceneId`, so join through the scene's paragraphs).

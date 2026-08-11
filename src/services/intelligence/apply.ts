@@ -2,6 +2,7 @@ import { db } from '@/db/schema';
 import { newId } from '@/lib/id';
 import { remapRefs } from '@/lib/remap';
 import { logAudit } from '@/db/repos/audit';
+import { ensureScenesForProject } from '@/db/repos/scenes';
 import type { Chapter, Entity, Link, SkillTree, TangleBoard } from '@/db/types';
 import type { EntityRef } from '@/domain/entity-types';
 import { chapterDocFromDraft } from '@/services/generate/apply';
@@ -413,6 +414,10 @@ export async function applyDelta(
       auditId = entry.id;
     }
   );
+
+  // Same reason as generate/apply: chapters written inside the
+  // transaction bypass createChapter and arrive without scenes.
+  if (record.chapterIds.length) await ensureScenesForProject(projectId);
 
   return {
     auditId,

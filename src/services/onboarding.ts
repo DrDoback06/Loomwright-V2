@@ -4,6 +4,7 @@ import { createProject } from '@/db/repos/projects';
 import { saveAiSettings } from '@/services/ai/settings';
 import { buildChapterDoc, splitManuscript } from '@/services/manuscript-import';
 import { extractChapter } from '@/services/extraction/session';
+import { ensureScenesForProject } from '@/db/repos/scenes';
 import type { StyleProfile } from '@/services/style-analysis';
 import type { Chapter } from '@/db/types';
 import { newId } from '@/lib/id';
@@ -185,6 +186,8 @@ export async function applyOnboarding(answers: OnboardingAnswers): Promise<Onboa
     await db.chapters.add(chapter);
     chapters.push(chapter);
   }
+  // Same reason as the sample project: these bypass createChapter.
+  await ensureScenesForProject(projectId);
   if (answers.runExtraction) {
     for (const chapter of chapters) {
       const summary = await extractChapter(chapter);

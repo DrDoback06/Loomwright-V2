@@ -2,6 +2,7 @@ import { db } from '@/db/schema';
 import { newId } from '@/lib/id';
 import { remapRefs } from '@/lib/remap';
 import { logAudit } from '@/db/repos/audit';
+import { ensureScenesForProject } from '@/db/repos/scenes';
 import type { Chapter, Entity, Link, SkillTree, TangleBoard } from '@/db/types';
 import type { EntityRef } from '@/domain/entity-types';
 import { bundleTitle, type BundleChapterDraft, type GenerationBundle } from './types';
@@ -228,6 +229,11 @@ export async function applyBundle(bundle: GenerationBundle): Promise<ApplyResult
       auditId = entry.id;
     }
   );
+
+  // Generated chapters are written inside the transaction rather than
+  // through createChapter, so they arrive without scenes. Outside the
+  // transaction (it writes the same tables) give them one each.
+  if (record.chapterIds.length) await ensureScenesForProject(projectId);
 
   return {
     auditId,
