@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import type { Chapter } from '@/db/types';
+import { paragraphsFromDoc } from '@/lib/prose';
 import {
   beatDelay,
   sentenceOf,
@@ -41,7 +42,14 @@ export function SpeedReaderSurface() {
   const text = useMemo(() => {
     if (sourceId === 'paste') return pasted;
     const chapter = chapters?.find((c) => c.id === sourceId);
-    return chapter ? chapter.paragraphs.map((p) => p.text).join(' ') : '';
+    // Derived from the document rather than `chapter.paragraphs`: that
+    // array now drops scenes hidden from AI, and a reading tool should
+    // read the book the author wrote, not the one a model is shown.
+    return chapter
+      ? paragraphsFromDoc(chapter.doc)
+          .map((p) => p.text)
+          .join(' ')
+      : '';
   }, [sourceId, pasted, chapters]);
 
   const beats = useMemo(() => srTokenise(text), [text]);

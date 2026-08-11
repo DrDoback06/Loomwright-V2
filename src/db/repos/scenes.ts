@@ -176,7 +176,12 @@ export async function updateSceneMeta(id: string, patch: Partial<Scene>): Promis
   const scene = await db.scenes.get(id);
   if (!scene) return;
   await db.scenes.update(id, { ...patch, updatedAt: Date.now() });
-  if (patch.title !== undefined) await chapterRollup(scene.chapterId);
+  // `aiVisible` is a rollup input, not just a stored flag — untick it and
+  // the chapter's paragraph substrate has to be rebuilt at once, or the
+  // model keeps seeing the scene until the next keystroke saves it.
+  if (patch.title !== undefined || patch.aiVisible !== undefined) {
+    await chapterRollup(scene.chapterId);
+  }
 }
 
 export async function renameScene(id: string, title: string): Promise<void> {
@@ -334,7 +339,16 @@ interface DocNode {
  * world bible, the speed reader or the archive: they all still read a
  * chapter as one document, and that document is now assembled rather than
  * typed. Scene boundaries appear as horizontal rules, which is what the
- * editor already renders as a scene break. */
+ * editor already renders as a scene break.
+ *
+ * It is also the single choke point where `scene.aiVisible` becomes real.
+ * Every AI path in the app — beats, Compose, deep extraction, the handoff
+ * pack, style analysis — reads `chapter.paragraphs`, so a scene the author
+ * has hidden contributes its `doc` (the chapter still reads as one
+ * document, and the speed reader and world bible still show the prose) and
+ * its `wordCount` (they wrote those words), but **not** its paragraphs.
+ * That array is the substrate every model sees, and this is the one filter
+ * that keeps it honest. */
 export async function chapterRollup(chapterId: string): Promise<void> {
   const chapter = await db.chapters.get(chapterId);
   if (!chapter) return;
@@ -348,7 +362,7 @@ export async function chapterRollup(chapterId: string): Promise<void> {
     if (index > 0) content.push({ type: 'horizontalRule' });
     const doc = scene.doc as DocNode | null;
     if (doc?.content?.length) content.push(...doc.content);
-    paragraphs.push(...scene.paragraphs);
+    if (scene.aiVisible !== false) paragraphs.push(...scene.paragraphs);
     wordCount += scene.wordCount;
   });
 

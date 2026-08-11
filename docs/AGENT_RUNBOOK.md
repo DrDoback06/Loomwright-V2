@@ -36,6 +36,12 @@ If e2e fails with `webServer exit code 2`, it is a build error — run `npm run 
 - Every step checked.
 - A row in `docs/rebuild/SURFACE_CHECKLIST.md` for **every** new rendered control, naming the
   spec that proves it. No dead buttons, ever.
+- **A control's spec must assert its consequence, not its storage.** "The value round-trips
+  through a reload" is necessary and never sufficient. If a control claims to change what is
+  rendered, assert the rendering; if it claims to change what is sent to a model, assert the
+  payload. A row in `SURFACE_CHECKLIST.md` naming a spec that only proves persistence is a row
+  that lies — six dead controls shipped across N1–N4 that way, including a privacy checkbox
+  that had no readers at all.
 - The new unit + e2e specs listed in the plan's verification table exist and pass.
 - Full suite green on desktop and mobile.
 - A section appended to `docs/HANDOFF.md` in the style of its §11/§12.

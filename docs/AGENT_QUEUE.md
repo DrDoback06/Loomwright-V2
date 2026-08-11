@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N5b · step 1 of 5
-**Last verified green:** N5a complete — lint ✅ tsc ✅ build ✅ vitest 246 ✅ playwright 202 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N5b · step 1 of 7 (step 0 done)
+**Last verified green:** N5b step 0 — lint ✅ tsc ✅ build ✅ vitest 251 ✅ playwright 206 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -14,7 +14,7 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N3 | Acts › Chapters › Scenes + snapshots | 8 | ✅ 8/8 |
 | N4 | Plan: Outline / Board / Matrix / Timeline | 7 | ✅ 7/7 |
 | N5a | Scene beats | 7 | ✅ 7/7 |
-| N5b | Inline rewrite, sections, focus mode | 5 | 🔄 0/5 |
+| N5b | AI visibility, acts, sections, rewrite, focus | 7 | 🔄 1/7 |
 | N6 | Typed `@` mentions | 4 | ⬜ |
 | N7 | Context engine + policy + tracking + budget rail | 7 | ⬜ |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
@@ -137,13 +137,19 @@ pending write; the database is authoritative by definition when the token moves)
 anything that calls `db.scenes.update` on the currently-loaded scene must bump the token;
 anything going through `editor.chain()` must not.
 
-## N5b — Inline rewrite, sections, focus mode
+## N5b — AI visibility, acts, sections, rewrite, focus
 
-- [ ] 1. `section.ts` node with `hiddenFromAi` / `hiddenFromWordCount`; `/note` preset  ← IN PROGRESS
-- [ ] 2. Both flags honoured — note `paragraphsFromDoc` recurses into a wrapper's content, so hidden sections need the `skipTypes` argument `lib/prose.ts` already takes
-- [ ] 3. `RewriteBubble.tsx` — Expand / Rephrase / Shorten on ≥4 selected words. **`@tiptap/react` v3 no longer exports `BubbleMenu`** — position by hand off `posToDOMRect`
-- [ ] 4. Focus mode: chrome fade after 3s typing, sentence/line/paragraph dimming, typewriter at 45%, all gated on `prefersReducedMotion()`. The `focus` tweak is **stored but never stamped** — add `data-focus` to `applyTweaks` AND the pre-paint script in `index.html`. The scroll container is `.lw-wroom__canvas`, not the window
-- [ ] 5. SURFACE_CHECKLIST rows; extend `23-beats.spec.ts`
+The throughline is **making AI-visibility real at both scales** — per scene (`aiVisible`,
+promised since N3) and per block (`hiddenFromAi`, new). They are the same feature and the
+same filter; the half-built fields ride along.
+
+- [x] 0. **`Scene.aiVisible` made real.** `chapterRollup` is the single choke point: a hidden scene contributes its `doc` and its `wordCount`, but **not** its paragraphs. `updateSceneMeta` re-rolls the chapter the instant the box is unticked. `search.ts` and `SpeedReaderSurface` re-derive from `chapter.doc` so hiding a scene from a model never hides it from its author. 5 unit tests + `24-sections.spec.ts` (2 × 2 projects).
+- [ ] 1. **Acts, reachable.** `OutlineView` act headers (create / rename / delete / assign a chapter); Act as a grouping axis on Board and Matrix. `usePlanData.chaptersByAct` already exists; `listActs` currently always returns `[]` because nothing creates one.  ← IN PROGRESS
+- [ ] 2. `section.ts` — a **full colourable** wrapper node (`content: 'block+'`) with independent `hiddenFromAi` / `hiddenFromWordCount`; `/note` inserts the yellow both-flags-on preset
+- [ ] 3. **Diverge the two derivations.** `paragraphsFromDoc` takes a predicate (keep the `skipTypes` overload; the beat exclusion must not change). `persist`/`flushSave` derive paragraphs with `HIDDEN_FROM_AI` and the count with `HIDDEN_FROM_COUNT`. **Trap:** `reanchorOccurrences` and `usePlanData.sceneOfParagraph` read `scene.paragraphs` for its *ids* — they must derive ids from the **unfiltered** `scene.doc` or occurrences orphan on a move and Matrix cells silently downgrade. Also needs the count derivation: `snapshotScene`, `appendParagraphToChapter`.
+- [ ] 4. `RewriteBubble.tsx` — Expand / Rephrase / Shorten on ≥4 selected words + `prompts/rewrite.ts`. **`@tiptap/react` v3's `BubbleMenu` moved to `@tiptap/react/menus` and drags in `@floating-ui/dom`** — position by hand off `posToDOMRect` (viewport coords: subtract the canvas rect, add its `scrollTop`). **`.lw-wroom__canvas` has no `position: relative`** today. Scope the locator: `Expand` collides with `CodexPanel` and `SceneBeatView`.
+- [ ] 5. Focus mode: chrome fade after 3s typing, sentence/line/paragraph dimming, typewriter at 45%, all gated on `prefersReducedMotion()`. The `focus` tweak is **stored but never stamped** — add `data-focus` to `applyTweaks` AND the pre-paint script in `index.html`. The scroll container is `.lw-wroom__canvas`, not the window. The dimming plugin must rebuild on **selection change**, not only `docChanged`.
+- [ ] 6. `Scene.labels` chips + `attachedRefs` entity picker in `ScenePanel`; give `--density-pad` / `--density-gap` consumers or delete them; SURFACE_CHECKLIST rows; finish `24-sections.spec.ts`
 
 ## N6 — Typed `@` mentions
 
@@ -229,7 +235,14 @@ anything going through `editor.chain()` must not.
 
 ## Notes for the next run
 
-N1–N4 and N5a are done and pushed. Start N5b step 1 — the `section` node.
+N1–N4, N5a and N5b step 0 are done and pushed. Start N5b step 1 — acts in Outline.
+
+**`chapter.paragraphs` now means something narrower than it used to.** It is *what a model
+is shown*, not *every word in the chapter*. Anything that shows the author their own text —
+search, the speed reader, the world bible, a reading view — must derive from `chapter.doc`
+via `paragraphsFromDoc` instead. Step 3 widens the same split to `scene.wordCount` vs
+`scene.paragraphs`, after which `countWords(scene.paragraphs)` will legitimately disagree
+with `scene.wordCount`. That is the contract, not a bug.
 
 Hard-won facts, in rough order of how much time they cost:
 

@@ -441,7 +441,7 @@ destination would be a dead button.
 | Scene panel: POV character / POV mode | Sets the POV the Matrix axis and the balance chart read | unit `scenes-repo.spec.ts` |
 | Scene panel: Location | Sets the scene's place | unit `scenes-repo.spec.ts` |
 | Scene panel: Word target | Per-scene target for the progress rings in N13 | `21-scenes.spec.ts` |
-| Scene panel: Let AI read this scene | Excludes the scene from every AI context when off | `21-scenes.spec.ts` |
+| Scene panel: Let AI read this scene | Excludes the scene's prose from `chapter.paragraphs` — the substrate every AI path reads — while keeping it in the word count, in the chapter document, and in local search | `24-sections.spec.ts`, unit `scenes-repo.spec.ts` |
 | Scene panel: Save point | Takes a manual snapshot | `21-scenes.spec.ts` |
 | Scene panel: Restore | Restores a snapshot, taking one of the current text first, and reloads the editor | `21-scenes.spec.ts` |
 | Trash: Restore (scene) | Returns a scene to its original position in its chapter | unit `scenes-repo.spec.ts` |

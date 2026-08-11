@@ -1,5 +1,6 @@
 import MiniSearch from 'minisearch';
 import { db } from '@/db/schema';
+import { paragraphsFromDoc } from '@/lib/prose';
 import type { EntityType } from '@/domain/entity-types';
 
 export interface SearchHit {
@@ -49,7 +50,14 @@ export async function buildSearchIndex(projectId: string) {
       kind: 'chapter',
       title: c.title,
       subtitle: `${c.wordCount.toLocaleString()} words`,
-      body: c.paragraphs.map((p) => p.text).join(' ').slice(0, 20000),
+      // Read the document, NOT `c.paragraphs`. That array is the AI
+      // substrate and deliberately omits scenes the author has hidden from
+      // models — but this is local, and it is you searching your own book.
+      // A note you cannot find is worse than useless.
+      body: paragraphsFromDoc(c.doc)
+        .map((p) => p.text)
+        .join(' ')
+        .slice(0, 20000),
     });
   }
   mini.addAll(docs);

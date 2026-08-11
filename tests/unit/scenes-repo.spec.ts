@@ -112,6 +112,80 @@ describe('scenes: the chapter rollup', () => {
   });
 });
 
+describe('scenes: "Let AI read this scene"', () => {
+  /** The checkbox has promised since N3 that unticking it keeps a scene out
+   * of every AI prompt. `chapter.paragraphs` is what every AI path reads —
+   * beats, Compose, deep extraction, the handoff pack, style analysis — so
+   * this is where the promise is either kept or broken. */
+  async function chapterWithAHiddenScene() {
+    const chapter = await seed();
+    const open = (await listScenesInChapter(chapter.id))[0];
+    const hidden = await createScene(PROJECT, chapter.id, 'Notes to self');
+
+    await saveSceneDoc(open.id, doc('The ferry did not come.', 'v1'), [
+      { id: 'v1', text: 'The ferry did not come.' },
+    ], 5);
+    await saveSceneDoc(hidden.id, doc('Maybe Marrow is the traitor.', 'h1'), [
+      { id: 'h1', text: 'Maybe Marrow is the traitor.' },
+    ], 5);
+    await updateSceneMeta(hidden.id, { aiVisible: false });
+    return { chapter, open, hidden };
+  }
+
+  it('keeps a hidden scene out of the substrate every AI path reads', async () => {
+    const { chapter } = await chapterWithAHiddenScene();
+    const rolled = (await db.chapters.get(chapter.id))!;
+
+    expect(rolled.paragraphs.map((p) => p.id)).toEqual(['v1']);
+    expect(rolled.paragraphs.map((p) => p.text).join(' ')).not.toContain('traitor');
+  });
+
+  it('still counts the words, because the author still wrote them', async () => {
+    const { chapter } = await chapterWithAHiddenScene();
+    expect((await db.chapters.get(chapter.id))!.wordCount).toBe(10);
+  });
+
+  it('leaves the prose in the chapter document, so it is still readable', async () => {
+    const { chapter } = await chapterWithAHiddenScene();
+    // Search, the speed reader and the world bible read the document. A
+    // scene you hid from a model is not a scene you hid from yourself.
+    const rolled = (await db.chapters.get(chapter.id))!;
+    expect(JSON.stringify(rolled.doc)).toContain('Maybe Marrow is the traitor.');
+  });
+
+  it('takes effect the moment the box is unticked, not on the next keystroke', async () => {
+    const { chapter, hidden } = await chapterWithAHiddenScene();
+    await updateSceneMeta(hidden.id, { aiVisible: true });
+    expect((await db.chapters.get(chapter.id))!.paragraphs.map((p) => p.id)).toEqual(['v1', 'h1']);
+
+    await updateSceneMeta(hidden.id, { aiVisible: false });
+    expect((await db.chapters.get(chapter.id))!.paragraphs.map((p) => p.id)).toEqual(['v1']);
+  });
+
+  it('never breaks the id bookkeeping a scene move depends on', async () => {
+    // `reanchorOccurrences` reads scene.paragraphs for its IDS. Those are
+    // stored per scene and are never filtered — only the chapter rollup
+    // filters — so a mention inside a hidden scene still travels with it.
+    const { hidden } = await chapterWithAHiddenScene();
+    const two = await createChapter(PROJECT, 'Chapter 2');
+    await db.occurrences.add({
+      id: 'occ-hidden',
+      projectId: PROJECT,
+      entityId: 'e1',
+      entityType: 'cast',
+      chapterId: hidden.chapterId,
+      paragraphId: 'h1',
+      start: 6,
+      end: 12,
+      exactText: 'Marrow',
+      createdAt: 1,
+    });
+
+    await moveScene(hidden.id, two.id, 0);
+    expect((await db.occurrences.get('occ-hidden'))!.chapterId).toBe(two.id);
+  });
+});
+
 describe('scenes: moving between chapters', () => {
   it('carries its mentions to the chapter it lands in', async () => {
     const one = await seed();

@@ -827,9 +827,227 @@ the existing one, which is worth stating plainly so it does not read as an incon
 
 ---
 
-## N5b — Inline rewrite, sections, focus mode (after N5a)
+## N5b — Sections, inline rewrite, focus mode, and the half-built features (next)
 
-Unchanged from the original plan and summarised here:
+### Context: a false privacy promise, and the machinery that makes it true
+
+N5a found a rendered control that did nothing for four milestones — the prose-width
+slider wrote a CSS variable nothing read, and its checklist row claimed a spec proved it.
+Auditing for the same class of mistake found five more. One of them is serious.
+
+**`Scene.aiVisible` does nothing.** N3 shipped a checkbox in the Scene panel reading:
+
+> *"Turn off to keep a scene out of every AI prompt — notes to self, alternate takes,
+> anything you would not want written back at you."*
+
+It has **zero readers**. Not one AI path consults it. `chapterRollup` concatenates every
+scene's paragraphs regardless, and beats, Compose, deep extraction, the handoff pack and
+the style profile all read the result. Unticking that box changes nothing, and the scene
+still goes to the model. That is worse than a control that visibly fails: it is a privacy
+promise the app does not keep, and someone could reasonably rely on it.
+
+This reframes N5b. Its throughline is not "three unrelated editor features" — it is
+**making AI-visibility real at both scales**: per scene (`aiVisible`, already promised)
+and per block (`hiddenFromAi`, the new section flag). They are the same feature and the
+same filter; shipping the second without fixing the first would be indefensible.
+
+The rest of the audit, in priority order:
+
+| Gap | State |
+|---|---|
+| **`Scene.aiVisible`** | **Dead privacy control.** Fixed first. |
+| **Tweaks `focus`** | Stored, never stamped, never read. Its fieldnote also lies: with focus *off* it says "Dims everything but the current line". This is N5b's own storage. |
+| **`--density-pad` / `--density-gap`** | Defined in three theme blocks, consumed by **zero** rules. "Density" moves control heights only, never spacing — which is exactly what the token names promise. |
+| **Acts** | Full schema and CRUD, `usePlanData.chaptersByAct` derived — and zero callers. `listActs` always returns `[]`. |
+| **`Scene.labels`** | `BoardView` renders label chips; nothing sets them. |
+| **`Scene.attachedRefs`** | Read by beat context and the Matrix presence map; no UI writes it. |
+| **`Scene.targetWords`** | Alive but inert — one text suffix on a Board card, no progress ring anywhere. |
+
+### The six steps
+
+**0. Make `aiVisible` true before anything else.** `chapterRollup` is the single choke
+point — every AI path reads `chapter.paragraphs`, which it builds. A scene with
+`aiVisible: false` contributes its `doc` (so the chapter still reads as one document) but
+**not** its paragraphs. One filter in one function, and the promise the checkbox has been
+making since N3 becomes real. A unit test asserts a hidden scene's text is absent from
+`chapter.paragraphs` and from the prompt a beat copies, and present in the word count.
+
+**1. Acts, reachable.** `OutlineView` gains act headers: create, rename, delete, and
+assign a chapter to an act. `BoardView` and `MatrixView` gain **Act** as a grouping axis
+(`usePlanData.chaptersByAct` already exists). Deleting an act never deletes prose —
+`deleteAct` already orphans its chapters rather than cascading, and that behaviour has a
+unit test.
+
+**2. Sections — full, colourable, with independent flags.**
+`src/features/writers-room/section.ts`, a wrapper node (`content: 'block+'`) with
+`colour`, `hiddenFromAi` and `hiddenFromWordCount`. `/note` inserts the preset: yellow,
+both flags on. A node view supplies the colour picker and the two toggles.
+
+**3. The two derivations must diverge — and one thing must NOT follow them.**
+This is the load-bearing change, and it has a trap in it.
+
+Today one array serves both purposes: `paragraphs = paragraphsFromDoc(doc)` and
+`wordCount = countWords(paragraphs)`. Independent flags mean two different filters:
+
+```ts
+// lib/prose.ts — the second parameter becomes a predicate. A section is ONE
+// node type with two independent booleans, so skipping by type name cannot
+// express it. Keep the existing `skipTypes` overload; `paragraph-id.ts`
+// re-exports this and the beat exclusion must not change.
+export function paragraphsFromDoc(
+  doc: unknown,
+  skip?: (node: BlockNode) => boolean
+): ProseParagraph[]
+
+export const HIDDEN_FROM_AI = (n: BlockNode) => n.attrs?.hiddenFromAi === true;
+export const HIDDEN_FROM_COUNT = (n: BlockNode) => n.attrs?.hiddenFromWordCount === true;
+```
+
+```ts
+// WritersRoom.persist / flushSave — a two-line diff at each of the two sites
+const doc = editor.getJSON();
+const paragraphs = paragraphsFromDoc(doc, HIDDEN_FROM_AI);            // AI + extraction substrate
+const words = countWords(paragraphsFromDoc(doc, HIDDEN_FROM_COUNT));  // what the author wrote
+void saveSceneDoc(sceneId, doc, paragraphs, words);
+```
+
+**What the stored row then means, stated once so nobody re-derives it wrongly:**
+`scene.paragraphs` is *what the story is made of* — what extraction reads, what every AI
+path is given. `scene.wordCount` is *what the author has written*. A note to self is in
+neither; an alternate take you want counted but not fed to a model is in the second only.
+Anything that computes `countWords(scene.paragraphs)` from now on will disagree with
+`scene.wordCount`, and that is correct rather than a bug.
+
+**The trap: two consumers read `scene.paragraphs` for its *ids*, not its text, and must
+keep seeing every paragraph.**
+
+- `reanchorOccurrences` (`db/repos/scenes.ts`) builds `new Set(scene.paragraphs.map(p => p.id))`
+  to move occurrences when a scene changes chapter. Drop hidden ids and those occurrences
+  are **orphaned permanently**, pointing at the chapter the text used to be in.
+- `usePlanData`'s `sceneOfParagraph` maps paragraph id → scene for the Matrix. Drop hidden
+  ids and an extracted mention inside a hidden section stops resolving, so the Matrix cell
+  silently downgrades.
+
+Both have `scene.doc` to hand, so both derive ids from the **unfiltered** document rather
+than from the stored array. Filtering happens once, at derivation, for the text; id
+bookkeeping never filters.
+
+**Per-consumer decisions** (12 readers traced; these are the ones that are not obvious):
+
+| Consumer | Excluded? |
+|---|---|
+| Extraction, deep extraction, intelligence, handoff pack, both style-analysis samples | **Yes** — this is the whole point. Measuring your voice off your own bracketed notes poisons the profile. |
+| **Search** | **No.** Local, and it is you searching your own notes. A note you cannot find is worse than useless. |
+| **Speed reader** | Excludes hidden-from-*word-count* (a reading tool should read the book, not the notes) but not hidden-from-AI. The one consumer where the two flags genuinely disagree — which is itself the argument that they must be separate flags. |
+| `reanchorOccurrences`, Matrix `sceneOfParagraph` | **Never** — see above. |
+
+Also needing the count-filtered derivation: `snapshotScene` (stores a `wordCount`) and
+`appendParagraphToChapter`, which hand-rolls both values and bypasses `paragraphsFromDoc`
+entirely today.
+
+`restoreSnapshot` uses the AI derivation, so the contract holds after a restore. The
+`outline → draft` auto-promotion in `saveSceneDoc` now cannot fire for a scene that is
+nothing but a hidden note — correct, and worth naming.
+
+**4. The rewrite bubble.** `RewriteBubble.tsx` — **Expand · Rephrase · Shorten** on a
+selection of ≥4 words, each with a small tweak row (word target; for Rephrase: change POV,
+change tense, convert to dialogue). A new `prompts/rewrite.ts` layers on `buildProseBrief`
+exactly as `beat.ts` does, adding the three constraints a rewrite has and a beat does not:
+return only the replacement, preserve every proper noun and fact in the original, and an
+explicit length contract per operation (Expand ≈ 1.5–2×, Shorten ≈ 0.5–0.7×, Rephrase ≈
+same). Then the whole N5a review flow: `pre-ai` snapshot → `completeDetailed` →
+`checkDraftAgainstCanon` → Apply/Retry/Discard, replacing the selection rather than
+inserting after it.
+
+*Positioning is hand-rolled.* `BubbleMenu` does exist at `@tiptap/react/menus`, but it is
+a transitive dependency nothing declares and it drags `@floating-ui/dom` into the bundle
+for one bubble — and it mounts per-editor via a plugin, which fights typewriter scrolling.
+Instead: a plain absolutely-positioned div rendered as a sibling of `EditorContent`,
+driven from `onSelectionUpdate` off `posToDOMRect(view, from, to)` (exported from
+`@tiptap/core`, already imported directly elsewhere). `posToDOMRect` returns
+**viewport** coordinates, so subtract the canvas rect and add its `scrollTop`.
+**`.lw-wroom__canvas` has no `position: relative` today** — it needs one, or the bubble
+positions against the wrong ancestor.
+
+Offline it copies the prompt and takes a paste, exactly as a beat does. Per the convention
+`09-ai.spec.ts` sets, the three AI buttons must be *absent from the tree* in local-only
+mode (`toHaveCount(0)`, not hidden), and the spec must positively assert what survives.
+Note `Expand` collides with existing accessible names in `CodexPanel` and `SceneBeatView`
+— scope the locator to the bubble.
+
+**5. Focus mode — and the stamp it is missing.** The `focus` tweak (off / paragraph /
+sentence / line) is stored by `TweaksPanel` and **stamped nowhere and read by nothing**.
+Add `data-focus` to both `applyTweaks()` *and* the pre-paint script in `index.html`, or it
+flashes on boot — the rule the ledger already records.
+
+Then three behaviours, all in a ProseMirror plugin modelled on `mention-highlights.ts`
+(decorations, never mutating the document):
+
+- **Dimming** — everything but the block/sentence/line containing the caret drops to
+  `--ink-4`. A visual state, not motion, so it stays on under reduced motion; only its
+  transition is dropped.
+- **Chrome fade** — the toolbar, strips and rails fade after 3s of sustained typing,
+  restored on `mousemove` or `Escape`. Better than a mode toggle because it costs no
+  decisions.
+- **Typewriter scrolling** — pins the caret at 45% of the viewport (not 50%: more
+  read-back context above). The scroller is **`.lw-wroom__canvas`**, not the window, so
+  set its `scrollTop` from `caretRect.top - canvasRect.top` rather than calling
+  `scrollIntoView`, which would also scroll every ancestor. `.lw-manuscript` needs a
+  temporary large `padding-bottom` in this mode or the final paragraph can never reach the
+  middle. A JS `scrollTo({behavior:'smooth'})` bypasses the CSS reduced-motion rules
+  entirely, so consult `prefersReducedMotion()` directly.
+
+The dimming extension declares its storage module-side the way `scene-beat.ts` does,
+rather than casting through `unknown` the way `mention-highlights.ts` does. It must also
+rebuild on **selection change**, not only `docChanged` — moving the caret with an arrow
+key changes the lit region without touching the document, which is the one way this
+differs from the mention-highlight plugin it is otherwise modelled on.
+
+**6. The remaining half-built fields.** `Scene.labels` gets a chips field and
+`attachedRefs` an entity picker in `ScenePanel` — both already have readers, and
+`attachedRefs` immediately improves beats by forcing an entity into their context.
+`--density-pad` and `--density-gap` get consumers (card and panel padding) or get deleted;
+writing three theme blocks for tokens nothing reads is the same lie in miniature.
+Then SURFACE_CHECKLIST rows and e2e.
+
+### Verification
+
+Extends `23-beats.spec.ts` and adds `24-sections.spec.ts`:
+
+- **a scene with "Let AI read this scene" off has its text absent from the prompt a beat
+  copies, and still present in the word count** — the assertion that turns the N3 checkbox
+  from a claim into a fact, and the first one to write
+- an act is created in Outline, a chapter joins it, Board groups by it, and it survives a
+  reload; deleting the act leaves the chapter and its prose intact
+- `/note` produces a section whose text is in **neither** the word count nor the prompt a
+  beat copies — the two exclusions asserted separately, because they are separate filters
+- a section hidden from the word count but visible to AI appears in the copied prompt and
+  not in the count, and vice versa (this is the assertion that proves the derivations
+  really did diverge rather than both following one flag)
+- the rewrite bubble does not appear under 4 selected words, appears at 4, and replaces
+  the selection on Apply with a `pre-ai` snapshot behind it
+- focus mode stamps `data-focus`, survives a reload, and dims everything but the caret's
+  block; with `data-motion-pref="reduce"` the dimming still applies and the transition
+  does not
+
+### And a rule for the runbook, so this stops happening
+
+Six dead controls in five milestones is a pattern, not bad luck, and it has one cause:
+a spec that asserts the *write* and never the *effect*. `19-studio.spec.ts` proved
+`--measure` was stored; nothing proved the manuscript got narrower. `21-scenes.spec.ts`
+proved `aiVisible` persisted; nothing proved a model stopped seeing the scene.
+
+Add to `docs/AGENT_RUNBOOK.md` §4, alongside the existing SURFACE_CHECKLIST requirement:
+
+> **A control's spec must assert its consequence, not its storage.** "The value round-trips
+> through a reload" is necessary and never sufficient. If a control claims to change what
+> is rendered, assert the rendering; if it claims to change what is sent to a model,
+> assert the payload. A row in `SURFACE_CHECKLIST.md` naming a spec that only proves
+> persistence is a row that lies.
+
+---
+
+### The original N5b sketch (retained)
 
 **Inline text replacement** (≥4 words selected): **Expand · Rephrase · Shorten**, each with
 a tweak panel (word target; for Rephrase: change POV, change tense, convert to dialogue).
@@ -1501,7 +1719,7 @@ CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test   # both projects, i
 | N3 | `scenes-repo.spec.ts`: create/move/resequence/snapshot/restore + **the v8→v9 migration on a seeded DB** | `21-scenes.spec.ts`: split a chapter, reorder, edit metadata, reload, restore a snapshot |
 | N4 | `plan-data.spec.ts`: derived indexes | `22-plan.spec.ts`: four views over one scene; Board drag changes status; Matrix cell promotes an extraction-derived hit; mobile fallbacks |
 | N5a | `prose.spec.ts`: a `sceneBeat` node contributes nothing to `paragraphsFromDoc` or `countWords`; `beat-prompt.spec.ts`: prompt shape, `[bracketed]` stage directions labelled, tier budget respected | `23-beats.spec.ts`: `/beat` creates a node · Expand with a **mocked** provider inserts prose after the beat and the beat survives as re-expandable · a `pre-ai` snapshot exists afterwards in the Scene panel · Retry produces different prose (mock `reply` as a function) · Discard leaves the document untouched · **with no key configured Expand is still present** and copies a prompt · the beat's own words are absent from the scene word count · both projects |
-| N5b | section flags honoured by word count and by the AI payload separately | `23-beats.spec.ts` extended: rewrite bubble needs ≥4 words selected; `/note` section is excluded from the count; focus mode stamps `data-focus` and survives reload |
+| N5b | `aiVisible` genuinely excludes a scene from `chapter.paragraphs`; the two section flags filter independently; `reanchorOccurrences` still sees hidden paragraph ids | `24-sections.spec.ts`: an AI-invisible scene is absent from a beat's copied prompt and present in the word count; `/note` excluded from both; a count-hidden-but-AI-visible section proves the derivations diverged; rewrite bubble needs ≥4 words and is absent in local-only; focus mode stamps `data-focus`, survives reload, and dims under reduced motion without transitioning |
 | N6 | mention plugin unit | `24-mentions.spec.ts`: type `@`, pick, occurrence written, highlight renders |
 | N7 | `scene-context.spec.ts`: lanes, ranking, budget truncation, `caseSensitive`/`exclusions`, `hiddenFieldIds`, `aiVisible:false` | `25-context.spec.ts`: rail shows lanes; dragging a chip changes what the mocked call receives |
 | N8 | `progressions.spec.ts`: `entityAtScene` layering + **a scene before the anchor cannot see it**; `story-so-far.spec.ts` budget truncation; offline summariser | `26-progressions.spec.ts`: Save & Extract writes an extracted progression; drafting an earlier scene excludes it |
