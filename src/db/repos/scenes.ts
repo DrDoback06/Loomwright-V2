@@ -1,5 +1,6 @@
 import { db } from '../schema';
 import { newId } from '@/lib/id';
+import { paragraphsFromDoc } from '@/lib/prose';
 import { logAudit } from './audit';
 import type { Act, Chapter, Scene, SceneSnapshot } from '../types';
 import { refreshProjectChapterReferences } from '@/services/chapter-awareness';
@@ -476,29 +477,6 @@ export async function restoreSnapshot(snapshotId: string): Promise<void> {
     before: { wordCount: scene.wordCount },
     after: { wordCount: snapshot.wordCount, snapshotId },
   });
-}
-
-/** Rebuild the paragraph substrate from a stored doc. Snapshots keep the
- * doc only — paragraphs are derived everywhere else too, so deriving them
- * here keeps one definition of what a paragraph is. */
-export function paragraphsFromDoc(doc: unknown): { id: string; text: string }[] {
-  const node = doc as DocNode | null;
-  if (!node?.content) return [];
-  const out: { id: string; text: string }[] = [];
-  for (const child of node.content as {
-    type?: string;
-    attrs?: { pid?: string };
-    content?: { text?: string }[];
-  }[]) {
-    if (!child?.content) continue;
-    const text = child.content
-      .map((leaf) => leaf?.text ?? '')
-      .join('')
-      .trim();
-    if (!text) continue;
-    out.push({ id: child.attrs?.pid ?? newId(), text });
-  }
-  return out;
 }
 
 /** Give every chapter at least one scene, carrying whatever prose the

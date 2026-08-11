@@ -27,6 +27,7 @@ import { useUiStore } from '@/stores/ui';
 import { toast } from '@/stores/toasts';
 import { UniqueParagraphId, countWords, paragraphsFromDoc } from './paragraph-id';
 import { MentionHighlights } from './mention-highlights';
+import { SceneBeat } from './scene-beat';
 import { Toolbar } from './Toolbar';
 import { NotesMargin } from './NotesMargin';
 import { ComposePanel } from './ComposePanel';
@@ -218,7 +219,7 @@ export function WritersRoom() {
   }, []);
 
   const editor = useEditor({
-    extensions: [StarterKit, UniqueParagraphId, MentionHighlights],
+    extensions: [StarterKit, UniqueParagraphId, MentionHighlights, SceneBeat],
     editorProps: {
       attributes: {
         class: 'lw-manuscript',
@@ -246,11 +247,30 @@ export function WritersRoom() {
     // editor kept showing the newer text and the next keystroke wrote it
     // straight back, quietly undoing the restore.
     if (loadedSceneRef.current === activeSceneId && loadedTokenRef.current === reloadToken) return;
+    // Was this a move to a different scene, or the same scene being
+    // replaced underneath us? The two need opposite treatment, and getting
+    // it wrong silently loses work either way.
+    const sameScene = loadedSceneRef.current === activeSceneId;
     loadedTokenRef.current = reloadToken;
+
+    if (sameScene && saveTimer.current) {
+      // The database has just been deliberately overwritten — a snapshot
+      // restore. Flushing here would write the pre-restore editor content
+      // straight back over it, and letting the pending timer fire later
+      // would do the same a moment afterwards. Both undo the restore. The
+      // DB is authoritative by definition when the token moves, so drop
+      // the pending write.
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      burstStartedAt.current = null;
+    }
+
     let cancelled = false;
     void (async () => {
       const outgoing = loadedSceneRef.current;
-      if (outgoing && saveTimer.current) {
+      // Only when genuinely leaving a scene: there, the editor is the
+      // authority and anything unsaved must reach disk first.
+      if (!sameScene && outgoing && saveTimer.current) {
         await flushSave(editor, outgoing);
       }
       const scene = await getScene(activeSceneId);
@@ -297,6 +317,21 @@ export function WritersRoom() {
       flushNow();
     };
   }, [flushSave]);
+
+  // Publish what a beat node view needs to act: which scene it is in, and
+  // how to flush the autosave debounce before snapshotting. Read through
+  // refs at click time so a control can never act on a stale closure —
+  // the class of bug that cost a red run in N3.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    const storage = editor.storage.sceneBeat;
+    storage.projectId = projectId;
+    storage.sceneId = activeSceneId;
+    storage.flush = async () => {
+      const id = loadedSceneRef.current;
+      if (editorRef.current && id) await flushSave(editorRef.current, id);
+    };
+  }, [editor, projectId, activeSceneId, flushSave]);
 
   // Live entity-mention highlights from persisted occurrences.
   const occurrences = useLiveQuery(

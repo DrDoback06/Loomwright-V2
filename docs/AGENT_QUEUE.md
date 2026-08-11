@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N5 · step 1 of 8
-**Last verified green:** N4 complete — lint ✅ tsc ✅ build ✅ vitest 235 ✅ playwright 190 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N5b · step 1 of 5
+**Last verified green:** N5a complete — lint ✅ tsc ✅ build ✅ vitest 246 ✅ playwright 202 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -13,7 +13,8 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N2 | Four destinations + palette + empty states | 6 | ✅ 6/6 |
 | N3 | Acts › Chapters › Scenes + snapshots | 8 | ✅ 8/8 |
 | N4 | Plan: Outline / Board / Matrix / Timeline | 7 | ✅ 7/7 |
-| N5 | Beats, inline AI, sections, focus mode | 8 | 🔄 0/8 |
+| N5a | Scene beats | 7 | ✅ 7/7 |
+| N5b | Inline rewrite, sections, focus mode | 5 | 🔄 0/5 |
 | N6 | Typed `@` mentions | 4 | ⬜ |
 | N7 | Context engine + policy + tracking + budget rail | 7 | ⬜ |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
@@ -108,16 +109,41 @@ surface genuinely works. Plan joins the rail in N4.
 first real words. Without it the Board is a single column of "Outline" that everyone has
 to hand-correct. It fires once and never demotes; a hand-set status is never overwritten.
 
-## N5 — Beats, inline AI, sections, focus
+## N5a — Scene beats ✅
 
-- [ ] 1. `scene-beat.ts` TipTap node + `/beat` input rule + `Mod-Enter` / `Mod-Shift-b`  ← IN PROGRESS
-- [ ] 2. `services/ai/prompts/beat.ts` built on `prompts/prose.ts`
-- [ ] 3. `expandBeat()`: `pre-ai` snapshot → `complete()` → `checkDraftAgainstCanon()` → insert; Apply / Retry / Discard / As-section
-- [ ] 4. Offline path: copy a fully-formed prompt + paste box (mirror `PasteTab`)
-- [ ] 5. `[bracketed]` stage directions passed through and labelled in the prompt
-- [ ] 6. `section.ts` node with `hiddenFromAi` / `hiddenFromWordCount`; `/note` preset; both flags honoured by context + word count
-- [ ] 7. `RewriteBubble.tsx` — Expand / Rephrase / Shorten on ≥4 selected words
-- [ ] 8. Focus mode (chrome fade after 3s typing, sentence/line/paragraph dimming, typewriter at 45%), all gated on `prefersReducedMotion()`; e2e `23-beats.spec.ts`
+- [x] 1. `src/lib/prose.ts` — one `paragraphsFromDoc`/`countWords`; the duplicate in `db/repos/scenes.ts` deleted. **`.lw-manuscript` now reads `--measure`**, so the N1 prose-width slider stops being a dead control.
+- [x] 2. `scene-beat.ts` — node (`isolating`, no `pid`), `/beat ` input rule, `Mod+Shift+B`, Enter-to-exit, and a beatId repair pass modelled on `UniqueParagraphId`
+- [x] 3. `SceneBeatView.tsx` — `ReactNodeViewRenderer`, controls attached to the node. All transient state is React state; nothing about a generation touches the document
+- [x] 4. `services/ai/prompts/beat.ts` — composed with `buildProseBrief`, plus preceding prose, "this is a fragment", and `[bracketed]` stage directions lifted out and labelled
+- [x] 5. `useBeatExpansion.ts` — flush → `pre-ai` snapshot → `completeDetailed` (for `truncated`) → `checkDraftAgainstCanon` → Apply / Retry / Discard
+- [x] 6. Offline round-trip: Copy prompt is present with or without a key, and the prompt is shown as selectable text so the clipboard is only ever a convenience
+- [x] 7. Toolbar button, styles, mobile; `beat-prompt.spec.ts` (11) + `23-beats.spec.ts` (6 × 2 projects)
+
+**A dead control shipped in N1, now fixed.** `applyTweaks` wrote `--measure` and nothing
+read it — `.lw-manuscript` hardcoded `max-width: 680px`. The prose-width slider did
+nothing, and its SURFACE_CHECKLIST row claimed a spec proved it; the spec only proved the
+variable persisted. Worth remembering as a class of mistake: **assert the effect, not the
+attribute.**
+
+**A data-loss bug the e2e caught.** Restoring a snapshot raced with a pending autosave.
+The scene-load effect flushed the outgoing scene on every re-read — including a
+same-scene reload triggered by `reloadToken` — which wrote the pre-restore editor content
+straight back over the restored row. It now distinguishes *moving to another scene* (flush;
+the editor is authoritative) from *the same scene being replaced underneath us* (drop the
+pending write; the database is authoritative by definition when the token moves).
+
+**Correcting the note left after N3:** insertion via `editor.chain()` does **not** need
+`reloadToken`. The token is only for DB-originated replacement. The rule for the codebase:
+anything that calls `db.scenes.update` on the currently-loaded scene must bump the token;
+anything going through `editor.chain()` must not.
+
+## N5b — Inline rewrite, sections, focus mode
+
+- [ ] 1. `section.ts` node with `hiddenFromAi` / `hiddenFromWordCount`; `/note` preset  ← IN PROGRESS
+- [ ] 2. Both flags honoured — note `paragraphsFromDoc` recurses into a wrapper's content, so hidden sections need the `skipTypes` argument `lib/prose.ts` already takes
+- [ ] 3. `RewriteBubble.tsx` — Expand / Rephrase / Shorten on ≥4 selected words. **`@tiptap/react` v3 no longer exports `BubbleMenu`** — position by hand off `posToDOMRect`
+- [ ] 4. Focus mode: chrome fade after 3s typing, sentence/line/paragraph dimming, typewriter at 45%, all gated on `prefersReducedMotion()`. The `focus` tweak is **stored but never stamped** — add `data-focus` to `applyTweaks` AND the pre-paint script in `index.html`. The scroll container is `.lw-wroom__canvas`, not the window
+- [ ] 5. SURFACE_CHECKLIST rows; extend `23-beats.spec.ts`
 
 ## N6 — Typed `@` mentions
 
@@ -203,7 +229,7 @@ to hand-correct. It fires once and never demotes; a hand-set status is never ove
 
 ## Notes for the next run
 
-N1–N4 are done and pushed. Start N5 step 1 — the `sceneBeat` TipTap node.
+N1–N4 and N5a are done and pushed. Start N5b step 1 — the `section` node.
 
 Hard-won facts, in rough order of how much time they cost:
 
@@ -234,11 +260,14 @@ Hard-won facts, in rough order of how much time they cost:
   `stores/ui.ts`, `NAV_ENTRIES` in `LeftRail.tsx`, `MainSurface` in `App.tsx`, the palette
   command list (and the Alt+N shortcuts shift — `20-shell.spec.ts` asserts them), `HELP`
   in `HelpDialog.tsx`, and `SURFACE_HOME` in `tests/e2e/helpers.ts`.
-- For N5: **`ScenePanel`'s optimistic-draft pattern and the editor's `reloadToken` both
-  matter here.** Inserting AI prose replaces the document underneath the editor exactly
-  the way a snapshot restore does — call `onProseReplaced`/bump the token, or the next
-  keystroke writes the pre-insertion text back over it.
-- `snapshotScene(sceneId, 'pre-ai')` already exists and is never pruned. Call it before
-  every AI insertion; that is the whole safety net for beats.
+- **Assert the effect, not the attribute.** N1 shipped a prose-width slider whose spec
+  proved a CSS variable was written, while nothing read it. The control did nothing for
+  four milestones.
+- **A node view's controls must `stopPropagation` on key events.** They sit inside the
+  editor's DOM, so Backspace in a beat's paste box would otherwise delete the beat.
+- **The clipboard can refuse** (unfocused document, locked-down browser). Anything that
+  copies must also show the text. `page.bringToFront()` before a clipboard assertion.
+- `editor.chain()` insertion does NOT need `reloadToken`; `db.scenes.update` on the loaded
+  scene does. See the N5a notes.
 - The presence map in `usePlanData.ts` is where a new "scene knows about entity X" source
   goes — it already ranks asserted > summary > extracted.

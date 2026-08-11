@@ -51,6 +51,14 @@ const TOOLS: ToolButton[] = [
     isActive: () => false,
     run: (e) => e.chain().focus().setHorizontalRule().run(),
   },
+  {
+    // The shortcut and the `/beat` rule are faster, but neither is
+    // discoverable — a button is how anyone finds out beats exist.
+    label: '✎+',
+    aria: 'Insert scene beat',
+    isActive: (e) => e.isActive('sceneBeat'),
+    run: (e) => e.commands.insertSceneBeat(),
+  },
 ];
 
 export function Toolbar({ editor }: { editor: Editor }) {
@@ -64,6 +72,9 @@ export function Toolbar({ editor }: { editor: Editor }) {
       strike: ctx.editor.isActive('strike'),
       heading: ctx.editor.isActive('heading'),
       blockquote: ctx.editor.isActive('blockquote'),
+      // Without this key the Beat button's pressed state would not track
+      // the caret — the selector's whole job is to force that re-render.
+      sceneBeat: ctx.editor.isActive('sceneBeat'),
     }),
   });
 

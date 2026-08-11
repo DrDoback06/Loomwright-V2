@@ -171,12 +171,17 @@
 }
 
 .lw-manuscript {
-  max-width: 680px;
+  /* --measure is in em and is set from Settings ▸ Appearance. It resolves
+     against this element's own font-size, so the slider changes the line
+     length in characters rather than in pixels — which is the thing that
+     actually governs reading speed. 40em at 17px is the 680px this used
+     to hardcode, so nobody's existing layout moves. */
+  max-width: var(--measure, 40em);
   margin: 0 auto;
   padding: var(--sp-10) var(--sp-9) var(--sp-14);
   font-family: var(--font-serif);
   font-size: 17px;
-  line-height: 1.75;
+  line-height: var(--lh-prose);
   color: var(--ink-1);
   min-height: 60vh;
   outline: none;
@@ -557,4 +562,76 @@
   }
   .lw-scenehead { padding: var(--sp-4) var(--sp-6) 0; }
   .lw-scenestrip { padding: var(--sp-3) var(--sp-6); }
+}
+
+/* ---------------------------------------------------------------------
+   Scene beats (N5a)
+   An instruction that lives in the prose. It reads as scaffolding rather
+   than manuscript — sans-serif against the serif body, tinted, ruled on
+   the left — so a page of beats never looks like a page of novel.
+   --------------------------------------------------------------------- */
+.lw-beat {
+  margin: var(--sp-8) 0;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--r-4) var(--r-4) 0;
+  background: var(--bg-tint);
+  font-family: var(--font-sans);
+}
+.lw-beat--expanded { border-left-color: var(--ink-5); }
+
+.lw-beat__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--line-1);
+}
+.lw-beat__tag {
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tr-eyebrow);
+  color: var(--accent);
+}
+.lw-beat--expanded .lw-beat__tag { color: var(--ink-4); }
+.lw-beat__control { display: inline-flex; }
+.lw-beat__words { width: 6ch; }
+.lw-beat__spacer { flex: 1; }
+
+.lw-beat__text {
+  padding: var(--sp-5);
+  font-size: var(--fs-md);
+  line-height: var(--lh-snug);
+  color: var(--ink-2);
+}
+.lw-beat__text:empty::before {
+  content: 'What happens in this moment?';
+  color: var(--ink-5);
+}
+
+.lw-beat__paste,
+.lw-beat__draft {
+  padding: var(--sp-5);
+  border-top: 1px solid var(--line-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.lw-beat__prose {
+  font-family: var(--font-serif);
+  font-size: var(--fs-md);
+  line-height: var(--lh-prose);
+  color: var(--ink-1);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.lw-beat__prose p { margin: 0 0 var(--sp-5); }
+.lw-beat__actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+
+@media (max-width: 720px) {
+  /* Touch targets before density: the bar wraps rather than shrinking. */
+  .lw-beat__bar { gap: var(--sp-4); }
+  .lw-beat__spacer { display: none; }
+  .lw-beat__actions .lw-btn { flex: 1; }
 }

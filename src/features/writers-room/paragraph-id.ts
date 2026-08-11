@@ -2,7 +2,9 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { newId } from '@/lib/id';
 
-const TYPES = ['paragraph', 'heading', 'blockquote'];
+import { PROSE_BLOCK_TYPES } from '@/lib/prose';
+
+const TYPES: string[] = [...PROSE_BLOCK_TYPES];
 
 /** Gives every top-level block a stable `pid` attribute. Paragraph notes,
  * occurrences, and extraction all key off these ids, so they must survive
@@ -54,41 +56,8 @@ export const UniqueParagraphId = Extension.create({
   },
 });
 
-/** Derive the extraction substrate from a TipTap JSON document:
- * ordered [{ id: pid, text }] for every block that carries text. */
-export function paragraphsFromDoc(doc: unknown): { id: string; text: string }[] {
-  const out: { id: string; text: string }[] = [];
-  const root = doc as { content?: BlockNode[] } | null;
-  if (!root?.content) return out;
-  const walk = (nodes: BlockNode[]) => {
-    for (const node of nodes) {
-      if (TYPES.includes(node.type) && node.attrs?.pid) {
-        out.push({ id: node.attrs.pid, text: textOf(node) });
-      } else if (node.content) {
-        walk(node.content);
-      }
-    }
-  };
-  walk(root.content);
-  return out;
-}
-
-interface BlockNode {
-  type: string;
-  attrs?: { pid?: string };
-  content?: BlockNode[];
-  text?: string;
-}
-
-function textOf(node: BlockNode): string {
-  if (node.text) return node.text;
-  if (!node.content) return '';
-  return node.content.map(textOf).join('');
-}
-
-export function countWords(paragraphs: { text: string }[]): number {
-  return paragraphs.reduce(
-    (sum, p) => sum + (p.text.trim() ? p.text.trim().split(/\s+/).length : 0),
-    0
-  );
-}
+/* The prose helpers moved to `@/lib/prose` so the scenes repo can use the
+   same definitions — `src/db/` must not import from `src/features/`.
+   Re-exported here because a dozen call sites already import them from
+   this module, and moving a function should not mean touching all of them. */
+export { paragraphsFromDoc, countWords, type ProseParagraph } from '@/lib/prose';

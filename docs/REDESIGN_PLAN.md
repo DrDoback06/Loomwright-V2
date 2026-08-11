@@ -609,7 +609,256 @@ scene. E2E must pass on both projects.
 
 ## Part 6 — The authoring loop
 
-### 6.1 N5 — Scene beats, inline AI, sections, focus mode
+### 6.1 N5 — split into N5a (beats) and N5b (rewrite, sections, focus)
+
+> **Status note, written after N1–N4 shipped.** N5 was one milestone of four features.
+> Beats are the headline and by far the riskiest — a custom interactive node inside an
+> autosave loop that has already produced three data-loss bugs — so it ships and verifies
+> alone as **N5a**. Inline rewrite, sections and focus mode follow as **N5b**.
+>
+> **Decided:** a beat is an instruction, not prose. It is invisible to word count, to
+> extraction, and to exports.
+
+---
+
+## N5a — Scene beats (the next milestone)
+
+### What already exists and must be reused, not rebuilt
+
+| Need | Already in the repo |
+|---|---|
+| Pre-AI safety net | `snapshotScene(sceneId, 'pre-ai')` in `src/db/repos/scenes.ts` — never pruned |
+| Prose brief construction | `buildProseBrief(...)` in `src/services/ai/prompts/prose.ts` (POV rules, tense, word targets, anti-patterns, measured `StyleProfile`) |
+| Canon facts + read-back | `buildCanonFacts` / `checkDraftAgainstCanon` in `src/services/ai/canon.ts` |
+| Model call | `complete(config, { system, prompt, temperature, maxTokens })` in `services/ai/providers.ts`; `tierForModel(config)` for budget |
+| Provider gate | `resolveProvider(projectId)` returns `null` when AI is unavailable — every AI entry point already gates on this |
+| Offline round-trip | `PasteTab` in `CreateAnythingDialog.tsx` (`navigator.clipboard.writeText` + a paste box + a parse step) |
+| Insertion | `editor.chain().focus('end').insertContent([...paragraphs]).run()` — the ComposePanel path in `WritersRoom.tsx` |
+| Issue chips | `lw-compose__issue--{contradiction,change,introduction}` |
+| Mocked provider in e2e | `mockAnthropic(page, reply)` pattern in `tests/e2e/09-ai.spec.ts` |
+
+The generation flow in `ComposePanel.runGenerate` is the template: resolve provider → build
+brief → `complete` at `temperature: 0.85` → `checkDraftAgainstCanon` → offer Insert. Beats
+are the same flow at paragraph scale, anchored to a node.
+
+### The three decisions that matter
+
+**1. Beats are invisible to word count, extraction and exports — and this is nearly free.**
+
+`paragraphsFromDoc` in `src/features/writers-room/paragraph-id.ts` only collects nodes whose
+type is in `['paragraph','heading','blockquote']` *and* which carry a `pid`. A `sceneBeat`
+with `content: 'inline*'` therefore never enters `scene.paragraphs`, and everything
+downstream reads that array: `countWords`, `extractChapter` (`session.ts` joins
+`chapter.paragraphs`), search, and the world bible (which reports `chapter.wordCount`).
+One node type, three exclusions, no special-casing.
+
+**The one real gap:** `src/db/repos/scenes.ts` has a *second, different*
+`paragraphsFromDoc` — written for `restoreSnapshot` — that walks any child with `content`
+and would happily include a beat's text. Two functions with the same name and different
+semantics is the bug waiting to happen.
+
+*Fix:* move the canonical `paragraphsFromDoc` + `countWords` into **`src/lib/prose.ts`**;
+`paragraph-id.ts` keeps only the `UniqueParagraphId` extension and re-exports for existing
+callers; `src/db/repos/scenes.ts` imports from `lib/` and deletes its copy. This respects
+the direction rule that `src/db/` must not import from `src/features/`.
+
+Two further constraints found while surveying:
+
+- `paragraphsFromDoc` **recurses into the content of any node type it does not recognise**.
+  That is exactly right for a beat (its children are text nodes, which the walk skips) and
+  exactly wrong for N5b's `section`, which *wraps* paragraphs — hidden sections will need
+  an explicit skip or their contents reach extraction, search and the word count anyway.
+  Noted here so N5b does not rediscover it.
+- `sceneBeat` must **not** be added to `TYPES` in `paragraph-id.ts`. Beyond the word count,
+  `NotesMargin` numbers paragraphs by counting every node carrying a `pid`, so a beat with
+  one would silently renumber every paragraph note in the scene.
+
+### A dead control shipped in N1, to fix here
+
+`applyTweaks` writes `--measure` to `<html>`, but `.lw-manuscript` in `writers-room.css`
+hardcodes `max-width: 680px` and never reads it. **The prose-width slider currently does
+nothing** — a rendered control that does not work, which is the one thing this repo's rules
+forbid outright. `.lw-manuscript { max-width: var(--measure); }` (680px at 17px ≈ 40em, so
+the 28–44em range brackets today's value sensibly). Small, but it belongs at the front of
+N5a rather than in a backlog: focus mode in N5b is the other half of the same setting.
+
+**2. Transient state never touches the document.**
+
+A pending generated draft, the "generating…" state and the canon issues live in React
+state, *not* in node attributes. Writing them to attrs would fire `onUpdate` → `persist()`
+on every frame of a generation, hammering IndexedDB and polluting undo history. Only two
+things ever reach the document: the beat's own text as the author types it, and the
+Apply that inserts prose.
+
+**3. Insertion does not need `reloadToken`.**
+
+The token added in N3 exists for changes that originate in the *database* (a snapshot
+restore), where the editor's in-memory doc is stale. A beat expansion originates in the
+*editor*, so `onUpdate` fires and persists normally. `snapshotScene(…, 'pre-ai')` is still
+mandatory before Apply — that is the undo of last resort — but the token is not.
+*(This corrects the note left in `docs/AGENT_QUEUE.md` after N3.)*
+
+### The node
+
+`src/features/writers-room/scene-beat.ts` + `SceneBeatView.tsx` (a
+`ReactNodeViewRenderer`, so the controls live with the node rather than in a floating
+toolbar that has to track selection):
+
+```ts
+import { Node, mergeAttributes } from '@tiptap/core';
+import { ReactNodeViewRenderer } from '@tiptap/react';
+
+export type BeatMode = 'prose' | 'dialogue' | 'description' | 'action' | 'transition';
+
+/** An instruction that lives in the prose. It survives expansion —
+ * generated paragraphs land AFTER it and the node stays, so a beat can
+ * always be re-rolled. Only `state` is ever written back by the app. */
+export const SceneBeat = Node.create({
+  name: 'sceneBeat',
+  group: 'block',
+  content: 'inline*',
+  defining: true,
+  addAttributes: () => ({
+    beatId: { default: null },
+    mode: { default: 'prose' as BeatMode },
+    words: { default: 400 },
+    state: { default: 'pending' },   // pending | expanded
+  }),
+  parseHTML: () => [{ tag: 'div[data-scene-beat]' }],
+  renderHTML: ({ HTMLAttributes }) => [
+    'div',
+    mergeAttributes(HTMLAttributes, { 'data-scene-beat': '', class: 'lw-beat' }),
+    0,
+  ],
+  addNodeView() { return ReactNodeViewRenderer(SceneBeatView); },
+  addInputRules() { /* `/beat ` at the start of an empty paragraph converts it */ },
+  addKeyboardShortcuts() {
+    return { 'Mod-Shift-b': () => this.editor.commands.insertSceneBeat() };
+  },
+});
+```
+
+`NodeViewWrapper` holds the controls; `NodeViewContent` holds the editable instruction, so
+the beat text is ordinary ProseMirror content and the caret behaves normally.
+
+### The prompt
+
+```ts
+// src/services/ai/prompts/beat.ts — NEW, composed with buildProseBrief
+export function buildBeatPrompt(input: {
+  beat: string;                 // the instruction, [bracketed] parts labelled as stage direction
+  mode: BeatMode;
+  targetWords: number;
+  scene: { title: string; summary: string; povName: string | null; povType: string | null };
+  precedingProse: string;       // last ~600 words before the beat, for continuity of voice
+  context: string;              // entity digests — N7 swaps the SOURCE, not this signature
+  style: StyleProfile | null;
+  facts: string;                // buildCanonFacts(...)
+  tier: 'small' | 'large';
+}): { system: string; prompt: string }
+```
+
+Taking `context` as a plain string is deliberate: N7's `buildSceneContext()` drops in
+behind it without the node or the prompt changing shape. Until then it is assembled from
+`focusStore` + the scene's own POV/location/characterIds, exactly as ComposePanel does.
+
+**Call `completeDetailed`, not `complete`.** `complete()` returns a bare string and cannot
+report truncation; a beat is precisely the case where a reply cut off mid-sentence is both
+likely (small models, tight token budgets) and unacceptable to insert silently. Use
+`completeDetailed(config, …)` and, when `truncated` is true, say so above the draft rather
+than pretending the prose is finished. Everything else mirrors `ComposePanel.runGenerate`:
+`temperature: 0.85` (the one place in the app a high temperature is right — everything else
+runs at 0), and `tierForModel(config)` for the budget.
+
+### Apply — one transaction, one undo, one save
+
+```ts
+editor
+  .chain()
+  .focus()
+  .insertContentAt(posAfterBeat, paragraphNodes)      // UniqueParagraphId assigns pids
+  .updateAttributes('sceneBeat', { state: 'expanded' })
+  .run();
+```
+
+One chain means one ProseMirror transaction: one undo step, and one `onUpdate` → one save.
+
+### The offline path is not a consolation prize
+
+With no provider, **Expand** becomes **Copy prompt** and reveals a paste box under the
+beat. Paste the reply, press Apply, and the same paragraphs land. This is the product's
+stated law — *offline smarts are free forever; AI enriches* — and it is also the answer to
+novelcrafter's most-cited complaint (you cannot do anything there until you have entered
+an API key).
+
+### Build order
+
+1. `src/lib/prose.ts` — move `paragraphsFromDoc` + `countWords`; delete the duplicate in
+   `db/repos/scenes.ts`; unit-test that a `sceneBeat` node contributes nothing.
+2. `scene-beat.ts` + `SceneBeatView.tsx` — node, node view, `/beat` input rule,
+   `Mod-Shift-B`, registered in `WritersRoom`'s `useEditor` extensions.
+3. `services/ai/prompts/beat.ts`.
+4. Expand flow — `pre-ai` snapshot → `complete` → `checkDraftAgainstCanon` → draft preview
+   with **Apply · Retry · Discard**, canon issues as chips.
+5. Offline path — Copy prompt + paste box + Apply.
+6. Styles (`writers-room.css`: `lw-beat*`), mobile layout, `prefersReducedMotion` on the
+   expand transition.
+7. `SURFACE_CHECKLIST.md` rows + `tests/unit/beat-prompt.spec.ts` +
+   `tests/e2e/23-beats.spec.ts` (mocked provider, both projects).
+
+### Risks, and the guard for each
+
+| Risk | Guard |
+|---|---|
+| A beat's text reaching extraction and creating phantom candidates | `paragraphsFromDoc` excludes it by construction; unit test asserts it |
+| Generation spamming autosave | Draft and status live in React state, never in node attrs |
+| Losing prose to a bad generation | `snapshotScene(…, 'pre-ai')` before Apply; never pruned; restorable from the Scene panel |
+| A pending draft surviving a scene switch as stale state | Node view unmounts with the document; draft is not persisted anywhere |
+| The node unreachable by keyboard | Controls are real buttons inside `NodeViewWrapper`; `Mod-Shift-B` inserts; Escape returns focus to the prose |
+| Dead button with no AI key | Offline copy-prompt path is part of step 5, not a follow-up |
+| Expanding against stale prose | Reuse the guard `runExtraction` already uses: refuse and toast when `loadedSceneRef.current !== activeSceneId` |
+| A truncated reply inserted as if finished | `completeDetailed` → surface `truncated` above the draft |
+
+**One deliberate difference from the existing AI controls.** `aiReady` hides the
+"Deep Extract (AI)" button entirely when no provider is configured, and `09-ai.spec.ts`
+asserts `toHaveCount(0)` for it in local-only mode. A beat's **Expand must not disappear** —
+it switches to the copy-prompt path instead. The e2e spec has to assert the opposite of
+the existing one, which is worth stating plainly so it does not read as an inconsistency.
+
+---
+
+## N5b — Inline rewrite, sections, focus mode (after N5a)
+
+Unchanged from the original plan and summarised here:
+
+**Inline text replacement** (≥4 words selected): **Expand · Rephrase · Shorten**, each with
+a tweak panel (word target; for Rephrase: change POV, change tense, convert to dialogue).
+A selection bubble routing through the prompt library (N10) so the actions are
+user-editable from the day it lands.
+*Gotcha:* `@tiptap/react` v3.27 **no longer re-exports `BubbleMenu`/`FloatingMenu`** as
+React components. Position it by hand off `posToDOMRect(editor.state.selection)`, which
+core does export — do not assume `import { BubbleMenu } from '@tiptap/react'` compiles.
+
+**Sections** — a `section` TipTap node: colourable, with `hiddenFromAi` and
+`hiddenFromWordCount` flags. `/note` inserts a yellow section with both on.
+*Two real complications:* `paragraphsFromDoc` recurses into a wrapper node's content, so
+hidden sections need an explicit skip; and hiding from the word count while staying visible
+to AI means `words` must be derived from a differently-filtered list than `paragraphs` —
+today `saveSceneDoc(id, doc, paragraphs, wordCount)` passes one array and one number
+computed from it.
+
+**Focus mode** — chrome fades after 3s of sustained typing (restored on `mousemove` /
+`Escape`); sentence/line/paragraph dimming per the existing Tweaks setting; typewriter
+scrolling pinning the caret at 45%. All three gated on `prefersReducedMotion()`.
+*Two gaps to close first:* the `focus` tweak is stored but **never stamped anywhere** —
+`applyTweaks` writes density, typeset, motion and measure, not focus — so it needs a
+`data-focus` attribute in both `applyTweaks` and the pre-paint script in `index.html`. And
+the scroll container is `.lw-wroom__canvas`, not the window, so typewriter scrolling must
+scroll that element.
+
+---
+
+### Original N5 detail (retained for reference)
 
 **Beats are a TipTap node, not a panel.** `src/features/writers-room/scene-beat.ts`:
 
@@ -1207,6 +1456,11 @@ the cron. A cron that fires before the ledger exists will improvise.
 
 ## Milestone order
 
+> **Progress:** N1–N4 shipped and pushed. N5 is split into N5a (beats) and N5b
+> (rewrite, sections, focus mode) — see Part 6.1. Order otherwise unchanged: the
+> authoring loop finishes before story health, because charts drawn over a manuscript
+> with no POV, status or summaries demo badly.
+
 | # | Milestone | Depends on | Why here |
 |---|---|---|---|
 | **N1** | Studio design system | — | Every later surface gets built in the new language once, not twice |
@@ -1246,7 +1500,8 @@ CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test   # both projects, i
 | N2 | route-alias resolution table | `20-shell.spec.ts`: five destinations on desktop **and** mobile; every legacy route id still lands; palette modes `>` `@` `#` `/` |
 | N3 | `scenes-repo.spec.ts`: create/move/resequence/snapshot/restore + **the v8→v9 migration on a seeded DB** | `21-scenes.spec.ts`: split a chapter, reorder, edit metadata, reload, restore a snapshot |
 | N4 | `plan-data.spec.ts`: derived indexes | `22-plan.spec.ts`: four views over one scene; Board drag changes status; Matrix cell promotes an extraction-derived hit; mobile fallbacks |
-| N5 | `beat-prompt.spec.ts`; section flags honoured by word count | `23-beats.spec.ts`: insert beat, expand with a **mocked** provider, prose lands, `pre-ai` snapshot exists, offline path copies a prompt; rewrite bubble needs ≥4 words |
+| N5a | `prose.spec.ts`: a `sceneBeat` node contributes nothing to `paragraphsFromDoc` or `countWords`; `beat-prompt.spec.ts`: prompt shape, `[bracketed]` stage directions labelled, tier budget respected | `23-beats.spec.ts`: `/beat` creates a node · Expand with a **mocked** provider inserts prose after the beat and the beat survives as re-expandable · a `pre-ai` snapshot exists afterwards in the Scene panel · Retry produces different prose (mock `reply` as a function) · Discard leaves the document untouched · **with no key configured Expand is still present** and copies a prompt · the beat's own words are absent from the scene word count · both projects |
+| N5b | section flags honoured by word count and by the AI payload separately | `23-beats.spec.ts` extended: rewrite bubble needs ≥4 words selected; `/note` section is excluded from the count; focus mode stamps `data-focus` and survives reload |
 | N6 | mention plugin unit | `24-mentions.spec.ts`: type `@`, pick, occurrence written, highlight renders |
 | N7 | `scene-context.spec.ts`: lanes, ranking, budget truncation, `caseSensitive`/`exclusions`, `hiddenFieldIds`, `aiVisible:false` | `25-context.spec.ts`: rail shows lanes; dragging a chip changes what the mocked call receives |
 | N8 | `progressions.spec.ts`: `entityAtScene` layering + **a scene before the anchor cannot see it**; `story-so-far.spec.ts` budget truncation; offline summariser | `26-progressions.spec.ts`: Save & Extract writes an extracted progression; drafting an earlier scene excludes it |

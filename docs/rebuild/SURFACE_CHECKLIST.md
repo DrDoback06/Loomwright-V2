@@ -470,3 +470,25 @@ writes back through `src/db/repos/scenes.ts`.
 | Matrix: arrow keys | Moves focus between cells | rendered handler; covered by the cell specs |
 | Timeline | Reuses the codex timeline lane; a card opens its entry | `22-plan.spec.ts` (reachability), `15-sweep.spec.ts` |
 | Scene status auto-promotion | An `outline` scene becomes `draft` on its first words, once, and is never demoted | unit `scenes-repo.spec.ts` |
+
+## Scene beats (N5a)
+
+A beat is an instruction that lives in the prose and turns into prose. It is
+deliberately absent from `PROSE_BLOCK_TYPES`, so it carries no `pid` and never
+reaches `paragraphsFromDoc` — which is what keeps it out of the word count,
+out of extraction, and out of every export in one omission.
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Toolbar: Insert scene beat | Inserts a beat at the caret (also `Mod+Shift+B`, also `/beat `) | `23-beats.spec.ts` |
+| Beat: Beat style | prose / dialogue / description / action / transition — changes the instructions sent | unit `beat-prompt.spec.ts` |
+| Beat: Target words | Word target for the expansion | `23-beats.spec.ts` (14-word assertion) |
+| Beat: Copy prompt | Always present, key or no key. Copies the full prompt and shows it as selectable text if the clipboard refuses | `23-beats.spec.ts` |
+| Beat: Expand | With a provider: privacy gate → generate → draft preview. Snapshots the scene as `pre-ai` first, after flushing the autosave debounce | `23-beats.spec.ts` |
+| Beat: Prompt to send | Read-only copy of the exact prompt, so the round-trip never depends on the clipboard | `23-beats.spec.ts` |
+| Beat: Pasted beat prose → Use this | Takes prose written elsewhere through the same canon check and preview | `23-beats.spec.ts` |
+| Beat draft: Apply | Inserts the prose AFTER the beat in one transaction — one undo, one save. The beat survives, re-expandable | `23-beats.spec.ts` |
+| Beat draft: Retry | Asks again; the document is untouched until Apply | `23-beats.spec.ts` |
+| Beat draft: Discard | Clears the draft, manuscript unchanged | `23-beats.spec.ts` |
+| Beat draft: canon issues | Contradictions / changes / new names read back from the draft by the offline engine before Apply | reuses `lw-compose__issue--*`; unit `ai-prompts.spec.ts` covers the checker |
+| Settings ▸ Appearance: Prose width | **Now genuinely changes the manuscript measure** — `.lw-manuscript` reads `--measure` | `19-studio.spec.ts` |
