@@ -497,4 +497,9 @@ out of extraction, and out of every export in one omission.
 | Beat draft: Retry | Asks again; the document is untouched until Apply | `23-beats.spec.ts` |
 | Beat draft: Discard | Clears the draft, manuscript unchanged | `23-beats.spec.ts` |
 | Beat draft: canon issues | Contradictions / changes / new names read back from the draft by the offline engine before Apply | reuses `lw-compose__issue--*`; unit `ai-prompts.spec.ts` covers the checker |
+| Toolbar: Wrap in a note | Wraps the current block in a yellow section with both switches off (also `Mod+Shift+N`, also `/note `; `/section ` gives a plain one) | `24-sections.spec.ts` |
+| Section: Section colour | Six named colours mapped onto semantic tokens, so a document written in one theme still reads in another | `24-sections.spec.ts` (the `/note ` preset asserts yellow) |
+| Section: Let AI read this | Off ⇒ the block is absent from `scene.paragraphs`, the substrate every AI path reads — **independent of the word count** | `24-sections.spec.ts`, unit `paragraphs.spec.ts` |
+| Section: Count these words | Off ⇒ the block is absent from `scene.wordCount` — **independent of what a model is shown** | `24-sections.spec.ts`, unit `paragraphs.spec.ts` |
+| Section: Remove section | Unwraps: the blocks inside come back out as ordinary prose. Never a delete, so it needs no confirmation | `24-sections.spec.ts` |
 | Settings ▸ Appearance: Prose width | **Now genuinely changes the manuscript measure** — `.lw-manuscript` reads `--measure` | `19-studio.spec.ts` |

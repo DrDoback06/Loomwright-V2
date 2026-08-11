@@ -629,9 +629,56 @@
 .lw-beat__prose p { margin: 0 0 var(--sp-5); }
 .lw-beat__actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
 
+/* ---------------------------------------------------------------------
+   Sections (N5b)
+   A run of blocks the author has marked out. Unlike a beat, the prose
+   inside is real prose — same serif, same measure — so a section tints and
+   rules it without changing how it reads. The colour is a NAME on the
+   node, mapped here onto a semantic token, so a document written in one
+   theme still reads correctly in another.
+   --------------------------------------------------------------------- */
+.lw-section {
+  --section-tint: var(--ink-5);
+  margin: var(--sp-8) 0;
+  border-left: 3px solid var(--section-tint);
+  border-radius: 0 var(--r-4) var(--r-4) 0;
+  background: color-mix(in oklab, var(--section-tint) 7%, transparent);
+}
+.lw-section[data-colour='yellow'] { --section-tint: var(--warn); }
+.lw-section[data-colour='green'] { --section-tint: var(--ok); }
+.lw-section[data-colour='blue'] { --section-tint: var(--info); }
+.lw-section[data-colour='red'] { --section-tint: var(--risk); }
+.lw-section[data-colour='violet'] { --section-tint: var(--accent); }
+
+.lw-section__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--line-1);
+  font-family: var(--font-sans);
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+}
+.lw-section__control { display: inline-flex; }
+.lw-section__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+.lw-section__spacer { flex: 1; }
+.lw-section__body { padding: var(--sp-4) var(--sp-5); }
+/* An uncounted block is not the book, so it is set slightly back from it —
+   never by colour alone, which is why the flags also read as words in the
+   bar above. */
+.lw-section[data-hidden-count='true'] .lw-section__body { color: var(--ink-3); }
+
 @media (max-width: 720px) {
   /* Touch targets before density: the bar wraps rather than shrinking. */
   .lw-beat__bar { gap: var(--sp-4); }
   .lw-beat__spacer { display: none; }
   .lw-beat__actions .lw-btn { flex: 1; }
+  .lw-section__spacer { display: none; }
 }

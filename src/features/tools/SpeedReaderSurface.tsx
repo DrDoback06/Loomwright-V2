@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import type { Chapter } from '@/db/types';
-import { paragraphsFromDoc } from '@/lib/prose';
+import { HIDDEN_FROM_COUNT, paragraphsFromDoc } from '@/lib/prose';
 import {
   beatDelay,
   sentenceOf,
@@ -43,10 +43,13 @@ export function SpeedReaderSurface() {
     if (sourceId === 'paste') return pasted;
     const chapter = chapters?.find((c) => c.id === sourceId);
     // Derived from the document rather than `chapter.paragraphs`: that
-    // array now drops scenes hidden from AI, and a reading tool should
-    // read the book the author wrote, not the one a model is shown.
+    // array now drops scenes hidden from AI, and a reading tool should read
+    // the book the author wrote, not the one a model is shown. It does skip
+    // anything hidden from the word count, though — the one consumer where
+    // the two flags genuinely disagree, which is itself the argument for
+    // their being separate flags.
     return chapter
-      ? paragraphsFromDoc(chapter.doc)
+      ? paragraphsFromDoc(chapter.doc, HIDDEN_FROM_COUNT)
           .map((p) => p.text)
           .join(' ')
       : '';

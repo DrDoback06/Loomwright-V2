@@ -59,6 +59,15 @@ const TOOLS: ToolButton[] = [
     isActive: (e) => e.isActive('sceneBeat'),
     run: (e) => e.commands.insertSceneBeat(),
   },
+  {
+    // The note preset, because it is the case everyone wants: a block that
+    // neither counts as words written nor reaches a model. Any other
+    // section is this one with a switch thrown.
+    label: '🗒',
+    aria: 'Wrap in a note',
+    isActive: (e) => e.isActive('section'),
+    run: (e) => e.commands.setNote(),
+  },
 ];
 
 export function Toolbar({ editor }: { editor: Editor }) {
@@ -75,6 +84,7 @@ export function Toolbar({ editor }: { editor: Editor }) {
       // Without this key the Beat button's pressed state would not track
       // the caret — the selector's whole job is to force that re-render.
       sceneBeat: ctx.editor.isActive('sceneBeat'),
+      section: ctx.editor.isActive('section'),
     }),
   });
 

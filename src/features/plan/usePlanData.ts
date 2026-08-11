@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import { listActs, listScenes } from '@/db/repos/scenes';
 import { listChapters } from '@/db/repos/chapters';
+import { paragraphsFromDoc } from '@/lib/prose';
 import type { Act, Chapter, Entity, Occurrence, Scene } from '@/db/types';
 import type { EntityType } from '@/domain/entity-types';
 import { useProjectStore } from '@/stores/project';
@@ -144,9 +145,17 @@ function buildPresence(
   // An occurrence is anchored to a paragraph, and a paragraph belongs to
   // exactly one scene — so the scene is reachable even though the
   // occurrence row only records a chapter.
+  //
+  // Built from the **unfiltered** document rather than `scene.paragraphs`,
+  // which drops sections hidden from AI. This map wants ids, not text: an
+  // extracted mention inside a hidden section would otherwise stop
+  // resolving, and its Matrix cell would silently downgrade from "found in
+  // the prose" to nothing at all.
   const sceneOfParagraph = new Map<string, string>();
   for (const scene of scenes) {
-    for (const paragraph of scene.paragraphs) sceneOfParagraph.set(paragraph.id, scene.id);
+    for (const paragraph of paragraphsFromDoc(scene.doc)) {
+      sceneOfParagraph.set(paragraph.id, scene.id);
+    }
   }
   for (const occurrence of occurrences) {
     if (!occurrence.entityId || !occurrence.paragraphId) continue;

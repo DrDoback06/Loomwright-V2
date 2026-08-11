@@ -93,3 +93,85 @@ test.describe('a scene the AI may not read', () => {
     expect(await buildPack(page)).toContain('traitor');
   });
 });
+
+test.describe('sections', () => {
+  test('a note counts as neither words written nor words sent', async ({ page }) => {
+    await bootWithProject(page);
+    await newChapter(page);
+    await typeAndSave(page, 'The ferry did not come.');
+
+    // `/note ` is the discoverable path; the toolbar button and
+    // Mod+Shift+N run the identical command.
+    await page.getByLabel('Manuscript body').click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('/note ');
+    await page.keyboard.type('Marrow is the traitor.');
+    await expect(page.getByTestId('save-state')).toHaveAttribute('data-save-state', 'saved');
+
+    const section = page.getByTestId('section');
+    await expect(section).toContainText('Marrow is the traitor.');
+    // Five words of manuscript. The note's four are not the book.
+    await expect(page.getByTestId('save-state')).toContainText('5 words');
+
+    const pack = await buildPack(page);
+    expect(pack).toContain('The ferry did not come.');
+    expect(pack).not.toContain('traitor');
+
+    // It is prose in a document, so it survives a reload like any other.
+    await openNav(page, "Writer's Room");
+    await page.reload();
+    await openNav(page, "Writer's Room");
+    await expect(page.getByTestId('section')).toContainText('Marrow is the traitor.');
+    await expect(page.getByTestId('save-state')).toContainText('5 words');
+  });
+
+  test('the two switches are genuinely independent', async ({ page }) => {
+    await bootWithProject(page);
+    await newChapter(page);
+    await typeAndSave(page, 'The ferry did not come.');
+
+    await page.getByLabel('Manuscript body').click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('/note ');
+    await page.keyboard.type('Ferries ran hourly until nineteen twelve.');
+    await expect(page.getByTestId('save-state')).toHaveAttribute('data-save-state', 'saved');
+
+    const section = page.getByTestId('section');
+
+    // Counted but never sent: an alternate take is real writing you may
+    // not want written back at you.
+    await section.getByLabel('Count these words').check();
+    await expect(page.getByTestId('save-state')).toContainText('11 words');
+    expect(await buildPack(page)).not.toContain('nineteen twelve');
+
+    // Sent but never counted: pasted research is the model's business and
+    // not your word count. Neither switch moved the other.
+    await openNav(page, "Writer's Room");
+    await section.getByLabel('Count these words').uncheck();
+    await section.getByLabel('Let AI read this').check();
+    await expect(page.getByTestId('save-state')).toContainText('5 words');
+    expect(await buildPack(page)).toContain('nineteen twelve');
+  });
+
+  test('removing a section keeps every word inside it', async ({ page }) => {
+    await bootWithProject(page);
+    await newChapter(page);
+    await typeAndSave(page, 'The ferry did not come.');
+
+    await page.getByLabel('Manuscript body').click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('/note ');
+    await page.keyboard.type('Words that must survive.');
+    await expect(page.getByTestId('save-state')).toHaveAttribute('data-save-state', 'saved');
+    await expect(page.getByTestId('save-state')).toContainText('5 words');
+
+    await page.getByTestId('section').getByRole('button', { name: 'Remove section' }).click();
+    await expect(page.getByTestId('section')).toHaveCount(0);
+    // Unwrapped, not deleted — and now ordinary prose, so it counts.
+    await expect(page.locator('.lw-manuscript')).toContainText('Words that must survive.');
+    await expect(page.getByTestId('save-state')).toContainText('9 words');
+  });
+});

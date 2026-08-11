@@ -1,6 +1,7 @@
 import { db } from '../schema';
 import { newId } from '@/lib/id';
 import { logAudit } from './audit';
+import { deriveScene } from '@/lib/prose';
 import type { Chapter } from '../types';
 import { refreshProjectChapterReferences } from '@/services/chapter-awareness';
 import {
@@ -129,10 +130,12 @@ export async function appendParagraphToChapter(id: string, text: string): Promis
     content: [],
   };
   const nextDoc = { ...doc, type: doc.type ?? 'doc', content: [...(doc.content ?? []), node] };
+  // Both numbers re-derived from the document rather than incremented by
+  // hand: they are two different filters over it now, and a hand-rolled
+  // increment can only ever be right for one of them.
   await db.scenes.update(scene.id, {
     doc: nextDoc,
-    paragraphs: [...scene.paragraphs, { id: pid, text: line }],
-    wordCount: scene.wordCount + line.split(/\s+/).length,
+    ...deriveScene(nextDoc),
     updatedAt: Date.now(),
   });
   await chapterRollup(id);

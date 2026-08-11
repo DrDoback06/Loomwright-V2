@@ -3,6 +3,7 @@ import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from '@tipt
 import { closeHistory } from '@tiptap/pm/history';
 import { BEAT_MODES, type BeatMode } from '@/services/ai/prompts/beat';
 import type { SceneBeatStorage } from './scene-beat';
+import { swallowEditorKeys } from './swallow';
 import { toast } from '@/stores/toasts';
 import { PrivacyConfirm } from '@/features/generate/PrivacyConfirm';
 import { getAiSettings, resolveProvider } from '@/services/ai/settings';
@@ -174,25 +175,12 @@ export function SceneBeatView({ node, editor, getPos, updateAttributes }: ReactN
     setDraft(null);
   };
 
-  /** Keystrokes inside a `contentEditable={false}` child still bubble to
-   * the editor's DOM node, where ProseMirror's keymap handles them — so
-   * Backspace in the paste box would delete the beat. Everything in the
-   * chrome stops here. */
-  const swallow = {
-    onKeyDown: (e: React.SyntheticEvent) => e.stopPropagation(),
-    onKeyUp: (e: React.SyntheticEvent) => e.stopPropagation(),
-    onBeforeInput: (e: React.SyntheticEvent) => e.stopPropagation(),
-    onPaste: (e: React.SyntheticEvent) => e.stopPropagation(),
-    onDrop: (e: React.SyntheticEvent) => e.stopPropagation(),
-    onMouseDown: (e: React.SyntheticEvent) => e.stopPropagation(),
-  };
-
   return (
     <NodeViewWrapper
       className={expanded ? 'lw-beat lw-beat--expanded' : 'lw-beat'}
       data-testid="scene-beat"
     >
-      <div className="lw-beat__bar" contentEditable={false} {...swallow}>
+      <div className="lw-beat__bar" contentEditable={false} {...swallowEditorKeys}>
         <span className="lw-beat__tag" aria-hidden>
           Beat
         </span>
@@ -249,7 +237,7 @@ export function SceneBeatView({ node, editor, getPos, updateAttributes }: ReactN
       <NodeViewContent className="lw-beat__text" />
 
       {confirming ? (
-        <div contentEditable={false} {...swallow}>
+        <div contentEditable={false} {...swallowEditorKeys}>
           <PrivacyConfirm
             projectId={projectId ?? ''}
             note="This sends the beat, the prose before it, and the entities in this scene to your configured provider."
@@ -260,7 +248,7 @@ export function SceneBeatView({ node, editor, getPos, updateAttributes }: ReactN
       ) : null}
 
       {pasteOpen ? (
-        <div className="lw-beat__paste" contentEditable={false} {...swallow}>
+        <div className="lw-beat__paste" contentEditable={false} {...swallowEditorKeys}>
           <textarea
             className="lw-input lw-input--area lw-beat__prompt"
             rows={4}
@@ -293,7 +281,7 @@ export function SceneBeatView({ node, editor, getPos, updateAttributes }: ReactN
       ) : null}
 
       {draft ? (
-        <div className="lw-beat__draft" contentEditable={false} {...swallow} data-testid="beat-draft">
+        <div className="lw-beat__draft" contentEditable={false} {...swallowEditorKeys} data-testid="beat-draft">
           {draft.truncated ? (
             <p className="lw-fieldnote lw-fieldnote--error">
               The model stopped mid-flow — this is cut off. Expand again, or lower the target.

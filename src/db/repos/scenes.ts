@@ -1,6 +1,6 @@
 import { db } from '../schema';
 import { newId } from '@/lib/id';
-import { paragraphsFromDoc } from '@/lib/prose';
+import { deriveScene, paragraphsFromDoc } from '@/lib/prose';
 import { logAudit } from './audit';
 import type { Act, Chapter, Scene, SceneSnapshot } from '../types';
 import { refreshProjectChapterReferences } from '@/services/chapter-awareness';
@@ -285,9 +285,16 @@ export async function moveScene(id: string, toChapterId: string, toIndex: number
 }
 
 /** Repoint every occurrence that lives in this scene's paragraphs at the
- * chapter the scene has moved into. */
+ * chapter the scene has moved into.
+ *
+ * Derived from the **unfiltered** document, not from `scene.paragraphs`.
+ * That array is the AI substrate and drops hidden sections, and this needs
+ * ids rather than text: filtering here would leave an occurrence inside a
+ * hidden section permanently orphaned, still pointing at the chapter the
+ * prose used to be in. Filtering happens once, at derivation, for text; id
+ * bookkeeping never filters. */
 async function reanchorOccurrences(scene: Scene, toChapterId: string): Promise<void> {
-  const pids = new Set(scene.paragraphs.map((p) => p.id));
+  const pids = new Set(paragraphsFromDoc(scene.doc).map((p) => p.id));
   if (!pids.size) return;
   const rows = await db.occurrences.where('projectId').equals(scene.projectId).toArray();
   const moved = rows.filter((row) => row.paragraphId && pids.has(row.paragraphId));
@@ -514,11 +521,15 @@ export async function restoreSnapshot(snapshotId: string): Promise<void> {
   if (!scene) return;
 
   await snapshotScene(scene.id, 'manual', 'Before restore');
-  const paragraphs = paragraphsFromDoc(snapshot.doc);
+  // Re-derived rather than trusted: the stored `wordCount` was correct when
+  // the snapshot was taken, but re-deriving both numbers from the document
+  // is what keeps the two-filter contract true across a restore however old
+  // the snapshot is.
+  const { paragraphs, wordCount } = deriveScene(snapshot.doc);
   await db.scenes.update(scene.id, {
     doc: snapshot.doc,
     paragraphs,
-    wordCount: snapshot.wordCount,
+    wordCount,
     updatedAt: Date.now(),
   });
   await chapterRollup(scene.chapterId);

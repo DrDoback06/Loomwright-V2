@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N5b · step 2 of 7 (steps 0–1 done)
-**Last verified green:** N5b step 1 — lint ✅ tsc ✅ build ✅ vitest 255 ✅ playwright 208 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N5b · step 4 of 7 (steps 0–3 done)
+**Last verified green:** N5b steps 2–3 — lint ✅ tsc ✅ build ✅ vitest 262 ✅ playwright 214 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -14,7 +14,7 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N3 | Acts › Chapters › Scenes + snapshots | 8 | ✅ 8/8 |
 | N4 | Plan: Outline / Board / Matrix / Timeline | 7 | ✅ 7/7 |
 | N5a | Scene beats | 7 | ✅ 7/7 |
-| N5b | AI visibility, acts, sections, rewrite, focus | 7 | 🔄 2/7 |
+| N5b | AI visibility, acts, sections, rewrite, focus | 7 | 🔄 4/7 |
 | N6 | Typed `@` mentions | 4 | ⬜ |
 | N7 | Context engine + policy + tracking + budget rail | 7 | ⬜ |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
@@ -145,9 +145,9 @@ same filter; the half-built fields ride along.
 
 - [x] 0. **`Scene.aiVisible` made real.** `chapterRollup` is the single choke point: a hidden scene contributes its `doc` and its `wordCount`, but **not** its paragraphs. `updateSceneMeta` re-rolls the chapter the instant the box is unticked. `search.ts` and `SpeedReaderSurface` re-derive from `chapter.doc` so hiding a scene from a model never hides it from its author. 5 unit tests + `24-sections.spec.ts` (2 × 2 projects).
 - [x] 1. **Acts, reachable.** `+ Act`, rename, ↑/↓, Delete act and a per-chapter act picker in `OutlineView`; **Act** as a Board grouping (rendered only once an act exists) and as a band across the Matrix rows. New repo functions: `renameAct`, `moveAct`, `setChapterAct`. 4 unit tests + `22-plan.spec.ts` (1 × 2 projects).
-- [ ] 2. `section.ts` — a **full colourable** wrapper node (`content: 'block+'`) with independent `hiddenFromAi` / `hiddenFromWordCount`; `/note` inserts the yellow both-flags-on preset  ← IN PROGRESS
-- [ ] 3. **Diverge the two derivations.** `paragraphsFromDoc` takes a predicate (keep the `skipTypes` overload; the beat exclusion must not change). `persist`/`flushSave` derive paragraphs with `HIDDEN_FROM_AI` and the count with `HIDDEN_FROM_COUNT`. **Trap:** `reanchorOccurrences` and `usePlanData.sceneOfParagraph` read `scene.paragraphs` for its *ids* — they must derive ids from the **unfiltered** `scene.doc` or occurrences orphan on a move and Matrix cells silently downgrade. Also needs the count derivation: `snapshotScene`, `appendParagraphToChapter`.
-- [ ] 4. `RewriteBubble.tsx` — Expand / Rephrase / Shorten on ≥4 selected words + `prompts/rewrite.ts`. **`@tiptap/react` v3's `BubbleMenu` moved to `@tiptap/react/menus` and drags in `@floating-ui/dom`** — position by hand off `posToDOMRect` (viewport coords: subtract the canvas rect, add its `scrollTop`). **`.lw-wroom__canvas` has no `position: relative`** today. Scope the locator: `Expand` collides with `CodexPanel` and `SceneBeatView`.
+- [x] 2. `section.ts` + `SectionView.tsx` — a colourable wrapper node (`content: 'block+'`) with independent `hiddenFromAi` / `hiddenFromWordCount`, six named colours mapped onto semantic tokens, `/note ` and `/section ` wrapping input rules, `Mod+Shift+N`, a toolbar button, and Remove section (unwrap, never delete).
+- [x] 3. **The two derivations diverged.** `paragraphsFromDoc(doc, skip)` now takes a predicate *or* the old array; `deriveScene(doc)` returns both numbers so no writer can derive one and reuse it for the other. Wired through `persist`, `flushSave`, `restoreSnapshot` and `appendParagraphToChapter`. **The trap was real and is closed:** `reanchorOccurrences` and `usePlanData.sceneOfParagraph` derive ids from the **unfiltered** `scene.doc`. Speed reader filters by count only; search filters by nothing.
+- [ ] 4. `RewriteBubble.tsx` — Expand / Rephrase / Shorten on ≥4 selected words + `prompts/rewrite.ts`. **`@tiptap/react` v3's `BubbleMenu` moved to `@tiptap/react/menus` and drags in `@floating-ui/dom`** — position by hand off `posToDOMRect` (viewport coords: subtract the canvas rect, add its `scrollTop`). **`.lw-wroom__canvas` has no `position: relative`** today. Scope the locator: `Expand` collides with `CodexPanel` and `SceneBeatView`.  ← IN PROGRESS
 - [ ] 5. Focus mode: chrome fade after 3s typing, sentence/line/paragraph dimming, typewriter at 45%, all gated on `prefersReducedMotion()`. The `focus` tweak is **stored but never stamped** — add `data-focus` to `applyTweaks` AND the pre-paint script in `index.html`. The scroll container is `.lw-wroom__canvas`, not the window. The dimming plugin must rebuild on **selection change**, not only `docChanged`.
 - [ ] 6. `Scene.labels` chips + `attachedRefs` entity picker in `ScenePanel`; give `--density-pad` / `--density-gap` consumers or delete them; SURFACE_CHECKLIST rows; finish `24-sections.spec.ts`
 
@@ -235,7 +235,18 @@ same filter; the half-built fields ride along.
 
 ## Notes for the next run
 
-N1–N4, N5a and N5b steps 0–1 are done and pushed. Start N5b step 2 — the `section` node.
+N1–N4, N5a and N5b steps 0–3 are done and pushed. Start N5b step 4 — the rewrite bubble.
+
+**`countWords(scene.paragraphs)` now legitimately disagrees with `scene.wordCount`.** They are
+two filters over one document — `deriveScene(doc)` in `lib/prose.ts` returns both, and every
+writer of a scene row must go through it rather than deriving one and reusing it. Anything
+that wants paragraph *ids* (occurrence re-anchoring, the Matrix's paragraph→scene map) reads
+the **unfiltered** document; filtering happens once, at derivation, for text only.
+
+**A node view's chrome must not swallow Ctrl/Cmd keys.** `swallowEditorKeys` in
+`writers-room/swallow.ts` stops unmodified keys only. The full swallow made the command
+palette unreachable while focus sat in a section checkbox — caught by e2e, and the same trap
+is waiting for every future node view.
 
 **Acts group chapters; they never re-order them.** `moveAct` swaps two acts' `order` and
 touches no chapter. The Outline renders act sections in act order, so a chapter assigned to

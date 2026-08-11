@@ -25,9 +25,11 @@ import { useProjectStore } from '@/stores/project';
 import { useFocusStore } from '@/stores/focus';
 import { useUiStore } from '@/stores/ui';
 import { toast } from '@/stores/toasts';
-import { UniqueParagraphId, countWords, paragraphsFromDoc } from './paragraph-id';
+import { UniqueParagraphId } from './paragraph-id';
+import { deriveScene } from '@/lib/prose';
 import { MentionHighlights } from './mention-highlights';
 import { SceneBeat } from './scene-beat';
+import { Section } from './section';
 import { Toolbar } from './Toolbar';
 import { NotesMargin } from './NotesMargin';
 import { ComposePanel } from './ComposePanel';
@@ -156,8 +158,10 @@ export function WritersRoom() {
           return;
         }
         const doc = editor.getJSON();
-        const paragraphs = paragraphsFromDoc(doc);
-        const words = countWords(paragraphs);
+        // Two filters over one document — see `deriveScene`. A hidden
+        // section is out of `paragraphs`, out of `wordCount`, or out of
+        // both, depending on which switch the author threw.
+        const { paragraphs, wordCount: words } = deriveScene(doc);
         void saveSceneDoc(sceneId, doc, paragraphs, words).then(
           () => {
             setWordCount(words);
@@ -197,8 +201,7 @@ export function WritersRoom() {
     // stamps the wrong (or, on a fresh mount, an empty) doc onto a real scene.
     if (loadedSceneRef.current !== sceneId) return;
     const doc = editor.getJSON();
-    const paragraphs = paragraphsFromDoc(doc);
-    const words = countWords(paragraphs);
+    const { paragraphs, wordCount: words } = deriveScene(doc);
     try {
       await saveSceneDoc(sceneId, doc, paragraphs, words);
     } catch (err) {
@@ -219,7 +222,7 @@ export function WritersRoom() {
   }, []);
 
   const editor = useEditor({
-    extensions: [StarterKit, UniqueParagraphId, MentionHighlights, SceneBeat],
+    extensions: [StarterKit, UniqueParagraphId, MentionHighlights, SceneBeat, Section],
     editorProps: {
       attributes: {
         class: 'lw-manuscript',

@@ -258,6 +258,78 @@ describe('scenes: "Let AI read this scene"', () => {
   });
 });
 
+describe('scenes: a hidden section is still part of the document', () => {
+  /** `scene.paragraphs` drops anything hidden from AI, so the two places
+   * that read it for its IDS have to look at the document instead. Getting
+   * this wrong loses data silently and permanently, which is why it has its
+   * own test rather than riding along with the section specs. */
+  const withHiddenNote = {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        attrs: { pid: 'open' },
+        content: [{ type: 'text', text: 'Vex crossed the pass.' }],
+      },
+      {
+        type: 'section',
+        attrs: { colour: 'yellow', hiddenFromAi: true, hiddenFromWordCount: true },
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { pid: 'hidden' },
+            content: [{ type: 'text', text: 'Marrow was here too, maybe.' }],
+          },
+        ],
+      },
+    ],
+  };
+
+  it('carries a mention inside a hidden note when the scene changes chapter', async () => {
+    const one = await seed();
+    const two = await createChapter(PROJECT, 'Chapter 2');
+    const scene = await createScene(PROJECT, one.id, 'Travelling');
+    // What the editor would write: the hidden paragraph is NOT in the
+    // stored array, but it is in the stored document.
+    await saveSceneDoc(scene.id, withHiddenNote, [{ id: 'open', text: 'Vex crossed the pass.' }], 4);
+
+    await db.occurrences.add({
+      id: 'occ-in-note',
+      projectId: PROJECT,
+      entityId: 'e1',
+      entityType: 'cast',
+      chapterId: one.id,
+      paragraphId: 'hidden',
+      start: 0,
+      end: 6,
+      exactText: 'Marrow',
+      createdAt: 1,
+    });
+
+    await moveScene(scene.id, two.id, 0);
+    expect((await db.occurrences.get('occ-in-note'))!.chapterId).toBe(two.id);
+  });
+
+  it('restores from a snapshot with both derivations intact', async () => {
+    const chapter = await seed();
+    const scene = (await listScenesInChapter(chapter.id))[0];
+    await saveSceneDoc(scene.id, withHiddenNote, [{ id: 'open', text: 'Vex crossed the pass.' }], 4);
+    const snapshot = (await snapshotScene(scene.id, 'manual', 'With a note'))!;
+
+    await saveSceneDoc(scene.id, doc('Rewritten entirely.', 'v2'), [
+      { id: 'v2', text: 'Rewritten entirely.' },
+    ], 2);
+    await restoreSnapshot(snapshot.id);
+
+    const after = (await db.scenes.get(scene.id))!;
+    // The note is back in the document, out of the AI substrate, and out
+    // of the count — all three re-derived rather than trusted.
+    expect(JSON.stringify(after.doc)).toContain('Marrow was here too');
+    expect(after.paragraphs.map((p) => p.id)).toEqual(['open']);
+    expect(after.wordCount).toBe(4);
+  });
+});
+
 describe('scenes: moving between chapters', () => {
   it('carries its mentions to the chapter it lands in', async () => {
     const one = await seed();
