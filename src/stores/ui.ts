@@ -1,7 +1,27 @@
 import { create } from 'zustand';
 import type { EntityType } from '@/domain/entity-types';
 
-export type Theme = 'parchment-light' | 'midnight-ink';
+/** Four themes in two families. Studio is the default — a modern dark
+ * studio, neutral ground and one vivid accent. The parchment/midnight
+ * pair is the original warm literary look, kept because a stored choice
+ * is a choice: an existing reader is never moved off it. */
+export type Theme = 'studio-dark' | 'studio-light' | 'parchment-light' | 'midnight-ink';
+
+export const ALL_THEMES: readonly Theme[] = [
+  'studio-dark',
+  'studio-light',
+  'parchment-light',
+  'midnight-ink',
+] as const;
+
+/** The toggle flips within a family rather than cycling all four, so the
+ * one-key light/dark switch never changes the app's character. */
+const THEME_COUNTERPART: Record<Theme, Theme> = {
+  'studio-dark': 'studio-light',
+  'studio-light': 'studio-dark',
+  'parchment-light': 'midnight-ink',
+  'midnight-ink': 'parchment-light',
+};
 export type PalettePurpose = 'search' | 'merge-target';
 
 /** Routes that exist in the rebuilt app. Grows milestone by milestone —
@@ -60,11 +80,11 @@ const RIGHT_DOCK_KEY = 'lw:right-dock-expanded';
 function initialTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_KEY);
-    if (stored === 'parchment-light' || stored === 'midnight-ink') return stored;
+    if (stored && (ALL_THEMES as readonly string[]).includes(stored)) return stored as Theme;
   } catch {
     /* private mode etc. */
   }
-  return 'parchment-light';
+  return 'studio-dark';
 }
 
 
@@ -105,7 +125,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ theme });
   },
   toggleTheme: () => {
-    const next: Theme = get().theme === 'parchment-light' ? 'midnight-ink' : 'parchment-light';
+    const next = THEME_COUNTERPART[get().theme];
     applyTheme(next);
     set({ theme: next });
   },

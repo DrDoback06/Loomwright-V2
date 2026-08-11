@@ -14,6 +14,12 @@ import '@/styles/writers-room.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from '@/App';
+import { applyTweaks, loadTweaks } from '@/lib/tweaks';
+
+// index.html already stamped these before first paint to avoid a flash;
+// re-applying here is what keeps the two paths honest — if the pre-paint
+// script ever drifts, this is the authoritative pass.
+applyTweaks(loadTweaks());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

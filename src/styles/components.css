@@ -3783,3 +3783,41 @@ select.lw-input {
     flex: 1;
   }
 }
+
+/* ---------------------------------------------------------------------
+   Tweaks (Settings ▸ Appearance)
+   One row per preference: label, a row of choices, an optional note.
+   Choices are lw-pill so they inherit the pressed/hover treatment the
+   rest of the app already uses.
+   --------------------------------------------------------------------- */
+.lw-tweak {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-6) 0;
+  border-top: 1px solid var(--line-1);
+}
+.lw-tweak:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+.lw-tweak__label {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tr-eyebrow);
+  color: var(--ink-4);
+}
+.lw-tweak__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.lw-tweak__range {
+  width: 100%;
+  max-width: 320px;
+  accent-color: var(--accent);
+}
+.lw-tweak .lw-fieldnote {
+  margin: 0;
+}

@@ -9,6 +9,7 @@ import { exportProject, importProject } from '@/services/archive/project';
 import { renderWorldBible } from '@/services/archive/world-bible';
 import { clearApiKey, listKeyedProviders, saveApiKey } from '@/services/crypto/keys';
 import { downloadFile, fileStem } from '@/lib/download';
+import { TweaksPanel } from '@/features/settings/TweaksPanel';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
 
@@ -101,6 +102,8 @@ export function SettingsSurface() {
           key anywhere but this browser, encrypted.
         </p>
       </div>
+
+      <TweaksPanel />
 
       <section className="lw-card">
         <h2 className="lw-card__title">AI mode</h2>

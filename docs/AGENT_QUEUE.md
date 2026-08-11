@@ -3,14 +3,14 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N1 · step 1 of 6
-**Last verified green:** not yet run on this branch — establish a baseline before step 1
+**Current:** N2 · step 1 of 6
+**Last verified green:** N1 complete — lint ✅ tsc ✅ build ✅ vitest 218 ✅ playwright 148 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
 |---|---|---|---|
-| N1 | Studio design system | 6 | 🔄 0/6 |
-| N2 | Five destinations + palette + empty states | 6 | ⬜ |
+| N1 | Studio design system | 6 | ✅ 6/6 |
+| N2 | Five destinations + palette + empty states | 6 | 🔄 0/6 |
 | N3 | Acts › Chapters › Scenes + snapshots | 8 | ⬜ |
 | N4 | Plan: Outline / Board / Matrix / Timeline | 7 | ⬜ |
 | N5 | Beats, inline AI, sections, focus mode | 8 | ⬜ |
@@ -26,18 +26,24 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 
 ---
 
-## N1 — Studio design system
+## N1 — Studio design system ✅
 
-- [ ] 1. Baseline: run the full verify gate on this branch untouched, record the numbers above  ← IN PROGRESS
-- [ ] 2. Shared token scale revision in `src/styles/tokens.css` (type, spacing, radii, motion language, `--measure`). Never delete a token id.
-- [ ] 3. `studio-dark` + `studio-light` theme blocks appended to `tokens.css` (OKLCH, hue 265 / accent 300, `--ok/--warn/--risk/--info`)
-- [ ] 4. `Theme` union + `studio-dark` default + family-aware `toggleTheme()` in `src/stores/ui.ts`; legacy stored values left untouched
-- [ ] 5. `src/lib/motion.ts` (`prefersReducedMotion`) + the reduced-motion block in `base.css`; apply `data-motion-pref` in `main.tsx` beside `data-theme`
-- [ ] 6. Tweaks panel in `SettingsSurface.tsx` (theme ×4, density ×3, typeset ×3, measure 28–44em, motion, focus granularity) persisted to `db.uiState` as `${projectId}:tweaks`; SURFACE_CHECKLIST rows; e2e `19-studio.spec.ts`
+- [x] 1. Baseline established: lint ✅ tsc ✅ build ✅ vitest 218 ✅ playwright 141 passed / 10 skipped / 1 failed (`14-offline` mobile — passes in isolation, a parallel-load flake, not a regression; green in every run since)
+- [x] 2. Shared token scale revision in `src/styles/tokens.css` (type + line-height + tracking + weights, 4px spacing, radii, easing language, `--measure`). No token id deleted; `--ease-out`/`--ease-in-out` aliased.
+- [x] 3. `studio-dark` + `studio-light` theme blocks (OKLCH hue 265 / accent 300). `--ok/--warn/--risk/--info` and `--line-highlight` added to **all four** themes so components can use them freely.
+- [x] 4. `Theme` union + `ALL_THEMES` + `THEME_COUNTERPART` + `studio-dark` default in `stores/ui.ts`; a stored legacy choice is preserved. `TopBar`'s dark check covers both dark themes.
+- [x] 5. `src/lib/motion.ts` (`prefersReducedMotion`, `motionDuration`) + reduced-motion blocks in `tokens.css` honouring both the media query and `data-motion-pref`
+- [x] 6. `TweaksPanel.tsx` in Settings (theme ×4, density ×3, typeset ×3, measure 28–44em, motion ×3, focus ×4); `lib/tweaks.ts`; pre-paint restore in `index.html`; `lw-tweak*` styles; SURFACE_CHECKLIST rows; e2e `19-studio.spec.ts` (6/6 on both projects)
+
+**Deviation from the plan, deliberate:** tweaks persist to **localStorage**, not `db.uiState`.
+The pre-paint script in `index.html` has to read them synchronously to avoid a flash of the
+default theme on every boot, and IndexedDB cannot be read before first paint. They are pure
+presentation, so this does not weaken the "all data lives in Dexie" rule. `applyTweaks()` in
+`main.tsx` re-applies authoritatively so the two paths cannot drift.
 
 ## N2 — Five destinations
 
-- [ ] 1. `RouteId` + `ROUTE_ALIAS` in `stores/ui.ts`; `MainSurface` resolves aliases first
+- [ ] 1. `RouteId` + `ROUTE_ALIAS` in `stores/ui.ts`; `MainSurface` resolves aliases first  ← IN PROGRESS
 - [ ] 2. `LeftRail.tsx` → five destinations; entity types move to a filter strip in the Codex surface
 - [ ] 3. `MobileNav.tsx` → the same five; simplify `openNav` in `tests/e2e/helpers.ts` without changing its signature
 - [ ] 4. `Worlds` and `Insights` container surfaces with sub-view switchers (absorb Atlas/Tangle/Trees and Home/Today/Review)
@@ -160,5 +166,16 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 
 ## Notes for the next run
 
-Nothing yet — this is the initial queue. Start at N1 step 1: establish the verify baseline on
-this branch before changing anything, and record the numbers in the header.
+N1 is done and pushed. Start N2 step 1.
+
+Things worth knowing before you touch the shell:
+
+- **The route is not persisted.** A reload lands on Home. Any e2e assertion made after
+  `page.reload()` must navigate back first — this cost a red run in N1.
+- `openNav(page, label)` in `tests/e2e/helpers.ts` is how every spec navigates, on both
+  desktop and mobile. When the rail collapses to five destinations, **keep its signature** and
+  change only its body, or every spec in the suite breaks at once.
+- `tests/e2e/15-sweep.spec.ts` walks all 13 routes and 16 codex types asserting zero console
+  errors. It is the canary for the IA change — run it early, not last.
+- Theme is stamped by `index.html` pre-paint **and** by `applyTweaks()` in `main.tsx`. If you
+  add another appearance preference, add it to both or it will flash on boot.

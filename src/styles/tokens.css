@@ -1,11 +1,19 @@
 /* =====================================================================
-   tokens.css — Design tokens (light parchment + midnight ink)
-   Drives every surface, type, shadow, radius. Theme switches via
-   data-theme on <html>.
+   tokens.css — Design tokens.
+   Four themes: studio-dark (default), studio-light, parchment-light,
+   midnight-ink. Every theme is a redefinition of the SAME semantic set
+   (--bg-*, --ink-*, --line-*, --accent-*, --shadow-*), which is why a
+   new look costs a theme block rather than a component rewrite:
+   components.css consumes the semantic layer and never a raw colour.
+
+   Never delete a token id — components.css references them ~1,900 times.
+   Re-point values and alias legacy names instead.
    ===================================================================== */
 
 :root {
-  /* Type stacks — switchable via Tweaks (data-typeset on <html>) */
+  /* Type stacks — switchable via Tweaks (data-typeset on <html>).
+     The Studio themes override --font-display with the sans; the
+     parchment/midnight pair keep the Garamond display face. */
   --font-display: "Cormorant Garamond", "EB Garamond", Georgia, serif;
   --font-serif:   "Source Serif 4 Variable", "Source Serif 4", "Source Serif Pro", Georgia, serif;
   --font-sans:    "Inter Tight Variable", "Inter Tight", "Inter", -apple-system, system-ui, sans-serif;
@@ -18,13 +26,30 @@
   --fs-sm:  13px;
   --fs-md:  14px;
   --fs-lg:  16px;
-  --fs-xl:  18px;
-  --fs-2xl: 22px;
-  --fs-3xl: 28px;
-  --fs-4xl: 36px;
-  --fs-5xl: 48px;
+  --fs-xl:  20px;
+  --fs-2xl: 24px;
+  --fs-3xl: 32px;
+  --fs-4xl: 40px;
+  --fs-5xl: 52px;
 
-  /* Spacing scale */
+  /* Line heights + tracking. Negative tracking above 20px, positive
+     below 12px — the pair that makes dense UI type read as deliberate. */
+  --lh-tight:  1.25;
+  --lh-snug:   1.4;
+  --lh-normal: 1.5;
+  --lh-prose:  1.7;
+  --tr-eyebrow: 0.06em;
+  --tr-tight:  -0.01em;
+  --tr-tighter:-0.02em;
+
+  /* Weights — the intermediate variable-font weights do most of the work. */
+  --fw-body: 400;
+  --fw-med:  510;
+  --fw-semi: 590;
+  --fw-bold: 680;
+
+  /* Spacing scale — 4px base. The odd steps (1/3/5/7) are kept so existing
+     rules keep resolving; NEW rules use only the multiples of four. */
   --sp-0:  0px;
   --sp-1:  2px;
   --sp-2:  4px;
@@ -40,37 +65,48 @@
   --sp-12: 40px;
   --sp-13: 48px;
   --sp-14: 64px;
+  --sp-15: 80px;
 
-  /* Radii */
-  --r-1: 2px;
+  /* Radii — nested rule: inner = outer − padding. */
+  --r-1: 3px;
   --r-2: 4px;
   --r-3: 6px;
   --r-4: 8px;
   --r-5: 10px;
-  --r-6: 14px;
+  --r-6: 12px;
+  --r-7: 16px;
   --r-pill: 999px;
 
   /* Density modes — set via data-density on <html> */
-  --density-row: 30px;     /* leftRail item, list row */
+  --density-row: 32px;     /* leftRail item, list row */
   --density-pad: 12px;     /* card/panel default padding */
-  --density-gap: 10px;
-  --density-control: 30px; /* button height */
+  --density-gap: 8px;
+  --density-control: 32px; /* button height */
 
   /* Layout — fixed chrome metrics */
-  --topbar-h: 48px;
+  --topbar-h: 44px;
   --statusbar-h: 28px;
   --leftrail-w-collapsed: 56px;
-  --leftrail-w-expanded: 224px;
-  --rightrail-w: 52px;
-  --panel-w-default: 380px;
-  --panel-w-expanded: 540px;
+  --leftrail-w-expanded: 232px;
+  --rightrail-w: 48px;
+  --panel-w-default: 340px;
+  --panel-w-expanded: 520px;
+  /* Prose line length. 34em at 18px ≈ 66 characters — the measure that
+     reads fastest. User-adjustable 28–44em from Tweaks. */
+  --measure: 34em;
 
-  /* Motion */
-  --motion-fast: 120ms;
+  /* Motion. An easing LANGUAGE: one curve per intent, so movement means
+     something rather than merely happening. */
+  --motion-instant: 90ms;
+  --motion-fast: 140ms;
   --motion-base: 200ms;
   --motion-slow: 320ms;
-  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-enter:  cubic-bezier(0, 0, 0.2, 1);        /* decelerate: appearing */
+  --ease-exit:   cubic-bezier(0.4, 0, 1, 1);        /* accelerate: leaving   */
+  --ease-move:   cubic-bezier(0.4, 0, 0.2, 1);      /* standard: reorder     */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* CELEBRATION ONLY      */
+  --ease-out: var(--ease-enter);                    /* legacy alias */
+  --ease-in-out: var(--ease-move);                  /* legacy alias */
 
   /* ---------------------------------------------------------------------
      Z-index ladder — final, single source of truth.
@@ -140,6 +176,121 @@
 }
 
 /* =====================================================================
+   STUDIO-DARK — the default. Deep neutral ground, one vivid accent.
+   Elevation is carried by surface lightness plus a 1px top highlight,
+   because a shadow barely reads against a dark ground.
+   OKLCH throughout: one neutral hue family (265) with a violet accent
+   (300), on the Tailwind-v4 lightness ladder so tints stay
+   perceptually even instead of going muddy at the dark end.
+   ===================================================================== */
+[data-theme="studio-dark"] {
+  /* Studio leads with the sans; the serif is reserved for prose. */
+  --font-display: "Inter Tight Variable", "Inter Tight", "Inter", system-ui, sans-serif;
+
+  /* Surfaces */
+  --bg-deep:    oklch(13.5% .008 265);
+  --bg-app:     oklch(16.5% .008 265);
+  --bg-paper:   oklch(19.5% .009 265);
+  --bg-paper-2: oklch(22.5% .010 265);
+  --bg-elev:    oklch(26.0% .011 265);
+  --bg-sunken:  oklch(12.0% .007 265);
+  --bg-tint:    oklch(72% .19 300 / .08);
+
+  /* Ink */
+  --ink-1: oklch(97% .004 265);
+  --ink-2: oklch(84% .007 265);
+  --ink-3: oklch(68% .009 265);
+  --ink-4: oklch(55% .010 265);
+  --ink-5: oklch(43% .010 265);
+  --ink-on-accent: oklch(17% .02 300);
+
+  /* Lines */
+  --line-1: oklch(100% 0 0 / .06);
+  --line-2: oklch(100% 0 0 / .10);
+  --line-3: oklch(100% 0 0 / .16);
+  --line-strong: oklch(100% 0 0 / .30);
+  --line-highlight: oklch(100% 0 0 / .07);
+
+  --accent:      oklch(72% .19 300);
+  --accent-deep: oklch(80% .17 300);
+  --accent-soft: oklch(72% .19 300 / .16);
+  --accent-on:   oklch(17% .02 300);
+
+  --focus-ring: 0 0 0 2px var(--bg-app), 0 0 0 4px var(--accent);
+
+  --shadow-1: 0 1px 2px oklch(0% 0 0 / .40);
+  --shadow-2: 0 2px 4px oklch(0% 0 0 / .36), 0 6px 16px -6px oklch(0% 0 0 / .44);
+  --shadow-3: 0 4px 10px oklch(0% 0 0 / .40), 0 18px 40px -12px oklch(0% 0 0 / .52);
+  --shadow-4: 0 6px 14px oklch(0% 0 0 / .44), 0 36px 80px -24px oklch(0% 0 0 / .62);
+  --shadow-stamp: inset 0 1px 0 var(--line-highlight), inset 0 0 0 1px var(--line-1);
+
+  --paper-grain: none;   /* Studio is flat: no texture layer */
+
+  --select-bg: oklch(72% .19 300 / .28);
+  --select-fg: var(--ink-1);
+
+  /* Semantic states — health charts, nudge severity, confidence bands. */
+  --ok:   oklch(72% .16 155);
+  --warn: oklch(78% .15 78);
+  --risk: oklch(66% .19 25);
+  --info: oklch(72% .14 235);
+}
+
+/* =====================================================================
+   STUDIO-LIGHT — the same system inverted. A clean studio, not a
+   parchment: the warmth lives in the other pair of themes.
+   ===================================================================== */
+[data-theme="studio-light"] {
+  --font-display: "Inter Tight Variable", "Inter Tight", "Inter", system-ui, sans-serif;
+
+  --bg-deep:    oklch(95.5% .004 265);
+  --bg-app:     oklch(98.0% .003 265);
+  --bg-paper:   oklch(100%  0 0);
+  --bg-paper-2: oklch(99.0% .002 265);
+  --bg-elev:    oklch(100%  0 0);
+  --bg-sunken:  oklch(96.5% .004 265);
+  --bg-tint:    oklch(56% .19 300 / .06);
+
+  --ink-1: oklch(22% .012 265);
+  --ink-2: oklch(38% .012 265);
+  --ink-3: oklch(52% .011 265);
+  --ink-4: oklch(64% .010 265);
+  --ink-5: oklch(76% .008 265);
+  --ink-on-accent: oklch(99% .002 300);
+
+  --line-1: oklch(22% .012 265 / .08);
+  --line-2: oklch(22% .012 265 / .13);
+  --line-3: oklch(22% .012 265 / .20);
+  --line-strong: oklch(22% .012 265 / .42);
+  --line-highlight: oklch(100% 0 0 / .80);
+
+  --accent:      oklch(56% .19 300);
+  --accent-deep: oklch(46% .18 300);
+  --accent-soft: oklch(56% .19 300 / .12);
+  --accent-on:   oklch(99% .002 300);
+
+  --focus-ring: 0 0 0 2px var(--bg-app), 0 0 0 4px var(--accent);
+
+  --shadow-1: 0 1px 2px oklch(22% .01 265 / .06), 0 1px 1px oklch(22% .01 265 / .04);
+  --shadow-2: 0 2px 4px oklch(22% .01 265 / .06), 0 4px 8px oklch(22% .01 265 / .05);
+  --shadow-3: 0 2px 4px oklch(22% .01 265 / .05), 0 8px 16px oklch(22% .01 265 / .06),
+              0 16px 32px oklch(22% .01 265 / .05);
+  --shadow-4: 0 4px 8px oklch(22% .01 265 / .05), 0 12px 24px oklch(22% .01 265 / .06),
+              0 32px 56px oklch(22% .01 265 / .07);
+  --shadow-stamp: inset 0 0 0 1px var(--line-1);
+
+  --paper-grain: none;
+
+  --select-bg: oklch(56% .19 300 / .18);
+  --select-fg: var(--ink-1);
+
+  --ok:   oklch(56% .15 155);
+  --warn: oklch(62% .15 65);
+  --risk: oklch(55% .21 25);
+  --info: oklch(56% .15 235);
+}
+
+/* =====================================================================
    PARCHMENT-LIGHT theme
    ===================================================================== */
 [data-theme="parchment-light"] {
@@ -190,6 +341,14 @@
   /* Selection */
   --select-bg: rgba(154, 123, 58, 0.22);
   --select-fg: var(--ink-1);
+
+  --line-highlight: rgba(255, 255, 255, 0.7);
+
+  /* Semantic states, warmed to sit inside the parchment palette. */
+  --ok:   #4f7a3f;
+  --warn: #a8761c;
+  --risk: #a33a28;
+  --info: #3d6a94;
 }
 
 /* =====================================================================
@@ -235,6 +394,13 @@
 
   --select-bg: rgba(201, 162, 74, 0.28);
   --select-fg: var(--ink-1);
+
+  --line-highlight: rgba(220, 195, 130, 0.08);
+
+  --ok:   #7fae5f;
+  --warn: #d9a441;
+  --risk: #d4674f;
+  --info: #6d9dc5;
 }
 
 /* =====================================================================
@@ -286,3 +452,42 @@ body {
 
 /* Stamp-like inner ring used on archive cards */
 .stamp { box-shadow: var(--shadow-stamp); }
+
+/* =====================================================================
+   Reduced motion.
+   Reduce is not remove: movement goes, but opacity transitions stay, so
+   a state change is still legible rather than teleporting. The in-app
+   Tweaks setting mirrors the OS one via data-motion-pref on <html>, set
+   in main.tsx — an OS setting does not cover everyone.
+   ===================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion-pref="full"]) *,
+  :root:not([data-motion-pref="full"]) *::before,
+  :root:not([data-motion-pref="full"]) *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[data-motion-pref="reduce"] *,
+[data-motion-pref="reduce"] *::before,
+[data-motion-pref="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Opacity-only transitions survive both paths. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion-pref="full"]) .lw-fade,
+  :root:not([data-motion-pref="full"]) [data-motion="fade"] {
+    transition: opacity 120ms linear !important;
+  }
+}
+[data-motion-pref="reduce"] .lw-fade,
+[data-motion-pref="reduce"] [data-motion="fade"] {
+  transition: opacity 120ms linear !important;
+}

@@ -389,3 +389,15 @@ offline engine already produced.
 | Settings ▸ providers: Get a key ↗ | Opens the provider's own key page in a new tab | link, no app state |
 | Review ▸ cascade board: new-entry roll-up | Discoveries reach the board as create units, grouped per type | `04-extraction-review.spec.ts` |
 | Review ▸ smart card: Accept as new (multi-record) | A new thing backed by several records still accepts in one click | `04-extraction-review.spec.ts` |
+
+## Studio design system (N1)
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Topbar theme toggle | Flips within the active family (studio-dark ↔ studio-light, parchment ↔ midnight); persists | `00-boot.spec.ts` |
+| Settings ▸ Appearance: Theme | Four themes, each stamped on `data-theme` and persisted through a reload | `19-studio.spec.ts` |
+| Settings ▸ Appearance: Density | compact / balanced / spacious → `data-density`, driving the row/pad/gap/control tokens | `19-studio.spec.ts` |
+| Settings ▸ Appearance: Typeface | workhorse / literary / archive → `data-typeset`, re-pointing the display and serif stacks | `19-studio.spec.ts` |
+| Settings ▸ Appearance: Prose width | 28–44em slider writing `--measure`; restored pre-paint | `19-studio.spec.ts` |
+| Settings ▸ Appearance: Motion | system / full / reduced → `data-motion-pref`; reduced kills movement but keeps opacity transitions | `19-studio.spec.ts` |
+| Settings ▸ Appearance: Focus mode | off / paragraph / sentence / line, stored for the Writer's Room to consume | `19-studio.spec.ts` (persistence); behaviour lands with N5 |

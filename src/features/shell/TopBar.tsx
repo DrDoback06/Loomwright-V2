@@ -15,7 +15,7 @@ export function TopBar() {
   const setRoute = useUiStore((state) => state.setRoute);
   const leftRailExpanded = useUiStore((state) => state.leftRailExpanded);
   const toggleLeftRail = useUiStore((state) => state.toggleLeftRail);
-  const dark = theme === 'midnight-ink';
+  const dark = theme === 'midnight-ink' || theme === 'studio-dark';
   const reviewCount = useLiveQuery(
     async () => (projectId ? countIdentityDecisions(projectId) : 0),
     [projectId],
