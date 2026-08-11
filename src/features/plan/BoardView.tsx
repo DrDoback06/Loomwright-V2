@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { updateSceneMeta } from '@/db/repos/scenes';
-import type { Scene, SceneStatus } from '@/db/types';
+import type { Chapter, Scene, SceneStatus } from '@/db/types';
 import { STATUS_META } from '@/features/writers-room/SceneStrip';
 import type { PlanData } from './usePlanData';
 
-type GroupBy = 'status' | 'chapter' | 'pov';
+type GroupBy = 'status' | 'act' | 'chapter' | 'pov';
 
 const STATUSES: SceneStatus[] = ['outline', 'draft', 'revised', 'final'];
 
 const GROUPS: { id: GroupBy; label: string }[] = [
   { id: 'status', label: 'Status' },
+  { id: 'act', label: 'Act' },
   { id: 'chapter', label: 'Chapter' },
   { id: 'pov', label: 'POV' },
 ];
@@ -22,10 +23,13 @@ const GROUPS: { id: GroupBy; label: string }[] = [
  * columns do not accept drops — a card that looks draggable and silently
  * does nothing is worse than one that does not. */
 export function BoardView({ data, onOpenScene }: { data: PlanData; onOpenScene: (id: string) => void }) {
-  const [groupBy, setGroupBy] = useState<GroupBy>('status');
+  const [chosen, setChosen] = useState<GroupBy>('status');
   const [dragging, setDragging] = useState<string | null>(null);
 
-  const { scenes, chapters, entityById } = data;
+  const { acts, scenes, chapters, entityById } = data;
+  // Deleting the last act while grouped by it would leave the board on a
+  // grouping whose pill is no longer rendered — one column, no way back.
+  const groupBy: GroupBy = chosen === 'act' && acts.length === 0 ? 'status' : chosen;
 
   const columns: { key: string; label: string; scenes: Scene[] }[] =
     groupBy === 'status'
@@ -34,13 +38,15 @@ export function BoardView({ data, onOpenScene }: { data: PlanData; onOpenScene: 
           label: STATUS_META[status].label,
           scenes: scenes.filter((s) => s.status === status),
         }))
-      : groupBy === 'chapter'
-        ? chapters.map((chapter) => ({
-            key: chapter.id,
-            label: chapter.title,
-            scenes: scenes.filter((s) => s.chapterId === chapter.id),
-          }))
-        : povColumns(scenes, entityById);
+      : groupBy === 'act'
+        ? actColumns(data)
+        : groupBy === 'chapter'
+          ? chapters.map((chapter) => ({
+              key: chapter.id,
+              label: chapter.title,
+              scenes: scenes.filter((s) => s.chapterId === chapter.id),
+            }))
+          : povColumns(scenes, entityById);
 
   return (
     <div className="lw-board" data-testid="plan-board">
@@ -49,13 +55,16 @@ export function BoardView({ data, onOpenScene }: { data: PlanData; onOpenScene: 
           Group by
         </span>
         <div className="lw-tweak__options" role="group" aria-labelledby="board-group">
-          {GROUPS.map((group) => (
+          {/* Act only appears once the book has one. A grouping that can
+              only ever produce a single "No act" column is a control that
+              does nothing, which this repo does not ship. */}
+          {GROUPS.filter((g) => g.id !== 'act' || acts.length > 0).map((group) => (
             <button
               key={group.id}
               type="button"
               className={group.id === groupBy ? 'lw-pill lw-pill--active' : 'lw-pill'}
               aria-pressed={group.id === groupBy}
-              onClick={() => setGroupBy(group.id)}
+              onClick={() => setChosen(group.id)}
             >
               {group.label}
             </button>
@@ -158,6 +167,24 @@ export function BoardView({ data, onOpenScene }: { data: PlanData; onOpenScene: 
       </div>
     </div>
   );
+}
+
+/** One column per act, in act order, plus a trailing column for chapters
+ * that belong to none. A scene's act is its chapter's act — acts group
+ * chapters, so this is a two-hop lookup rather than a field on the row. */
+function actColumns(data: PlanData) {
+  const columns = data.acts.map((act) => ({
+    key: act.id,
+    label: act.title,
+    scenes: scenesOfChapters(data, data.chaptersByAct.get(act.id) ?? []),
+  }));
+  const loose = scenesOfChapters(data, data.chaptersByAct.get('') ?? []);
+  if (loose.length) columns.push({ key: 'none', label: 'Not in an act', scenes: loose });
+  return columns;
+}
+
+function scenesOfChapters(data: PlanData, chapters: Chapter[]): Scene[] {
+  return chapters.flatMap((chapter) => data.scenesByChapter.get(chapter.id) ?? []);
 }
 
 function povColumns(scenes: Scene[], entityById: PlanData['entityById']) {

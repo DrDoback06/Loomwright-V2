@@ -1,8 +1,20 @@
-import { useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { updateSceneMeta } from '@/db/repos/scenes';
 import type { Scene } from '@/db/types';
 import { ENTITY_TYPE_META, type EntityType } from '@/domain/entity-types';
 import { MATRIX_ENTITY_TYPES, type CellSource, type PlanData } from './usePlanData';
+
+/** The act banner to draw above this row, or null when the act has not
+ * changed since the row before it. Returns null entirely when the book has
+ * no acts — an unbanded grid is the right grid for most manuscripts. */
+function bandLabel(data: PlanData, scene: Scene, previous: Scene | undefined): string | null {
+  if (data.acts.length === 0) return null;
+  const actOf = (s: Scene | undefined) =>
+    s ? (data.chapterOf.get(s.id)?.actId ?? null) : undefined;
+  const current = actOf(scene);
+  if (previous && actOf(previous) === current) return null;
+  return current ? (data.acts.find((a) => a.id === current)?.title ?? null) : 'Not in an act';
+}
 
 const SOURCE_TITLE: Record<CellSource, string> = {
   asserted: 'You marked this',
@@ -133,48 +145,62 @@ export function MatrixView({
               </tr>
             </thead>
             <tbody>
-              {data.scenes.map((scene) => (
-                <tr key={scene.id}>
-                  <th scope="row" className="lw-matrix__rowhead">
-                    <button
-                      type="button"
-                      className="lw-matrix__scenebtn"
-                      onClick={() => onOpenScene(scene.id)}
-                    >
-                      <span className="lw-matrix__scenename">{scene.title}</span>
-                      <span className="lw-matrix__scenechapter">
-                        {data.chapterOf.get(scene.id)?.title ?? ''}
-                      </span>
-                    </button>
-                  </th>
-                  {columns.map((entity) => {
-                    const source = data.presence.get(`${scene.id}|${entity.id}`);
-                    return (
-                      <td key={entity.id} className="lw-matrix__cell">
-                        <button
-                          type="button"
-                          className={
-                            source
-                              ? `lw-matrix__mark lw-matrix__mark--${source}`
-                              : 'lw-matrix__mark'
-                          }
-                          data-source={source ?? 'none'}
-                          aria-pressed={source === 'asserted'}
-                          title={
-                            source
-                              ? `${entity.name} · ${SOURCE_TITLE[source]}`
-                              : `Mark ${entity.name} as present in ${scene.title}`
-                          }
-                          aria-label={`${entity.name} in ${scene.title}${
-                            source ? ` — ${SOURCE_TITLE[source]}` : ''
-                          }`}
-                          style={source ? { backgroundColor: meta.color } : undefined}
-                          onClick={() => toggle(scene, entity.id, source)}
-                        />
-                      </td>
-                    );
-                  })}
-                </tr>
+              {data.scenes.map((scene, index) => (
+                <Fragment key={scene.id}>
+                  {/* Acts band the rows rather than becoming a column axis:
+                      the columns are codex entries, and an act is not one.
+                      The band is emitted whenever the act changes going down
+                      the manuscript, so a chapter assigned out of sequence
+                      shows up as a repeated act rather than being hidden. */}
+                  {bandLabel(data, scene, data.scenes[index - 1]) ? (
+                    <tr className="lw-matrix__band">
+                      <th scope="colgroup" colSpan={columns.length + 1}>
+                        {bandLabel(data, scene, data.scenes[index - 1])}
+                      </th>
+                    </tr>
+                  ) : null}
+                  <tr>
+                    <th scope="row" className="lw-matrix__rowhead">
+                      <button
+                        type="button"
+                        className="lw-matrix__scenebtn"
+                        onClick={() => onOpenScene(scene.id)}
+                      >
+                        <span className="lw-matrix__scenename">{scene.title}</span>
+                        <span className="lw-matrix__scenechapter">
+                          {data.chapterOf.get(scene.id)?.title ?? ''}
+                        </span>
+                      </button>
+                    </th>
+                    {columns.map((entity) => {
+                      const source = data.presence.get(`${scene.id}|${entity.id}`);
+                      return (
+                        <td key={entity.id} className="lw-matrix__cell">
+                          <button
+                            type="button"
+                            className={
+                              source
+                                ? `lw-matrix__mark lw-matrix__mark--${source}`
+                                : 'lw-matrix__mark'
+                            }
+                            data-source={source ?? 'none'}
+                            aria-pressed={source === 'asserted'}
+                            title={
+                              source
+                                ? `${entity.name} · ${SOURCE_TITLE[source]}`
+                                : `Mark ${entity.name} as present in ${scene.title}`
+                            }
+                            aria-label={`${entity.name} in ${scene.title}${
+                              source ? ` — ${SOURCE_TITLE[source]}` : ''
+                            }`}
+                            style={source ? { backgroundColor: meta.color } : undefined}
+                            onClick={() => toggle(scene, entity.id, source)}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>

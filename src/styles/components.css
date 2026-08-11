@@ -3992,12 +3992,56 @@ select.lw-input {
   color: var(--ink-4);
   font-variant-numeric: tabular-nums;
 }
+.lw-outline__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+}
+.lw-outline__head .lw-outline__total { flex: 1; }
 .lw-outline__chapter {
   border: 1px solid var(--line-1);
   border-radius: var(--r-4);
   background: var(--bg-paper-2);
   box-shadow: var(--shadow-stamp);
   overflow: hidden;
+}
+
+/* Acts — an optional band above the chapters, indented so the hierarchy
+   reads at a glance without another level of card nesting. */
+.lw-outline__act { display: flex; flex-direction: column; gap: var(--sp-6); }
+.lw-outline__acthead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 2px solid var(--line-2);
+}
+.lw-outline__eyebrow {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--tr-eyebrow);
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.lw-outline__acttitle {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: none;
+  color: var(--ink-1);
+  font: inherit;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--tr-tight);
+}
+.lw-outline__acttitle:hover { border-bottom-color: var(--line-2); }
+.lw-outline__acttitle:focus { border-bottom-color: var(--accent); outline: none; }
+.lw-outline__actpick { display: flex; }
+.lw-outline__emptyact {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
 }
 .lw-outline__chapterhead {
   display: flex;
@@ -4220,6 +4264,22 @@ select.lw-input {
 .lw-matrix__mark--extracted::after { outline: 1px dashed var(--line-strong); outline-offset: -1px; }
 .lw-matrix__mark[data-source='none'] { background: transparent !important; }
 .lw-matrix__mark[data-source='none']:hover::after { background: var(--line-2); }
+/* An act banner across the grid. It sits under the sticky column head and
+   above the sticky first column, so it must claim its own stacking slot. */
+.lw-matrix__band > th {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  padding: var(--sp-4) var(--sp-5) var(--sp-2);
+  background: var(--bg-app);
+  border-bottom: 2px solid var(--line-2);
+  text-align: left;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--tr-eyebrow);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
 
 @media (max-width: 720px) {
   .lw-plan__body { padding: var(--sp-6); }

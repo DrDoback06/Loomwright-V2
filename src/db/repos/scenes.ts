@@ -42,6 +42,44 @@ export async function updateAct(id: string, patch: Partial<Act>): Promise<void> 
   await db.acts.update(id, { ...patch, updatedAt: Date.now() });
 }
 
+export async function renameAct(id: string, title: string): Promise<void> {
+  const act = await db.acts.get(id);
+  if (!act) return;
+  await updateAct(id, { title: title.trim() || act.title });
+}
+
+/** Swap an act with its neighbour. Acts carry their own order — they are a
+ * grouping over chapters, not a re-ordering of them — so moving one never
+ * touches a chapter's position in the manuscript. */
+export async function moveAct(id: string, direction: 'up' | 'down'): Promise<void> {
+  const act = await db.acts.get(id);
+  if (!act) return;
+  const siblings = await listActs(act.projectId);
+  const index = siblings.findIndex((a) => a.id === id);
+  const swapWith = direction === 'up' ? siblings[index - 1] : siblings[index + 1];
+  if (!swapWith) return;
+  const now = Date.now();
+  await db.transaction('rw', db.acts, async () => {
+    await db.acts.update(act.id, { order: swapWith.order, updatedAt: now });
+    await db.acts.update(swapWith.id, { order: act.order, updatedAt: now });
+  });
+}
+
+/** Put a chapter in an act, or take it out of one. Grouping only: the
+ * chapter's `order`, its scenes and its prose are all untouched. */
+export async function setChapterAct(chapterId: string, actId: string | null): Promise<void> {
+  const chapter = await db.chapters.get(chapterId);
+  if (!chapter) return;
+  await db.chapters.update(chapterId, { actId, updatedAt: Date.now() });
+  await logAudit({
+    projectId: chapter.projectId,
+    action: 'chapter.act',
+    target: { table: 'chapters', id: chapterId, label: chapter.title },
+    before: { actId: chapter.actId ?? null },
+    after: { actId },
+  });
+}
+
 /** Deleting an act never deletes prose — its chapters simply stop
  * belonging to one. Losing a grouping must not be able to lose a word. */
 export async function deleteAct(id: string): Promise<void> {

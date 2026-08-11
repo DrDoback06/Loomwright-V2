@@ -124,6 +124,59 @@ test.describe('plan', () => {
     await expect(page.getByTestId('surface-writers-room')).toBeVisible();
   });
 
+  test('an act groups chapters everywhere, and deleting it costs no prose', async ({ page }) => {
+    await bootWithProject(page);
+    await seedTwoScenes(page);
+
+    await openNav(page, 'Outline');
+    const outline = page.getByTestId('plan-outline');
+    // Acts stay out of the way until asked for: none until you make one.
+    await expect(outline.getByTestId('outline-act')).toHaveCount(0);
+
+    await outline.getByRole('button', { name: '+ Act' }).click();
+    const act = outline.getByTestId('outline-act');
+    await expect(act).toHaveCount(1);
+
+    const title = act.getByRole('textbox', { name: /Act title/ });
+    await title.fill('The gathering storm');
+    await title.blur();
+    await expect(act.getByText('No chapters in this act yet')).toBeVisible();
+
+    await outline
+      .getByRole('combobox', { name: 'Act for Chapter 1' })
+      .selectOption({ label: 'The gathering storm' });
+    await expect(act.getByRole('heading', { name: 'Chapter 1' })).toBeVisible();
+
+    // The same grouping is a column on the Board...
+    await page.getByRole('tab', { name: 'Board' }).click();
+    const board = page.getByTestId('plan-board');
+    await board.getByRole('button', { name: 'Act', exact: true }).click();
+    await expect(board.getByRole('region', { name: 'The gathering storm' })).toContainText(
+      'Scene 1'
+    );
+
+    // ...and a band across the Matrix.
+    await page.getByRole('tab', { name: 'Matrix' }).click();
+    await expect(page.getByTestId('plan-matrix')).toContainText('The gathering storm');
+
+    // It survives a reload, because it is data and not view state.
+    await page.reload();
+    await openNav(page, 'Outline');
+    await expect(
+      page.getByTestId('plan-outline').getByRole('textbox', { name: /Act title/ })
+    ).toHaveValue('The gathering storm');
+
+    // And losing the grouping cannot lose the book.
+    await page
+      .getByTestId('plan-outline')
+      .getByRole('button', { name: 'Delete The gathering storm' })
+      .click();
+    await expect(page.getByTestId('plan-outline').getByTestId('outline-act')).toHaveCount(0);
+    await expect(page.getByTestId('plan-outline')).toContainText('1 chapter · 2 scenes');
+    await openNav(page, "Writer's Room");
+    await expect(page.getByLabel('Manuscript body')).toContainText('Aelinor crossed the pass');
+  });
+
   test('every view is reachable, including on a phone', async ({ page }) => {
     await bootWithProject(page);
     await seedTwoScenes(page);

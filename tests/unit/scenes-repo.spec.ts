@@ -6,7 +6,13 @@ import { restoreFromTrash } from '@/db/repos/trash';
 import {
   SNAPSHOT_KEEP,
   chapterRollup,
+  createAct,
   createScene,
+  deleteAct,
+  listActs,
+  moveAct,
+  renameAct,
+  setChapterAct,
   deleteSceneToTrash,
   ensureScenesForProject,
   listScenes,
@@ -109,6 +115,72 @@ describe('scenes: the chapter rollup', () => {
     // A rollup triggered by anything else must not lose it.
     await chapterRollup(chapter.id);
     expect((await db.chapters.get(chapter.id))!.wordCount).toBe(4);
+  });
+});
+
+describe('acts', () => {
+  it('numbers itself from what is already there, and renames without losing its place', async () => {
+    await seed();
+    const first = await createAct(PROJECT);
+    const second = await createAct(PROJECT);
+    expect([first.title, second.title]).toEqual(['Act 1', 'Act 2']);
+
+    await renameAct(first.id, '  The gathering storm  ');
+    expect((await listActs(PROJECT))[0].title).toBe('The gathering storm');
+
+    // A blank rename is a slip, not an instruction.
+    await renameAct(first.id, '   ');
+    expect((await listActs(PROJECT))[0].title).toBe('The gathering storm');
+  });
+
+  it('reorders without touching a single chapter', async () => {
+    const chapter = await seed();
+    const first = await createAct(PROJECT);
+    const second = await createAct(PROJECT);
+    const orderBefore = (await db.chapters.get(chapter.id))!.order;
+
+    await moveAct(second.id, 'up');
+    expect((await listActs(PROJECT)).map((a) => a.id)).toEqual([second.id, first.id]);
+    expect((await db.chapters.get(chapter.id))!.order).toBe(orderBefore);
+
+    // Moving past the end is a no-op, not a corrupted order.
+    await moveAct(second.id, 'up');
+    expect((await listActs(PROJECT)).map((a) => a.id)).toEqual([second.id, first.id]);
+  });
+
+  it('groups chapters without moving them', async () => {
+    const one = await seed();
+    const two = await createChapter(PROJECT, 'Chapter 2');
+    const act = await createAct(PROJECT);
+
+    await setChapterAct(two.id, act.id);
+    expect((await db.chapters.get(two.id))!.actId).toBe(act.id);
+    expect((await db.chapters.get(one.id))!.actId ?? null).toBeNull();
+    // Grouping is not ordering: chapter two is still chapter two.
+    expect((await db.chapters.get(two.id))!.order).toBe(1);
+
+    await setChapterAct(two.id, null);
+    expect((await db.chapters.get(two.id))!.actId).toBeNull();
+  });
+
+  it('deleting an act never costs a word', async () => {
+    const chapter = await seed();
+    const scene = (await listScenesInChapter(chapter.id))[0];
+    await saveSceneDoc(scene.id, doc('Every word of this survives.', 'a1'), [
+      { id: 'a1', text: 'Every word of this survives.' },
+    ], 5);
+    const act = await createAct(PROJECT);
+    await setChapterAct(chapter.id, act.id);
+
+    await deleteAct(act.id);
+
+    expect(await listActs(PROJECT)).toHaveLength(0);
+    const after = (await db.chapters.get(chapter.id))!;
+    expect(after.actId).toBeNull();
+    expect(after.wordCount).toBe(5);
+    expect((await listScenesInChapter(chapter.id))[0].paragraphs[0].text).toBe(
+      'Every word of this survives.'
+    );
   });
 });
 

@@ -460,7 +460,12 @@ writes back through `src/db/repos/scenes.ts`.
 | Outline: move scene earlier / later | Reorders within the chapter and re-sequences the manuscript | `22-plan.spec.ts` |
 | Outline: move chapter earlier / later | Reorders chapters and re-indexes chapter-anchored data | unit `scenes-repo.spec.ts` |
 | Outline: Open | Opens that scene's chapter in the Writer's Room | `22-plan.spec.ts` (via Matrix row; same handler) |
-| Board: Group by status / chapter / POV | Re-columns the same scenes; only status accepts drops | `22-plan.spec.ts` |
+| Outline: + Act | Creates an act; the Outline, Board and Matrix all group by it from that moment | `22-plan.spec.ts` |
+| Outline: Act title | Renames the act; the Board column and Matrix band follow | `22-plan.spec.ts` |
+| Outline: Move act earlier / later | Swaps two acts' order **without touching a chapter's position** | unit `scenes-repo.spec.ts` |
+| Outline: Delete act | Removes the grouping only — its chapters, scenes and prose all survive | `22-plan.spec.ts`, unit `scenes-repo.spec.ts` |
+| Outline: Act for *chapter* | Puts the chapter in an act, or takes it out; grouping only, never re-ordering | `22-plan.spec.ts`, unit `scenes-repo.spec.ts` |
+| Board: Group by status / act / chapter / POV | Re-columns the same scenes; only status accepts drops. **Act appears only once the book has one** | `22-plan.spec.ts` |
 | Board: card drag between status columns | Writes the new status | `22-plan.spec.ts` (via the select — same write, keyboard path) |
 | Board: per-card status select | Keyboard and touch path for the same move | `22-plan.spec.ts` |
 | Board: card title | Opens the scene in the Writer's Room | `22-plan.spec.ts` |
@@ -468,6 +473,7 @@ writes back through `src/db/repos/scenes.ts`.
 | Matrix: cell | Toggles author-asserted presence; **a faint cell is what extraction found in the prose, and clicking promotes it** | `22-plan.spec.ts` |
 | Matrix: row header | Opens that scene in the Writer's Room | `22-plan.spec.ts` |
 | Matrix: arrow keys | Moves focus between cells | rendered handler; covered by the cell specs |
+| Matrix: act band | Not a control — a banner emitted wherever the act changes going down the manuscript, so a chapter assigned out of sequence is visible rather than hidden | `22-plan.spec.ts` |
 | Timeline | Reuses the codex timeline lane; a card opens its entry | `22-plan.spec.ts` (reachability), `15-sweep.spec.ts` |
 | Scene status auto-promotion | An `outline` scene becomes `draft` on its first words, once, and is never demoted | unit `scenes-repo.spec.ts` |
 
