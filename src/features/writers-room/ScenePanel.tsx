@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import { listSnapshots, restoreSnapshot, snapshotScene, updateSceneMeta } from '@/db/repos/scenes';
 import type { Scene, ScenePovType, SceneStatus } from '@/db/types';
+import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { STATUS_META } from './SceneStrip';
 import { toast } from '@/stores/toasts';
 
@@ -50,6 +51,18 @@ export function ScenePanel({
     [scene.projectId],
     []
   );
+  /** Anything worth forcing into a prompt. Deliberately broader than the
+   * POV and location pickers above: the point of an attachment is the
+   * faction, quest or object the prose has not named yet. */
+  const attachable = useLiveQuery(
+    async () =>
+      (await db.entities.where('projectId').equals(scene.projectId).toArray())
+        .filter((e) => e.status === 'active')
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .slice(0, 200),
+    [scene.projectId],
+    []
+  );
   const snapshots = useLiveQuery(async () => listSnapshots(scene.id), [scene.id], []);
 
   // Edit a local copy, not the row.
@@ -72,6 +85,17 @@ export function ScenePanel({
   const patch = (next: Partial<Scene>) => {
     setDraft((current) => ({ ...current, ...next }));
     void updateSceneMeta(scene.id, next);
+  };
+
+  const [labelDraft, setLabelDraft] = useState('');
+  const addLabel = () => {
+    const label = labelDraft.trim();
+    if (!label || draft.labels.includes(label)) {
+      setLabelDraft('');
+      return;
+    }
+    patch({ labels: [...draft.labels, label] });
+    setLabelDraft('');
   };
 
   return (
@@ -178,6 +202,110 @@ export function ScenePanel({
           value={draft.targetWords ?? ''}
           onChange={(e) => patch({ targetWords: e.target.value ? Number(e.target.value) : null })}
         />
+      </div>
+
+      <div className="lw-field lw-field--full">
+        <span className="lw-tweak__label" id="scene-labels">
+          Labels
+        </span>
+        <div className="lw-chips" aria-labelledby="scene-labels">
+          {draft.labels.length ? (
+            <div className="lw-chips__row">
+              {draft.labels.map((label) => (
+                <span key={label} className="lw-chip">
+                  {label}
+                  <button
+                    type="button"
+                    className="lw-chip__x"
+                    aria-label={`Remove label ${label}`}
+                    onClick={() => patch({ labels: draft.labels.filter((l) => l !== label) })}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <div className="lw-chips__add">
+            <input
+              className="lw-input"
+              aria-label="Add a label"
+              placeholder="setup, night, flashback…"
+              value={labelDraft}
+              onChange={(e) => setLabelDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                addLabel();
+              }}
+            />
+            <button
+              type="button"
+              className="lw-btn lw-btn--sm"
+              disabled={!labelDraft.trim()}
+              onClick={addLabel}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+        <p className="lw-fieldnote">
+          Your own words for what a scene is. They colour the Board cards and can be a Matrix
+          axis.
+        </p>
+      </div>
+
+      <div className="lw-field lw-field--full">
+        <label htmlFor="scene-attach">Always in this scene&rsquo;s AI context</label>
+        <div className="lw-chips">
+          {draft.attachedRefs.length ? (
+            <div className="lw-chips__row">
+              {draft.attachedRefs.map((ref) => (
+                <span key={ref.id} className="lw-chip">
+                  <span aria-hidden>{ENTITY_TYPE_META[ref.type].glyph}</span> {ref.name}
+                  <button
+                    type="button"
+                    className="lw-chip__x"
+                    aria-label={`Remove ${ref.name} from this scene`}
+                    onClick={() =>
+                      patch({ attachedRefs: draft.attachedRefs.filter((r) => r.id !== ref.id) })
+                    }
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <select
+            id="scene-attach"
+            className="lw-input"
+            value=""
+            onChange={(e) => {
+              const entity = attachable.find((c) => c.id === e.target.value);
+              if (!entity) return;
+              patch({
+                attachedRefs: [
+                  ...draft.attachedRefs,
+                  { id: entity.id, type: entity.type, name: entity.name },
+                ],
+              });
+            }}
+          >
+            <option value="">Add an entry…</option>
+            {attachable
+              .filter((entity) => !draft.attachedRefs.some((r) => r.id === entity.id))
+              .map((entity) => (
+                <option key={entity.id} value={entity.id}>
+                  {ENTITY_TYPE_META[entity.type].label} · {entity.name}
+                </option>
+              ))}
+          </select>
+        </div>
+        <p className="lw-fieldnote">
+          Forced into every prompt this scene sends, whether or not it is named in the prose —
+          the thing the model would otherwise have no way to know is relevant here.
+        </p>
       </div>
 
       <div className="lw-field lw-field--full">

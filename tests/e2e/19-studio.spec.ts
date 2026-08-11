@@ -39,8 +39,14 @@ test.describe('studio appearance', () => {
     const html = page.locator('html');
     const tweaks = page.getByTestId('settings-tweaks');
 
+    // Density has to move SPACING, not just control heights — that is what
+    // `--density-pad` and `--density-gap` have always claimed, and until
+    // N5b nothing read either of them.
+    const card = page.getByTestId('settings-tweaks');
+    await expect(card).toHaveCSS('padding', '20px');
     await tweaks.getByRole('button', { name: 'Compact', exact: true }).click();
     await expect(html).toHaveAttribute('data-density', 'compact');
+    await expect(card).toHaveCSS('padding', '14px');
 
     await tweaks.getByRole('button', { name: 'Literary', exact: true }).click();
     await expect(html).toHaveAttribute('data-typeset', 'literary');

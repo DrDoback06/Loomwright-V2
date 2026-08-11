@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { bootWithProject, openNav } from './helpers';
+import { bootWithProject, createCastMember, openNav } from './helpers';
 
 // AI visibility, at both scales.
 //
@@ -91,6 +91,59 @@ test.describe('a scene the AI may not read', () => {
       .getByRole('button', { name: 'Close scene details' })
       .click();
     expect(await buildPack(page)).toContain('traitor');
+  });
+});
+
+test.describe('scene metadata that other surfaces read', () => {
+  test('labels reach the Board, and an attached entry reaches the prompt', async ({ page }) => {
+    await bootWithProject(page);
+    await createCastMember(page, { name: 'Marrow', summary: 'A ferryman who owes money.' });
+    await newChapter(page);
+    await typeAndSave(page, 'The ferry did not come.');
+
+    await page.getByRole('button', { name: 'Scene', exact: true }).click();
+    const panel = page.getByTestId('scene-panel');
+
+    await panel.getByLabel('Add a label').fill('night');
+    await panel.getByRole('button', { name: 'Add', exact: true }).click();
+    await panel.getByLabel('Add a label').fill('setup');
+    await panel.getByLabel('Add a label').press('Enter');
+    await expect(panel.getByText('night')).toBeVisible();
+
+    // Marrow is nowhere in the prose, so nothing could infer he matters
+    // here. Attaching him is how you say so.
+    await panel
+      // The rendered label uses a typographic apostrophe.
+      .getByLabel(/Always in this scene.s AI context/)
+      .selectOption({ label: 'Cast · Marrow' });
+    await expect(panel.getByRole('button', { name: 'Remove Marrow from this scene' })).toBeVisible();
+
+    await panel.getByRole('button', { name: 'Close scene details' }).click();
+
+    // The labels are on the Board card, which is the reader that already
+    // existed and had nothing to render.
+    await openNav(page, 'Board');
+    await expect(page.getByTestId('plan-board')).toContainText('night');
+    await expect(page.getByTestId('plan-board')).toContainText('setup');
+
+    // And the attachment is in what a beat would send.
+    await openNav(page, "Writer's Room");
+    await page.getByLabel('Manuscript body').click();
+    await page.keyboard.press('End');
+    await page.getByRole('button', { name: 'Insert scene beat' }).click();
+    await page.keyboard.type('They wait.');
+    await page.getByTestId('scene-beat').first().getByRole('button', { name: 'Copy prompt' }).click();
+    const prompt = await page.getByTestId('scene-beat').first().getByLabel('Prompt to send').inputValue();
+    expect(prompt).toContain('Marrow');
+    expect(prompt).toContain('A ferryman who owes money.');
+
+    // Both survive a reload; they are scene data, not panel state.
+    await page.reload();
+    await openNav(page, "Writer's Room");
+    await page.getByRole('button', { name: 'Scene', exact: true }).click();
+    await expect(
+      page.getByTestId('scene-panel').getByRole('button', { name: 'Remove label night' })
+    ).toBeVisible();
   });
 });
 

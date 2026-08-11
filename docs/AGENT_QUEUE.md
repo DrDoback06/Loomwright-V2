@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N5b · step 6 of 7 (steps 0–5 done)
-**Last verified green:** N5b step 5 — lint ✅ tsc ✅ build ✅ vitest 279 ✅ playwright 230 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N6 · not started (N5b complete)
+**Last verified green:** N5b complete — lint ✅ tsc ✅ build ✅ vitest 279 ✅ playwright 232 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -14,8 +14,8 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N3 | Acts › Chapters › Scenes + snapshots | 8 | ✅ 8/8 |
 | N4 | Plan: Outline / Board / Matrix / Timeline | 7 | ✅ 7/7 |
 | N5a | Scene beats | 7 | ✅ 7/7 |
-| N5b | AI visibility, acts, sections, rewrite, focus | 7 | 🔄 6/7 |
-| N6 | Typed `@` mentions | 4 | ⬜ |
+| N5b | AI visibility, acts, sections, rewrite, focus | 7 | ✅ 7/7 |
+| N6 | Typed `@` mentions | 4 | 🔄 0/4 |
 | N7 | Context engine + policy + tracking + budget rail | 7 | ⬜ |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
 | N9 | Chat dock | 6 | ⬜ |
@@ -137,7 +137,7 @@ pending write; the database is authoritative by definition when the token moves)
 anything that calls `db.scenes.update` on the currently-loaded scene must bump the token;
 anything going through `editor.chain()` must not.
 
-## N5b — AI visibility, acts, sections, rewrite, focus
+## N5b — AI visibility, acts, sections, rewrite, focus ✅
 
 The throughline is **making AI-visibility real at both scales** — per scene (`aiVisible`,
 promised since N3) and per block (`hiddenFromAi`, new). They are the same feature and the
@@ -149,11 +149,11 @@ same filter; the half-built fields ride along.
 - [x] 3. **The two derivations diverged.** `paragraphsFromDoc(doc, skip)` now takes a predicate *or* the old array; `deriveScene(doc)` returns both numbers so no writer can derive one and reuse it for the other. Wired through `persist`, `flushSave`, `restoreSnapshot` and `appendParagraphToChapter`. **The trap was real and is closed:** `reanchorOccurrences` and `usePlanData.sceneOfParagraph` derive ids from the **unfiltered** `scene.doc`. Speed reader filters by count only; search filters by nothing.
 - [x] 4. **`RewriteBubble.tsx` + `prompts/rewrite.ts`.** Expand / Rephrase / Shorten on ≥4 selected words, positioned by hand off `posToDOMRect` (no `BubbleMenu`, no `@floating-ui/dom`); `.lw-wroom__canvas` is now `position: relative` and the bubble flips below the selection when there is no room above. Rephrase carries POV / tense / as-dialogue. Offline it copies the prompt and takes a paste, and the three AI buttons are absent from the tree. `gatherSceneContext` / `manuscriptStyleSample` extracted to `ai-context.ts` so beats and rewrites share one context source — **N7 replaces that one file, not two**. 11 unit tests + `25-rewrite.spec.ts` (4 × 2 projects).
 - [x] 5. **Focus mode, all three parts.** `data-focus` stamped by `applyTweaks` *and* the pre-paint script; `focus-dim.ts` decorations rebuilding on `selectionSet` as well as `docChanged`; chrome fade after a 3s burst, restored on mousemove or Escape; typewriter scrolling on `.lw-wroom__canvas` consulting `prefersReducedMotion()` directly, with a 55vh tail so the last paragraph can reach the line. **The N1 `line` option is retired** — a rendered line is a layout fact the document does not hold, so it could only ever have behaved as `sentence`; a stored `line` migrates. The Tweaks fieldnote no longer lies when focus is off. 6 unit tests + `26-focus.spec.ts` (4 × 2 projects).
-- [ ] 6. ← IN PROGRESS · `Scene.labels` chips + `attachedRefs` entity picker in `ScenePanel`; give `--density-pad` / `--density-gap` consumers or delete them; SURFACE_CHECKLIST rows; finish `24-sections.spec.ts`
+- [x] 6. **The last half-built fields.** `Scene.labels` is a chips field and `attachedRefs` an entity picker in `ScenePanel` — both had readers and no writer. `--density-pad` and `--density-gap` now drive `.lw-card` padding and the `.lw-page` section gap, with `balanced` set to exactly what those rules hardcoded, so Density finally moves spacing as its token names always claimed and the default layout does not shift. `19-studio.spec.ts` asserts the computed padding, not the attribute.
 
 ## N6 — Typed `@` mentions
 
-- [ ] 1. `mention-suggest.ts` suggestion plugin on `@tiptap/pm` (no new dep)
+- [ ] 1. `mention-suggest.ts` suggestion plugin on `@tiptap/pm` (no new dep)  ← IN PROGRESS
 - [ ] 2. `mention` mark carrying `entityId` / `entityType`; preview card on click
 - [ ] 3. Write an `Occurrence` with `source: 'typed'` on select; `MentionHighlights` renders typed solid, extracted dimmer
 - [ ] 4. e2e `24-mentions.spec.ts`
@@ -235,7 +235,11 @@ same filter; the half-built fields ride along.
 
 ## Notes for the next run
 
-N1–N4, N5a and N5b steps 0–5 are done and pushed. Start N5b step 6 — the last half-built fields.
+N1–N5b are complete and pushed. Start N6 — typed `@` mentions.
+
+**A node view's controls are the second place a scene's metadata is written.** N7's
+`buildSceneContext()` replaces the body of ONE file, `writers-room/ai-context.ts` —
+beats and the rewrite bubble both go through it. Do not add a third context builder.
 
 **Never select text in an e2e with a triple click or with Ctrl+A on a container.** A triple
 click inherits the browser's multi-click counter from whatever was clicked before it, so after

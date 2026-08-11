@@ -217,7 +217,11 @@ a {
   background: var(--bg-paper-2);
   border: 1px solid var(--line-1);
   border-radius: var(--r-6);
-  padding: var(--sp-9);
+  /* The density tokens' promised consumer. Balanced resolves to the 20px
+     this used to hardcode, so the default layout is unchanged and Compact
+     and Spacious now genuinely move spacing rather than control heights
+     alone — which is what the token names have always said. */
+  padding: var(--density-pad);
   box-shadow: var(--shadow-1, 0 1px 2px rgba(42, 34, 24, 0.08));
 }
 
@@ -227,7 +231,7 @@ a {
   padding: var(--sp-11) var(--sp-9) var(--sp-14);
   display: flex;
   flex-direction: column;
-  gap: var(--sp-9);
+  gap: var(--density-gap);
 }
 
 .lw-page__title {

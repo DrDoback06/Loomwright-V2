@@ -396,7 +396,7 @@ offline engine already produced.
 | --- | --- | --- |
 | Topbar theme toggle | Flips within the active family (studio-dark ↔ studio-light, parchment ↔ midnight); persists | `00-boot.spec.ts` |
 | Settings ▸ Appearance: Theme | Four themes, each stamped on `data-theme` and persisted through a reload | `19-studio.spec.ts` |
-| Settings ▸ Appearance: Density | compact / balanced / spacious → `data-density`, driving the row/pad/gap/control tokens | `19-studio.spec.ts` |
+| Settings ▸ Appearance: Density | compact / balanced / spacious → `data-density`. Moves control heights **and, since N5b, spacing**: `--density-pad` is `.lw-card` padding and `--density-gap` is the `.lw-page` section gap. Balanced resolves to the values those rules used to hardcode, so the default layout is unchanged | `19-studio.spec.ts` (asserts the card's computed padding, not just the attribute) |
 | Settings ▸ Appearance: Typeface | workhorse / literary / archive → `data-typeset`, re-pointing the display and serif stacks | `19-studio.spec.ts` |
 | Settings ▸ Appearance: Prose width | 28–44em slider writing `--measure`; restored pre-paint | `19-studio.spec.ts` |
 | Settings ▸ Appearance: Motion | system / full / reduced → `data-motion-pref`; reduced kills movement but keeps opacity transitions | `19-studio.spec.ts` |
@@ -441,6 +441,8 @@ destination would be a dead button.
 | Scene panel: POV character / POV mode | Sets the POV the Matrix axis and the balance chart read | unit `scenes-repo.spec.ts` |
 | Scene panel: Location | Sets the scene's place | unit `scenes-repo.spec.ts` |
 | Scene panel: Word target | Per-scene target for the progress rings in N13 | `21-scenes.spec.ts` |
+| Scene panel: Labels — Add / Enter / Remove | Your own words for a scene; the Board card renders them and nothing else wrote them until now | `24-sections.spec.ts` |
+| Scene panel: Always in this scene's AI context | Forces an entry into every prompt this scene sends, whether or not the prose names it — read by the beat and rewrite context builders and by the Matrix presence map | `24-sections.spec.ts` |
 | Scene panel: Let AI read this scene | Excludes the scene's prose from `chapter.paragraphs` — the substrate every AI path reads — while keeping it in the word count, in the chapter document, and in local search | `24-sections.spec.ts`, unit `scenes-repo.spec.ts` |
 | Scene panel: Save point | Takes a manual snapshot | `21-scenes.spec.ts` |
 | Scene panel: Restore | Restores a snapshot, taking one of the current text first, and reloads the editor | `21-scenes.spec.ts` |

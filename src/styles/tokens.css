@@ -78,9 +78,13 @@
   --r-pill: 999px;
 
   /* Density modes — set via data-density on <html> */
+  /* Density modes are set via data-density on <html>. The `balanced`
+     values below are exactly what cards and pages used before density had
+     a driver, so the default layout does not move by a pixel — only the
+     other two modes change anything. */
   --density-row: 32px;     /* leftRail item, list row */
-  --density-pad: 12px;     /* card/panel default padding */
-  --density-gap: 8px;
+  --density-pad: 20px;     /* .lw-card padding */
+  --density-gap: 20px;     /* .lw-page section gap */
   --density-control: 32px; /* button height */
 
   /* Layout — fixed chrome metrics */
@@ -147,14 +151,14 @@
 /* Density variants */
 [data-density="spacious"] {
   --density-row: 38px;
-  --density-pad: 16px;
-  --density-gap: 14px;
+  --density-pad: 28px;
+  --density-gap: 28px;
   --density-control: 36px;
 }
 [data-density="compact"] {
   --density-row: 26px;
-  --density-pad: 8px;
-  --density-gap: 6px;
+  --density-pad: 14px;
+  --density-gap: 12px;
   --density-control: 26px;
 }
 

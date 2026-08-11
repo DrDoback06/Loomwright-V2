@@ -376,3 +376,60 @@ it as a suggestion and guesses at everything unstated. So nothing is unstated.
   unifying them would let the extraction schema follow the configs too.
 - Suggestion volume is read for cascades but not yet for quest outcomes at the
   per-surface level.
+
+---
+
+## 13. Studio redesign N1–N5b — SHIPPED (branch `claude/novelcrafter-analysis-ui-redesign-5b8jva`)
+
+Full spec: `docs/REDESIGN_PLAN.md`. Live state: `docs/AGENT_QUEUE.md`.
+
+**N1 Studio design system** — `studio-dark` (new default) + `studio-light` OKLCH
+themes, a revised shared token scale, `lib/motion.ts`, and a Tweaks panel driving
+theme / density / typeface / prose measure / motion / focus. Tweaks live in
+localStorage, not Dexie, because `index.html` must read them before first paint.
+
+**N2 Four destinations** — Write · Plan · Codex · Insights · Worlds, everything
+else behind ⌘K with `>` `@` `#` `/` modes. `setRoute` normalises legacy route
+ids into destination + sub-view, so ~100 call sites needed no edit.
+
+**N3 Acts › Chapters › Scenes** — Dexie v9. Prose moved down to `Scene`;
+`chapterRollup()` reassembles a chapter from its scenes, which is why extraction,
+search, the world bible and the speed reader needed no changes. First prose
+history in the app's life: interval / pre-ai / pre-import snapshots, the last two
+never pruned, restore itself snapshotted.
+
+**N4 Plan** — Outline · Board · Matrix · Timeline over one query. Matrix cells
+render three sources, and the faint one is **what extraction found in the prose**,
+promoted to a fact with a click. No competitor can draw that column.
+
+**N5a Scene beats** — an instruction that lives in the prose, survives its own
+expansion, and is invisible to word count, extraction and exports by construction
+(it carries no `pid`, so `paragraphsFromDoc` never sees it). Offline it copies a
+prompt and takes a paste.
+
+**N5b AI visibility, acts, sections, rewrite, focus** — the milestone's throughline
+is **making AI-visibility real at both scales**, because an audit found the N3
+"Let AI read this scene" checkbox had *zero readers*: a privacy promise the app
+did not keep.
+
+- `chapterRollup` is the choke point. A hidden scene contributes its `doc` and its
+  `wordCount` but not its paragraphs — the array every AI path reads.
+- Sections carry **independent** `hiddenFromAi` / `hiddenFromWordCount`. One
+  document now yields two lists (`deriveScene`), so `countWords(scene.paragraphs)`
+  legitimately disagrees with `scene.wordCount`. **Anything that wants paragraph
+  *ids* — occurrence re-anchoring, the Matrix's paragraph→scene map — reads the
+  unfiltered document.** Filtering happens once, at derivation, for text only.
+- Local search filters by nothing; the speed reader filters by word count only.
+  Hiding a scene from a model is not hiding it from its author.
+- Acts became reachable (they had CRUD and no UI since N3); the rewrite bubble
+  landed with a prompt that demands every proper noun and fact survive; focus mode
+  finally reads the preference N1 stored and nothing consumed.
+
+Six dead controls across N1–N4 traced to one cause — a spec that asserts the
+*write* and never the *effect* — and `docs/AGENT_RUNBOOK.md` §4 now forbids it.
+
+### Verification
+
+`npm run lint` ✅ · `npx tsc --noEmit` ✅ · `npm run build` ✅ ·
+`npx vitest run` **279** ✅ · full Playwright suite **232 passed, 10 skipped,
+0 failed** on BOTH desktop and mobile ✅
