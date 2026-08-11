@@ -3821,3 +3821,136 @@ select.lw-input {
 .lw-tweak .lw-fieldnote {
   margin: 0;
 }
+
+/* ---------------------------------------------------------------------
+   Destinations (N2)
+   A destination is a container: a sub-navigation strip above, the real
+   surface below. The body is a flex child that owns its own scrolling,
+   so a canvas surface still gets the full remaining height.
+   --------------------------------------------------------------------- */
+.lw-dest {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.lw-dest__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.lw-subnav {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-8) 0;
+  border-bottom: 1px solid var(--line-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.lw-subnav::-webkit-scrollbar { display: none; }
+
+.lw-subnav__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-6);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-med);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease-move),
+              border-color var(--motion-fast) var(--ease-move);
+}
+.lw-subnav__tab:hover { color: var(--ink-1); }
+.lw-subnav__tab--active {
+  color: var(--ink-1);
+  border-bottom-color: var(--accent);
+}
+
+/* ---------------------------------------------------------------------
+   Codex type strip — the sixteen types, as a filter rather than as two
+   thirds of the app's navigation. Each chip carries its live count, so
+   an empty type is visibly empty before you open it.
+   --------------------------------------------------------------------- */
+.lw-typestrip {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-8);
+  border-bottom: 1px solid var(--line-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.lw-typestrip::-webkit-scrollbar { display: none; }
+
+.lw-typechip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--density-control);
+  padding: 0 var(--sp-5);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-pill);
+  background: var(--bg-paper-2);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-move),
+              color var(--motion-fast) var(--ease-move),
+              border-color var(--motion-fast) var(--ease-move);
+}
+.lw-typechip:hover {
+  background: var(--bg-tint);
+  color: var(--ink-1);
+}
+.lw-typechip--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink-1);
+}
+.lw-typechip__count {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+}
+.lw-typechip--active .lw-typechip__count { color: var(--ink-2); }
+
+/* The rail's destinations sit a little taller than an ordinary nav row,
+   and the spacer pushes the palette + Settings pair to the bottom. */
+.lw-navitem--dest { height: calc(var(--density-row) + var(--sp-2)); }
+.lw-leftrail__spacer { flex: 1; min-height: var(--sp-8); }
+
+/* Palette: the shortcut column is how people learn the keyboard path
+   without being taught it, so it only ever shows a binding that exists. */
+.lw-palette__kbd {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 2px var(--sp-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+  background: var(--bg-sunken);
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lw-empty__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  justify-content: center;
+  margin-top: var(--sp-6);
+}

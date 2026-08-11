@@ -3,15 +3,15 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N2 · step 1 of 6
-**Last verified green:** N1 complete — lint ✅ tsc ✅ build ✅ vitest 218 ✅ playwright 148 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N3 · step 1 of 8
+**Last verified green:** N2 complete — lint ✅ tsc ✅ build ✅ vitest 218 ✅ playwright 164 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
 |---|---|---|---|
 | N1 | Studio design system | 6 | ✅ 6/6 |
-| N2 | Five destinations + palette + empty states | 6 | 🔄 0/6 |
-| N3 | Acts › Chapters › Scenes + snapshots | 8 | ⬜ |
+| N2 | Four destinations + palette + empty states | 6 | ✅ 6/6 |
+| N3 | Acts › Chapters › Scenes + snapshots | 8 | 🔄 0/8 |
 | N4 | Plan: Outline / Board / Matrix / Timeline | 7 | ⬜ |
 | N5 | Beats, inline AI, sections, focus mode | 8 | ⬜ |
 | N6 | Typed `@` mentions | 4 | ⬜ |
@@ -41,18 +41,30 @@ default theme on every boot, and IndexedDB cannot be read before first paint. Th
 presentation, so this does not weaken the "all data lives in Dexie" rule. `applyTweaks()` in
 `main.tsx` re-applies authoritatively so the two paths cannot drift.
 
-## N2 — Five destinations
+## N2 — Four destinations ✅
 
-- [ ] 1. `RouteId` + `ROUTE_ALIAS` in `stores/ui.ts`; `MainSurface` resolves aliases first  ← IN PROGRESS
-- [ ] 2. `LeftRail.tsx` → five destinations; entity types move to a filter strip in the Codex surface
-- [ ] 3. `MobileNav.tsx` → the same five; simplify `openNav` in `tests/e2e/helpers.ts` without changing its signature
-- [ ] 4. `Worlds` and `Insights` container surfaces with sub-view switchers (absorb Atlas/Tangle/Trees and Home/Today/Review)
-- [ ] 5. `CommandPalette.tsx`: mode prefixes `>` `@` `#` `/`, recents-first, shortcut rendered per row
-- [ ] 6. Empty states, one action each — Write's is "Paste a chapter — we'll build the codex for you. No AI key needed."; SURFACE_CHECKLIST; e2e `20-shell.spec.ts` (desktop + mobile)
+- [x] 1. `RouteId` + `ROUTE_ALIAS` + `WorldsView`/`InsightsView` in `stores/ui.ts`. **`setRoute` normalises** a legacy id into destination + sub-view, so ~100 existing call sites, palette commands and toast actions needed no edit at all.
+- [x] 2. `LeftRail.tsx` → four destinations + More… + Settings; the 16 types became `CodexSurface`'s filter strip, each chip carrying its live active count
+- [x] 3. `MobileNav.tsx` → the same four + More; Browse/More sheets deleted (nothing left to hide behind them). `openNav` signature unchanged, body now a routing table
+- [x] 4. `WorldsSurface` + `InsightsSurface` with sub-view switchers; `HelpDialog` resolves help through the sub-view so it still describes what you are looking at
+- [x] 5. `CommandPalette`: `>` `@` `#` `/` modes, recents-first when idle, real shortcuts rendered per row (Alt+1..4, bound in `App.tsx`)
+- [x] 6. Write's empty state leads with the paste path; SURFACE_CHECKLIST rows; e2e `20-shell.spec.ts` 16/16 on both projects
+
+**Deliberate scope change: four destinations, not five.** Plan has no surface until
+scenes exist (N3/N4), and the repo's first law is that a nav entry appears only once its
+surface genuinely works. Plan joins the rail in N4.
+
+**Three real regressions the suite caught, all fixed:**
+1. `"Go to Insights"` has *Overview, Today, Review* as its subtitle, so it outranked
+   `"Go to Today"` for the query "today". The palette now scores a title match above a
+   subtitle match — worth keeping in mind for any subtitle that names another surface.
+2. The rail lost its group headings, which `17-identity-resolution` asserted on.
+3. `openNav` was matching a regex label by stringifying it. It now tests the regex against
+   a table of known surface names, which is what makes `/Import & Extract|Handoff/` work.
 
 ## N3 — Acts › Chapters › Scenes
 
-- [ ] 1. `Act` / `Scene` / `SceneSnapshot` types in `src/db/types.ts`; `Chapter.actId`
+- [ ] 1. `Act` / `Scene` / `SceneSnapshot` types in `src/db/types.ts`; `Chapter.actId`  ← IN PROGRESS
 - [ ] 2. Dexie v9 + the chapter→scene upgrade (chapters keep `doc` untouched for one release)
 - [ ] 3. `src/db/repos/scenes.ts` mirroring `chapters.ts` (order, trash, audit)
 - [ ] 4. Snapshot policy: one `interval` per 3-min window, always `pre-ai` / `pre-import`, keep last 20 + one per day
@@ -166,16 +178,25 @@ presentation, so this does not weaken the "all data lives in Dexie" rule. `apply
 
 ## Notes for the next run
 
-N1 is done and pushed. Start N2 step 1.
+N1 and N2 are done and pushed. Start N3 step 1 — the scenes schema.
 
-Things worth knowing before you touch the shell:
+Hard-won facts, in rough order of how much time they cost:
 
-- **The route is not persisted.** A reload lands on Home. Any e2e assertion made after
-  `page.reload()` must navigate back first — this cost a red run in N1.
-- `openNav(page, label)` in `tests/e2e/helpers.ts` is how every spec navigates, on both
-  desktop and mobile. When the rail collapses to five destinations, **keep its signature** and
-  change only its body, or every spec in the suite breaks at once.
-- `tests/e2e/15-sweep.spec.ts` walks all 13 routes and 16 codex types asserting zero console
-  errors. It is the canary for the IA change — run it early, not last.
-- Theme is stamped by `index.html` pre-paint **and** by `applyTweaks()` in `main.tsx`. If you
-  add another appearance preference, add it to both or it will flash on boot.
+- **`npx tsc --noEmit` does NOT typecheck `src`.** Only `npm run build` (`tsc -b`) does. A
+  missing `Record<RouteId, …>` key passed `--noEmit` cleanly and failed the build. Run the
+  build before believing a type is sound. CLAUDE.md's wording is optimistic here.
+- **The route is not persisted.** A reload lands on the default destination. Any e2e
+  assertion after `page.reload()` must navigate back first.
+- **A palette row's accessible name is its title *and* its subtitle**, so `exact: true`
+  never matches one. And a subtitle that names another surface will compete with it in
+  search — the scorer in `CommandPalette.tsx` handles this, but keep subtitles specific.
+- `openNav(page, label)` is now a routing table over `SURFACE_HOME` / `PALETTE_ONLY` in
+  `tests/e2e/helpers.ts`. **When N4 adds Plan, add its surfaces there** or specs will fall
+  through to the codex-chip branch and throw.
+- `tests/e2e/15-sweep.spec.ts` walks every surface asserting zero console errors. It is the
+  canary for any structural change — run it early, not last.
+- Appearance is stamped by `index.html` pre-paint **and** `applyTweaks()` in `main.tsx`. A
+  new preference must go in both or it flashes on boot.
+- For N3 specifically: `Chapter.doc` must stay untouched by the v9 migration for one
+  release. `chapterRollup()` is what keeps extraction, search, world-bible export and the
+  speed reader working while scenes take over as the source of truth.

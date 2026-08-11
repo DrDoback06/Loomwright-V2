@@ -7,13 +7,16 @@ test.describe('identity resolution centre', () => {
     await bootWithProject(page);
 
     const workspace = page.getByRole('navigation', { name: 'Workspace' });
-    await expect(workspace.getByText('Workspace', { exact: true })).toBeVisible();
+    // The rail lost its group headings when it collapsed to destinations;
+    // a destination's own label is what appears and disappears with the
+    // expanded/collapsed modes now.
+    await expect(workspace.getByText('Codex', { exact: true })).toBeVisible();
 
     const topbar = page.locator('.lw-topbar');
     await expect(topbar.getByRole('button', { name: /Open review queue/i })).toBeVisible();
     await topbar.getByRole('button', { name: 'Collapse left navigation' }).click();
     await expect(workspace).toHaveClass(/lw-leftrail--collapsed/);
-    await expect(workspace.getByText('Workspace', { exact: true })).toHaveCount(0);
+    await expect(workspace.getByText('Codex', { exact: true })).toHaveCount(0);
     await topbar.getByRole('button', { name: 'Expand left navigation' }).click();
     await expect(workspace).toHaveClass(/lw-leftrail--expanded/);
 

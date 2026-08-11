@@ -580,12 +580,28 @@ export function WritersRoom() {
           )}
         </div>
       ) : (
-        <div className="lw-empty lw-empty--center">
-          <p className="lw-empty__title">No chapters yet.</p>
-          <p className="lw-empty__note">Create your first chapter to start writing.</p>
-          <button type="button" className="lw-btn lw-btn--primary" onClick={() => void addChapter()}>
-            + New chapter
-          </button>
+        /* The first thing a new reader sees. It leads with the paste path
+           because that is the thing no competitor can do: the codex builds
+           itself out of the prose, with no account and no API key. Every
+           rival makes you enter a key before anything works at all. */
+        <div className="lw-empty lw-empty--center" data-testid="write-empty">
+          <p className="lw-empty__title">Nothing written yet.</p>
+          <p className="lw-empty__note">
+            Already have a draft? Paste it and Loomwright builds the codex for you — cast,
+            places, items, who owns what and who went where. No AI key needed.
+          </p>
+          <div className="lw-empty__actions">
+            <button
+              type="button"
+              className="lw-btn lw-btn--primary"
+              onClick={() => setRoute('handoff')}
+            >
+              Paste a chapter →
+            </button>
+            <button type="button" className="lw-btn" onClick={() => void addChapter()}>
+              + Start from blank
+            </button>
+          </div>
         </div>
       )}
     </div>

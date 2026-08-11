@@ -16,6 +16,12 @@ interface Command {
   run: () => void;
   /** Hidden until the query matches — keeps the idle palette short. */
   searchOnly?: boolean;
+  /** Rendered right-aligned on the row. This is how people learn the
+   * keyboard path without being taught it — so it must be a shortcut
+   * that genuinely exists, never a decoration. */
+  shortcut?: string;
+  /** Commands that reach an AI capability, surfaced by the `/` mode. */
+  ai?: boolean;
 }
 
 interface Row {
@@ -24,6 +30,64 @@ interface Row {
   title: string;
   subtitle: string;
   run: () => void;
+  shortcut?: string;
+}
+
+/** Typing a prefix narrows the palette to one kind of thing. The prefix
+ * stays in the input, so Backspace at position 0 leaves the mode with no
+ * extra state to track. */
+type PaletteMode = 'all' | 'commands' | 'entities' | 'chapters' | 'ai';
+
+const MODE_BY_PREFIX: Record<string, PaletteMode> = {
+  '>': 'commands',
+  '@': 'entities',
+  '#': 'chapters',
+  '/': 'ai',
+};
+
+const MODE_HINT: Record<PaletteMode, string> = {
+  all: '> commands · @ codex · # chapters · / AI',
+  commands: 'Commands',
+  entities: 'Codex entries',
+  chapters: 'Chapters',
+  ai: 'AI actions',
+};
+
+function parseQuery(raw: string): { mode: PaletteMode; term: string } {
+  const mode = MODE_BY_PREFIX[raw[0] ?? ''];
+  return mode ? { mode, term: raw.slice(1).trim() } : { mode: 'all', term: raw.trim() };
+}
+
+/** Lower sorts first. Exact title, then title prefix, then anywhere in the
+ * title, then the subtitle — the order someone typing a name expects. */
+function commandScore(c: Command, q: string): number {
+  if (!q) return 3;
+  const title = c.title.toLowerCase();
+  if (title === q) return 0;
+  if (title.startsWith(q) || title.startsWith(`go to ${q}`)) return 1;
+  if (title.includes(q)) return 2;
+  return 3;
+}
+
+const RECENTS_KEY = 'lw:palette-recents';
+const RECENTS_MAX = 6;
+
+function loadRecents(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENTS_KEY);
+    return raw ? (JSON.parse(raw) as string[]).slice(0, RECENTS_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberRecent(id: string): void {
+  try {
+    const next = [id, ...loadRecents().filter((x) => x !== id)].slice(0, RECENTS_MAX);
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+  } catch {
+    /* private mode — recents are a convenience, never a requirement */
+  }
 }
 
 /** The command palette (Ctrl/Cmd+K): jump anywhere, find anything.
@@ -67,8 +131,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   }, [palettePurpose, mergeRequest?.canonicalName]);
 
   useEffect(() => {
-    const q = query.trim();
-    setHits(q && searchRef.current ? searchRef.current(q) : []);
+    const { term } = parseQuery(query);
+    setHits(term && searchRef.current ? searchRef.current(term) : []);
     setActive(0);
   }, [query, searchVersion]);
 
@@ -84,7 +148,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const commands: Command[] = useMemo(
     () => [
-      { id: 'write', title: "Go to Writer's Room", subtitle: 'Write and extract', run: () => go('writers-room') },
+      { id: 'write', title: "Go to Writer's Room", subtitle: 'Write and extract', shortcut: 'Alt+1', run: () => go('writers-room') },
+      { id: 'codex', title: 'Go to Codex', subtitle: 'Everything your story knows', shortcut: 'Alt+2', run: () => go('codex') },
+      { id: 'insights', title: 'Go to Insights', subtitle: 'Overview, Today, Review', shortcut: 'Alt+3', run: () => go('insights') },
+      { id: 'worlds', title: 'Go to Worlds', subtitle: 'Atlas, Tangle, Skill Trees', shortcut: 'Alt+4', run: () => go('worlds') },
       { id: 'home', title: 'Go to Home', subtitle: 'Project dashboard', run: () => go('home') },
       { id: 'today', title: 'Go to Today', subtitle: 'What to work on now', run: () => go('today') },
       { id: 'atlas', title: 'Go to Atlas', subtitle: 'The world map', run: () => go('atlas') },
@@ -94,7 +161,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: 'reader', title: 'Go to Speed Reader', subtitle: 'RSVP read-back', run: () => go('speed-reader') },
       { id: 'templates', title: 'Go to Templates', subtitle: 'Reusable starters', run: () => go('templates') },
       { id: 'review', title: 'Go to Review', subtitle: 'Extraction queue', run: () => go('review') },
-      { id: 'handoff', title: 'Go to AI Handoff', subtitle: 'External-AI workflow', run: () => go('handoff') },
+      { id: 'handoff', title: 'Go to AI Handoff', subtitle: 'External-AI workflow', ai: true, run: () => go('handoff') },
       { id: 'settings', title: 'Go to Settings', subtitle: 'AI, privacy, extraction', run: () => go('settings') },
       { id: 'trash', title: 'Go to Trash', subtitle: 'Restore deleted things', run: () => go('trash') },
       // Create anything, from anywhere: one manual + one generate command
@@ -117,6 +184,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             title: `Generate ${label}… ✨`,
             subtitle: 'Random, AI, or paste JSON',
             searchOnly: true,
+            ai: true,
             run: () => {
               openGenerate({ kind: 'entity', entityType: type });
               closePalette();
@@ -128,14 +196,48 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     [onClose, openCreate, openGenerate]
   );
 
+  const { mode, term } = parseQuery(query);
+
   const rows: Row[] = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const commandRows: Row[] = palettePurpose === 'merge-target'
+    const q = term.toLowerCase();
+    const wantCommands =
+      palettePurpose !== 'merge-target' && (mode === 'all' || mode === 'commands' || mode === 'ai');
+
+    const commandRows: Row[] = !wantCommands
       ? []
       : commands
-      .filter((c) => (q ? c.title.toLowerCase().includes(q) || c.subtitle.toLowerCase().includes(q) : !c.searchOnly))
-      .map((c) => ({ key: `cmd:${c.id}`, glyph: '›', title: c.title, subtitle: c.subtitle, run: c.run }));
+          .filter((c) => (mode === 'ai' ? c.ai : true))
+          .filter((c) =>
+            q
+              ? c.title.toLowerCase().includes(q) || c.subtitle.toLowerCase().includes(q)
+              : // A mode is an explicit ask, so it shows its whole set
+                // rather than only the short idle list.
+                mode !== 'all' || !c.searchOnly
+          )
+          // A title match beats a subtitle match. Without this, typing
+          // "today" surfaced "Go to Insights" first, because Insights
+          // lists Today among its sub-views — technically a match, and
+          // exactly not what was asked for.
+          .sort((a, b) => commandScore(a, q) - commandScore(b, q))
+          .map((c) => ({
+            key: `cmd:${c.id}`,
+            glyph: '›',
+            title: c.title,
+            subtitle: c.subtitle,
+            shortcut: c.shortcut,
+            run: () => {
+              rememberRecent(`cmd:${c.id}`);
+              c.run();
+            },
+          }));
+
     const hitRows: Row[] = hits
+      .filter((h) => {
+        if (mode === 'entities') return h.kind === 'entity';
+        if (mode === 'chapters') return h.kind === 'chapter';
+        if (mode === 'commands' || mode === 'ai') return false;
+        return true;
+      })
       .filter((h) => {
         if (palettePurpose !== 'merge-target') return true;
         return h.kind === 'entity' && h.entityType === mergeRequest?.entityType;
@@ -167,13 +269,27 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           closePalette();
         },
       }));
-    return q ? [...hitRows, ...commandRows].slice(0, 12) : commandRows;
+    const all = q || mode !== 'all' ? [...hitRows, ...commandRows] : commandRows;
+
+    // Idle, with no mode: recents float to the top. They are what you are
+    // most likely to want, and they teach the palette by showing it doing
+    // something useful the moment it opens.
+    if (!q && mode === 'all' && palettePurpose !== 'merge-target') {
+      const recents = loadRecents();
+      const rank = (row: Row) => {
+        const i = recents.indexOf(row.key);
+        return i === -1 ? recents.length : i;
+      };
+      return [...all].sort((a, b) => rank(a) - rank(b)).slice(0, 12);
+    }
+    return all.slice(0, 12);
   }, [
     commands,
     hits,
     mergeRequest?.entityType,
+    mode,
     palettePurpose,
-    query,
+    term,
     requestChapter,
     setCodexType,
     setFocus,
@@ -223,10 +339,14 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           <p className="lw-palette__mode">
             Choose the canonical existing entity. The merge preview remains open behind this search.
           </p>
-        ) : null}
+        ) : (
+          <p className="lw-palette__mode" data-testid="palette-mode">
+            {MODE_HINT[mode]}
+          </p>
+        )}
         <ul className="lw-palette__list">
           {rows.length === 0 ? (
-            <li className="lw-palette__empty">Nothing matches “{query}”.</li>
+            <li className="lw-palette__empty">Nothing matches “{term}”.</li>
           ) : (
             rows.map((row, i) => (
               <li key={row.key}>
@@ -243,6 +363,11 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                     <span className="lw-palette__title">{row.title}</span>
                     <span className="lw-palette__sub">{row.subtitle}</span>
                   </span>
+                  {row.shortcut ? (
+                    <kbd className="lw-palette__kbd" aria-hidden>
+                      {row.shortcut}
+                    </kbd>
+                  ) : null}
                 </button>
               </li>
             ))

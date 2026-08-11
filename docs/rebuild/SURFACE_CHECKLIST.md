@@ -401,3 +401,27 @@ offline engine already produced.
 | Settings ▸ Appearance: Prose width | 28–44em slider writing `--measure`; restored pre-paint | `19-studio.spec.ts` |
 | Settings ▸ Appearance: Motion | system / full / reduced → `data-motion-pref`; reduced kills movement but keeps opacity transitions | `19-studio.spec.ts` |
 | Settings ▸ Appearance: Focus mode | off / paragraph / sentence / line, stored for the Writer's Room to consume | `19-studio.spec.ts` (persistence); behaviour lands with N5 |
+
+## Five-destination shell (N2)
+
+Plan is deliberately absent until N4: scenes do not exist yet, so a Plan
+destination would be a dead button.
+
+| Control | Action | Spec |
+| --- | --- | --- |
+| Left rail: Write / Codex / Insights / Worlds | Routes to the destination; marks itself current | `20-shell.spec.ts` |
+| Left rail: More… | Opens the command palette | `20-shell.spec.ts` (palette-only routes) |
+| Left rail: Settings | Routes to Settings | `20-shell.spec.ts` |
+| Bottom nav (mobile): the same four + More | Same destinations, phone layout; no Browse/More sheets | `20-shell.spec.ts` (both projects) |
+| Alt+1 … Alt+4 | Jumps to a destination from anywhere | `20-shell.spec.ts` |
+| Insights sub-nav: Overview / Today / Review | Switches sub-view; Review carries the pending badge | `20-shell.spec.ts`, `00-boot.spec.ts` |
+| Worlds sub-nav: Atlas / Tangle / Skill Trees | Switches sub-view | `20-shell.spec.ts`, `15-sweep.spec.ts` |
+| Codex type strip (16 chips) | Filters the roster to that type; each chip shows its live active count | `20-shell.spec.ts` |
+| Palette `>` prefix | Commands only | `20-shell.spec.ts` |
+| Palette `@` prefix | Codex entries only | `20-shell.spec.ts` |
+| Palette `#` prefix | Chapters only | `20-shell.spec.ts` |
+| Palette `/` prefix | AI actions only (generate commands, Import & Extract) | `20-shell.spec.ts` |
+| Palette shortcut column | Shows the real binding for a row; destinations show Alt+1..4 | `20-shell.spec.ts` |
+| Palette recents | Idle palette floats the last six run commands to the top | localStorage-backed; covered by the mode spec's idle assertion |
+| Write empty state: Paste a chapter → | Routes to Import & Extract; states no AI key is needed | `20-shell.spec.ts`, `03-writers-room.spec.ts` |
+| Write empty state: + Start from blank | Creates the first chapter | `03-writers-room.spec.ts` |

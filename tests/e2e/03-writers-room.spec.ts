@@ -96,7 +96,7 @@ test.describe("writer's room", () => {
 
     await page.getByTestId('surface-writers-room').getByRole('button', { name: 'Delete', exact: true }).click();
     await page.getByRole('button', { name: 'Move to trash' }).click();
-    await expect(page.getByText('No chapters yet.')).toBeVisible();
+    await expect(page.getByTestId('write-empty')).toBeVisible();
 
     await openNav(page, 'Trash');
     await page.getByTestId('surface-trash').getByRole('button', { name: 'Restore' }).click();

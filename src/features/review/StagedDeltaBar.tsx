@@ -19,11 +19,12 @@ export function StagedDeltaBar() {
   const discard = useIntelligenceStore((s) => s.discard);
   const progress = useIntelligenceStore((s) => s.progress);
   const route = useUiStore((s) => s.route);
+  const insightsView = useUiStore((s) => s.insightsView);
   const setRoute = useUiStore((s) => s.setRoute);
 
   if (!staged) return null;
   // The board itself is on screen — it is its own bar there.
-  if (route === 'review') return null;
+  if (route === 'insights' && insightsView === 'review') return null;
 
   const groups = staged.groups.length;
 

@@ -25,12 +25,28 @@ const THEME_COUNTERPART: Record<Theme, Theme> = {
 export type PalettePurpose = 'search' | 'merge-target';
 
 /** Routes that exist in the rebuilt app. Grows milestone by milestone —
- * a nav entry is only rendered once its surface genuinely works. */
+ * a nav entry is only rendered once its surface genuinely works.
+ *
+ * Two kinds live in this union. **Destinations** are what the rail shows:
+ * a handful of places, each gathering several old surfaces behind a
+ * sub-view switcher. **Legacy ids** are every route the app has ever had;
+ * they all still resolve, because roughly a hundred `setRoute` calls,
+ * palette commands, toast actions and specs name them. `setRoute`
+ * normalises a legacy id into its destination plus sub-view, so nothing
+ * had to be rewritten to move a surface.
+ *
+ * `plan` is deliberately absent until N4: scenes do not exist yet, so a
+ * Plan destination would be a dead button. */
 export type RouteId =
+  // destinations
+  | 'write'
+  | 'codex'
+  | 'insights'
+  | 'worlds'
+  // legacy ids, still valid everywhere
   | 'home'
   | 'today'
   | 'writers-room'
-  | 'codex'
   | 'atlas'
   | 'tangle'
   | 'skill-trees'
@@ -42,9 +58,31 @@ export type RouteId =
   | 'speed-reader'
   | 'templates';
 
+/** Sub-views inside the gathering destinations. */
+export type WorldsView = 'atlas' | 'tangle' | 'trees';
+export type InsightsView = 'overview' | 'today' | 'review';
+
+/** Legacy route → the destination that now owns it. Routes absent from
+ * this table (settings, trash, handoff, the three tools) are still real
+ * routes; they simply have no rail slot and are reached from the command
+ * palette or Settings ▸ Tools. */
+export const ROUTE_ALIAS: Partial<Record<RouteId, { dest: RouteId; view?: string }>> = {
+  'writers-room': { dest: 'write' },
+  home: { dest: 'insights', view: 'overview' },
+  today: { dest: 'insights', view: 'today' },
+  review: { dest: 'insights', view: 'review' },
+  atlas: { dest: 'worlds', view: 'atlas' },
+  tangle: { dest: 'worlds', view: 'tangle' },
+  'skill-trees': { dest: 'worlds', view: 'trees' },
+};
+
 interface UiState {
   theme: Theme;
+  /** Always a destination or a palette-only route — never a legacy id
+   * that has an alias. `setRoute` guarantees it. */
   route: RouteId;
+  worldsView: WorldsView;
+  insightsView: InsightsView;
   /** Which entity type the 'codex' route shows. */
   codexType: EntityType;
   /** Command palette (Ctrl/Cmd+K) visibility. */
@@ -62,6 +100,8 @@ interface UiState {
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   setRoute: (route: RouteId) => void;
+  setWorldsView: (view: WorldsView) => void;
+  setInsightsView: (view: InsightsView) => void;
   setCodexType: (type: EntityType) => void;
   setPaletteOpen: (open: boolean) => void;
   setPalettePurpose: (purpose: PalettePurpose) => void;
@@ -118,7 +158,9 @@ function applyTheme(theme: Theme) {
 
 export const useUiStore = create<UiState>((set, get) => ({
   theme: initialTheme(),
-  route: 'home',
+  route: 'insights',
+  worldsView: 'atlas',
+  insightsView: 'overview',
   codexType: 'cast',
   setTheme: (theme) => {
     applyTheme(theme);
@@ -129,7 +171,21 @@ export const useUiStore = create<UiState>((set, get) => ({
     applyTheme(next);
     set({ theme: next });
   },
-  setRoute: (route) => set({ route }),
+  /** Accepts any route the app has ever had and resolves it to the
+   * destination that now owns it, so old call sites keep working. */
+  setRoute: (route) => {
+    const alias = ROUTE_ALIAS[route];
+    if (!alias) return set({ route });
+    if (alias.dest === 'worlds') {
+      return set({ route: 'worlds', worldsView: (alias.view ?? 'atlas') as WorldsView });
+    }
+    if (alias.dest === 'insights') {
+      return set({ route: 'insights', insightsView: (alias.view ?? 'overview') as InsightsView });
+    }
+    set({ route: alias.dest });
+  },
+  setWorldsView: (worldsView) => set({ route: 'worlds', worldsView }),
+  setInsightsView: (insightsView) => set({ route: 'insights', insightsView }),
   setCodexType: (type) => set({ codexType: type }),
   paletteOpen: false,
   palettePurpose: 'search',

@@ -35,12 +35,18 @@ test.describe('boot', () => {
     await expect(html).toHaveAttribute('data-theme', 'studio-dark');
   });
 
-  test('navigation renders Home as the current surface after setup', async ({ page }) => {
+  test('navigation renders Insights as the current destination after setup', async ({ page }) => {
     await bootWithProject(page);
     const nav = page.getByRole('navigation', { name: 'Workspace' });
-    await expect(nav.getByRole('button', { name: 'Home' })).toHaveAttribute(
+    // Home is now the Overview sub-view of Insights, so the destination
+    // is what carries aria-current.
+    await expect(nav.getByRole('button', { name: 'Insights' })).toHaveAttribute(
       'aria-current',
       'page'
+    );
+    await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute(
+      'aria-selected',
+      'true'
     );
   });
 });

@@ -1,11 +1,16 @@
-import { useUiStore, type RouteId } from '@/stores/ui';
+import { useUiStore, type InsightsView, type RouteId, type WorldsView } from '@/stores/ui';
 
 interface HelpEntry {
   title: string;
   points: string[];
 }
 
-const HELP: Record<RouteId, HelpEntry> = {
+/** Keyed by the legacy per-surface route. The destinations resolve into
+ * this table via their sub-view, so there is one entry per real surface
+ * rather than one per container. */
+type HelpRouteId = Exclude<RouteId, 'write' | 'insights' | 'worlds'>;
+
+const HELP: Record<HelpRouteId, HelpEntry> = {
   home: {
     title: 'Home',
     points: [
@@ -113,10 +118,34 @@ const HELP: Record<RouteId, HelpEntry> = {
   },
 };
 
+/** Which legacy entry a destination's sub-view should show. Help follows
+ * what you are actually looking at, not the container it sits in. */
+const WORLDS_HELP: Record<WorldsView, HelpRouteId> = {
+  atlas: 'atlas',
+  tangle: 'tangle',
+  trees: 'skill-trees',
+};
+const INSIGHTS_HELP: Record<InsightsView, HelpRouteId> = {
+  overview: 'home',
+  today: 'today',
+  review: 'review',
+};
+
 /** Per-surface help: one dialog, content keyed to the current route. */
 export function HelpDialog({ onClose }: { onClose: () => void }) {
   const route = useUiStore((s) => s.route);
-  const entry = HELP[route];
+  const worldsView = useUiStore((s) => s.worldsView);
+  const insightsView = useUiStore((s) => s.insightsView);
+
+  const key: HelpRouteId =
+    route === 'worlds'
+      ? WORLDS_HELP[worldsView]
+      : route === 'insights'
+        ? INSIGHTS_HELP[insightsView]
+        : route === 'write'
+          ? 'writers-room'
+          : route;
+  const entry = HELP[key];
 
   return (
     <div className="lw-drawer-backdrop" role="presentation" onClick={onClose}>
