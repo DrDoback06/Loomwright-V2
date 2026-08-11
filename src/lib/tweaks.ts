@@ -19,8 +19,15 @@ export interface Tweaks {
    * fastest; the range spans roughly 55–85 characters. */
   measure: number;
   /** How much of the prose stays lit in focus mode. Consumed by the
-   * Writer's Room. */
-  focus: 'off' | 'paragraph' | 'sentence' | 'line';
+   * Writer's Room.
+   *
+   * N1 offered a fourth value, `line`. It is gone, and a stored one now
+   * loads as `sentence`: a *rendered* line is a layout fact the document
+   * does not contain, so dimming by it would have to re-measure on every
+   * resize and would jump under the reader — and in practice "line" is
+   * what people say when they mean the sentence they are writing. Three
+   * options that differ beat four where two are the same. */
+  focus: 'off' | 'paragraph' | 'sentence';
 }
 
 export const DEFAULT_TWEAKS: Tweaks = {
@@ -46,7 +53,7 @@ export function loadTweaks(): Tweaks {
       typeset: parsed.typeset ?? DEFAULT_TWEAKS.typeset,
       motion: parsed.motion ?? DEFAULT_TWEAKS.motion,
       measure: clampMeasure(parsed.measure ?? DEFAULT_TWEAKS.measure),
-      focus: parsed.focus ?? DEFAULT_TWEAKS.focus,
+      focus: readFocus(parsed.focus),
     };
   } catch {
     return { ...DEFAULT_TWEAKS };
@@ -68,7 +75,17 @@ export function applyTweaks(tweaks: Tweaks): void {
   root.setAttribute('data-density', tweaks.density);
   root.setAttribute('data-typeset', tweaks.typeset);
   root.setAttribute('data-motion-pref', tweaks.motion);
+  // Stamped like the rest: focus mode fades the app's chrome, and CSS has
+  // to know about it before React does or the toolbar flashes in on boot.
+  root.setAttribute('data-focus', tweaks.focus);
   root.style.setProperty('--measure', `${clampMeasure(tweaks.measure)}em`);
+}
+
+/** Reads a stored focus setting, migrating the retired `line`. */
+function readFocus(value: unknown): Tweaks['focus'] {
+  if (value === 'line' || value === 'sentence') return 'sentence';
+  if (value === 'paragraph' || value === 'off') return value;
+  return DEFAULT_TWEAKS.focus;
 }
 
 function clampMeasure(value: number): number {

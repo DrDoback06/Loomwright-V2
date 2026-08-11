@@ -36,6 +36,8 @@ import { ComposePanel } from './ComposePanel';
 import { SceneHead, SceneStrip } from './SceneStrip';
 import { ScenePanel } from './ScenePanel';
 import { RewriteBubble } from './RewriteBubble';
+import { FocusDim } from './focus-dim';
+import { useFocusMode } from './useFocusMode';
 
 /** Hard ceiling on how long typed text may sit unwritten. The 600ms debounce
  * still governs the common case (a pause commits immediately); this only binds
@@ -223,7 +225,7 @@ export function WritersRoom() {
   }, []);
 
   const editor = useEditor({
-    extensions: [StarterKit, UniqueParagraphId, MentionHighlights, SceneBeat, Section],
+    extensions: [StarterKit, UniqueParagraphId, MentionHighlights, SceneBeat, Section, FocusDim],
     editorProps: {
       attributes: {
         class: 'lw-manuscript',
@@ -474,6 +476,11 @@ export function WritersRoom() {
     [setFocus, setRoute, setCodexType]
   );
 
+  // Dimming, the chrome fade and typewriter scrolling, all from the one
+  // Tweaks setting. Called before the early return below so the hook order
+  // is stable.
+  const focus = useFocusMode(editor, canvasRef);
+
   editorRef.current = editor;
   activeSceneRef.current = activeSceneId;
 
@@ -494,7 +501,12 @@ export function WritersRoom() {
   };
 
   return (
-    <div className="lw-wroom" data-testid="surface-writers-room">
+    <div
+      className="lw-wroom"
+      data-testid="surface-writers-room"
+      data-focus={focus.mode}
+      data-typing={focus.typing ? 'true' : undefined}
+    >
       <div className="lw-wroom__chapters" role="tablist" aria-label="Chapters">
         {chapters.map((chapter, i) => (
           <button

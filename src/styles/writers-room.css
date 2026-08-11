@@ -635,6 +635,48 @@
 .lw-beat__actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
 
 /* ---------------------------------------------------------------------
+   Focus mode (N5b)
+   Dimming is a visual STATE, not motion, so it survives reduced motion —
+   only its transition is dropped. The chrome fade is motion, and is
+   dropped to an instant cross-fade.
+   --------------------------------------------------------------------- */
+.lw-dim {
+  color: var(--ink-4);
+  transition: color var(--motion-base) var(--ease-move);
+}
+/* Without this the final paragraph can never reach the typewriter line —
+   there is nothing below it to scroll into. */
+.lw-wroom:not([data-focus='off']) .lw-manuscript { padding-bottom: 55vh; }
+.lw-dim .lw-mention { color: inherit; }
+
+/* Everything but the prose steps back once a burst of typing is under way.
+   Pointer events stay on: the toolbar is faded, not gone, and reaching for
+   it with the mouse brings it straight back. */
+.lw-wroom[data-typing='true'] .lw-wroom__chapters,
+.lw-wroom[data-typing='true'] .lw-scenestrip,
+.lw-wroom[data-typing='true'] .lw-scenehead,
+.lw-wroom[data-typing='true'] .lw-wroom__chapterhead,
+.lw-wroom[data-typing='true'] .lw-wtoolbar,
+.lw-wroom[data-typing='true'] .lw-wroom__status {
+  opacity: 0.12;
+  transition: opacity var(--motion-slow) var(--ease-exit);
+}
+.lw-wroom[data-typing='true'] .lw-wroom__chapters:hover,
+.lw-wroom[data-typing='true'] .lw-scenestrip:hover,
+.lw-wroom[data-typing='true'] .lw-scenehead:hover,
+.lw-wroom[data-typing='true'] .lw-wroom__chapterhead:hover,
+.lw-wroom[data-typing='true'] .lw-wtoolbar:hover,
+.lw-wroom[data-typing='true'] .lw-wroom__status:hover,
+.lw-wroom[data-typing='true'] :focus-visible {
+  opacity: 1;
+}
+
+/* Reduced motion needs no rule of its own here: the blocks in tokens.css
+   already collapse every transition to .01ms under both the media query
+   and `data-motion-pref`, and the dimming is a colour STATE, so it still
+   applies — it simply arrives instantly. */
+
+/* ---------------------------------------------------------------------
    Rewrite bubble (N5b)
    Anchored above the selection on a desktop; pinned to the bottom of the
    canvas on a phone, where a floating popover over a soft keyboard is

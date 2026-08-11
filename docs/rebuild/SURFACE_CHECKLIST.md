@@ -400,7 +400,7 @@ offline engine already produced.
 | Settings ▸ Appearance: Typeface | workhorse / literary / archive → `data-typeset`, re-pointing the display and serif stacks | `19-studio.spec.ts` |
 | Settings ▸ Appearance: Prose width | 28–44em slider writing `--measure`; restored pre-paint | `19-studio.spec.ts` |
 | Settings ▸ Appearance: Motion | system / full / reduced → `data-motion-pref`; reduced kills movement but keeps opacity transitions | `19-studio.spec.ts` |
-| Settings ▸ Appearance: Focus mode | off / paragraph / sentence / line, stored for the Writer's Room to consume | `19-studio.spec.ts` (persistence); behaviour lands with N5 |
+| Settings ▸ Appearance: Focus mode | off / paragraph / sentence. Stamps `data-focus` pre-paint, **dims every block but the caret's** (and every sentence but the caret's, on `sentence`), fades the chrome after a burst of typing, and pins the caret at 45% of the canvas. The N1 `line` option is retired — a rendered line is not in the document; a stored one loads as `sentence` | `26-focus.spec.ts`, unit `focus-dim.spec.ts` |
 
 ## Five-destination shell (N2)
 

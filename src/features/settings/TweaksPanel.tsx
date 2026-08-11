@@ -41,7 +41,6 @@ const FOCUS_MODES: { value: Tweaks['focus']; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 'paragraph', label: 'Paragraph' },
   { value: 'sentence', label: 'Sentence' },
-  { value: 'line', label: 'Line' },
 ];
 
 /** Appearance controls. `data-density` and `data-typeset` have been in
@@ -168,8 +167,11 @@ export function TweaksPanel() {
           ))}
         </div>
         <p className="lw-fieldnote">
-          Dims everything but the {tweaks.focus === 'off' ? 'current line' : tweaks.focus} while
-          you type in the Writer&rsquo;s Room.
+          {tweaks.focus === 'off'
+            ? 'Off: the whole page stays lit, and the toolbar and rails stay put.'
+            : `Dims everything but the ${tweaks.focus} you are writing in, and fades the ` +
+              'toolbar and rails after a few seconds of typing. Move the mouse or press ' +
+              'Escape to bring them back.'}
         </p>
       </div>
     </section>
