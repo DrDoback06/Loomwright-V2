@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/schema';
 import { createEntity } from '@/db/repos/entities';
 import { createChapter, saveChapterDoc, appendParagraphToChapter } from '@/db/repos/chapters';
+import { ensureScenesForProject } from '@/db/repos/scenes';
 import { exportProject, importProject } from '@/services/archive/project';
 import { renderWorldBible } from '@/services/archive/world-bible';
 import { saveApiKey } from '@/services/crypto/keys';
@@ -47,17 +48,17 @@ async function seedProject() {
   return { projectId, aelinorId: aelinor.id, passId: pass.id, chapterId: chapter.id };
 }
 
-describe('project export/import v2', () => {
+describe('project export/import v3', () => {
   it('round-trips a project with a full id remap and rewritten refs', async () => {
     const { projectId, aelinorId } = await seedProject();
     await rememberSameIdentity({ projectId, entityType: 'cast', surface: 'Queen Ael', canonicalEntityId: aelinorId });
     const archive = await exportProject(projectId);
-    expect(archive.schemaVersion).toBe('loomwright-project-v2');
+    expect(archive.schemaVersion).toBe('loomwright-project-v3');
     expect(archive.meta.entities).toBe(2);
 
     const result = await importProject(JSON.parse(JSON.stringify(archive)));
     expect(result.projectId).not.toBe(projectId);
-    expect(result.counts).toMatchObject({ entities: 2, chapters: 1, occurrences: 1, identityRules: 1 });
+    expect(result.counts).toMatchObject({ entities: 2, chapters: 1, scenes: 1, occurrences: 1, identityRules: 1 });
 
     // Fresh ids everywhere; the field ref follows the remapped entity.
     const imported = await db.entities.where('projectId').equals(result.projectId).toArray();
@@ -98,7 +99,29 @@ describe('project export/import v2', () => {
     expect(blob).not.toContain('cryptoKey');
     expect(Object.keys(archive.tables)).not.toContain('keys');
 
-    await expect(importProject({ schemaVersion: 'something-else' })).rejects.toThrow(/v2/);
+    await expect(importProject({ schemaVersion: 'something-else' })).rejects.toThrow(/v3/);
+  });
+
+  it('still imports a v2 archive, and the prose reaches a scene', async () => {
+    const { projectId } = await seedProject();
+    const archive = JSON.parse(JSON.stringify(await exportProject(projectId)));
+    // Age the archive back to what a pre-scenes export looked like.
+    archive.schemaVersion = 'loomwright-project-v2';
+    delete archive.tables.acts;
+    delete archive.tables.scenes;
+    delete archive.tables.sceneSnapshots;
+
+    const result = await importProject(archive);
+    expect(result.counts.chapters).toBe(1);
+    expect(result.counts.scenes).toBe(0);
+
+    // The backfill is what makes an old archive whole again.
+    const created = await ensureScenesForProject(result.projectId);
+    expect(created).toBe(1);
+    const scenes = await db.scenes.where('projectId').equals(result.projectId).toArray();
+    expect(scenes).toHaveLength(1);
+    expect(scenes[0].paragraphs[0].text).toBe('Aelinor crossed Vraska Pass.');
+    expect(scenes[0].wordCount).toBe(4);
   });
 });
 

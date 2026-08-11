@@ -1,8 +1,11 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type {
+  Act,
   AtlasMap,
   AuditEntry,
   KeyRow,
+  Scene,
+  SceneSnapshot,
   RandomTable,
   SkillTree,
   TangleBoard,
@@ -49,6 +52,9 @@ export class LoomwrightDB extends Dexie {
   identityRules!: EntityTable<IdentityRule, 'id'>;
   mergeReceipts!: EntityTable<MergeReceipt, 'id'>;
   suggestions!: EntityTable<SuggestionRecord, 'id'>;
+  acts!: EntityTable<Act, 'id'>;
+  scenes!: EntityTable<Scene, 'id'>;
+  sceneSnapshots!: EntityTable<SceneSnapshot, 'id'>;
 
   constructor() {
     super('loomwright');
@@ -93,6 +99,53 @@ export class LoomwrightDB extends Dexie {
     this.version(8).stores({
       suggestions: 'id, projectId, [projectId+status], [projectId+createdAt], targetEntityId',
     });
+    // Acts › Chapters › Scenes. Every existing chapter becomes exactly one
+    // scene carrying its doc, so nothing moves for an author who never
+    // splits anything — a book that used chapters keeps working unchanged.
+    //
+    // The chapter's own `doc` is deliberately left in place rather than
+    // cleared: it becomes a derived rollup, and leaving the original bytes
+    // there means a rollback to v8 loses no text.
+    this.version(9)
+      .stores({
+        acts: 'id, projectId, [projectId+order]',
+        scenes:
+          'id, projectId, chapterId, [projectId+globalOrder], [projectId+chapterId], [chapterId+order], [projectId+status], [projectId+pov]',
+        sceneSnapshots: 'id, projectId, sceneId, [projectId+sceneId], [sceneId+createdAt]',
+      })
+      .upgrade(async (tx) => {
+        const chapters = await tx
+          .table<Chapter>('chapters')
+          .toArray();
+        chapters.sort((a, b) => a.order - b.order);
+        const now = Date.now();
+        await tx.table<Scene>('scenes').bulkAdd(
+          chapters.map((chapter, index) => ({
+            id: `sc_${chapter.id}`,
+            projectId: chapter.projectId,
+            chapterId: chapter.id,
+            title: chapter.title,
+            order: 0,
+            globalOrder: index,
+            doc: chapter.doc,
+            paragraphs: chapter.paragraphs ?? [],
+            wordCount: chapter.wordCount ?? 0,
+            summary: '',
+            summaryUpdatedAt: 0,
+            status: (chapter.wordCount ?? 0) > 0 ? 'draft' : 'outline',
+            pov: null,
+            povType: null,
+            characterIds: [],
+            locationId: null,
+            attachedRefs: [],
+            labels: [],
+            targetWords: null,
+            aiVisible: true,
+            createdAt: chapter.createdAt ?? now,
+            updatedAt: chapter.updatedAt ?? now,
+          }))
+        );
+      });
   }
 }
 

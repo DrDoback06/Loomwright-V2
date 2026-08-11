@@ -1,7 +1,10 @@
 import { db } from '@/db/schema';
 import type {
+  Act,
   AtlasMap,
   Chapter,
+  Scene,
+  SceneSnapshot,
   Entity,
   IdentityRule,
   Link,
@@ -18,16 +21,24 @@ import type {
 import { newId } from '@/lib/id';
 import { remapRefs } from '@/lib/remap';
 
-export const PROJECT_SCHEMA_VERSION = 'loomwright-project-v2';
+export const PROJECT_SCHEMA_VERSION = 'loomwright-project-v3';
+
+/** Archives written before scenes existed. Still importable: the chapters
+ * arrive with their prose on the chapter row, and `ensureScenesForProject`
+ * gives each one a scene carrying that prose on first load. */
+const ACCEPTED_SCHEMA_VERSIONS = ['loomwright-project-v2', 'loomwright-project-v3'];
 
 export interface ProjectArchive {
-  schemaVersion: typeof PROJECT_SCHEMA_VERSION;
+  schemaVersion: string;
   exportedAt: string;
   project: Project;
   tables: {
     entities: Entity[];
     links: Link[];
     chapters: Chapter[];
+    acts: Act[];
+    scenes: Scene[];
+    sceneSnapshots: SceneSnapshot[];
     notes: ParagraphNote[];
     occurrences: Occurrence[];
     candidates: ReviewCandidate[];
@@ -56,6 +67,9 @@ export async function exportProject(projectId: string): Promise<ProjectArchive> 
     entities: await byProject<Entity>(db.entities),
     links: await byProject<Link>(db.links),
     chapters: await byProject<Chapter>(db.chapters),
+    acts: await byProject<Act>(db.acts),
+    scenes: await byProject<Scene>(db.scenes),
+    sceneSnapshots: await byProject<SceneSnapshot>(db.sceneSnapshots),
     notes: await byProject<ParagraphNote>(db.notes),
     occurrences: await byProject<Occurrence>(db.occurrences),
     candidates: await byProject<ReviewCandidate>(db.candidates),
@@ -91,7 +105,13 @@ export interface ImportResult {
  * (or twice) can never collide. */
 export async function importProject(raw: unknown): Promise<ImportResult> {
   const archive = raw as Partial<ProjectArchive>;
-  if (!archive || archive.schemaVersion !== PROJECT_SCHEMA_VERSION || !archive.project || !archive.tables) {
+  if (
+    !archive ||
+    !archive.schemaVersion ||
+    !ACCEPTED_SCHEMA_VERSIONS.includes(archive.schemaVersion) ||
+    !archive.project ||
+    !archive.tables
+  ) {
     throw new Error(`Not a ${PROJECT_SCHEMA_VERSION} file.`);
   }
   const t = archive.tables;
@@ -100,7 +120,8 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
   // First pass: a fresh id for every row of every table.
   const idMap = new Map<string, string>();
   const allRowLists: { id: string }[][] = [
-    t.entities ?? [], t.links ?? [], t.chapters ?? [], t.notes ?? [], t.occurrences ?? [],
+    t.entities ?? [], t.links ?? [], t.chapters ?? [], t.acts ?? [], t.scenes ?? [],
+    t.sceneSnapshots ?? [], t.notes ?? [], t.occurrences ?? [],
     t.candidates ?? [], t.atlasMaps ?? [], t.skillTrees ?? [], t.tangleBoards ?? [],
     t.randomTables ?? [], t.templates ?? [], t.identityRules ?? [],
   ];
@@ -117,7 +138,22 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
     mergedIntoId: entity.mergedIntoId ? (idMap.get(entity.mergedIntoId) ?? entity.mergedIntoId) : entity.mergedIntoId,
   }));
   const links = rebase(t.links);
-  const chapters = rebase(t.chapters);
+  const chapters = rebase(t.chapters).map((c) => ({
+    ...c,
+    actId: c.actId ? (idMap.get(c.actId) ?? c.actId) : c.actId,
+  }));
+  const acts = rebase(t.acts);
+  const scenes = rebase(t.scenes).map((s) => ({
+    ...s,
+    chapterId: idMap.get(s.chapterId) ?? s.chapterId,
+    pov: s.pov ? (idMap.get(s.pov) ?? s.pov) : s.pov,
+    locationId: s.locationId ? (idMap.get(s.locationId) ?? s.locationId) : s.locationId,
+    characterIds: (s.characterIds ?? []).map((id) => idMap.get(id) ?? id),
+  }));
+  const sceneSnapshots = rebase(t.sceneSnapshots).map((s) => ({
+    ...s,
+    sceneId: idMap.get(s.sceneId) ?? s.sceneId,
+  }));
   const notes = rebase(t.notes).map((n) => ({ ...n, chapterId: idMap.get(n.chapterId) ?? n.chapterId }));
   const occurrences = rebase(t.occurrences).map((o) => ({
     ...o,
@@ -154,7 +190,8 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
   await db.transaction(
     'rw',
     [
-      db.projects, db.entities, db.links, db.chapters, db.notes, db.occurrences,
+      db.projects, db.entities, db.links, db.chapters, db.acts, db.scenes,
+      db.sceneSnapshots, db.notes, db.occurrences,
       db.candidates, db.atlasMaps, db.skillTrees, db.tangleBoards, db.randomTables,
       db.templates, db.identityRules, db.settings,
     ],
@@ -163,6 +200,9 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
       await db.entities.bulkAdd(entities);
       await db.links.bulkAdd(links);
       await db.chapters.bulkAdd(chapters);
+      await db.acts.bulkAdd(acts);
+      await db.scenes.bulkAdd(scenes);
+      await db.sceneSnapshots.bulkAdd(sceneSnapshots);
       await db.notes.bulkAdd(notes);
       await db.occurrences.bulkAdd(occurrences);
       await db.candidates.bulkAdd(candidates);
@@ -182,6 +222,7 @@ export async function importProject(raw: unknown): Promise<ImportResult> {
     counts: {
       entities: entities.length,
       chapters: chapters.length,
+      scenes: scenes.length,
       occurrences: occurrences.length,
       candidates: candidates.length,
       identityRules: identityRules.length,

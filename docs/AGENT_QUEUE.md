@@ -3,7 +3,7 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N3 · step 1 of 8
+**Current:** N3 · step 6 of 8
 **Last verified green:** N2 complete — lint ✅ tsc ✅ build ✅ vitest 218 ✅ playwright 164 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
@@ -11,7 +11,7 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 |---|---|---|---|
 | N1 | Studio design system | 6 | ✅ 6/6 |
 | N2 | Four destinations + palette + empty states | 6 | ✅ 6/6 |
-| N3 | Acts › Chapters › Scenes + snapshots | 8 | 🔄 0/8 |
+| N3 | Acts › Chapters › Scenes + snapshots | 8 | 🔄 5/8 |
 | N4 | Plan: Outline / Board / Matrix / Timeline | 7 | ⬜ |
 | N5 | Beats, inline AI, sections, focus mode | 8 | ⬜ |
 | N6 | Typed `@` mentions | 4 | ⬜ |
@@ -64,12 +64,12 @@ surface genuinely works. Plan joins the rail in N4.
 
 ## N3 — Acts › Chapters › Scenes
 
-- [ ] 1. `Act` / `Scene` / `SceneSnapshot` types in `src/db/types.ts`; `Chapter.actId`  ← IN PROGRESS
-- [ ] 2. Dexie v9 + the chapter→scene upgrade (chapters keep `doc` untouched for one release)
-- [ ] 3. `src/db/repos/scenes.ts` mirroring `chapters.ts` (order, trash, audit)
-- [ ] 4. Snapshot policy: one `interval` per 3-min window, always `pre-ai` / `pre-import`, keep last 20 + one per day
-- [ ] 5. `chapterRollup()` so `Chapter.doc/paragraphs/wordCount` stay valid derived rollups
-- [ ] 6. Writer's Room: scene list, scene switcher, scene metadata drawer, snapshot history
+- [x] 1. `Act` / `Scene` / `SceneSnapshot` types in `src/db/types.ts`; `Chapter.actId`
+- [x] 2. Dexie v9 + the chapter→scene upgrade (chapter `doc` left in place, so a rollback loses no text)
+- [x] 3. `src/db/repos/scenes.ts` — acts, scenes, ordering, `moveScene` (incl. re-anchoring occurrences across chapters), trash, audit
+- [x] 4. Snapshot policy: one `interval` per 3-min window, always `pre-ai` / `pre-import`, keep last 20 + one per day; `pre-ai`/`pre-import` never pruned; restore takes its own snapshot first
+- [x] 5. `chapterRollup()` + `ensureScenesForProject()` backfill on project load
+- [ ] 6. Writer's Room: scene list, scene switcher, scene metadata drawer, snapshot history  ← IN PROGRESS
 - [ ] 7. Ripple: extraction/session, chapter-awareness, search, archive (v3, accepts v2), world-bible, manuscript-import, generate/apply
 - [ ] 8. `tests/unit/scenes-repo.spec.ts` incl. the v8→v9 migration on a seeded DB; e2e `21-scenes.spec.ts`
 

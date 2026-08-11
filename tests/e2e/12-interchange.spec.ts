@@ -48,7 +48,7 @@ test.describe('interchange: world bible, project export/import, references', () 
     const download = await downloadPromise;
     const filePath = (await download.path())!;
     const blob = readFileSync(filePath, 'utf8');
-    expect(blob).toContain('loomwright-project-v2');
+    expect(blob).toContain('loomwright-project-v3');
     expect(blob).toContain('Aelinor Vael');
     expect(blob).not.toContain(FAKE_KEY);
     expect(blob).not.toContain('"keys"');

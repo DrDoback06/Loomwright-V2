@@ -3,6 +3,12 @@ import { newId } from '@/lib/id';
 import { logAudit } from './audit';
 import type { Chapter } from '../types';
 import { refreshProjectChapterReferences } from '@/services/chapter-awareness';
+import {
+  chapterRollup,
+  createScene,
+  ensureChapterHasScene,
+  listScenesInChapter,
+} from './scenes';
 
 export async function listChapters(projectId: string): Promise<Chapter[]> {
   return db.chapters
@@ -48,6 +54,10 @@ export async function createChapter(
     }
     await db.chapters.add(chapter);
   });
+  // A chapter is a container; the prose lives in scenes. Creating the
+  // first one here means no surface ever has to handle a chapter with
+  // nowhere to type.
+  await createScene(projectId, chapter.id, 'Scene 1');
   await refreshProjectChapterReferences(projectId);
   await logAudit({
     projectId,
@@ -70,43 +80,62 @@ export async function refreshChapterLabels(projectId: string): Promise<number> {
   return refreshProjectChapterReferences(projectId);
 }
 
-/** Persist the edited document. Called from autosave — no audit entry per
- * keystroke; chapter.updatedAt is the save marker. */
+/** Persist a whole chapter's prose.
+ *
+ * Since v9 a chapter's doc is a rollup of its scenes, so writing the
+ * chapter row directly would be silently overwritten the next time
+ * anything recomputed it. This writes into the chapter's first scene and
+ * rolls up, which keeps the old contract — "save this chapter's text" —
+ * true under the new model. Callers that know about scenes should prefer
+ * `saveSceneDoc`; this exists so the ones that do not cannot corrupt
+ * anything.
+ *
+ * No audit entry per keystroke; `updatedAt` is the save marker and
+ * `snapshotScene` is what makes the history recoverable. */
 export async function saveChapterDoc(
   id: string,
   doc: unknown,
   paragraphs: { id: string; text: string }[],
   wordCount: number
 ): Promise<void> {
-  await db.chapters.update(id, { doc, paragraphs, wordCount, updatedAt: Date.now() });
+  const chapter = await db.chapters.get(id);
+  if (!chapter) return;
+  const scenes = await listScenesInChapter(id);
+  const scene = scenes[0] ?? (await ensureChapterHasScene(chapter));
+  await db.scenes.update(scene.id, { doc, paragraphs, wordCount, updatedAt: Date.now() });
+  await chapterRollup(id);
 }
 
 /** Append a plain paragraph to a chapter (random-table results, tool
- * output). Doc, derived paragraphs, and word count stay in step; the
- * editor picks the block up like any other on next load. */
+ * output). The prose lives in scenes now, so this lands in the chapter's
+ * last scene and the chapter re-rolls up; doc, derived paragraphs and
+ * word count stay in step, and the editor picks the block up like any
+ * other on next load. */
 export async function appendParagraphToChapter(id: string, text: string): Promise<void> {
   const chapter = await db.chapters.get(id);
   const line = text.trim();
   if (!chapter || !line) return;
+  const scenes = await listScenesInChapter(id);
+  const scene = scenes[scenes.length - 1] ?? (await ensureChapterHasScene(chapter));
+
   const pid = newId();
   const node = {
     type: 'paragraph',
     attrs: { pid },
     content: [{ type: 'text', text: line }],
   };
-  const doc = (chapter.doc as { type?: string; content?: unknown[] } | null) ?? {
+  const doc = (scene.doc as { type?: string; content?: unknown[] } | null) ?? {
     type: 'doc',
     content: [],
   };
   const nextDoc = { ...doc, type: doc.type ?? 'doc', content: [...(doc.content ?? []), node] };
-  const paragraphs = [...chapter.paragraphs, { id: pid, text: line }];
-  const words = line.split(/\s+/).length;
-  await db.chapters.update(id, {
+  await db.scenes.update(scene.id, {
     doc: nextDoc,
-    paragraphs,
-    wordCount: chapter.wordCount + words,
+    paragraphs: [...scene.paragraphs, { id: pid, text: line }],
+    wordCount: scene.wordCount + line.split(/\s+/).length,
     updatedAt: Date.now(),
   });
+  await chapterRollup(id);
 }
 
 /** Move a chapter one slot earlier/later, swapping orders, then refresh the
@@ -135,15 +164,21 @@ export async function moveChapter(id: string, direction: 'up' | 'down'): Promise
 export async function deleteChapterToTrash(id: string): Promise<void> {
   const chapter = await db.chapters.get(id);
   if (!chapter) return;
-  await db.transaction('rw', [db.chapters, db.trash, db.auditLog], async () => {
+  await db.transaction('rw', [db.chapters, db.scenes, db.trash, db.auditLog], async () => {
+    // The chapter's prose lives in its scenes, so they travel into the
+    // trash with it. Leaving them behind would orphan rows pointing at a
+    // chapter that no longer exists, and restoring would bring back an
+    // empty chapter with the text still gone.
+    const scenes = await db.scenes.where('chapterId').equals(id).toArray();
     await db.trash.put({
       id: chapter.id,
       projectId: chapter.projectId,
       table: 'chapters',
       label: chapter.title,
-      payload: chapter,
+      payload: { ...chapter, scenes },
       deletedAt: Date.now(),
     });
+    if (scenes.length) await db.scenes.bulkDelete(scenes.map((s) => s.id));
     await db.chapters.delete(id);
     const remaining = await db.chapters
       .where('[projectId+order]')

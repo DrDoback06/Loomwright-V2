@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { createProject, listProjects } from '@/db/repos/projects';
+import { ensureScenesForProject } from '@/db/repos/scenes';
 import { createSampleProject } from '@/services/sample-project';
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard';
 import { useProjectStore } from '@/stores/project';
@@ -29,6 +30,16 @@ export function ProjectGate({ children }: { children: React.ReactNode }) {
       setCurrentProject(projects[0]?.id ?? null);
     }
   }, [projects, currentProjectId, setCurrentProject]);
+
+  // Chapters are written directly by the sample project, onboarding,
+  // generation, intelligence apply and archive import. Rather than teach
+  // five call sites about scenes, backfill on load: idempotent, free when
+  // there is nothing to do, and it also catches a v2 archive imported
+  // into a v9 database — which no migration could have reached.
+  useEffect(() => {
+    if (!currentProjectId) return;
+    void ensureScenesForProject(currentProjectId);
+  }, [currentProjectId, projects]);
 
   if (projects === null) return null; // booting
 

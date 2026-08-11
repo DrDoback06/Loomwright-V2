@@ -45,13 +45,103 @@ export interface Chapter {
   projectId: string;
   title: string;
   order: number;
-  /** TipTap document JSON — the formatted source of truth. */
+  /** Optional grouping above the chapter. Null means "not in an act",
+   * which is the normal state for a book that does not use them. */
+  actId?: string | null;
+  /** TipTap document JSON.
+   *
+   * Since v9 this is a DERIVED ROLLUP of the chapter's scenes, kept in
+   * step by `chapterRollup()`. Everything downstream — extraction,
+   * search, the world bible, the speed reader — still reads a chapter as
+   * one document, so none of it had to change when scenes arrived. */
   doc: unknown;
   /** Derived on save; the extraction/occurrence substrate. */
   paragraphs: { id: string; text: string }[];
   wordCount: number;
   createdAt: number;
   updatedAt: number;
+}
+
+/** Optional top level of the manuscript. A book can live in one act, or
+ * in none at all — acts exist to be a planning axis, never a required
+ * step between an author and a blank page. */
+export interface Act {
+  id: string;
+  projectId: string;
+  title: string;
+  order: number;
+  summary: string;
+  /** Optional tint, used by the planning views. */
+  colour?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type SceneStatus = 'outline' | 'draft' | 'revised' | 'final';
+export type ScenePovType = 'first' | 'third-limited' | 'third-omniscient' | 'second';
+
+/** The unit the whole app turns out to need.
+ *
+ * A chapter is atomic prose; you cannot put it on a board, colour a grid
+ * by it, or measure pacing with it. A scene carries the metadata that
+ * makes all of that possible, and holds the TipTap doc that used to live
+ * on the chapter. */
+export interface Scene {
+  id: string;
+  projectId: string;
+  chapterId: string;
+  title: string;
+  /** Order within the chapter. */
+  order: number;
+  /** Order across the whole manuscript — the x-axis of every planning
+   * view. Recomputed by `resequenceScenes()` after any structural change,
+   * so no view has to walk chapters to work out where a scene sits. */
+  globalOrder: number;
+
+  /** TipTap document JSON — the source of truth, moved down from Chapter. */
+  doc: unknown;
+  /** Derived on save; the extraction substrate (same contract as Chapter). */
+  paragraphs: { id: string; text: string }[];
+  wordCount: number;
+
+  /* --- planning metadata: the columns every view reads --- */
+  /** The long-book memory unit: `storySoFar()` assembles these rather
+   * than the prose, which is how continuity survives at 150k words. */
+  summary: string;
+  summaryUpdatedAt: number;
+  status: SceneStatus;
+  /** Cast entity id of the POV character. */
+  pov: string | null;
+  povType: ScenePovType | null;
+  /** Entities the author asserts are present. Distinct from extracted
+   * mentions on purpose — the Matrix shows both and lets you promote one
+   * to the other. */
+  characterIds: string[];
+  locationId: string | null;
+  /** Entries force-included in this scene's AI context (N7). */
+  attachedRefs: EntityRef[];
+  /** User-defined labels; also the Matrix's colour source. */
+  labels: string[];
+  targetWords: number | null;
+  /** Excludes the scene from every AI context when false. */
+  aiVisible: boolean;
+
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Prose version history — the thing the app had none of. Overwriting a
+ * chapter used to be unrecoverable: the audit log covers entities, and
+ * `saveChapterDoc` deliberately writes no entry per keystroke. */
+export interface SceneSnapshot {
+  id: string;
+  projectId: string;
+  sceneId: string;
+  doc: unknown;
+  wordCount: number;
+  label: string;
+  reason: 'manual' | 'interval' | 'pre-ai' | 'pre-import';
+  createdAt: number;
 }
 
 export interface ParagraphNote {
