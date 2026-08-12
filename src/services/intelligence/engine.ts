@@ -3,6 +3,7 @@ import type { Entity, SkillTree } from '@/db/types';
 import { runLocalExtraction } from '@/services/extraction/engine';
 import type { ExtractionCandidate } from '@/services/extraction/detectors';
 import type { KnownEntity } from '@/services/extraction/known-index';
+import { isLiveEntity, toKnownEntity } from '@/services/extraction/entity-to-known';
 import { chunkText } from '@/services/extraction/text-utils';
 import { runPropagation, type RuleContext } from './rules';
 import { DEFAULT_VOLUME, type SuggestionVolume } from './suggestions';
@@ -51,13 +52,10 @@ export function buildStoryDelta(input: BuildDeltaInput): StoryDelta {
     onProgress,
   } = input;
 
-  const known: KnownEntity[] = entities.map((e) => ({
-    id: e.id,
-    type: e.type,
-    name: e.name,
-    aliases: e.aliases,
-    statPhrases: (e.fields?.statPhrases as string[] | undefined) ?? undefined,
-  }));
+  // Was hand-rolled, and read `fields.statPhrases` — a key the stats config
+  // has never written. Whole-book intake had therefore never seen an
+  // author-defined phrase rule.
+  const known: KnownEntity[] = entities.filter(isLiveEntity).map((e) => toKnownEntity(e));
 
   // Whole-book intake: chunk, extract per chunk, then merge. Offsets are
   // rebased so quotes and spans stay meaningful in the merged result.

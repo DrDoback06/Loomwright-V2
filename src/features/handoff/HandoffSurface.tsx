@@ -11,13 +11,16 @@ import { digestNoticeSeen, enrichDelta, markDigestNoticeSeen } from '@/services/
 import { resolveProvider } from '@/services/ai/settings';
 import { useIntelligenceStore } from '@/stores/intelligence';
 import type { KnownEntity } from '@/services/extraction/known-index';
+import { isLiveEntity, toKnownEntity } from '@/services/extraction/entity-to-known';
 import { useProjectStore } from '@/stores/project';
 import { useUiStore } from '@/stores/ui';
 import { toast } from '@/stores/toasts';
 
 async function loadKnown(projectId: string): Promise<KnownEntity[]> {
   const rows = await db.entities.where('projectId').equals(projectId).toArray();
-  return rows.map((e) => ({ id: e.id, type: e.type, name: e.name, aliases: e.aliases }));
+  // Had no status filter at all, so a merged duplicate's name went out to an
+  // external model alongside the survivor's — two names for one person.
+  return rows.filter(isLiveEntity).map((e) => toKnownEntity(e));
 }
 
 /** AI Handoff: write with any external AI for free — export a

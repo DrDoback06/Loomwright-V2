@@ -1,6 +1,7 @@
 import type { Entity } from '@/db/types';
 import { runLocalExtraction } from '@/services/extraction/engine';
 import type { KnownEntity } from '@/services/extraction/known-index';
+import { isLiveEntity, toKnownEntity } from '@/services/extraction/entity-to-known';
 
 /**
  * Canon, both directions.
@@ -115,12 +116,7 @@ export interface CanonIssue {
  */
 export function checkDraftAgainstCanon(draft: string, entities: Entity[]): CanonIssue[] {
   if (!draft.trim()) return [];
-  const known: KnownEntity[] = entities.map((e) => ({
-    id: e.id,
-    type: e.type,
-    name: e.name,
-    aliases: e.aliases ?? [],
-  }));
+  const known: KnownEntity[] = entities.filter(isLiveEntity).map((e) => toKnownEntity(e));
   const byId = new Map(entities.map((e) => [e.id, e]));
   const { candidates } = runLocalExtraction({ text: draft, entities: known });
   const issues: CanonIssue[] = [];

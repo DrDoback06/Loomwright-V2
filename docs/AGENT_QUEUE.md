@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N7 · not started (N6 complete)
-**Last verified green:** N6 complete — lint ✅ tsc ✅ build ✅ vitest 297 ✅ playwright 244 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N7 · step 2 of 6 (step 1 done)
+**Last verified green:** N7 step 1 — lint ✅ tsc ✅ build ✅ vitest 306 ✅ playwright 244 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -16,7 +16,7 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N5a | Scene beats | 7 | ✅ 7/7 |
 | N5b | AI visibility, acts, sections, rewrite, focus | 7 | ✅ 7/7 |
 | N6 | Typed `@` mentions | 6 | ✅ 6/6 |
-| N7 | Context engine + policy + tracking + budget rail | 7 | 🔄 0/7 |
+| N7 | Context engine + policy + tracking + budget rail | 6 | 🔄 1/6 |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
 | N9 | Chat dock | 6 | ⬜ |
 | N10 | Prompt library | 6 | ⬜ |
@@ -166,13 +166,12 @@ same filter; the half-built fields ride along.
 
 ## N7 — Context engine
 
-- [ ] 1. `EntityAiPolicy` in the reserved `__ai` block + an AI section in `EntityEditorDrawer`  ← IN PROGRESS
-- [ ] 2. `caseSensitive` + `exclusions` wired into `extraction/known-index.ts` (improves extraction too)
-- [ ] 3. `hiddenFieldIds` honoured by every digest path; sensible appearance-field defaults
-- [ ] 4. `services/context/scene-context.ts` — lanes, ranking, budget truncation, `aiVisible` and `hiddenFromAi` exclusions
-- [ ] 5. `ContextRail.tsx` — three lanes, live budget bar, drag between lanes, per-chip digest, Preview disclosure
-- [ ] 6. Route `ComposePanel`, `AiTab`, beats through `buildSceneContext()`
-- [ ] 7. `tests/unit/scene-context.spec.ts`; e2e `25-context.spec.ts`
+- [x] 1. **`toKnownEntity()` — the enabling refactor.** `services/extraction/entity-to-known.ts` (type-only imports, so `known-index.ts` stays decoupled from Dexie) adopted by all **seven** hand-rolled builders. Fixed two silent bugs on the way: `intelligence/engine.ts` read `fields.statPhrases` where the stats config writes `extractionRules` (whole-book intake had never seen an author-defined phrase rule), and four builders dropped `pronouns`/`gender` entirely, disabling pronoun resolution on those paths. `HandoffSurface` had no status filter at all. 9 unit tests; the 16 extraction fixtures and `extraction-bootstrap` green **unchanged**, which is the condition for the refactor being right.
+- [ ] 2. `EntityAiPolicy` in the reserved `fields.__ai` block + an **AI** section in `EntityEditorDrawer` (policy, case-sensitivity, exclusions, per-field hide list). Default `'detected'`; appearance fields default-hidden on **new entities only**.  ← IN PROGRESS
+- [ ] 3. Tracking controls into the matcher. `caseSensitive` flips `buildKnownIndex`'s regex flags + an option on `findRanges`; `exclusions` filter the label arrays at `known-index.ts:32/144/197` **and** post-filter ranges, because `findEntityInSpan` bypasses the scan path (18 detector call sites). **Scope the flag to the prose scan only** — `findKnownEntityMention` also resolves model-emitted names at thresholds 0.85–0.92 and must stay case-insensitive. **`engine.ts:180` must keep its insensitive path** or every discovery highlight vanishes.
+- [ ] 4. `services/context/scene-context.ts` — lanes, ranking, budget via `TIER_BUDGET[tier].digestChars` + `fitToBudget`, `droppedForBudget` reported rather than silent. `aiVisible: false` / `hiddenFromAi` are free (already absent from `scene.paragraphs`).
+- [ ] 5. `ContextRail.tsx` — fourth panel with its own toolbar button; three lanes, budget bar, Preview disclosure, per-chip digest. **Buttons as well as drag** for moving a chip between lanes (the N4 rule). Reuses `writeDragPayload`/`readDragPayload`.
+- [ ] 6. Route `ai-context.ts` (converts beats + rewrite in one edit) and `ComposePanel` through it; wire or delete `ComposePanel.dropped`, which is dead state whose `×` can never render. `tests/unit/scene-context.spec.ts`; e2e `28-context.spec.ts`.
 
 ## N8 — Progressions + story memory
 
@@ -241,7 +240,22 @@ same filter; the half-built fields ride along.
 
 ## Notes for the next run
 
-N1–N6 are complete and pushed. Start N7 — the context engine.
+N1–N6 and N7 step 1 are complete and pushed. Start N7 step 2 — the entity AI policy.
+
+**There is no token counter in this repo.** Everything budgets in *characters* — `TIER_BUDGET`
+is `chunkChars`/`digestChars`/`namesPerType`, and `fitToBudget` (`ai/prompts/index.ts:165`) is
+the single sentence-aware truncation primitive. `enrich.ts:41-49` is the worked example of
+composing tier + depth + `fitToBudget`. Do not invent an estimator; show characters.
+
+**Automatic plurals are deliberately deferred.** They inject into the same label arrays as
+exclusions and must inherit the case flag, and 16 golden fixtures plus
+`extraction-bootstrap.spec.ts:124`'s occurrence-count equality pin current matcher behaviour.
+Three matcher changes at once makes a red run impossible to attribute.
+
+**Fixture `11-false-positive-trap` lies in its comments.** It claims `Hess` "should only match
+when capitalised"; it does not today, and passes for an unrelated reason (the `(?![A-Za-z0-9])`
+boundary rejects `hessian`). Step 3 makes its stated intent true for the first time — say so
+rather than letting it read as no change.
 
 **N7's `buildSceneContext()` replaces the body of ONE file**, `writers-room/ai-context.ts` —
 beats and the rewrite bubble both go through it. Do not add a third context builder.

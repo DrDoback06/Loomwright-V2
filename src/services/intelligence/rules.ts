@@ -3,6 +3,7 @@ import { ENTITY_TYPE_META, type EntityRef, type EntityType } from '@/domain/enti
 import type { ExtractionCandidate, ExtractionSignal } from '@/services/extraction/detectors';
 import { confidenceBand } from '@/services/extraction/text-utils';
 import { findKnownEntityMention, type KnownEntity } from '@/services/extraction/known-index';
+import { toKnownEntity } from '@/services/extraction/entity-to-known';
 import { deepPackFor, matchArchetype, resolveTheme } from '@/services/generate/random/packs';
 import { createRng } from '@/services/generate/random/rng';
 import {
@@ -188,7 +189,9 @@ function dependOn(out: RuleOutput, target: RuleTarget | undefined): void {
 
 function knownList(ctx: RuleRun): KnownEntity[] {
   return [
-    ...ctx.entities.map((e) => ({ id: e.id, type: e.type, name: e.name, aliases: e.aliases })),
+    ...ctx.entities.map((e) => toKnownEntity(e)),
+    // A provisional target is a row that does not exist yet — there is no
+    // stored entity to map, so this one stays hand-built.
     ...[...ctx.provisional.values()].map((t) => ({ id: t.id, type: t.type, name: t.name, aliases: [] })),
   ];
 }

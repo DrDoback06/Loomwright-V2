@@ -1,6 +1,7 @@
 import { db } from '@/db/schema';
 import type { IdentityRule } from '@/db/types';
 import type { KnownEntity } from './known-index';
+import { isLiveEntity, toKnownEntity } from './entity-to-known';
 
 function learnedAliases(entityId: string, rules: IdentityRule[]): string[] {
   return rules
@@ -24,22 +25,6 @@ export async function loadKnownProjectEntities(projectId: string): Promise<Known
     db.identityRules.where('projectId').equals(projectId).toArray(),
   ]);
   return rows
-    .filter((entity) => entity.status !== 'merged')
-    .map((entity) => ({
-      id: entity.id,
-      type: entity.type,
-      name: entity.name,
-      aliases: [
-        ...new Set([
-          ...entity.aliases,
-          ...learnedAliases(entity.id, rules),
-        ]),
-      ],
-      pronouns: typeof entity.fields.pronouns === 'string' ? entity.fields.pronouns : undefined,
-      gender: typeof entity.fields.gender === 'string' ? entity.fields.gender : undefined,
-      statPhrases:
-        entity.type === 'stats' && Array.isArray(entity.fields.extractionRules)
-          ? (entity.fields.extractionRules as string[])
-          : undefined,
-    }));
+    .filter(isLiveEntity)
+    .map((entity) => toKnownEntity(entity, learnedAliases(entity.id, rules)));
 }

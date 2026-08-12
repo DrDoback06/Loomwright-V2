@@ -1311,7 +1311,161 @@ Full gate before each step is checked off: `npm run lint` · `npx tsc --noEmit` 
 `24-mentions.spec.ts`; it is 6 steps and `27-mentions.spec.ts` — 24, 25 and 26 went to
 sections, rewrite and focus.
 
-### 6.3 N7 — The Context Engine (the thing novelcrafter is genuinely best at)
+## N7 — The context engine (the next milestone)
+
+### Context
+
+Every AI feature in the app now runs through prose the author wrote — beats, rewrites,
+Compose, deep extraction, the handoff pack. None of them can say what the model was told.
+Worse, they do not agree: exploration found **five different renderings of "who is in scope"**
+and **three budget regimes**, two of which are "none at all" — and the two paths with no budget
+(`ai-context.ts`, feeding beats and the rewrite bubble) are the ones sending the most.
+
+N7 makes the context one thing, ranked, budgeted, and **visible**. It is the most
+trust-building screen in the app: the author can see exactly what leaves their machine, why
+each entry is there, and what got dropped to fit. Novelcrafter has a Preview tab; ours is
+always on and carries a budget bar they do not have.
+
+### What exploration changed
+
+**1. There is no token counter anywhere in the repo.** The whole app budgets in *characters* —
+`TIER_BUDGET` (`src/services/ai/prompts/index.ts:88-102`) is `chunkChars` / `digestChars` /
+`namesPerType`, and the only tokens-per-char statement in the codebase is a comment at
+`intelligence/digest.ts:16`. So the assembler budgets in characters like everything else and
+reuses **`fitToBudget`** (`prompts/index.ts:165`), the one truncation primitive, which is
+sentence-boundary aware and reports whether it cut. `enrich.ts:41-49` is the worked example of
+composing tier + depth + `fitToBudget` and is the shape to copy. The rail shows characters with
+an approximate token figure beside them, rather than inventing an estimator and pretending it
+is exact.
+
+**2. `KnownEntity` already lifts type-scoped fields off `entity.fields`** — `pronouns`,
+`gender`, `statPhrases` (`extraction/known-index.ts:6-17`). The policy belongs there, by exactly
+the same precedent. **But seven places hand-roll that mapping** (`project-known.ts:21`,
+`generate/known.ts:6`, `intelligence/engine.ts:54`, `intelligence/digest.ts:227`,
+`intelligence/rules.ts:189`, `ai/canon.ts:118`, `HandoffSurface.tsx:18`) — and they do not even
+agree on the status filter (`!== 'merged'` vs `=== 'active'` vs nothing). Adding an eighth field
+to seven copies is how a policy silently fails on one path. **A shared
+`toKnownEntity(entity): KnownEntity` is step 1, before any of the rest.**
+
+**3. `caseSensitive` must NOT apply to `findKnownEntityMention`.** That function does two jobs
+today: matching prose, and resolving **model-emitted names** (`digest.ts:237`, `rules.ts:198`,
+`coerce.ts:69`, `ai-candidates.ts:86/93/129/130`, thresholds 0.85–0.92). Models return arbitrary
+case. Scope the flag to the prose-scan path — `buildKnownIndex`'s regex flags, plus
+`scanTextForKnownEntities` and `resolvePronounsInText` — and leave name resolution insensitive.
+
+**4. One line must keep its insensitive path whatever happens.** `engine.ts:180-182` lowercases
+a candidate name and hands it to `findRanges`. If `findRanges` ever defaults to sensitive, every
+discovery highlight span vanishes. `text-utils.ts` carries a "pinned by fixtures — change
+deliberately or not at all" header; a new optional argument is safe, a new default is not.
+
+**5. `ComposePanel.dropped` is dead code.** Declared at `:54`, referenced only by its own
+removal filter at `:201`, with no `onDrop` anywhere — so it can never be non-empty and its `×`
+can never render. The panel's copy describes only the focus path. `services/drag.ts` already
+carries a validated entity payload and every codex row is already a drag *source*; the drop
+target is the missing half. N7 either wires it or deletes it — leaving it is the same lie N5b
+spent a milestone removing.
+
+**6. No progress bar exists anywhere in the app.** Every readout is textual (`{done}/{total}`).
+The budget meter and its CSS are new; `BoardView`'s columns and `.lw-chip` are the house style
+to match, including its rule that a column which does not accept drops must not look as if it
+does.
+
+### Decisions taken
+
+| Question | Decision |
+|---|---|
+| Default policy for existing entities | **When detected.** Matches novelcrafter, and it is what makes a codex feel alive. It genuinely sends more than today, which is exactly why the rail and the budget bar ship in the same milestone rather than after it |
+| Appearance fields hidden from AI | **Default-hidden on new entities only.** No existing project silently changes what it sends; the drawer explains the asymmetry |
+| Where the rail lives | **A fourth panel with its own toolbar button**, beside Compose / Scene / Notes — a full-screen sheet on a phone, the pattern `ScenePanel` sets |
+| Automatic plurals | **Deferred, recorded in the ledger.** They inject into the same label arrays as exclusions and must inherit the case flag, and 16 golden fixtures plus `extraction-bootstrap.spec.ts:124`'s occurrence-count equality pin current matcher behaviour. Three matcher changes at once makes a red run impossible to attribute |
+
+### The build
+
+**1. `toKnownEntity()` — the enabling refactor.** One mapper in
+`src/services/extraction/known-index.ts`, adopted by all seven call sites, with the status
+filter made explicit at each. No behaviour change, and a unit test that every builder produces
+the same shape for the same entity. Everything else in N7 depends on this being true first.
+
+**2. `EntityAiPolicy` in the reserved `entity.fields.__ai` block.**
+
+```ts
+export interface EntityAiPolicy {
+  context: 'always' | 'detected' | 'never';   // default 'detected'
+  caseSensitive: boolean;                     // kills "Red" / "Will" / "May"
+  exclusions: string[];                       // e.g. "the Reach" for an entity named Reach
+  hiddenFieldIds: string[];                   // never sent, per field
+}
+```
+
+Read with the same `typeof` / `Array.isArray` guards `project-known.ts:38-43` already uses for
+`pronouns`. An **AI** section in `EntityEditorDrawer` renders it: three-way policy, the two
+tracking controls, and a per-field hide list built from the type's config.
+
+**3. Tracking controls into the matcher.** `caseSensitive` flips `buildKnownIndex`'s regex
+flags (`known-index.ts:41`) and threads an option into `findRanges`; `exclusions` filter the
+label arrays at `known-index.ts:32`, `:144`, `:197` **and** post-filter produced ranges, because
+`findEntityInSpan` bypasses the scan path and 18 detector call sites go through it. One control,
+two wins: the same setting that keeps "May" out of a prompt keeps it out of the review queue.
+
+*Note for the changelog:* fixture `11-false-positive-trap` claims `Hess` "should only match
+when capitalised" — it does not today, and passes for an unrelated reason. This makes its
+stated intent true for the first time.
+
+**4. `src/services/context/scene-context.ts` — the assembler.** Signature as in the retained
+sketch below. Deterministic, offline, and the only place that decides:
+
+- `always` = policy `always` + POV + `scene.attachedRefs` + focus lock;
+- `detected` = name/alias matches in the scene text **using the same matcher extraction uses**,
+  ranked by mentions × recency-in-scene × type weight;
+- `excluded` = policy `never`, plus anything dropped for budget — reported, not hidden;
+- scenes with `aiVisible: false` and sections with `hiddenFromAi` never enter the scan or the
+  payload, which is free: they are already absent from `scene.paragraphs`.
+
+Budget is `TIER_BUDGET[tier].digestChars`, truncation is `fitToBudget`, and `droppedForBudget`
+is part of the return value rather than a silent cut.
+
+**5. `ContextRail.tsx`.** Three lanes as chip groups, a live budget bar tinted
+`--ok`/`--warn`/`--risk`, a **Preview** disclosure rendering the assembled block verbatim, and
+per-chip digests on click. Moving a chip between lanes has a **button path as well as a drag**
+— the N4 rule: a drag-only affordance is unreachable by keyboard, on a phone, and to a screen
+reader. Reuses `writeDragPayload` / `readDragPayload` from `services/drag.ts`.
+
+**6. Route everything through it.** `ai-context.ts`'s body is replaced — its docblock already
+says so — which converts beats and the rewrite bubble in one edit. `ComposePanel` follows, and
+its dead `dropped` state either becomes a real drop target or goes.
+
+### Risks, and the guard for each
+
+| Risk | Guard |
+|---|---|
+| A policy silently missing on one AI path | `toKnownEntity` first, adopted everywhere, with a unit test that the seven builders agree |
+| Case-sensitivity breaking model-name resolution | Scoped to the prose scan; `findKnownEntityMention` stays insensitive, asserted in a unit test |
+| `findRanges` losing its insensitive default | New optional argument only; `engine.ts:180` covered by an assertion that discovery spans survive |
+| 'detected' quietly sending far more than before | The rail and the budget bar ship in the same milestone; e2e asserts what a mocked call actually receives |
+| Truncation hiding something that mattered | `droppedForBudget` is rendered in the `excluded` lane with a reason, never dropped in silence |
+| A drag-only lane control | Buttons too, asserted on the mobile project |
+
+### Verification
+
+| Unit — `tests/unit/scene-context.spec.ts` | E2E — `tests/e2e/28-context.spec.ts` |
+|---|---|
+| Lanes populated from policy, POV, attachments, lock | The rail shows the three lanes and a budget figure |
+| Ranking and budget truncation, with `droppedForBudget` reported | Moving a chip between lanes changes what a mocked provider receives |
+| `caseSensitive` / `exclusions` change what is detected — and do **not** change `findKnownEntityMention` | Setting an entity to Never removes it from the Preview and from the payload |
+| `hiddenFieldIds` absent from the digest | A hidden field never appears in the Preview |
+| `aiVisible: false` and `hiddenFromAi` never enter the scan | Preview text equals what the beat's Copy prompt produces |
+
+Full gate before each step: `npm run lint` · `npx tsc --noEmit` · `npm run build` ·
+`npx vitest run` · `CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test` on both
+projects. Plus the 16 extraction fixtures and `extraction-bootstrap.spec.ts` green **unchanged**
+— if a fixture moves, the matcher change was wrong.
+
+**Ledger note:** the spec is `28-context.spec.ts`; the plan's old `25-context.spec.ts` was taken
+by the rewrite bubble.
+
+---
+
+### The original N7 sketch (retained)
 
 Three parts: a **per-entity policy**, **tracking controls**, and an **assembler the author can
 see**.

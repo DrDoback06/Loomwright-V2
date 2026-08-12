@@ -4,6 +4,7 @@ import type { Entity } from '@/db/types';
 import type { ExtractionCandidate, ExtractionSignal } from '@/services/extraction/detectors';
 import { confidenceBand } from '@/services/extraction/text-utils';
 import { findKnownEntityMention, type KnownEntity } from '@/services/extraction/known-index';
+import { isLiveEntity, toKnownEntity } from '@/services/extraction/entity-to-known';
 import { ENTITY_TYPE_META, type EntityType } from '@/domain/entity-types';
 import { buildDeltaPrompt } from '@/services/ai/prompts/delta';
 import type { ModelTier } from '@/services/ai/prompts';
@@ -223,13 +224,8 @@ export async function parseDeltaReply(
     db.entities.where('projectId').equals(projectId).toArray(),
     db.skillTrees.where('projectId').equals(projectId).toArray(),
   ]);
-  const live = entities.filter((e) => e.status !== 'merged' && !e.mergedIntoId);
-  const known: KnownEntity[] = live.map((e) => ({
-    id: e.id,
-    type: e.type,
-    name: e.name,
-    aliases: e.aliases,
-  }));
+  const live = entities.filter(isLiveEntity);
+  const known: KnownEntity[] = live.map((e) => toKnownEntity(e));
 
   const warnings: string[] = [];
   const resolve = (name: string | undefined, type: EntityType): Entity | null => {
