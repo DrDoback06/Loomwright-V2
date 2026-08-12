@@ -1,5 +1,6 @@
 import type { Entity } from '@/db/types';
 import type { KnownEntity } from './known-index';
+import { readAiPolicy } from '@/domain/ai-policy';
 
 /** The one place a stored entity becomes the shape the engine matches on.
  *
@@ -17,6 +18,7 @@ import type { KnownEntity } from './known-index';
  * `extraAliases` carries the identity lessons the author has already
  * confirmed; only the project loader has them to hand. */
 export function toKnownEntity(entity: Entity, extraAliases: readonly string[] = []): KnownEntity {
+  const policy = readAiPolicy(entity.fields);
   return {
     id: entity.id,
     type: entity.type,
@@ -28,6 +30,8 @@ export function toKnownEntity(entity: Entity, extraAliases: readonly string[] = 
       entity.type === 'stats' && Array.isArray(entity.fields.extractionRules)
         ? entity.fields.extractionRules.filter((p): p is string => typeof p === 'string')
         : undefined,
+    caseSensitive: policy.caseSensitive || undefined,
+    exclusions: policy.exclusions.length ? policy.exclusions : undefined,
   };
 }
 

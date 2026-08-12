@@ -15,7 +15,12 @@ const FIXTURE_DIR = join(__dirname, '..', 'fixtures', 'extraction');
 interface Fixture {
   name: string;
   description: string;
-  seed: Partial<Record<EntityType, { id: string; name: string; aliases?: string[] }[]>>;
+  seed: Partial<
+    Record<
+      EntityType,
+      { id: string; name: string; aliases?: string[]; caseSensitive?: boolean; exclusions?: string[] }[]
+    >
+  >;
   text: string;
   expectedOccurrences: { entityId: string; exactText?: string }[];
   expectedCandidates: {
@@ -42,6 +47,10 @@ function seedEntities(fixture: Fixture): KnownEntity[] {
         type: type as EntityType,
         name: row.name,
         aliases: row.aliases ?? [],
+        // Per-entity tracking controls. Both default off, so every fixture
+        // written before they existed behaves exactly as it did.
+        caseSensitive: row.caseSensitive,
+        exclusions: row.exclusions,
       });
     }
   }

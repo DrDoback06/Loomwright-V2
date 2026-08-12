@@ -1,5 +1,5 @@
 import type { EntityType } from '@/domain/entity-types';
-import { findRanges, levenshteinSimilarity, splitSentenceSpans } from './text-utils';
+import { findRanges, isExcludedAt, levenshteinSimilarity, splitSentenceSpans } from './text-utils';
 
 /** Minimal entity shape the engine needs — decoupled from the Dexie
  * record so fixtures can seed plain objects. */
@@ -14,6 +14,17 @@ export interface KnownEntity {
   /** stats only: author-defined phrase rules the statChange detector
    * scans for in addition to the stat name. */
   statPhrases?: string[];
+  /** Match this entity's names case-sensitively when scanning PROSE. The fix
+   * for a character called Red, Will or May. Optional because two producers
+   * hand-build this object (`extraction/engine.ts` provisional rows,
+   * `intelligence/rules.ts` drafts) and every fixture seeds a bare literal.
+   *
+   * Deliberately NOT consulted by `findKnownEntityMention` — that resolves
+   * names a model emitted, in whatever case the model chose. */
+  caseSensitive?: boolean;
+  /** Phrases in the prose that never count as a mention of this entity,
+   * e.g. "the Reach" for an entity named Reach. */
+  exclusions?: string[];
 }
 
 export interface KnownIndexEntry {
@@ -21,7 +32,11 @@ export interface KnownIndexEntry {
   type: EntityType;
   name: string;
   aliases: string[];
+  /** Case-sensitivity is baked into this regex's flags, so every consumer
+   * inherits it for free. Exclusions cannot be — they are about the words
+   * AROUND a match — so they travel separately and are applied after. */
   regex: RegExp | null;
+  exclusions?: string[];
 }
 
 export type KnownIndex = Partial<Record<EntityType, KnownIndexEntry[]>>;
@@ -38,7 +53,10 @@ export function buildKnownIndex(entities: KnownEntity[]): KnownIndex {
       .sort((a, b) => b.length - a.length);
     let regex: RegExp | null = null;
     try {
-      regex = new RegExp(`(?<![A-Za-z0-9])(${escaped.join('|')})(?![A-Za-z0-9])`, 'gi');
+      regex = new RegExp(
+        `(?<![A-Za-z0-9])(${escaped.join('|')})(?![A-Za-z0-9])`,
+        e.caseSensitive ? 'g' : 'gi'
+      );
     } catch {
       regex = null;
     }
@@ -48,6 +66,7 @@ export function buildKnownIndex(entities: KnownEntity[]): KnownIndex {
       name: e.name,
       aliases: e.aliases ?? [],
       regex,
+      exclusions: e.exclusions,
     });
   }
   return out;
@@ -60,7 +79,19 @@ export interface EntityMention {
   matchType: 'exact' | 'nickname' | 'fuzzy';
 }
 
-/** Three-tier match: exact → alias → fuzzy (Levenshtein ≥ threshold). */
+/** Three-tier match: exact → alias → fuzzy (Levenshtein ≥ threshold).
+ *
+ * **This resolves an already-extracted string, not prose — and it stays
+ * case-insensitive on purpose.** Six of its callers hand it a name a *model*
+ * produced (`ai-candidates.ts`, `generate/coerce.ts`, `intelligence/digest.ts`),
+ * and models return whatever case they like: "vex ilmaren", "VEX ILMAREN".
+ * `KnownEntity` now carries `caseSensitive`, so the temptation is to honour it
+ * here because it is in scope. Doing that would break every AI round-trip for
+ * any entity the author had marked case-sensitive, and it would fail quietly —
+ * the name simply stops resolving and the finding is dropped.
+ *
+ * The flag belongs to the prose scan only: `buildKnownIndex`,
+ * `scanTextForKnownEntities`, `resolvePronounsInText`. */
 export function findKnownEntityMention(
   needle: string,
   entities: KnownEntity[],
@@ -113,7 +144,14 @@ export function findEntityInSpan(
     for (const ent of index[type] ?? []) {
       if (!ent.regex) continue;
       ent.regex.lastIndex = 0;
-      const m = ent.regex.exec(slice);
+      let m = ent.regex.exec(slice);
+      // Walk past hits the author excluded rather than giving up on the
+      // entity: "the Reach" early in the span must not hide a real "Reach"
+      // later in it. Offsets are absolute so the exclusion window can see
+      // the words on either side of the span boundary.
+      while (m && isExcludedAt(text, span.start + m.index, span.start + m.index + m[0].length, ent.exclusions)) {
+        m = ent.regex.exec(slice);
+      }
       if (!m) continue;
       const offset = span.start + m.index;
       if (!best || offset < best.offset) best = { ...ent, matchText: m[0], offset };
@@ -143,7 +181,8 @@ export function scanTextForKnownEntities(text: string, entities: KnownEntity[]):
   for (const entity of entities) {
     const labels = [entity.name, ...(entity.aliases ?? [])].filter(Boolean);
     for (const label of labels) {
-      for (const r of findRanges(text, label)) {
+      for (const r of findRanges(text, label, { caseSensitive: entity.caseSensitive })) {
+        if (isExcludedAt(text, r.start, r.end, entity.exclusions, entity.caseSensitive)) continue;
         out.push({
           entityId: entity.id,
           entityType: entity.type,
@@ -195,6 +234,8 @@ export function resolvePronounsInText(
     id: e.id,
     gender: castGenderOf(e),
     labels: [e.name, ...(e.aliases ?? [])].filter(Boolean),
+    caseSensitive: e.caseSensitive,
+    exclusions: e.exclusions,
   }));
   const spans = splitSentenceSpans(text);
   const maxOut = opts.max ?? 200;
@@ -205,8 +246,13 @@ export function resolvePronounsInText(
     const found: { castIx: number; offset: number }[] = [];
     cast.forEach((c, ix) => {
       for (const label of c.labels) {
-        for (const r of findRanges(slice, label)) {
-          found.push({ castIx: ix, offset: s.start + r.start });
+        for (const r of findRanges(slice, label, { caseSensitive: c.caseSensitive })) {
+          // Absolute offsets: an exclusion phrase can straddle the sentence
+          // boundary this slice was cut on.
+          const start = s.start + r.start;
+          const end = s.start + r.end;
+          if (isExcludedAt(text, start, end, c.exclusions, c.caseSensitive)) continue;
+          found.push({ castIx: ix, offset: start });
         }
       }
     });

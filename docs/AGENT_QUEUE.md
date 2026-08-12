@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N7 · step 4 of 8 (steps 1–3 done; the build grew from 6 steps to 8 after exploration)
-**Last verified green:** N7 steps 2–3 — lint ✅ tsc ✅ build ✅ vitest 323 ✅ playwright 250 passed / 10 skipped / 0 failed on desktop + mobile ✅ (a first run had `21-scenes` "scene metadata persists" red on mobile; it passed in isolation and the confirming full re-run was clean, so it was the parallel-load flake — same class as the `14-offline` one under N1. Recorded because it will happen again: **re-run before believing a single red mobile scene test**.)
+**Current:** N7 · step 5 of 8 (steps 1–4 done)
+**Last verified green:** N7 step 4 — lint ✅ tsc ✅ build ✅ vitest 341 ✅ playwright 250 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -16,7 +16,7 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N5a | Scene beats | 7 | ✅ 7/7 |
 | N5b | AI visibility, acts, sections, rewrite, focus | 7 | ✅ 7/7 |
 | N6 | Typed `@` mentions | 6 | ✅ 6/6 |
-| N7 | Context engine + policy + tracking + budget rail | 8 | 🔄 3/8 |
+| N7 | Context engine + policy + tracking + budget rail | 8 | 🔄 4/8 |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
 | N9 | Chat dock | 6 | ⬜ |
 | N10 | Prompt library | 6 | ⬜ |
@@ -169,8 +169,8 @@ same filter; the half-built fields ride along.
 - [x] 1. **`toKnownEntity()` — the enabling refactor.** `services/extraction/entity-to-known.ts` (type-only imports, so `known-index.ts` stays decoupled from Dexie) adopted by all **seven** hand-rolled builders. Fixed two silent bugs on the way: `intelligence/engine.ts` read `fields.statPhrases` where the stats config writes `extractionRules` (whole-book intake had never seen an author-defined phrase rule), and four builders dropped `pronouns`/`gender` entirely, disabling pronoun resolution on those paths. `HandoffSurface` had no status filter at all. 9 unit tests; the 16 extraction fixtures and `extraction-bootstrap` green **unchanged**, which is the condition for the refactor being right.
 - [x] 2. **`EntityAiPolicy` at `fields.__ai`** — `src/domain/ai-policy.ts`: the type, `DEFAULT_AI_POLICY` (`context: 'detected'`), a guarded `readAiPolicy` that degrades to the default rather than throwing on a malformed bag, `isFieldHiddenFromAi`, and `isReservedFieldKey`. `FieldDef` gained `aiHidden?: true`; cast's three appearance fields carry it. **The opinion lives in the entity config, not in rows** — nothing is written on create, so a later change to the default still reaches everyone who never expressed one, and the three entity-creation paths needed no edits. Override is a three-state map because a `hiddenFieldIds` array cannot express "send this field the config hides".
 - [x] 3. **"AI context" section in the drawer** — a synthetic nav entry (`AiContextSection.tsx`), not a config section. `ChipsInput` exported and reused via a synthetic `FieldDef` rather than a second chips editor. `formFromEntity`/`splitForm`/`deriveName` extracted to `entity-form.ts` so the round-trip is testable without React. Reserved keys skipped in `merge.ts` (inside the fields loop only, so `__summary` keeps its conflict row) and `templates.ts`. 16 unit tests + `28-context.spec.ts` 3/3 on both projects.
-- [ ] 4. **← IN PROGRESS** Tracking controls into the matcher. `caseSensitive` flips `buildKnownIndex`'s regex flags (`known-index.ts:41`) and threads an option into `findRanges`; `exclusions` filter the label arrays at `known-index.ts:32/144/197` **and** post-filter produced ranges, because `findEntityInSpan` bypasses the scan path (18 detector call sites). **Scope to the prose scan only** — `findKnownEntityMention` also resolves model-emitted names at 0.85–0.92 and must stay insensitive. **`intelligence/engine.ts:180` must keep its insensitive path** or every discovery highlight vanishes: new optional argument, never a new default. Fixture `11-false-positive-trap` claims `Hess` "should only match when capitalised" — it does not today; this makes its stated intent true for the first time, so say so rather than letting it read as no change.
-- [ ] 5. `src/services/context/scene-context.ts` — the assembler, and **the first generic renderer of entity fields**, which is what makes step 2's per-field gate mean anything. Lanes (`always`/`detected`/`excluded`), ranking by mentions × recency × type weight, budget from `TIER_BUDGET[tier].digestChars` with `fitToBudget`, depth clamped by tier exactly as `intelligence/enrich.ts:42` does, `droppedForBudget` returned rather than silently cut. This is where cast's `writingInstructions`/`avoidTropes` finally get read — that whole "AI profile" section has **zero readers** today.
+- [x] 4. **Tracking controls into the matcher.** `findRanges` gained an **optional** `{caseSensitive}` bag (a new default would have silently killed every discovery highlight via `extraction/engine.ts:180`, which lowercases its needle); `isExcludedAt` in `text-utils.ts` suppresses **by surrounding phrase**, windowed to the phrase length either side. Wired into `buildKnownIndex` (per-entity regex flags), `scanTextForKnownEntities`, `resolvePronounsInText` and `findEntityInSpan` — which **walks past** an excluded hit rather than giving up on the entity, so a real mention behind an excluded one still lands. `findKnownEntityMention` deliberately untouched and now carries a long comment saying why. New fixture `17-tracking-controls`, and the runner passes both controls through from the seed. 17 unit tests.
+- [ ] 5. **← IN PROGRESS** `src/services/context/scene-context.ts` — the assembler, and **the first generic renderer of entity fields**, which is what makes step 2's per-field gate mean anything. Lanes (`always`/`detected`/`excluded`), ranking by mentions × recency × type weight, budget from `TIER_BUDGET[tier].digestChars` with `fitToBudget`, depth clamped by tier exactly as `intelligence/enrich.ts:42` does, `droppedForBudget` returned rather than silently cut. This is where cast's `writingInstructions`/`avoidTropes` finally get read — that whole "AI profile" section has **zero readers** today.
 - [ ] 6. `ContextRail.tsx` — fourth panel with its own toolbar button; three lanes, budget bar (**characters**, not tokens — there is no token counter in this repo), Preview disclosure, per-chip digest. **Buttons as well as drag** for moving a chip between lanes (the N4 rule). Reuses `writeDragPayload`/`readDragPayload`.
 - [ ] 7. Route everything through it. `features/writers-room/ai-context.ts`'s `gatherSceneContext` body is replaced — its docblock already says so — converting beats and the rewrite bubble in one edit. `ComposePanel` follows, deleting the byte-identical duplicate at `:130-137`; wire or delete `ComposePanel.dropped`, dead state whose `×` can never render. `EntityDetail`'s **Copy AI prompt** filters through `isFieldHiddenFromAi`; **Copy as JSON** deliberately does not, because filtering a data export makes it lossy.
 - [ ] 8. `tests/unit/scene-context.spec.ts`; extend `28-context.spec.ts` with the payload assertions — a hidden field absent from what a mocked provider receives, `Never` removing an entity from the Preview, moving a chip changing the payload. SURFACE_CHECKLIST rows for the rail.
@@ -242,8 +242,7 @@ same filter; the half-built fields ride along.
 
 ## Notes for the next run
 
-N1–N6 and N7 steps 1–3 are complete and pushed. Start N7 step 4 — the tracking
-controls into the matcher.
+N1–N6 and N7 steps 1–4 are complete and pushed. Start N7 step 5 — the assembler.
 
 **There is no token counter in this repo.** Everything budgets in *characters* — `TIER_BUDGET`
 is `chunkChars`/`digestChars`/`namesPerType`, and `fitToBudget` (`ai/prompts/index.ts:165`) is
@@ -257,8 +256,11 @@ Three matcher changes at once makes a red run impossible to attribute.
 
 **Fixture `11-false-positive-trap` lies in its comments.** It claims `Hess` "should only match
 when capitalised"; it does not today, and passes for an unrelated reason (the `(?![A-Za-z0-9])`
-boundary rejects `hessian`). Step 4 makes its stated intent true for the first time — say so
-rather than letting it read as no change.
+boundary rejects `hessian`), and it passes **identically with the tracking controls on or off**,
+which makes it worthless as proof of them. `17-tracking-controls` is the fixture that actually
+fails when the feature is unwired — verified by temporarily removing the wiring and watching it
+go red. **Do that check for any fixture you add**: a golden fixture that cannot fail is worse
+than none, because it reads as coverage.
 
 **N7's `buildSceneContext()` replaces the body of ONE file**, `writers-room/ai-context.ts` —
 beats and the rewrite bubble both go through it. Do not add a third context builder.

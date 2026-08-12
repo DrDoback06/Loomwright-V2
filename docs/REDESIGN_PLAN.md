@@ -1293,15 +1293,56 @@ That is worth a unit test precisely **because** it is incidental: `updateEntity`
 the day someone rebuilds `splitForm` from the config instead of the form, every policy in the
 project silently resets with nothing on screen to show it.
 
-**4. Tracking controls into the matcher.** `caseSensitive` flips `buildKnownIndex`'s regex flags
-(`known-index.ts:41`) and threads an option into `findRanges`; `exclusions` filter the label
-arrays at `known-index.ts:32/144/197` **and** post-filter produced ranges, because
-`findEntityInSpan` bypasses the scan path and 18 detector call sites go through it. One control,
-two wins: the setting that keeps "May" out of a prompt keeps it out of the review queue.
+**4. Tracking controls into the matcher.** One control, two wins: the setting that keeps "May"
+out of a prompt keeps it out of the review queue.
 
-*For the changelog:* fixture `11-false-positive-trap` claims `Hess` "should only match when
-capitalised". It does not today, and passes for an unrelated reason. This makes its stated
-intent true for the first time.
+**Exclusions suppress by surrounding phrase, not by label** (decided). An entity named Reach
+with the exclusion "the Reach" means: when the scanner finds `Reach`, look at the words around
+it, and if they form `the Reach`, drop that hit — while *"Reach the stone"* still counts.
+Filtering the entity's own label array, which the earlier draft of this plan proposed, would
+only help when the false positive came from an alias the author typed, and cannot stop the
+entity's real name matching inside a longer phrase, which is the case people actually hit.
+
+One new primitive covers every path:
+
+```ts
+/** True when the match at [start, end) sits inside an excluded phrase.
+ * Windowed to the phrase length either side, so it costs nothing per hit. */
+export function isExcludedAt(
+  text: string, start: number, end: number,
+  exclusions: string[], caseSensitive?: boolean
+): boolean
+```
+
+Threading, and the three places it must NOT go:
+
+| Path | Change |
+|---|---|
+| `findRanges` (`text-utils.ts:5`) | New **optional** `{ caseSensitive }` bag. Default keeps today's `'gi'` |
+| `buildKnownIndex` (`known-index.ts:41`) | Per-entity flags `caseSensitive ? 'g' : 'gi'`; `KnownIndexEntry` carries `exclusions` so `findEntityInSpan` can post-filter |
+| `scanTextForKnownEntities` (`:140`), `resolvePronounsInText` (`:186`) | Pass the entity's flag to `findRanges`; drop ranges failing `isExcludedAt` |
+| `findEntityInSpan` (`:98`) | Post-filter hits — 19 detector call sites reach the index only through here |
+| **`findKnownEntityMention` (`:64`)** | **Untouched.** It resolves *already-extracted strings*, and 6 of its 11 call sites hand it a name a **model** emitted (`ai-candidates.ts:86/93/129/130`, `coerce.ts:69`, `digest.ts:233`). Models return arbitrary case. `KnownEntity` will now *carry* the flag, so the danger is using it because it is in scope |
+| **`extraction/engine.ts:180`** | **Untouched.** It lowercases a candidate name before `findRanges`. That is inert today because the regex is `gi` — but it means a case-sensitive *default* would make every discovery highlight silently vanish. Optional argument only, never a new default |
+| `FieldInput.tsx:517` | The phrase-tester calls `findRanges` too and claims to use "the exact word-boundary matching the extraction detectors use". An optional bag keeps that true |
+
+`KnownEntity` gains `caseSensitive?: boolean` and `exclusions?: string[]`, filled by
+`toKnownEntity` from `readAiPolicy`. **Optional is load-bearing**: two producers hand-build the
+object literal (`extraction/engine.ts:198`, `intelligence/rules.ts:195` for provisional rows)
+and every fixture seeds only `{id, type, name, aliases}`.
+
+**Correcting this plan's earlier claim about fixture 11.** It says `Hess` "should only match
+when capitalised" — and I wrote that this milestone would make that true. It will not, and the
+fixture cannot show it either way: `Hess` is protected today purely by `findRanges`'
+`(?![A-Za-z0-9])` lookahead rejecting `hess` inside `hessian`, and the text contains no isolated
+lowercase `hess` for a case flag to catch. **The fixture passes identically with the feature on
+or off, which makes it worthless as proof.** Case-sensitivity therefore needs a *new* 17th
+fixture, and `extraction-fixtures.spec.ts:36-49` needs to pass `caseSensitive`/`exclusions`
+through from the seed — a small runner change that keeps the contract format expressive.
+
+**Why the existing suite stays green:** both controls default off, no fixture sets them, and
+`extraction-bootstrap.spec.ts:124` runs with `entities: []`, so nothing per-entity can fire.
+A red fixture means the defaults leaked.
 
 **5. `src/services/context/scene-context.ts` — the assembler**, and the first generic renderer
 of entity fields, which is what makes step 2 mean anything:
@@ -1380,7 +1421,9 @@ Filtering it would make it impossible to *generate* an appearance.
 |---|---|
 | `scene-context.spec.ts`: lanes from policy/POV/attachments/lock; ranking; budget truncation reporting `droppedForBudget`; depth clamped by tier | The rail shows three lanes and a budget figure |
 | `isFieldHiddenFromAi`: config default, override in both directions, absent key | Moving a chip between lanes changes what a mocked provider receives |
-| `caseSensitive` / `exclusions` change what is detected — and do **not** change `findKnownEntityMention` | Setting an entity to Never removes it from the Preview **and** from the payload |
+| `tracking-controls.spec.ts`: `caseSensitive` and `exclusions` change what `scanTextForKnownEntities` / `findEntityInSpan` / `resolvePronounsInText` find; `isExcludedAt` suppresses by surrounding phrase and not by bare label | Setting an entity to Never removes it from the Preview **and** from the payload |
+| **`findKnownEntityMention` returns the same result with `caseSensitive` on** — the guard that model-emitted names keep resolving | An entity with a case-sensitive name stops matching its lowercase homograph in the review queue |
+| A new 17th fixture that genuinely fails with the feature off — fixture 11 cannot show this | |
 | `__ai` survives the drawer round-trip; is absent from a template, from a merge row, and from the world bible | A field marked hidden is absent from the Preview and from a beat's copied prompt |
 | Cast's `writingInstructions` **is** present in the assembled digest | Preview text equals what the beat's Copy prompt produces |
 
@@ -1898,6 +1941,25 @@ step is incomplete."
 
 **Set-up order on approval:** write and commit the ledger and runbook **first**, then create
 the cron. A cron that fires before the ledger exists will improvise.
+
+---
+
+## Progress accounting
+
+**Report a rough completion % at the end of every pass**, alongside what shipped. Count
+checked steps in `docs/AGENT_QUEUE.md` against the total in its milestone table, and state the
+two caveats rather than presenting a bare number:
+
+1. **Steps are not equal weight.** N7's assembler, N10's resolver and N11's seven analyzers are
+   each worth several of N13's steps. Step count runs slightly *ahead* of effort.
+2. **The denominator grows.** N5 split into N5a + N5b (7 steps became 14) and N7 went from 6 to
+   8 once exploration showed the per-field gate needed the assembler to mean anything. Every
+   milestone still unexplored is an estimate, so a rising total is the plan working, not
+   slipping — say so plainly instead of quietly restating a lower number.
+
+| Checkpoint | Steps | Milestones | Headline |
+|---|---|---|---|
+| After N7 step 3 | 50 / 97 | 7 of 15 done, N7 at 3/8 | ~50% by step count, ~45% by effort |
 
 ---
 

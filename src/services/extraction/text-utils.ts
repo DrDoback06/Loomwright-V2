@@ -2,11 +2,21 @@
  * (legacy/backend-services.jsx). Behaviour is pinned by
  * tests/fixtures/extraction — change deliberately or not at all. */
 
-/** Word-bounded, case-insensitive ranges of `needle` in `haystack`. */
-export function findRanges(haystack: string, needle: string): { start: number; end: number }[] {
+/** Word-bounded ranges of `needle` in `haystack`.
+ *
+ * Case-**in**sensitive by default, and that default is load-bearing: two
+ * callers pass a lowercased needle against original-cased prose
+ * (`extraction/engine.ts:180`, which recovers the casing by re-slicing, and
+ * the phrase tester at `FieldInput.tsx:517`). A sensitive default would make
+ * both silently match nothing. Opt in per call, never by changing this. */
+export function findRanges(
+  haystack: string,
+  needle: string,
+  opts: { caseSensitive?: boolean } = {}
+): { start: number; end: number }[] {
   if (!haystack || !needle || needle.length < 2) return [];
   const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, 'gi');
+  const re = new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, opts.caseSensitive ? 'g' : 'gi');
   const out: { start: number; end: number }[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(haystack)) !== null) {
@@ -14,6 +24,36 @@ export function findRanges(haystack: string, needle: string): { start: number; e
     if (m.index === re.lastIndex) re.lastIndex++;
   }
   return out;
+}
+
+/** True when the match at [start, end) sits inside one of `exclusions`.
+ *
+ * An exclusion is a phrase in the author's prose, not a label on the entity:
+ * "the Reach" excluded from an entity named Reach means *that* occurrence is
+ * not a mention, while "Reach the stone" still is. Filtering the entity's own
+ * name list could not express this — the name is exactly what is matching.
+ *
+ * Windowed to the phrase length either side of the hit, so it costs nothing
+ * per match and never scans the whole chapter. */
+export function isExcludedAt(
+  text: string,
+  start: number,
+  end: number,
+  exclusions: readonly string[] | undefined,
+  caseSensitive = false
+): boolean {
+  if (!exclusions?.length) return false;
+  for (const phrase of exclusions) {
+    if (typeof phrase !== 'string' || phrase.length < 2) continue;
+    // A phrase can only swallow the hit if it reaches at least as far in both
+    // directions, so a window of its own length either side is sufficient.
+    const from = Math.max(0, start - phrase.length);
+    const window = text.slice(from, Math.min(text.length, end + phrase.length));
+    for (const r of findRanges(window, phrase, { caseSensitive })) {
+      if (from + r.start <= start && from + r.end >= end) return true;
+    }
+  }
+  return false;
 }
 
 export function levenshteinDistance(a: string, b: string): number {
