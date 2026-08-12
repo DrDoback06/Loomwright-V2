@@ -1154,18 +1154,162 @@ scrolling pinning the caret at 45% viewport height. All three gated on
 `ComposePanel` stays for whole-scene drafting; its brief builder becomes shared code with
 `buildBeatPrompt`.
 
-### 6.2 N6 — Typed `@` mentions
+## N6 — Typed `@` mentions (the next milestone)
 
-A ProseMirror suggestion plugin built on `@tiptap/pm` (**already a dependency — no new runtime
-dep**). Trigger `@` → inline popup over the minisearch index → select → insert a `mention`
-mark carrying `entityId`/`entityType`, and immediately write an `Occurrence` with
-`source: 'typed'`. Clicking a mention opens a preview card (theirs) as well as the dossier
-(ours).
+### Context
 
-This makes typed and extracted mentions the *same substrate*: the Matrix, the context engine,
-character-recency analysis and the highlight decorations all read `occurrences`.
-`MentionHighlights` keeps rendering extraction-derived hits at lower emphasis; typed ones
-render solid. Add `Occurrence.source?: 'extraction' | 'typed'`.
+Today the only way the app knows an entity appears in a passage is to *find* it: extraction
+runs, matches names and aliases, and writes `Occurrence` rows. That is our differentiator and
+it stays — but it is always one run behind, it cannot know that "the ferryman" is Marrow, and
+it gives the author no way to *assert* a link while writing.
+
+N6 adds the other half: type `@`, pick an entry, and the mention is linked at the moment you
+mean it. The point is not the autocomplete. It is that **typed and extracted mentions become
+the same substrate** — the Matrix presence map, the context engine (N7), story health (N11)
+and the highlight decorations all read `occurrences`, so an assertion made while writing is
+worth exactly as much as a finding made by the engine.
+
+Novelcrafter has typed mentions and no extraction. We will have both, reading one table.
+
+### What exploration changed about the plan
+
+**1. Occurrences cannot be written at pick time.** `extractChapter`
+(`src/services/extraction/session.ts:48`) opens with:
+
+```ts
+await db.occurrences.where('[projectId+chapterId]').equals([projectId, chapter.id]).delete();
+```
+
+Save & Extract deletes **every** occurrence in the chapter and rewrites only what the offline
+detectors found. A typed occurrence written once, at pick time, would be destroyed by a button
+sitting in the same toolbar.
+
+So: **the document is the source of truth and occurrences are a projection**, re-derived on
+save exactly as `scene.paragraphs` already is. The mark in the prose is the fact; the row is a
+view of it. This is the pattern the repo already uses (`deriveScene` in `src/lib/prose.ts`) and
+it makes the whole class of drift impossible — delete the sentence and the mention goes with
+it, because there was never a second copy to forget.
+
+**2. A merge must not need to rewrite documents.** `05-cross-panel.spec.ts` proves that merging
+one entity into another repoints its occurrences (`src/db/repos/merge.ts:1011`). A typed *mark*
+would still carry the old id, and — because rows are re-derived — the next save would quietly
+un-merge it. The fix is free: `Entity.mergedIntoId` already exists, and
+`getEntity()` (`src/db/repos/entities.ts:15`) already follows the redirect. **Resolve the
+mark's id through the merge chain at derivation time.** The document is never rewritten, the
+merge undo receipt stays exact, and typed mentions merge more cleanly than extracted ones do.
+
+**3. `@tiptap/suggestion` and `@tiptap/extension-mention` are not installed at all** — not even
+transitively. The popup is hand-rolled on `@tiptap/pm`, and positioned the way
+`RewriteBubble.tsx` already positions itself: `posToDOMRect` off the caret, minus the canvas
+rect, plus its `scrollTop`. `.lw-wroom__canvas` is already `position: relative` from N5b.
+
+**4. Two existing specs assert `.lw-mention` and click-through-to-dossier**
+(`04-extraction-review.spec.ts:33-43`, `05-cross-panel.spec.ts:116-137`). The base class stays;
+typed mentions get a modifier. Both specs get one extra click, through the preview card.
+
+### Decisions taken
+
+| Question | Decision |
+|---|---|
+| Unknown name | **Create inline, with a type picker.** The popup's last row is *Create "Marrow" as…* over the story types. One keystroke from prose to codex — the direct answer to novelcrafter's "the codex is a time sink" complaint |
+| Searchable types | **All 16.** Nothing in the codex is unmentionable. Ranking carries the weight instead of a filter (below) |
+| Click | **Preview card** with *Open dossier* and *Unlink* inside it |
+
+**Ranking, because "all 16" only works if the order is right.** Score by match quality first —
+exact name > name prefix > alias prefix > name contains > summary contains — then break ties by
+type weight (the five story types first, everything else after), then by how many occurrences
+the entity already has. Every row carries its type label and glyph, so the eye filters what the
+ranking did not. This is the same scoring shape `commandScore` in `CommandPalette.tsx` uses,
+and for the same reason.
+
+### The build
+
+**1. Derivation — `src/lib/prose.ts` and the scene row.**
+
+```ts
+export interface TypedMention {
+  pid: string; start: number; end: number;   // paragraph-relative, same contract as Occurrence
+  entityId: string; entityType: EntityType; text: string;
+}
+/** Marks are inline; offsets are accumulated by the same walk `textOf` uses,
+ * so they cannot drift from what `paragraphsFromDoc` produced. */
+export function mentionsFromDoc(doc: unknown, skip?: BlockPredicate): TypedMention[]
+```
+
+`deriveScene(doc)` gains `mentions`, derived with `HIDDEN_FROM_AI` — **a mention inside a note
+you hid from models is a link you can click, not an appearance in the book.** That follows
+N5b's rule rather than inventing a new one. `Scene.mentions` is stored on the row: a
+non-indexed field, so **no Dexie version bump**, and having it there makes the save-path
+comparison free.
+
+`Occurrence` gains `source?: 'extraction' | 'typed'` — also non-indexed, also no migration.
+
+**2. The mark — `src/features/writers-room/mention.ts`.**
+A `Mark` from `@tiptap/core` with `entityId`, `entityType` and `label` (the name at insert
+time, so a mention whose entity was deleted still renders and can explain itself).
+`inclusive: false`, so typing after a mention does not extend it. Deliberately a mark and not a
+node: the text is real prose, `textOf` ignores marks, and therefore word count, extraction and
+every export are unaffected by construction — the same argument that made `sceneBeat` free.
+
+**3. The popup — `mention-suggest.ts` (plugin) + `MentionSuggest.tsx` (React).**
+The plugin tracks an active query: `@` at a word boundary starts it, word characters extend it,
+space/Escape/selection-move cancels it, and `handleKeyDown` swallows ↑ ↓ Enter Tab Escape so
+they never reach the editor. It publishes `{ query, from, to }` on extension storage, exactly
+as `MentionHighlights` publishes occurrences. The React popup reads that, ranks the project's
+entities in memory (a few hundred rows — no index to keep warm, no staleness), and renders
+rows in the palette's shape. Last row is the inline-create affordance.
+
+**4. Reconciliation — `src/db/repos/scenes.ts`.**
+`saveSceneDoc` compares the freshly derived `mentions` with `scene.mentions`; when they differ
+it replaces this scene's `source: 'typed'` occurrences. `restoreSnapshot` goes through the same
+path (it already calls `deriveScene`). `deleteSceneToTrash` clears the scene's typed rows —
+nothing else would, because extraction only ever owned them per chapter.
+
+**5. Extraction integration — `src/services/extraction/session.ts`.**
+Two small changes, both load-bearing:
+- the opening delete excludes `source: 'typed'`, so Save & Extract stops destroying assertions;
+- detector hits that fall inside a typed span are dropped, so one mention never becomes two
+  rows. **A typed mention wins.** The author said so; the matcher only guessed.
+
+**6. Rendering and the preview.**
+`MentionHighlights` skips `source: 'typed'` rows — the mark renders those itself, and drawing a
+decoration over it would double up. Typed renders solid in the entity's type colour; extracted
+keeps today's fainter treatment. `MentionPreview.tsx` replaces the current straight-to-dossier
+click in `WritersRoom.onCanvasClick`: glyph, name, type, summary, then *Open dossier* and
+*Unlink*. Unlink removes the mark and leaves the words.
+
+### Risks, and the guard for each
+
+| Risk | Guard |
+|---|---|
+| Save & Extract destroying typed mentions | Rows are derived, not authored; and the delete now excludes them. Asserted in e2e by extracting **after** typing a mention |
+| A merge silently un-merging typed mentions | Resolve through `mergedIntoId` at derivation. `05-cross-panel` extended to cover a typed mention |
+| One mention becoming two occurrence rows | Detector hits inside a typed span are dropped; unit test on the overlap filter |
+| Reconciling on every keystroke | `scene.mentions` is compared first; an unchanged set does no IO at all |
+| The popup eating keys the editor needs | `handleKeyDown` only claims ↑ ↓ Enter Tab Escape, and only while a query is active |
+| Editing the text under a mark | `inclusive: false` plus an `appendTransaction` that drops a mark whose text no longer matches its `label` — the same repair shape `scene-beat.ts` uses for `beatId` |
+| A mention to a deleted entity | The mark carries `label`, so it still renders; the preview says it is gone and offers Unlink |
+
+### Verification
+
+| Unit — `tests/unit/mentions.spec.ts` | E2E — `tests/e2e/27-mentions.spec.ts` |
+|---|---|
+| `mentionsFromDoc` offsets agree with `paragraphsFromDoc` for the same doc | `@` opens the popup; typing filters it; Enter inserts the name as plain prose with a mark |
+| A mention inside a `hiddenFromAi` section is excluded | The mention survives a reload and **survives Save & Extract** |
+| A mark whose entity was merged derives the canonical id | An unknown name offers Create, and picking a type creates the entity **and** links it |
+| The overlap filter drops a detector hit inside a typed span | Clicking a mention shows the preview; Open reaches the dossier; Unlink leaves the words |
+| An unchanged mention set skips the occurrence write | The Matrix cell for that scene/entity reads as author-asserted, not extracted |
+
+Plus `04-extraction-review` and `05-cross-panel` updated to click through the preview card,
+keeping their real assertion — that a mention resolves to the right entity — intact.
+
+Full gate before each step is checked off: `npm run lint` · `npx tsc --noEmit` ·
+`npm run build` · `npx vitest run` ·
+`CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test` on both projects.
+
+**Ledger note:** `docs/AGENT_QUEUE.md` lists N6 as 4 steps and names the spec
+`24-mentions.spec.ts`; it is 6 steps and `27-mentions.spec.ts` — 24, 25 and 26 went to
+sections, rewrite and focus.
 
 ### 6.3 N7 — The Context Engine (the thing novelcrafter is genuinely best at)
 

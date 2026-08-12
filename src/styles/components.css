@@ -967,6 +967,19 @@ select.lw-input {
   border-bottom: 1.5px dashed rgba(93, 120, 150, 0.6);
 }
 
+/* A link the author made by hand reads a shade more definite than one the
+   engine found, and wears its entity's colour — the type is legible in the
+   prose without opening anything. `--mention-tint` is set per mark by
+   `mention.ts`, so the sixteen colours stay defined once, in
+   ENTITY_TYPE_META, rather than being copied into this file. */
+.lw-mention--typed {
+  background: color-mix(in oklab, var(--mention-tint, var(--accent)) 16%, transparent);
+  border-bottom: 1.5px solid var(--mention-tint, var(--accent));
+}
+.lw-mention--typed:hover {
+  background: color-mix(in oklab, var(--mention-tint, var(--accent)) 30%, transparent);
+}
+
 /* ---- Review queue ---- */
 
 .lw-page--wide {

@@ -39,8 +39,13 @@ test.describe('extraction + review loop', () => {
     await openWritersRoom(page);
     await expect(page.locator('.lw-mention').first()).toBeVisible();
 
-    // Clicking a mention opens the entity in the Cast surface.
+    // Clicking a mention previews the entity in place, and the card is the
+    // way through to the dossier — you find out who someone is without
+    // leaving the sentence that asked.
     await page.locator('.lw-mention').first().click();
+    const card = page.getByTestId('mention-preview');
+    await expect(card).toContainText('Aelinor');
+    await card.getByRole('button', { name: 'Open dossier' }).click();
     await expect(page.getByTestId('entity-detail').getByRole('heading', { name: 'Aelinor' })).toBeVisible();
   });
 

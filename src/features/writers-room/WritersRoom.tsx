@@ -22,7 +22,6 @@ import { loadKnownProjectEntities } from '@/services/extraction/project-known';
 import { describeDeepExtraction, runDeepExtraction } from '@/services/ai/deep-extraction';
 import { getAiSettings, resolveProvider } from '@/services/ai/settings';
 import { useProjectStore } from '@/stores/project';
-import { useFocusStore } from '@/stores/focus';
 import { useUiStore } from '@/stores/ui';
 import { toast } from '@/stores/toasts';
 import { UniqueParagraphId } from './paragraph-id';
@@ -38,6 +37,11 @@ import { ScenePanel } from './ScenePanel';
 import { RewriteBubble } from './RewriteBubble';
 import { FocusDim } from './focus-dim';
 import { useFocusMode } from './useFocusMode';
+import { Mention } from './mention';
+import { MentionSuggest as MentionSuggestExtension } from './mention-suggest';
+import { MentionSuggest } from './MentionSuggest';
+import { MentionPreview, type MentionTarget } from './MentionPreview';
+import type { EntityType } from '@/domain/entity-types';
 
 /** Hard ceiling on how long typed text may sit unwritten. The 600ms debounce
  * still governs the common case (a pause commits immediately); this only binds
@@ -47,9 +51,7 @@ const MAX_UNSAVED_MS = 3000;
 export function WritersRoom() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const setRoute = useUiStore((s) => s.setRoute);
-  const setCodexType = useUiStore((s) => s.setCodexType);
   const pendingChapterId = useUiStore((s) => s.pendingChapterId);
-  const setFocus = useFocusStore((s) => s.setFocus);
   const chapters = useLiveQuery(
     async () => (projectId ? listChapters(projectId) : ([] as Chapter[])),
     [projectId],
@@ -75,6 +77,7 @@ export function WritersRoom() {
     () => !window.matchMedia('(max-width: 720px)').matches
   );
   const [extracting, setExtracting] = useState(false);
+  const [mentionTarget, setMentionTarget] = useState<MentionTarget | null>(null);
   const stageDelta = useIntelligenceStore((s) => s.stage);
   const [composeOpen, setComposeOpen] = useState(false);
   const [aiReady, setAiReady] = useState(false);
@@ -225,7 +228,16 @@ export function WritersRoom() {
   }, []);
 
   const editor = useEditor({
-    extensions: [StarterKit, UniqueParagraphId, MentionHighlights, SceneBeat, Section, FocusDim],
+    extensions: [
+      StarterKit,
+      UniqueParagraphId,
+      MentionHighlights,
+      SceneBeat,
+      Section,
+      FocusDim,
+      Mention,
+      MentionSuggestExtension,
+    ],
     editorProps: {
       attributes: {
         class: 'lw-manuscript',
@@ -458,22 +470,40 @@ export function WritersRoom() {
     else await runDeep();
   }, [projectId, runDeep]);
 
-  // Clicking a highlighted mention opens its entity.
+  /** Clicking a mention opens a preview card rather than jumping.
+   *
+   * The question a mention raises is "who is this again?", and the old
+   * behaviour answered it by navigating away from the sentence that asked.
+   * The card answers it in place and still offers the trip. Delegated from
+   * the canvas because extraction-derived mentions are decorations with no
+   * React component of their own. */
   const onCanvasClick = useCallback(
     (e: React.MouseEvent) => {
-      const target = (e.target as HTMLElement).closest?.('.lw-mention');
-      if (!target) return;
-      const entityId = target.getAttribute('data-entity-id');
-      const entityType = target.getAttribute('data-entity-type');
+      const el = (e.target as HTMLElement).closest?.('.lw-mention') as HTMLElement | null;
+      const canvas = canvasRef.current;
+      if (!el || !canvas) {
+        setMentionTarget(null);
+        return;
+      }
+      const entityId = el.getAttribute('data-entity-id');
+      const entityType = el.getAttribute('data-entity-type') as EntityType | null;
       if (!entityId || !entityType) return;
-      void db.entities.get(entityId).then((entity) => {
-        if (!entity) return;
-        setFocus({ id: entity.id, type: entity.type, name: entity.name });
-        setCodexType(entity.type);
-        setRoute('codex');
+      const rect = el.getBoundingClientRect();
+      const box = canvas.getBoundingClientRect();
+      // A typed mention is a mark and can be unlinked; an extracted one is
+      // a decoration with nothing to remove, so the card omits Unlink.
+      const pos = el.classList.contains('lw-mention--typed')
+        ? (editorRef.current?.view.posAtDOM(el, 0) ?? undefined)
+        : undefined;
+      setMentionTarget({
+        entityId,
+        entityType,
+        pos,
+        top: rect.bottom - box.top + canvas.scrollTop,
+        left: Math.min(Math.max(rect.left - box.left, 8), Math.max(8, box.width - 300)),
       });
     },
-    [setFocus, setRoute, setCodexType]
+    []
   );
 
   // Dimming, the chrome fade and typewriter scrolling, all from the one
@@ -666,6 +696,14 @@ export function WritersRoom() {
                 canvasRef={canvasRef}
                 flush={flushEditorNow}
               />
+              <MentionSuggest editor={editor} projectId={projectId} canvasRef={canvasRef} />
+              {mentionTarget ? (
+                <MentionPreview
+                  target={mentionTarget}
+                  editor={editor}
+                  onClose={() => setMentionTarget(null)}
+                />
+              ) : null}
             </div>
 
             <div

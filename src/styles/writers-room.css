@@ -677,6 +677,122 @@
    applies — it simply arrives instantly. */
 
 /* ---------------------------------------------------------------------
+   `@` mentions (N6)
+   The picker sits BELOW the caret — a list that covered the words you were
+   typing would be unreadable — and the preview card below the mention it
+   describes, for the same reason.
+   --------------------------------------------------------------------- */
+.lw-suggest,
+.lw-mentioncard {
+  position: absolute;
+  z-index: 4;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-5);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+}
+
+.lw-suggest {
+  top: var(--suggest-top, 0px);
+  left: var(--suggest-left, 0px);
+  width: 288px;
+  max-width: calc(100% - var(--sp-8));
+  padding: var(--sp-2);
+  overflow: hidden;
+}
+.lw-suggest__list { list-style: none; margin: 0; padding: 0; }
+.lw-suggest__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  height: var(--density-row);
+  padding: 0 var(--sp-4);
+  border: 0;
+  border-radius: var(--r-3);
+  background: none;
+  color: var(--ink-1);
+  font: inherit;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+/* Keyboard and pointer share one highlighted row: the arrow keys move it
+   and hovering moves it too, so Enter always takes what you are looking at. */
+.lw-suggest__row--on { background: var(--bg-tint); }
+.lw-suggest__glyph { flex-shrink: 0; }
+.lw-suggest__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lw-suggest__type {
+  flex-shrink: 0;
+  font-size: var(--fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tr-eyebrow);
+  color: var(--ink-4);
+}
+.lw-suggest__create {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-top: 1px solid var(--line-1);
+}
+.lw-suggest__createlabel { color: var(--ink-3); }
+.lw-suggest__types { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+.lw-mentioncard {
+  top: var(--card-top, 0px);
+  left: var(--card-left, 0px);
+  width: 288px;
+  max-width: calc(100% - var(--sp-8));
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+}
+.lw-mentioncard__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+}
+.lw-mentioncard__name { flex: 1; min-width: 0; font-size: var(--fs-sm); }
+.lw-mentioncard__type {
+  font-size: var(--fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tr-eyebrow);
+  color: var(--ink-4);
+}
+.lw-mentioncard__summary {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: var(--lh-snug);
+}
+.lw-mentioncard__gone { margin: 0; color: var(--ink-3); }
+.lw-mentioncard__actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+
+@media (max-width: 720px) {
+  /* Anchoring a list to a caret above a soft keyboard puts it off-screen
+     as often as not. Both pin to the bottom instead. */
+  .lw-suggest,
+  .lw-mentioncard {
+    position: fixed;
+    top: auto;
+    left: var(--sp-4);
+    right: var(--sp-4);
+    bottom: calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
+    width: auto;
+    max-width: none;
+  }
+}
+
+/* ---------------------------------------------------------------------
    Rewrite bubble (N5b)
    Anchored above the selection on a desktop; pinned to the bottom of the
    canvas on a phone, where a floating popover over a soft keyboard is

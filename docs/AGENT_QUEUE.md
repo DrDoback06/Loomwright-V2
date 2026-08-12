@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N6 · not started (N5b complete)
-**Last verified green:** N5b complete — lint ✅ tsc ✅ build ✅ vitest 279 ✅ playwright 232 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N7 · not started (N6 complete)
+**Last verified green:** N6 complete — lint ✅ tsc ✅ build ✅ vitest 297 ✅ playwright 244 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -15,8 +15,8 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N4 | Plan: Outline / Board / Matrix / Timeline | 7 | ✅ 7/7 |
 | N5a | Scene beats | 7 | ✅ 7/7 |
 | N5b | AI visibility, acts, sections, rewrite, focus | 7 | ✅ 7/7 |
-| N6 | Typed `@` mentions | 4 | 🔄 0/4 |
-| N7 | Context engine + policy + tracking + budget rail | 7 | ⬜ |
+| N6 | Typed `@` mentions | 6 | ✅ 6/6 |
+| N7 | Context engine + policy + tracking + budget rail | 7 | 🔄 0/7 |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
 | N9 | Chat dock | 6 | ⬜ |
 | N10 | Prompt library | 6 | ⬜ |
@@ -151,16 +151,22 @@ same filter; the half-built fields ride along.
 - [x] 5. **Focus mode, all three parts.** `data-focus` stamped by `applyTweaks` *and* the pre-paint script; `focus-dim.ts` decorations rebuilding on `selectionSet` as well as `docChanged`; chrome fade after a 3s burst, restored on mousemove or Escape; typewriter scrolling on `.lw-wroom__canvas` consulting `prefersReducedMotion()` directly, with a 55vh tail so the last paragraph can reach the line. **The N1 `line` option is retired** — a rendered line is a layout fact the document does not hold, so it could only ever have behaved as `sentence`; a stored `line` migrates. The Tweaks fieldnote no longer lies when focus is off. 6 unit tests + `26-focus.spec.ts` (4 × 2 projects).
 - [x] 6. **The last half-built fields.** `Scene.labels` is a chips field and `attachedRefs` an entity picker in `ScenePanel` — both had readers and no writer. `--density-pad` and `--density-gap` now drive `.lw-card` padding and the `.lw-page` section gap, with `balanced` set to exactly what those rules hardcoded, so Density finally moves spacing as its token names always claimed and the default layout does not shift. `19-studio.spec.ts` asserts the computed padding, not the attribute.
 
-## N6 — Typed `@` mentions
+## N6 — Typed `@` mentions ✅
 
-- [ ] 1. `mention-suggest.ts` suggestion plugin on `@tiptap/pm` (no new dep)  ← IN PROGRESS
-- [ ] 2. `mention` mark carrying `entityId` / `entityType`; preview card on click
-- [ ] 3. Write an `Occurrence` with `source: 'typed'` on select; `MentionHighlights` renders typed solid, extracted dimmer
-- [ ] 4. e2e `24-mentions.spec.ts`
+- [x] 1. **Derivation.** `mentionsFromDoc` + `TypedMention` in `lib/prose.ts`; `deriveScene` returns it; `Scene.mentions` and `Occurrence.source` added (both non-indexed — **no Dexie bump**). Offsets come from the same walk `textOf` uses, so they cannot drift from `paragraphsFromDoc`.
+- [x] 2. `mention.ts` — a **Mark**, not a node, so `textOf` ignores it and word count, extraction and every export are unaffected by construction. Carries `entityId`/`entityType`/`label`, `inclusive: false`, plus an `appendTransaction` that drops a mark whose words no longer read as its label.
+- [x] 3. `mention-suggest.ts` (plugin, hand-rolled — **`@tiptap/suggestion` is not installed at all**) + `MentionSuggest.tsx`. All 16 types searchable, ranked by match quality → type weight → existing mention count. Inline create over the five story types.
+- [x] 4. Reconciliation in `saveSceneDoc` / `restoreSnapshot` / `deleteSceneToTrash`. **Ids are resolved through `mergedIntoId` BEFORE the change comparison** — the marks are identical either side of a merge, so comparing raw ids would decide nothing changed and leave every row pointing at a dead entity. A unit test caught exactly that.
+- [x] 5. Extraction integration: the opening delete excludes `source: 'typed'`, and detector hits overlapping a typed span are dropped. One mention is one row.
+- [x] 6. `MentionPreview.tsx` replaces the straight-to-dossier click; `MentionHighlights` skips typed rows (the mark renders them); styles; 12 + 6 unit tests; e2e `27-mentions.spec.ts` (6 × 2 projects), with `04-extraction-review` and `05-cross-panel` updated to click through the card.
+
+**The finding that set the architecture.** `extractChapter` opens by deleting *every* occurrence in the chapter. A typed mention written as a row at pick time would have been destroyed by the Save & Extract button in the same toolbar. So the **document is the source of truth and occurrences are a projection** re-derived on save — the same relationship `scene.paragraphs` has. Delete the sentence and the mention goes with it, because there was never a second copy to forget.
+
+**A deliberate call worth not re-litigating:** a typed mention lands in the Matrix's `extracted` lane, not `asserted`. Mentioning someone is not the same as their being in the scene — "Vex thought of Marrow" mentions a man who is miles away — so a mention of any provenance sits in the "found in the prose" lane, and clicking it still promotes it to an assertion of presence, which is a stronger claim than either the author or the engine had made.
 
 ## N7 — Context engine
 
-- [ ] 1. `EntityAiPolicy` in the reserved `__ai` block + an AI section in `EntityEditorDrawer`
+- [ ] 1. `EntityAiPolicy` in the reserved `__ai` block + an AI section in `EntityEditorDrawer`  ← IN PROGRESS
 - [ ] 2. `caseSensitive` + `exclusions` wired into `extraction/known-index.ts` (improves extraction too)
 - [ ] 3. `hiddenFieldIds` honoured by every digest path; sensible appearance-field defaults
 - [ ] 4. `services/context/scene-context.ts` — lanes, ranking, budget truncation, `aiVisible` and `hiddenFromAi` exclusions
@@ -235,11 +241,19 @@ same filter; the half-built fields ride along.
 
 ## Notes for the next run
 
-N1–N5b are complete and pushed. Start N6 — typed `@` mentions.
+N1–N6 are complete and pushed. Start N7 — the context engine.
 
-**A node view's controls are the second place a scene's metadata is written.** N7's
-`buildSceneContext()` replaces the body of ONE file, `writers-room/ai-context.ts` —
+**N7's `buildSceneContext()` replaces the body of ONE file**, `writers-room/ai-context.ts` —
 beats and the rewrite bubble both go through it. Do not add a third context builder.
+
+**`Occurrence` now has provenance.** `source: 'typed'` rows are a projection of `mention`
+marks, re-derived on every scene save; `'extraction'` rows are owned by `extractChapter`,
+which still deletes and rewrites its own on every run. Anything new that writes occurrences
+must say which it is, and anything that deletes them in bulk must say which it is deleting.
+
+**Ids in a mark are raw; ids in a row are canonical.** The mark keeps whatever entity id it
+was written with and `resolvedMentions` follows `mergedIntoId` on the way to the row — which
+is why a merge never has to rewrite a document.
 
 **Never select text in an e2e with a triple click or with Ctrl+A on a container.** A triple
 click inherits the browser's multi-click counter from whatever was clicked before it, so after

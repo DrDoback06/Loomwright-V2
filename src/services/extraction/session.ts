@@ -44,8 +44,24 @@ export async function extractChapter(chapter: Chapter): Promise<ExtractionSummar
     confidenceOverrides: overrides,
   });
 
-  // Replace this chapter's prior occurrences.
-  await db.occurrences.where('[projectId+chapterId]').equals([projectId, chapter.id]).delete();
+  // Replace this chapter's prior occurrences — but only the ones this pass
+  // owns.
+  //
+  // A `typed` row is a projection of an `@` mention in the prose, and the
+  // author put it there deliberately. Clearing it here would mean the Save
+  // & Extract button silently deleted an assertion every time it ran, and
+  // the only reason it would come back is that the next keystroke saves the
+  // scene. Leave them alone.
+  await db.occurrences
+    .where('[projectId+chapterId]')
+    .equals([projectId, chapter.id])
+    .and((row) => row.source !== 'typed')
+    .delete();
+
+  // What the author has already said is here, so the detectors do not say
+  // it again. A typed mention and a matched name over the same words are
+  // one mention, and two rows would double every count built on them.
+  const typedSpans = await loadTypedSpans(projectId, chapter.id);
 
   // Persist candidates first so candidate occurrences can point at them.
   //
@@ -81,25 +97,29 @@ export async function extractChapter(chapter: Chapter): Promise<ExtractionSummar
     spans.find((s) => s.start <= start && s.end >= end) ?? null;
 
   const now = Date.now();
-  const occurrenceRows: Occurrence[] = occurrences.map((o) => {
-    const para = toParagraph(o.start, o.end);
-    return {
-      id: newId(),
-      projectId,
-      entityId: o.entityId,
-      entityType: o.entityType,
-      chapterId: chapter.id,
-      paragraphId: para?.id ?? null,
-      start: para ? o.start - para.start : o.start,
-      end: para ? o.end - para.start : o.end,
-      exactText: o.exactText,
-      isPronounResolution: o.isPronounResolution,
-      candidateId: o.candidateName
-        ? candidateIdByName.get(o.candidateName.toLowerCase())
-        : undefined,
-      createdAt: now,
-    };
-  });
+  const occurrenceRows: Occurrence[] = occurrences
+    .map((o) => {
+      const para = toParagraph(o.start, o.end);
+      return {
+        id: newId(),
+        projectId,
+        entityId: o.entityId,
+        entityType: o.entityType,
+        chapterId: chapter.id,
+        paragraphId: para?.id ?? null,
+        start: para ? o.start - para.start : o.start,
+        end: para ? o.end - para.start : o.end,
+        exactText: o.exactText,
+        isPronounResolution: o.isPronounResolution,
+        candidateId: o.candidateName
+          ? candidateIdByName.get(o.candidateName.toLowerCase())
+          : undefined,
+        source: 'extraction' as const,
+        createdAt: now,
+      };
+    })
+    // A typed mention wins. The author said so; the matcher only guessed.
+    .filter((row) => !overlapsTypedSpan(typedSpans, row));
   if (occurrenceRows.length) await db.occurrences.bulkAdd(occurrenceRows);
 
   const knownMentions = (() => {
@@ -131,6 +151,38 @@ export async function extractChapter(chapter: Chapter): Promise<ExtractionSummar
     knownMentions,
     candidates,
   };
+}
+
+/** Paragraph-relative spans the author has already claimed with `@`,
+ * grouped by paragraph. Read from the scene rows rather than from the
+ * occurrence table so this is true even on the very first extraction after
+ * a mention was typed, before any reconciliation has run. */
+async function loadTypedSpans(
+  projectId: string,
+  chapterId: string
+): Promise<Map<string, { start: number; end: number }[]>> {
+  const scenes = await db.scenes.where('chapterId').equals(chapterId).toArray();
+  const byParagraph = new Map<string, { start: number; end: number }[]>();
+  for (const scene of scenes) {
+    if (scene.projectId !== projectId) continue;
+    for (const mention of scene.mentions ?? []) {
+      const list = byParagraph.get(mention.pid) ?? [];
+      list.push({ start: mention.start, end: mention.end });
+      byParagraph.set(mention.pid, list);
+    }
+  }
+  return byParagraph;
+}
+
+/** True when a detector hit sits on words a typed mention already covers. */
+export function overlapsTypedSpan(
+  typed: Map<string, { start: number; end: number }[]>,
+  row: Pick<Occurrence, 'paragraphId' | 'start' | 'end'>
+): boolean {
+  if (!row.paragraphId) return false;
+  const spans = typed.get(row.paragraphId);
+  if (!spans) return false;
+  return spans.some((span) => row.start < span.end && span.start < row.end);
 }
 
 async function loadDetectorOverrides(projectId: string): Promise<Record<string, number>> {

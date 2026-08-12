@@ -433,3 +433,52 @@ Six dead controls across N1–N4 traced to one cause — a spec that asserts the
 `npm run lint` ✅ · `npx tsc --noEmit` ✅ · `npm run build` ✅ ·
 `npx vitest run` **279** ✅ · full Playwright suite **232 passed, 10 skipped,
 0 failed** on BOTH desktop and mobile ✅
+
+---
+
+## 14. N6 typed `@` mentions — SHIPPED
+
+Type `@`, pick an entry, and the mention is linked at the moment you mean it. The point is not
+the autocomplete: it is that **typed and extracted mentions become the same substrate**. The
+Matrix presence map, the context engine (N7), story health (N11) and the highlight decorations
+all read `occurrences`, so an assertion made while writing is worth exactly what a finding made
+by the engine is worth.
+
+**The document is the source of truth; occurrences are a projection.** `extractChapter` opens
+by deleting *every* occurrence in the chapter, so a typed mention written as a row when the
+author picked from the popup would have been destroyed by the Save & Extract button in the same
+toolbar. Instead the link is a **mark** in the prose, and `saveSceneDoc` re-derives the rows
+from it — the same relationship `scene.paragraphs` has with the document. Delete the sentence
+and the mention goes with it, because there was never a second copy to forget.
+
+Consequences worth knowing before touching any of this:
+
+- **`Occurrence.source`** distinguishes `'typed'` from `'extraction'`. Anything that writes
+  occurrences must say which; anything that deletes them in bulk must say which it is deleting.
+  `extractChapter` now excludes typed rows from its opening delete, and drops detector hits that
+  overlap a typed span — one mention is one row.
+- **Ids in a mark are raw; ids in a row are canonical.** The mark keeps whatever entity id it
+  was written with, and `resolvedMentions` follows `mergedIntoId` on the way to the row. That is
+  why a merge never has to rewrite a document. It also has to happen *before* the change
+  comparison: the marks are identical either side of a merge, so comparing raw ids would decide
+  nothing had changed and leave every typed row pointing at a dead entity. A unit test caught
+  exactly that.
+- **A mention is a Mark, not a node**, so `textOf` ignores it: word count, extraction and every
+  export see plain prose. There is no `@Vex` in the manuscript, only "Vex".
+- **A mention inside AI-hidden content is a link you can click, not an appearance in the book** —
+  N5b's rule, applied to mentions.
+- `@` searches **all 16 codex types**; ranking, not a filter, keeps the list readable. An unknown
+  name can be created and linked in one keystroke over the five story types.
+- A typed mention lands in the Matrix's `extracted` lane on purpose. Mentioning someone is not
+  the same as their being in the scene — "Vex thought of Marrow" mentions a man who is miles
+  away — so a mention of any provenance sits in the "found in the prose" lane, and clicking it
+  still promotes it to an assertion of presence.
+
+Hand-rolled on `@tiptap/pm`: `@tiptap/suggestion` and `@tiptap/extension-mention` are not
+installed at all, not even transitively, and neither is worth a new runtime dependency.
+
+### Verification
+
+`npm run lint` ✅ · `npx tsc --noEmit` ✅ · `npm run build` ✅ ·
+`npx vitest run` **297** ✅ · full Playwright suite **244 passed, 10 skipped, 0 failed** on
+BOTH desktop and mobile ✅

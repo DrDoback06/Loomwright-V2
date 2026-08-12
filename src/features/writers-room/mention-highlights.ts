@@ -47,6 +47,10 @@ function buildDecorations(doc: PMNode, occurrences: Occurrence[]): DecorationSet
   const byPid = new Map<string, Occurrence[]>();
   for (const o of occurrences) {
     if (o.isPronounResolution || !o.paragraphId) continue;
+    // A typed mention is a MARK in the document and renders itself. Drawing
+    // a decoration over it too would stack two backgrounds on one word and
+    // give the click handler two elements to choose between.
+    if (o.source === 'typed') continue;
     const list = byPid.get(o.paragraphId) ?? [];
     list.push(o);
     byPid.set(o.paragraphId, list);

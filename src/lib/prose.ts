@@ -23,6 +23,7 @@ export interface BlockNode {
   attrs?: Record<string, unknown>;
   content?: BlockNode[];
   text?: string;
+  marks?: { type: string; attrs?: Record<string, unknown> }[];
 }
 
 /** Skip a node and everything inside it. */
@@ -92,15 +93,116 @@ export function countWords(paragraphs: { text: string }[]): number {
   );
 }
 
-/** The two numbers a scene save writes, derived from one document by two
- * different filters. Every writer of a scene row should go through this
- * rather than deriving one and reusing it for the other. */
+/** A link the author made by hand, with `@`.
+ *
+ * Offsets are relative to the paragraph's own text, which is the same
+ * contract `Occurrence.start` / `.end` use — deliberately, because a typed
+ * mention becomes an occurrence row and has to sit in the same coordinate
+ * space as an extracted one. */
+export interface TypedMention {
+  pid: string;
+  start: number;
+  end: number;
+  entityId: string;
+  entityType: string;
+  /** The marked text itself. */
+  text: string;
+}
+
+/** The name of the mark a typed mention wears. Lives here rather than in
+ * the extension so `src/db/` and `src/lib/` can read a document without
+ * importing from `src/features/`. */
+export const MENTION_MARK = 'mention';
+
+/** Collect every typed mention in a document.
+ *
+ * Walks the same way `textOf` does and accumulates the same offsets, so a
+ * mention's `start`/`end` cannot drift from the paragraph text
+ * `paragraphsFromDoc` produced for the same node — they are computed by
+ * one traversal from one definition of "the text of this block".
+ *
+ * Adjacent text nodes carrying the same mention are merged: ProseMirror
+ * splits a run wherever another mark begins or ends, so a bolded word
+ * inside a mention would otherwise report as two mentions of one entity. */
+export function mentionsFromDoc(
+  doc: unknown,
+  skip: readonly string[] | BlockPredicate = HIDDEN_FROM_AI
+): TypedMention[] {
+  const out: TypedMention[] = [];
+  const root = doc as { content?: BlockNode[] } | null;
+  if (!root?.content) return out;
+
+  const skipped: BlockPredicate =
+    typeof skip === 'function' ? skip : (node) => skip.includes(node.type);
+
+  const walk = (nodes: BlockNode[]) => {
+    for (const node of nodes) {
+      if (skipped(node)) continue;
+      const pid = node.attrs?.pid;
+      if ((PROSE_BLOCK_TYPES as readonly string[]).includes(node.type) && typeof pid === 'string') {
+        collect(node, pid, out);
+      } else if (node.content) {
+        walk(node.content);
+      }
+    }
+  };
+  walk(root.content);
+  return out;
+}
+
+function collect(block: BlockNode, pid: string, out: TypedMention[]): void {
+  let offset = 0;
+  let open: TypedMention | null = null;
+
+  const visit = (node: BlockNode) => {
+    if (node.text != null) {
+      const mark = node.marks?.find((m) => m.type === MENTION_MARK);
+      const entityId = mark?.attrs?.entityId;
+      const entityType = mark?.attrs?.entityType;
+      if (typeof entityId === 'string' && typeof entityType === 'string') {
+        if (open && open.entityId === entityId && open.end === offset) {
+          // A run split by another mark — same mention, keep extending.
+          open.end += node.text.length;
+          open.text += node.text;
+        } else {
+          open = {
+            pid,
+            start: offset,
+            end: offset + node.text.length,
+            entityId,
+            entityType,
+            text: node.text,
+          };
+          out.push(open);
+        }
+      } else {
+        open = null;
+      }
+      offset += node.text.length;
+      return;
+    }
+    if (node.content) node.content.forEach(visit);
+  };
+
+  block.content?.forEach(visit);
+}
+
+/** Everything a scene save writes, derived from one document.
+ *
+ * Two of these are the same text filtered two different ways — see
+ * `HIDDEN_FROM_AI` / `HIDDEN_FROM_COUNT` above. Every writer of a scene row
+ * should go through this rather than deriving one value and reusing it for
+ * another, which is exactly how the two would fall out of step. */
 export function deriveScene(doc: unknown): {
   paragraphs: ProseParagraph[];
   wordCount: number;
+  mentions: TypedMention[];
 } {
   return {
     paragraphs: paragraphsFromDoc(doc, HIDDEN_FROM_AI),
     wordCount: countWords(paragraphsFromDoc(doc, HIDDEN_FROM_COUNT)),
+    // A mention inside a note you hid from models is a link you can click,
+    // not an appearance in the book — the rule N5b already set for text.
+    mentions: mentionsFromDoc(doc, HIDDEN_FROM_AI),
   };
 }

@@ -1,8 +1,8 @@
 import { db } from '../schema';
 import { newId } from '@/lib/id';
-import { deriveScene, paragraphsFromDoc } from '@/lib/prose';
+import { deriveScene, mentionsFromDoc, paragraphsFromDoc, type TypedMention } from '@/lib/prose';
 import { logAudit } from './audit';
-import type { Act, Chapter, Scene, SceneSnapshot } from '../types';
+import type { Act, Chapter, Occurrence, Scene, SceneSnapshot } from '../types';
 import { refreshProjectChapterReferences } from '@/services/chapter-awareness';
 
 /* ---------------------------------------------------------------------
@@ -195,10 +195,15 @@ export async function saveSceneDoc(
   const scene = await db.scenes.get(id);
   if (!scene) return;
   await maybeIntervalSnapshot(scene);
+  // Typed mentions are derived here rather than passed in, so no caller can
+  // save a document without them — and so `saveChapterDoc` and the tests
+  // keep their signatures.
+  const mentions = await resolvedMentions(doc);
   await db.scenes.update(id, {
     doc,
     paragraphs,
     wordCount,
+    mentions,
     // A scene with prose in it is not an outline any more. Promote once,
     // on the first real words, and never again: this is the only status
     // transition the app makes on the author's behalf, and it exists so
@@ -207,7 +212,105 @@ export async function saveSceneDoc(
     ...(scene.status === 'outline' && wordCount > 0 ? { status: 'draft' as const } : {}),
     updatedAt: Date.now(),
   });
+  await reconcileTypedOccurrences(scene, mentions);
   await chapterRollup(scene.chapterId);
+}
+
+/** Bring the `typed` occurrence rows for a scene into line with the marks
+ * in its document.
+ *
+ * The document is the source of truth; these rows are a projection of it,
+ * exactly as `scene.paragraphs` is. That is not a stylistic choice —
+ * `extractChapter` clears a chapter's occurrences on every run, so a row
+ * authored once when the author picked from the popup would be destroyed
+ * by the Save & Extract button in the same toolbar. Deriving means the
+ * next save simply puts it back.
+ *
+ * Compares against the previously stored set first, so the ordinary
+ * keystroke save — where no mention changed — does no database work at
+ * all. */
+async function reconcileTypedOccurrences(
+  scene: Scene,
+  mentions: TypedMention[]
+): Promise<void> {
+  if (sameMentions(scene.mentions, mentions)) return;
+
+  const pids = new Set(paragraphsFromDoc(scene.doc).map((p) => p.id));
+  for (const mention of mentions) pids.add(mention.pid);
+
+  const existing = await db.occurrences
+    .where('[projectId+chapterId]')
+    .equals([scene.projectId, scene.chapterId])
+    .toArray();
+  const stale = existing.filter(
+    (row) => row.source === 'typed' && row.paragraphId && pids.has(row.paragraphId)
+  );
+
+  const now = Date.now();
+  const rows: Occurrence[] = mentions.map((mention) => ({
+    id: newId(),
+    projectId: scene.projectId,
+    entityId: mention.entityId,
+    entityType: mention.entityType as Occurrence['entityType'],
+    chapterId: scene.chapterId,
+    paragraphId: mention.pid,
+    start: mention.start,
+    end: mention.end,
+    exactText: mention.text,
+    source: 'typed',
+    createdAt: now,
+  }));
+
+  await db.transaction('rw', db.occurrences, async () => {
+    if (stale.length) await db.occurrences.bulkDelete(stale.map((row) => row.id));
+    if (rows.length) await db.occurrences.bulkAdd(rows);
+  });
+}
+
+function sameMentions(a: TypedMention[] | undefined, b: TypedMention[]): boolean {
+  if (!a || a.length !== b.length) return false;
+  return a.every((m, i) => {
+    const other = b[i];
+    return (
+      m.pid === other.pid &&
+      m.start === other.start &&
+      m.end === other.end &&
+      m.entityId === other.entityId
+    );
+  });
+}
+
+/** The typed mentions a document implies, with every id resolved to the
+ * entity it really means.
+ *
+ * The mark keeps whatever id it was written with — rewriting every scene
+ * in the project on a merge would be an enormous hammer for a pointer
+ * change — so the redirect is followed here instead, once, on the way to
+ * the row. Resolving BEFORE the change comparison is what makes the merge
+ * case work at all: the marks are identical either side of a merge, so a
+ * comparison on raw ids would decide nothing had changed and leave every
+ * typed row pointing at an entity that no longer exists. */
+async function resolvedMentions(doc: unknown): Promise<TypedMention[]> {
+  const mentions = mentionsFromDoc(doc);
+  if (!mentions.length) return mentions;
+
+  const canonical = new Map<string, string>();
+  for (const id of new Set(mentions.map((m) => m.entityId))) {
+    let current = await db.entities.get(id);
+    // A hop limit rather than a `while`: merge chains are short, and a
+    // cycle written by a bad import must not hang the save path.
+    for (let hops = 0; hops < 8 && current?.status === 'merged' && current.mergedIntoId; hops++) {
+      const next = await db.entities.get(current.mergedIntoId);
+      if (!next) break;
+      current = next;
+    }
+    if (current) canonical.set(id, current.id);
+  }
+
+  return mentions.map((mention) => ({
+    ...mention,
+    entityId: canonical.get(mention.entityId) ?? mention.entityId,
+  }));
 }
 
 export async function updateSceneMeta(id: string, patch: Partial<Scene>): Promise<void> {
@@ -309,6 +412,10 @@ async function reanchorOccurrences(scene: Scene, toChapterId: string): Promise<v
 export async function deleteSceneToTrash(id: string): Promise<void> {
   const scene = await db.scenes.get(id);
   if (!scene) return;
+  // Typed rows are derived from THIS scene's document, so nothing else
+  // will ever clean them up — extraction only owns a chapter's extracted
+  // ones. Restoring the scene re-derives them on its first save.
+  await reconcileTypedOccurrences(scene, []);
   await db.transaction('rw', [db.scenes, db.trash, db.auditLog], async () => {
     await db.trash.put({
       id: scene.id,
@@ -526,12 +633,17 @@ export async function restoreSnapshot(snapshotId: string): Promise<void> {
   // is what keeps the two-filter contract true across a restore however old
   // the snapshot is.
   const { paragraphs, wordCount } = deriveScene(snapshot.doc);
+  const mentions = await resolvedMentions(snapshot.doc);
   await db.scenes.update(scene.id, {
     doc: snapshot.doc,
     paragraphs,
     wordCount,
+    mentions,
     updatedAt: Date.now(),
   });
+  // A restore replaces the document, so the mentions it held go back to
+  // whatever that version said — including none.
+  await reconcileTypedOccurrences(scene, mentions);
   await chapterRollup(scene.chapterId);
   await logAudit({
     projectId: scene.projectId,

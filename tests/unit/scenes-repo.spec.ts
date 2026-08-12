@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/db/schema';
 import { createChapter, deleteChapterToTrash, saveChapterDoc } from '@/db/repos/chapters';
 import { restoreFromTrash } from '@/db/repos/trash';
+import { extractChapter } from '@/services/extraction/session';
+import { paragraphsFromDoc } from '@/lib/prose';
 import {
   SNAPSHOT_KEEP,
   chapterRollup,
@@ -327,6 +329,145 @@ describe('scenes: a hidden section is still part of the document', () => {
     expect(JSON.stringify(after.doc)).toContain('Marrow was here too');
     expect(after.paragraphs.map((p) => p.id)).toEqual(['open']);
     expect(after.wordCount).toBe(4);
+  });
+});
+
+describe('scenes: typed @ mentions', () => {
+  /** A paragraph with one `@` mention in it, as the editor would write it. */
+  function docWithMention(entityId: string, pid = 'p1') {
+    return {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: { pid },
+          content: [
+            { type: 'text', text: 'The ferry brought ' },
+            {
+              type: 'text',
+              text: 'Marrow',
+              marks: [{ type: 'mention', attrs: { entityId, entityType: 'cast', label: 'Marrow' } }],
+            },
+            { type: 'text', text: '.' },
+          ],
+        },
+      ],
+    };
+  }
+
+  async function seedWithMention(entityId = 'e-marrow') {
+    const chapter = await seed();
+    const scene = (await listScenesInChapter(chapter.id))[0];
+    await db.entities.add({
+      id: entityId,
+      projectId: PROJECT,
+      type: 'cast',
+      name: 'Marrow',
+      aliases: [],
+      summary: '',
+      status: 'active',
+      tags: [],
+      fields: {},
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const doc = docWithMention(entityId);
+    await saveSceneDoc(scene.id, doc, paragraphsFromDoc(doc), 4);
+    return { chapter, scene };
+  }
+
+  async function typedRows() {
+    return (await db.occurrences.where('projectId').equals(PROJECT).toArray()).filter(
+      (row) => row.source === 'typed'
+    );
+  }
+
+  it('becomes an occurrence anchored where the words are', async () => {
+    await seedWithMention();
+    const rows = await typedRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].exactText).toBe('Marrow');
+    expect(rows[0].paragraphId).toBe('p1');
+    // Same coordinate space as an extracted mention: offsets into the
+    // paragraph's own text.
+    expect('The ferry brought Marrow.'.slice(rows[0].start, rows[0].end)).toBe('Marrow');
+  });
+
+  it('is a projection, so removing the mark removes the row', async () => {
+    const { scene } = await seedWithMention();
+    await saveSceneDoc(scene.id, doc('The ferry brought Marrow.', 'p1'), [
+      { id: 'p1', text: 'The ferry brought Marrow.' },
+    ], 4);
+    expect(await typedRows()).toHaveLength(0);
+  });
+
+  it('does no database work when nothing about the mentions changed', async () => {
+    const { scene } = await seedWithMention();
+    const before = (await typedRows())[0];
+    // A save that only changes prose elsewhere must not churn the rows —
+    // this runs on a 600ms debounce while someone is typing.
+    const same = docWithMention('e-marrow');
+    await saveSceneDoc(scene.id, same, paragraphsFromDoc(same), 4);
+    const after = (await typedRows())[0];
+    expect(after.id).toBe(before.id);
+  });
+
+  it('follows a merge, so a mention never silently un-merges', async () => {
+    // The mark keeps the id it was written with — rewriting every document
+    // on a merge would be a far bigger hammer — so the derivation follows
+    // `mergedIntoId` instead.
+    const { scene } = await seedWithMention('e-old');
+    await db.entities.add({
+      id: 'e-canonical',
+      projectId: PROJECT,
+      type: 'cast',
+      name: 'Marrow',
+      aliases: [],
+      summary: '',
+      status: 'active',
+      tags: [],
+      fields: {},
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    await db.entities.update('e-old', { status: 'merged', mergedIntoId: 'e-canonical' });
+
+    // Any later save re-derives, and the row points at the survivor.
+    const doc2 = docWithMention('e-old');
+    await saveSceneDoc(scene.id, doc2, paragraphsFromDoc(doc2), 5);
+    expect((await typedRows())[0].entityId).toBe('e-canonical');
+  });
+
+  it('survives Save & Extract, which clears every other occurrence', async () => {
+    const { chapter } = await seedWithMention();
+    await db.occurrences.add({
+      id: 'occ-extracted',
+      projectId: PROJECT,
+      entityId: 'e-marrow',
+      entityType: 'cast',
+      chapterId: chapter.id,
+      paragraphId: 'p1',
+      start: 0,
+      end: 3,
+      exactText: 'The',
+      source: 'extraction',
+      createdAt: 1,
+    });
+
+    await extractChapter((await db.chapters.get(chapter.id))!);
+
+    // The extracted row was replaced; the typed one was not touched.
+    expect(await db.occurrences.get('occ-extracted')).toBeUndefined();
+    expect(await typedRows()).toHaveLength(1);
+  });
+
+  it('goes when its scene does', async () => {
+    const { chapter } = await seedWithMention();
+    const second = await createScene(PROJECT, chapter.id, 'Second');
+    await saveSceneDoc(second.id, doc('Filler.', 'p2'), [{ id: 'p2', text: 'Filler.' }], 1);
+
+    await deleteSceneToTrash((await listScenesInChapter(chapter.id))[0].id);
+    expect(await typedRows()).toHaveLength(0);
   });
 });
 

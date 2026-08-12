@@ -131,10 +131,11 @@ test.describe('cross-panel context', () => {
     await page.getByRole('button', { name: /Aelinor/ }).click();
     await expect(page.getByTestId('entity-detail').getByText(/also known as.*Ael of Hess/)).toBeVisible();
 
-    // After reload, the manuscript mention now opens Aelinor's dossier.
+    // After reload, the manuscript mention now resolves to Aelinor.
     await page.reload();
     await openNav(page, "Writer's Room");
     await page.locator('.lw-mention').first().click();
+    await page.getByTestId('mention-preview').getByRole('button', { name: 'Open dossier' }).click();
     await expect(
       page.getByTestId('entity-detail').getByRole('heading', { name: 'Aelinor' })
     ).toBeVisible();

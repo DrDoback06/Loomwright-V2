@@ -1,4 +1,5 @@
 import type { CandidateInterpretationKind, EntityRef, EntityType, EntityTypeSuggestion } from '@/domain/entity-types';
+import type { TypedMention } from '@/lib/prose';
 
 export interface Project {
   id: string;
@@ -103,6 +104,13 @@ export interface Scene {
   /** Derived on save; the extraction substrate (same contract as Chapter). */
   paragraphs: { id: string; text: string }[];
   wordCount: number;
+  /** Typed `@` mentions, derived on save from the marks in `doc`.
+   *
+   * The document is the source of truth and this is a projection of it —
+   * the same relationship `paragraphs` has. Its job here is to make the
+   * occurrence reconciliation free: an unchanged set does no IO at all.
+   * Optional because every scene written before N6 predates it. */
+  mentions?: TypedMention[];
 
   /* --- planning metadata: the columns every view reads --- */
   /** The long-book memory unit: `storySoFar()` assembles these rather
@@ -168,6 +176,15 @@ export interface Occurrence {
   exactText: string;
   isPronounResolution?: boolean;
   candidateId?: string;
+  /** How this mention came to be known. Absent means `'extraction'` —
+   * every row written before N6.
+   *
+   * A `'typed'` row is a projection of a `mention` mark in the scene
+   * document, re-derived on every save. It is NOT authored once and left:
+   * `extractChapter` clears a chapter's occurrences on every run, so a row
+   * that had no source in the prose would be destroyed by the Save &
+   * Extract button sitting in the same toolbar. */
+  source?: 'extraction' | 'typed';
   createdAt: number;
 }
 
