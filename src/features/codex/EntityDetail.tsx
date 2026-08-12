@@ -117,7 +117,9 @@ export function EntityDetail({ entity, onEdit, onDelete }: EntityDetailProps) {
                 ),
                 '',
                 'Here is an existing entry as a style/shape example — make the new one this rich:',
-                entityWireString(entity),
+                // Honours the per-field AI gate; "Copy as JSON" above
+                // deliberately does not, because that one is a data export.
+                entityWireString(entity, { forPrompt: true }),
               ].join('\n');
               await navigator.clipboard.writeText(prompt);
               toast('AI prompt copied — paste it into any AI, then paste the JSON reply into a create menu.', { kind: 'success' });

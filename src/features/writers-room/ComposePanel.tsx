@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import type { Entity } from '@/db/types';
-import { ENTITY_TYPE_META, type EntityRef } from '@/domain/entity-types';
+import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { complete } from '@/services/ai/providers';
 import { buildProseBrief } from '@/services/ai/prompts/prose';
 import { tierForModel } from '@/services/ai/prompts';
@@ -13,6 +13,9 @@ import { PrivacyConfirm } from '@/features/generate/PrivacyConfirm';
 import { useFocusStore } from '@/stores/focus';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
+import type { Scene } from '@/db/types';
+import { buildSceneContext } from '@/services/context/scene-context';
+import { pinnedRefs } from '@/services/context/pinned';
 
 const MODES = ['scene', 'chapter opening', 'dialogue', 'description', 'transition'] as const;
 const POVS = ['third limited', 'third omniscient', 'first person', 'second person'] as const;
@@ -30,6 +33,9 @@ const ISSUE_GLYPH: Record<CanonIssue['kind'], string> = {
 };
 
 interface ComposePanelProps {
+  /** The scene being drafted into. Required because context now comes from
+   * `buildSceneContext`, the same call the context rail renders. */
+  scene: Scene;
   /** Insert the planning brief (renders as a blockquote note). */
   onInsert: (briefText: string) => void;
   /** Insert generated prose as real manuscript paragraphs. */
@@ -41,7 +47,7 @@ interface ComposePanelProps {
  * (focus per type + lock) into a structured writing brief. Offline it
  * inserts the brief into the chapter or copies it for an external AI;
  * M7 adds in-app generation on top of the same brief. */
-export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelProps) {
+export function ComposePanel({ scene, onInsert, onInsertProse, onClose }: ComposePanelProps) {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const focusedByType = useFocusStore((s) => s.focusedByType);
   const lock = useFocusStore((s) => s.lock);
@@ -51,7 +57,6 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
   const [tense, setTense] = useState<(typeof TENSES)[number]>('past');
   const [length, setLength] = useState<(typeof LENGTHS)[number]>('a few paragraphs');
   const [instruction, setInstruction] = useState('');
-  const [dropped, setDropped] = useState<EntityRef[]>([]);
   const [aiReady, setAiReady] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState('');
@@ -92,24 +97,23 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
     null
   );
 
-  const contextRefs: EntityRef[] = (() => {
-    const map = new Map<string, EntityRef>();
-    if (lock) map.set(lock.id, lock);
-    for (const ref of Object.values(focusedByType)) if (ref) map.set(ref.id, ref);
-    for (const ref of dropped) map.set(ref.id, ref);
-    return [...map.values()];
-  })();
-
+  // The same call the context rail renders, so the brief and the Preview
+  // cannot disagree about what a model is told. Replaces a byte-identical
+  // copy of `ai-context.ts`'s personality/speechStyle block.
+  const sceneContext = useLiveQuery(
+    () => buildSceneContext(scene.projectId, scene, { pinned: pinnedRefs() }),
+    [scene, lock, focusedByType],
+    null
+  );
+  const contextItems = (sceneContext?.items ?? []).filter((i) => i.lane !== 'excluded');
   const details = useLiveQuery(
     async () => {
-      const rows = await Promise.all(contextRefs.map((r) => db.entities.get(r.id)));
+      const rows = await Promise.all(contextItems.map((i) => db.entities.get(i.ref.id)));
       return rows.filter((r) => r !== undefined);
     },
-    [contextRefs.map((r) => r.id).join(',')],
+    [contextItems.map((i) => i.ref.id).join(',')],
     []
   );
-
-  const removable = (id: string) => dropped.some((d) => d.id === id);
 
   /**
    * The brief.
@@ -127,14 +131,7 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
       tense,
       length,
       instruction,
-      cast: details.map((e) => {
-        const bits = [e.summary].filter(Boolean);
-        const persona = typeof e.fields.personality === 'string' ? e.fields.personality : '';
-        const voice = typeof e.fields.speechStyle === 'string' ? e.fields.speechStyle : '';
-        if (persona) bits.push(`personality: ${persona}`);
-        if (voice) bits.push(`voice: ${voice.split('\n')[0]}`);
-        return { label: ENTITY_TYPE_META[e.type].label, name: e.name, detail: bits.join('; ') };
-      }),
+      context: sceneContext?.text ?? '',
       style: matchVoice ? style : null,
       facts: buildCanonFacts(details, world),
     }, options);
@@ -186,23 +183,17 @@ export function ComposePanel({ onInsert, onInsertProse, onClose }: ComposePanelP
         add them.
       </p>
 
+      {/* Read-only on purpose: the context rail is where context is shaped,
+          with a real drop target, a keyboard path and a reason per chip.
+          This panel had a remove × that could never render, because the
+          state behind it was never written to. */}
       <div className="lw-compose__refs">
-        {contextRefs.length === 0 ? (
+        {contextItems.length === 0 ? (
           <p className="lw-empty__note">Nothing in context yet.</p>
         ) : (
-          contextRefs.map((ref) => (
-            <span key={ref.id} className="lw-chip">
-              {ENTITY_TYPE_META[ref.type].glyph} {ref.name}
-              {removable(ref.id) && (
-                <button
-                  type="button"
-                  className="lw-chip__x"
-                  aria-label={`Remove ${ref.name} from composition`}
-                  onClick={() => setDropped((d) => d.filter((x) => x.id !== ref.id))}
-                >
-                  ×
-                </button>
-              )}
+          contextItems.map((item) => (
+            <span key={item.ref.id} className="lw-chip lw-chip--static">
+              <span aria-hidden>{ENTITY_TYPE_META[item.ref.type].glyph}</span> {item.ref.name}
             </span>
           ))
         )}

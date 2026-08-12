@@ -536,3 +536,6 @@ out of extraction, and out of every export in one omission.
 | Context rail: chip → Always send / Don't send here / Let the scan decide | Writes `scene.attachedRefs` / `scene.excludedRefs`. **This scene only** — the entity's own policy is untouched, asserted directly | `28-context.spec.ts`, unit `scene-context.spec.ts` |
 | Context rail: chip drag between lanes | Same mutation as the buttons; the detected lane deliberately rejects drops rather than looking droppable | `28-context.spec.ts` covers the button path on both projects |
 | Context rail: Change this everywhere… | Opens that entity's AI context section — the global choice, one click away and unmistakably different | rendered handler; `28-context.spec.ts` asserts the policy is otherwise untouched |
+| Compose: context chips | Read-only, rendered from `buildSceneContext` — the rail is where context is shaped. The old remove `×` could never render, because nothing ever wrote the state behind it | `28-context.spec.ts` |
+| Codex ▸ Copy AI prompt | Filters through `isFieldHiddenFromAi` — a field marked hidden never reaches a model | unit `context-routing.spec.ts` |
+| Codex ▸ Copy as JSON | Deliberately **unfiltered**: a data export must stay complete | unit `context-routing.spec.ts` |

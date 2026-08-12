@@ -1,9 +1,9 @@
 import { db } from '@/db/schema';
 import { getScene } from '@/db/repos/scenes';
 import type { Entity } from '@/db/types';
-import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { buildCanonFacts } from '@/services/ai/canon';
-import { useFocusStore } from '@/stores/focus';
+import { buildSceneContext } from '@/services/context/scene-context';
+import { pinnedRefs } from '@/services/context/pinned';
 
 /** How much manuscript to measure the author's voice from — the same
  * budget ComposePanel uses, for the same reason. */
@@ -20,11 +20,16 @@ export interface SceneAiContext {
 /** Everything an in-editor AI action needs to describe this scene to a
  * model: who is in it, what is true of them, and how the author writes.
  *
- * Assembled from the scene's own POV / location / characters / attached
- * refs plus whatever is in cross-panel focus — the same sources
- * ComposePanel uses. **N7 replaces this function's body with
- * `buildSceneContext()`**; beats and the rewrite bubble both call it, so
- * that is one edit rather than two. */
+ * **The body is now `buildSceneContext()`** — the promise this docblock has
+ * carried since N5a. The return shape is unchanged on purpose: beats
+ * (`useBeatExpansion`) and the rewrite bubble (`useRewrite`) read `.scene`,
+ * `.context`, `.facts` and `.world`, so both converted without an edit, and
+ * their specs staying green is the proof.
+ *
+ * `context` is now byte-identical to what the context rail's Preview shows,
+ * because both come from the same call with the same inputs. That is the
+ * point: a Preview that could differ from the payload would be worse than
+ * no Preview at all. */
 export async function gatherSceneContext(
   projectId: string,
   sceneId: string
@@ -35,38 +40,29 @@ export async function gatherSceneContext(
   );
   const byId = new Map(world.map((e) => [e.id, e]));
 
-  const ids = new Set<string>();
-  if (scene?.pov) ids.add(scene.pov);
-  if (scene?.locationId) ids.add(scene.locationId);
-  for (const id of scene?.characterIds ?? []) ids.add(id);
-  for (const ref of scene?.attachedRefs ?? []) ids.add(ref.id);
-  for (const ref of Object.values(useFocusStore.getState().focusedByType)) {
-    if (ref) ids.add(ref.id);
+  if (!scene) {
+    return { scene: { title: '', summary: '', povName: null, povType: null }, context: '', facts: [], subjects: [], world };
   }
 
-  const subjects = [...ids].map((id) => byId.get(id)).filter((e): e is Entity => !!e);
+  const ctx = await buildSceneContext(projectId, scene, { pinned: pinnedRefs() });
 
-  const context = subjects
-    .map((entity) => {
-      const bits = [entity.summary].filter(Boolean);
-      const persona = typeof entity.fields.personality === 'string' ? entity.fields.personality : '';
-      const voice = typeof entity.fields.speechStyle === 'string' ? entity.fields.speechStyle : '';
-      if (persona) bits.push(`personality: ${persona}`);
-      if (voice) bits.push(`voice: ${voice.split('\n')[0]}`);
-      return `- ${ENTITY_TYPE_META[entity.type].label} ${entity.name}${
-        bits.length ? ` — ${bits.join('; ')}` : ''
-      }`;
-    })
-    .join('\n');
+  // `subjects` feeds `buildCanonFacts`, which answers "what is true" rather
+  // than "who is here". Anything the assembler excluded is not in the
+  // prompt, so asserting canon about it would describe a cast the model was
+  // never shown.
+  const subjects = ctx.items
+    .filter((item) => item.lane !== 'excluded')
+    .map((item) => byId.get(item.ref.id))
+    .filter((e): e is Entity => !!e);
 
   return {
     scene: {
-      title: scene?.title ?? '',
-      summary: scene?.summary ?? '',
-      povName: scene?.pov ? (byId.get(scene.pov)?.name ?? null) : null,
-      povType: scene?.povType ?? null,
+      title: scene.title,
+      summary: scene.summary,
+      povName: scene.pov ? (byId.get(scene.pov)?.name ?? null) : null,
+      povType: scene.povType,
     },
-    context,
+    context: ctx.text,
     facts: buildCanonFacts(subjects, world),
     subjects,
     world,

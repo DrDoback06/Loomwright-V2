@@ -22,8 +22,11 @@ export interface ProseBrief {
   tense: 'past' | 'present';
   length: string;
   instruction: string;
-  /** Entities in context, already flattened for the prompt. */
-  cast: { label: string; name: string; detail: string }[];
+  /** Who and what is in scope, already assembled by
+   * `services/context/scene-context.ts`. A pre-rendered block rather than a
+   * structured list, because beats and rewrites take exactly this and three
+   * renderings of one idea is how they drifted apart in the first place. */
+  context: string;
   /** Measured from the author's own manuscript, never guessed. */
   style?: StyleProfile | null;
   /** Canon the passage must not contradict — ownership, whereabouts, bonds. */
@@ -100,11 +103,11 @@ export function buildProseBrief(brief: ProseBrief, options: { tier?: ModelTier }
     '- Standard prose formatting: dialogue in double quotes, a new paragraph per speaker.',
   ];
 
-  if (brief.cast.length) {
+  if (brief.context.trim()) {
     sections.push(
       '',
       'WHO AND WHAT IS IN THIS PASSAGE — use these, and only these, by name:',
-      ...brief.cast.map((c) => `- ${c.label}: ${c.name}${c.detail ? ` — ${c.detail}` : ''}`)
+      brief.context
     );
   }
 

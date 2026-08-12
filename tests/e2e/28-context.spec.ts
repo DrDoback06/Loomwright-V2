@@ -193,4 +193,55 @@ test.describe('context rail', () => {
         .getByRole('button', { name: /Marrow/ })
     ).toBeVisible();
   });
+
+  test("the Preview is what a beat's prompt actually carries", async ({ page }) => {
+    // The claim the whole milestone rests on: the rail is not a summary of
+    // the payload, it is the payload. Both come from one assembler call.
+    await bootWithProject(page);
+    await createCastMember(page, { name: 'Marrow', summary: 'A ferryman with a long pole.' });
+    const rail = await openWriteWithScene(page, 'Marrow poled the ferry across the water.');
+
+    await rail.getByText('Show exactly what gets sent').click();
+    const preview = (await rail.getByTestId('context-preview').innerText()).trim();
+    expect(preview).toContain('Marrow');
+
+    // Close the rail (a full-screen sheet on a phone), then write a beat and
+    // read its prompt out of the DOM — the clipboard is a convenience any
+    // browser may refuse, and 23-beats already sets this pattern.
+    await rail.getByRole('button', { name: 'Close AI context' }).click();
+    await page.getByLabel('Manuscript body').click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('/beat ');
+    await page.keyboard.type('They argue about the crossing.');
+    const beat = page.locator('.lw-beat').first();
+    await beat.getByRole('button', { name: 'Copy prompt' }).click();
+
+    const prompt = await beat.getByLabel('Prompt to send').inputValue();
+    // Every line the Preview showed is in the prompt, verbatim. This is the
+    // claim the milestone rests on.
+    for (const line of preview.split('\n').filter(Boolean)) {
+      expect(prompt).toContain(line);
+    }
+  });
+
+  test('a field hidden from AI never reaches a beat prompt', async ({ page }) => {
+    await bootWithProject(page);
+    await createCastMember(page, { name: 'Marrow', summary: 'A ferryman.' });
+
+    // Appearance is withheld by default; put something in it and confirm.
+    await openNav(page, 'Cast');
+    await page.getByRole('button', { name: /Marrow/ }).click();
+    await page.getByTestId('entity-detail').getByRole('button', { name: 'Edit' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: 'Appearance' }).click();
+    await dialog.getByLabel('Physical description').fill('Green eyes, always noted.');
+    await dialog.getByRole('button', { name: 'Save changes' }).click();
+    await expect(dialog).toBeHidden();
+
+    const rail = await openWriteWithScene(page, 'Marrow poled the ferry across the water.');
+    await rail.getByText('Show exactly what gets sent').click();
+    await expect(rail.getByTestId('context-preview')).toContainText('Marrow');
+    await expect(rail.getByTestId('context-preview')).not.toContainText('Green eyes');
+  });
 });

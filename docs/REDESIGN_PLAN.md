@@ -1447,11 +1447,37 @@ unmistakably a different act.
 *"you removed this from this scene"* — and `excludedRefs` outranks a detection, because the
 author said so after seeing what the matcher found.
 
-**7. Route everything through it.** `gatherSceneContext`'s body is replaced — its docblock
-already says so — converting beats and the rewrite bubble in one edit. `ComposePanel` follows,
-deleting the duplicate at `:130-137`, and its dead `dropped` state either becomes a real drop
-target or goes. `EntityDetail`'s **Copy AI prompt** filters through `isFieldHiddenFromAi`;
-**Copy as JSON** deliberately does not.
+**7. Route everything through it.**
+
+**a. `gatherSceneContext` keeps its return shape.** It returns
+`{scene, context, facts, subjects, world}`; `useBeatExpansion.ts:30` and `useRewrite.ts:43`
+read `.scene`, `.context`, `.facts`, `.world`. Replacing only the *body* — `context` becomes
+`ctx.text`, `subjects` becomes the non-excluded items — converts **beats and the rewrite bubble
+with zero changes to either**. Their existing specs staying green is the proof it worked.
+
+**b. One `pinnedRefs()` helper, or the Preview lies.** `gatherSceneContext` folds in
+`focusStore.focusedByType` *and* `lock`; `ContextRail` currently passes only `lock`. Left alone
+that ships a rail showing **less than what beats actually send** — the exact failure this
+milestone exists to prevent, introduced by the milestone itself. Both call one helper reading
+both, so the rail and the payload cannot diverge.
+
+**c. `ProseBrief.cast` becomes `context: string`.** `prose.ts:103-109` renders
+`{label, name, detail}[]` under *"WHO AND WHAT IS IN THIS PASSAGE"*; `beat.ts:136` renders a
+pre-built string under *"WHO AND WHAT IS IN THIS SCENE"*. Two headings, two shapes, one idea.
+Unifying leaves prose.ts with a single rendering and all three prompt builders taking the same
+block from the same assembler. One assertion to update (`ai-prompts.spec.ts:98`).
+
+**d. `ComposePanel` takes a `scene` prop and is gated on it**, exactly as `ScenePanel` is
+(`WritersRoom.tsx:765`). Since N3 every chapter has at least one scene, so this is not a
+practical restriction. Its duplicate at `:130-137` goes.
+
+**e. `ComposePanel.dropped` is deleted, not wired.** The rail is now the place to add and
+remove context, with a real drop target, a keyboard path and a reason on every chip. Building a
+second, weaker drop surface in a panel the rail supersedes would be the wrong half of
+"wire it or delete it".
+
+**f. `EntityDetail`'s Copy AI prompt** filters through `isFieldHiddenFromAi`; **Copy as JSON**
+deliberately does not, because filtering a data export makes it silently lossy.
 
 **8. Keep the reserved key out of human-facing surfaces.** Five places iterate `fields`
 generically. Three are already safe: `relations.ts:25` (`isRef` needs `id`+`type`+`name`),

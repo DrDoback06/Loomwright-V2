@@ -9,6 +9,7 @@ import {
   type ContextLane,
   type SceneContext,
 } from '@/services/context/scene-context';
+import { pinnedRefs } from '@/services/context/pinned';
 import { useEditorStore } from '@/stores/editor';
 import { useFocusStore } from '@/stores/focus';
 
@@ -44,7 +45,10 @@ export function ContextRail({ scene, onClose }: { scene: Scene; onClose: () => v
   const [ctx, setCtx] = useState<SceneContext | null>(null);
   const [openChip, setOpenChip] = useState<string | null>(null);
   const [dropLane, setDropLane] = useState<ContextLane | null>(null);
+  // Subscribed so the rail re-renders when focus changes; the values are
+  // read through `pinnedRefs()` so the rail and the payload cannot diverge.
   const lock = useFocusStore((s) => s.lock);
+  const focusedByType = useFocusStore((s) => s.focusedByType);
   const openEdit = useEditorStore((s) => s.openEdit);
 
   // Recomputed whenever the prose, the metadata or the pin changes. Cheap and
@@ -52,13 +56,13 @@ export function ContextRail({ scene, onClose }: { scene: Scene; onClose: () => v
   // Preview would be worse than a slightly eager one.
   useEffect(() => {
     let live = true;
-    void buildSceneContext(scene.projectId, scene, { pinned: lock ? [lock] : [] }).then((next) => {
+    void buildSceneContext(scene.projectId, scene, { pinned: pinnedRefs() }).then((next) => {
       if (live) setCtx(next);
     });
     return () => {
       live = false;
     };
-  }, [scene, lock]);
+  }, [scene, lock, focusedByType]);
 
   const move = async (ref: EntityRef, to: ContextLane) => {
     const attached = (scene.attachedRefs ?? []).filter((r) => r.id !== ref.id);

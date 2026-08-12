@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N7 · step 7 of 8 (steps 1–6 done)
-**Last verified green:** N7 step 6 — lint ✅ tsc ✅ build ✅ vitest 360 ✅ playwright 256 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N7 · step 8 of 8 (steps 1–7 done)
+**Last verified green:** N7 step 7 — lint ✅ tsc ✅ build ✅ vitest 364 ✅ playwright 260 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -16,7 +16,7 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N5a | Scene beats | 7 | ✅ 7/7 |
 | N5b | AI visibility, acts, sections, rewrite, focus | 7 | ✅ 7/7 |
 | N6 | Typed `@` mentions | 6 | ✅ 6/6 |
-| N7 | Context engine + policy + tracking + budget rail | 8 | 🔄 6/8 |
+| N7 | Context engine + policy + tracking + budget rail | 8 | 🔄 7/8 |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
 | N9 | Chat dock | 6 | ⬜ |
 | N10 | Prompt library | 6 | ⬜ |
@@ -172,8 +172,8 @@ same filter; the half-built fields ride along.
 - [x] 4. **Tracking controls into the matcher.** `findRanges` gained an **optional** `{caseSensitive}` bag (a new default would have silently killed every discovery highlight via `extraction/engine.ts:180`, which lowercases its needle); `isExcludedAt` in `text-utils.ts` suppresses **by surrounding phrase**, windowed to the phrase length either side. Wired into `buildKnownIndex` (per-entity regex flags), `scanTextForKnownEntities`, `resolvePronounsInText` and `findEntityInSpan` — which **walks past** an excluded hit rather than giving up on the entity, so a real mention behind an excluded one still lands. `findKnownEntityMention` deliberately untouched and now carries a long comment saying why. New fixture `17-tracking-controls`, and the runner passes both controls through from the seed. 17 unit tests.
 - [x] 5. **`src/services/context/scene-context.ts` — the assembler.** Lanes (`always`/`detected`/`excluded`) each carrying a plain-words `reason` the rail renders verbatim. **`entityDigest` is the first generic renderer of entity fields in the app** — every other AI path names ~8 fields by hand — which is what makes step 2's per-field gate real and what finally reads cast's `writingInstructions`/`avoidTropes` (zero readers until now). `detected` is the **union of a live scan and this scene's `source:'typed'` occurrences**, with the typed mention ranked higher: it is an assertion, and it catches "the ferryman → Marrow" which no matcher can. Budget from `TIER_BUDGET[tier].digestChars` with `fitToBudget`; depth clamped by tier as `enrich.ts:42` does; a per-entity cap so one digest cannot starve the scene. **`always` is trimmed last but still trimmed** — 30 Always entities would otherwise fail a small model's request outright — and anything cut moves to `excluded` with the reason "no room in the budget". New `field-text.ts` (`fieldValueToText`) rather than extracting world-bible's `renderValue`, which is shaped for markdown a person reads. 17 unit tests.
 - [x] 6. **`ContextRail.tsx` — the trust surface.** Fourth panel beside Compose/Scene/Notes, built on the free-standing `<aside>` shape `ScenePanel` set (there is no shared panel wrapper in the Writer's Room; `PanelDock` is the app shell's codex rail, a different thing). Three lanes, the **app's first progress meter** (`.lw-budget`, new CSS — nothing in `src/styles/` rendered a filled track before), and a `<details>` Preview whose body is `ctx.text` **verbatim**. **Lane moves are per-scene**: `scene.attachedRefs` / the new non-indexed `Scene.excludedRefs` (no Dexie bump, the `scene.mentions` trick from N6). Never the entity policy — a gesture while reading one scene must not silently change the other two hundred; each chip links to the global setting instead. Buttons as well as drag (the N4 rule). 12 e2e on both projects.
-- [ ] 7. **← IN PROGRESS** Route everything through it. `features/writers-room/ai-context.ts`'s `gatherSceneContext` body is replaced — its docblock already says so — converting beats and the rewrite bubble in one edit. `ComposePanel` follows, deleting the byte-identical duplicate at `:130-137`; wire or delete `ComposePanel.dropped`, dead state whose `×` can never render. `EntityDetail`'s **Copy AI prompt** filters through `isFieldHiddenFromAi`; **Copy as JSON** deliberately does not, because filtering a data export makes it lossy.
-- [ ] 8. `tests/unit/scene-context.spec.ts`; extend `28-context.spec.ts` with the payload assertions — a hidden field absent from what a mocked provider receives, `Never` removing an entity from the Preview, moving a chip changing the payload. SURFACE_CHECKLIST rows for the rail.
+- [x] 7. **Everything routed through `buildSceneContext`.** `gatherSceneContext` kept its return shape, so **beats and the rewrite bubble converted with zero edits** — their specs staying green is the proof. `ProseBrief.cast` became `context: string`, so `prose.ts` has one rendering and beat/rewrite dropped their own duplicate heading. `ComposePanel` takes a `scene` prop, is gated on it like `ScenePanel`, and lost both its byte-identical `personality`/`speechStyle` block and its dead `dropped` state — **deleted, not wired**: the rail is the place to shape context now, with a real drop target and a reason per chip. `EntityDetail`'s Copy AI prompt filters through `isFieldHiddenFromAi` via `entityWireString(e, {forPrompt:true})`; Copy as JSON deliberately does not. **New `services/context/pinned.ts`**: the rail passed only the focus lock while `gatherSceneContext` also folded in `focusedByType`, so the Preview would have under-reported what beats send — one helper, read by both.
+- [ ] 8. **← IN PROGRESS** `tests/unit/scene-context.spec.ts`; extend `28-context.spec.ts` with the payload assertions — a hidden field absent from what a mocked provider receives, `Never` removing an entity from the Preview, moving a chip changing the payload. SURFACE_CHECKLIST rows for the rail.
 
 ## N8 — Progressions + story memory
 
@@ -297,6 +297,11 @@ an act out of sequence appears under that act rather than in manuscript position
 Matrix band is deliberately emitted on every act *change* going down `globalOrder`, so the
 same mis-assignment shows up there as a repeated band instead of being hidden. If acts ever
 need to imply order, that is a `resequenceScenes` change, not a rendering one.
+
+**`services/context/pinned.ts` is the only reader of focus for context.** The rail and every
+AI path call it, so the Preview cannot show less than the payload. Anything new that wants
+"what is in scope" calls `buildSceneContext` with `pinnedRefs()` — never `useFocusStore`
+directly, which is how the rail and `gatherSceneContext` drifted apart within one milestone.
 
 **A lane move in the context rail is per-scene, never global.** `scene.attachedRefs` and
 `scene.excludedRefs` are the local assertions; `entity.fields.__ai.context` is the global one,

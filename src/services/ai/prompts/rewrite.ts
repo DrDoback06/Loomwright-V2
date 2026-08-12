@@ -98,7 +98,7 @@ export function buildRewritePrompt(input: RewriteBriefInput): { system: string; 
       tense,
       length: 'a few paragraphs',
       instruction: OP_RULES[input.op],
-      cast: [],
+      context: input.context,
       style: input.style,
       facts: input.facts,
     },
@@ -131,10 +131,6 @@ export function buildRewritePrompt(input: RewriteBriefInput): { system: string; 
 
   if (input.scene.summary.trim()) lines.push('', `Scene so far: ${input.scene.summary.trim()}`);
   if (input.scene.povName) lines.push(`Viewpoint character: ${input.scene.povName}.`);
-
-  if (input.context.trim()) {
-    lines.push('', 'WHO AND WHAT IS IN THIS SCENE:', input.context.trim());
-  }
 
   if (input.precedingProse.trim()) {
     lines.push(

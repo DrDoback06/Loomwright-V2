@@ -99,7 +99,7 @@ export function buildBeatPrompt(input: BeatBriefInput): { system: string; prompt
       tense: 'past',
       length: 'a few paragraphs',
       instruction: instruction || 'Continue the scene.',
-      cast: [],
+      context: input.context,
       style: input.style,
       facts: input.facts,
     },
@@ -131,10 +131,6 @@ export function buildBeatPrompt(input: BeatBriefInput): { system: string; prompt
   }
   if (input.scene.povName) {
     lines.push(`Viewpoint character: ${input.scene.povName}.`);
-  }
-
-  if (input.context.trim()) {
-    lines.push('', 'WHO AND WHAT IS IN THIS SCENE:', input.context.trim());
   }
 
   if (input.precedingProse.trim()) {

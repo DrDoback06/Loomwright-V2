@@ -737,8 +737,9 @@ export function WritersRoom() {
             </div>
           </div>
 
-          {composeOpen && (
+          {composeOpen && activeScene && (
             <ComposePanel
+              scene={activeScene}
               onClose={() => setComposeOpen(false)}
               onInsertProse={(prose) => {
                 editor

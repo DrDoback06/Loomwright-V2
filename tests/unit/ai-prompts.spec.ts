@@ -95,7 +95,7 @@ describe('prompts state the whole contract instead of assuming it', () => {
       tense: 'past',
       length: 'a few paragraphs',
       instruction: 'Vex refuses the blade.',
-      cast: [{ label: 'Character', name: 'Vex', detail: 'a poisoner' }],
+      context: '- Character Vex — a poisoner',
       facts: ['Saltbrand belongs to Marrow.'],
       style: null,
     });
