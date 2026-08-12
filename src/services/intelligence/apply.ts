@@ -6,7 +6,8 @@ import { ensureScenesForProject } from '@/db/repos/scenes';
 import type { Chapter, Entity, Link, SkillTree, TangleBoard } from '@/db/types';
 import type { EntityRef } from '@/domain/entity-types';
 import { chapterDocFromDraft } from '@/services/generate/apply';
-import { deltaTitle, type StoryDelta, type SuggestionRecord } from './types';
+import { fieldValueToText } from '@/services/context/field-text';
+import { deltaTitle, type DeltaPatch, type StoryDelta, type SuggestionRecord } from './types';
 
 /** Everything one accept touched — stored on the single audit entry so the
  * whole cascade reverts as one unit, exactly like `generate.apply`. */
@@ -21,6 +22,9 @@ export interface DeltaApplyRecord {
   suggestionIds: string[];
   /** Flat-queue candidates this accept satisfied, so undo can re-open them. */
   resolvedCandidateIds: string[];
+  /** Progressions this accept anchored. Optional so audit entries written
+   * before N8 still undo — they simply have none. */
+  progressionIds?: string[];
 }
 
 export interface DeltaApplyResult {
@@ -73,6 +77,32 @@ function appendUnique(before: unknown, addition: unknown): unknown {
 function removeMembers(before: unknown, removal: unknown): unknown {
   const removals = new Set((Array.isArray(removal) ? removal : [removal]).map(memberKey));
   return asList(before).filter((item) => !removals.has(memberKey(item)));
+}
+
+/**
+ * The progression a field patch implies, in the words a model should read.
+ *
+ * A progression is **not** a second copy of the patch. The patch keeps the
+ * codex current — which is what the roster, the Matrix and search show. The
+ * progression records *when it became true*, so the context assembler can
+ * withhold it from every earlier scene. Both, not either.
+ *
+ * `replace` becomes a replacement anchored to its field, because that is a
+ * fact superseding a fact: the sword's owner is Vex from here on, and before
+ * here the field must not be sent at all. `append` / `remove` become prose
+ * additions, because a list gaining a member is an event in the entity's
+ * history rather than a new value for the whole list.
+ *
+ * Returns null when there is nothing worth sending — a boolean flip renders
+ * as the empty string, and an empty progression would cost budget and say
+ * nothing.
+ */
+function progressionText(patch: DeltaPatch, after: unknown): string {
+  const rendered = fieldValueToText(after);
+  if (!rendered) return '';
+  if (patch.mode === 'replace') return rendered;
+  const verb = patch.mode === 'remove' ? 'lost' : 'gained';
+  return `${patch.fieldLabel} ${verb}: ${rendered}`;
 }
 
 /**
@@ -137,6 +167,7 @@ export async function applyDelta(
     linkIds: [],
     suggestionIds: [],
     resolvedCandidateIds: [],
+    progressionIds: [],
   };
   const created: EntityRef[] = [];
   const updatedById = new Map<string, EntityRef>();
@@ -152,6 +183,7 @@ export async function applyDelta(
       db.links,
       db.suggestions,
       db.candidates,
+      db.progressions,
       db.auditLog,
     ],
     async () => {
@@ -224,6 +256,29 @@ export async function applyDelta(
                 : after,
         };
         row.updatedAt = now;
+
+        // The multiplier. Novelcrafter asks its users to hand-author
+        // progressions; ours fall out of writing the book, because the
+        // extraction that produced this patch already knows which scene the
+        // author was in. It goes in this transaction, so the one Undo that
+        // reverts the cascade reverts the timeline with it.
+        const text = delta.sceneId ? progressionText(patch, after) : '';
+        if (text && delta.sceneId) {
+          const progression = {
+            id: newId(),
+            projectId,
+            entityId: id,
+            sceneId: delta.sceneId,
+            mode: patch.mode === 'replace' ? ('replacement' as const) : ('addition' as const),
+            fieldId: patch.mode === 'replace' ? patch.fieldId : null,
+            text,
+            source: 'extracted' as const,
+            confidence: patch.confidence,
+            createdAt: now,
+          };
+          await db.progressions.add(progression);
+          record.progressionIds!.push(progression.id);
+        }
       }
 
       // 3. Hierarchy — set the child's parent AND keep the parent's child

@@ -100,7 +100,8 @@ export async function extractTextToDelta(
 export async function deltaFromCandidates(
   projectId: string,
   candidates: ExtractionCandidate[],
-  chapterId?: string
+  chapterId?: string,
+  sceneId?: string
 ): Promise<StoryDelta> {
   const { entities, trees, volume } = await loadWorld(projectId);
   const ctx: RuleContext = {
@@ -113,7 +114,7 @@ export async function deltaFromCandidates(
   };
   const propagated = runPropagation(candidates, ctx);
   return {
-    ...emptyDelta(newId(), projectId, 'local', chapterId),
+    ...emptyDelta(newId(), projectId, 'local', chapterId, sceneId),
     entities: propagated.entities,
     patches: propagated.patches,
     graphPlacements: propagated.graphPlacements,

@@ -176,6 +176,13 @@ export interface StoryDelta {
   source: DeltaSource;
   /** Chapter this delta was extracted from, when it came from one. */
   chapterId?: string;
+  /** Scene this delta was extracted from, when it came from the editor.
+   *
+   * Extraction runs against a whole chapter, but the author was in one
+   * scene — and a progression has to anchor somewhere it can be resolved
+   * back to a position in the manuscript. Absent for a paste, which has no
+   * place in the book at all. */
+  sceneId?: string;
   entities: DeltaEntityCreate[];
   patches: DeltaPatch[];
   graphPlacements: DeltaGraphPlacement[];
@@ -201,13 +208,15 @@ export function emptyDelta(
   id: string,
   projectId: string,
   source: DeltaSource,
-  chapterId?: string
+  chapterId?: string,
+  sceneId?: string
 ): StoryDelta {
   return {
     id,
     projectId,
     source,
     chapterId,
+    sceneId,
     entities: [],
     patches: [],
     graphPlacements: [],

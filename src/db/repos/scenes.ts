@@ -210,6 +210,12 @@ export async function saveSceneDoc(
     // the Board is useful on day one rather than a column of "Outline"
     // that everyone has to hand-correct. Nothing is ever demoted.
     ...(scene.status === 'outline' && wordCount > 0 ? { status: 'draft' as const } : {}),
+    // Stamped separately from `updatedAt` because they answer different
+    // questions. `updatedAt` moves when a label is added or a status is
+    // flipped; this moves only when the PROSE moves, which is the only
+    // thing that can make a summary stale. Comparing a summary against
+    // `updatedAt` would call it stale for changing the POV dropdown.
+    proseUpdatedAt: Date.now(),
     updatedAt: Date.now(),
   });
   await reconcileTypedOccurrences(scene, mentions);
@@ -316,7 +322,15 @@ async function resolvedMentions(doc: unknown): Promise<TypedMention[]> {
 export async function updateSceneMeta(id: string, patch: Partial<Scene>): Promise<void> {
   const scene = await db.scenes.get(id);
   if (!scene) return;
-  await db.scenes.update(id, { ...patch, updatedAt: Date.now() });
+  const now = Date.now();
+  await db.scenes.update(id, {
+    ...patch,
+    // Stamped here rather than by the caller: a staleness rule every
+    // caller has to remember to maintain is a rule that will be wrong
+    // within a milestone.
+    ...(patch.summary !== undefined ? { summaryUpdatedAt: now } : {}),
+    updatedAt: now,
+  });
   // `aiVisible` is a rollup input, not just a stored flag — untick it and
   // the chapter's paragraph substrate has to be rebuilt at once, or the
   // model keeps seeing the scene until the next keystroke saves it.

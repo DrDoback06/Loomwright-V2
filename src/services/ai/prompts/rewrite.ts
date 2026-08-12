@@ -69,6 +69,8 @@ export interface RewriteBriefInput {
   /** Entity digests. N7's `buildSceneContext()` replaces the SOURCE without
    * changing this signature — same arrangement `beat.ts` has. */
   context: string;
+  /** Ordered summaries of every prior scene. Optional. */
+  storySoFar?: string;
   style: StyleProfile | null;
   facts: string[];
   tier: ModelTier;
@@ -99,6 +101,7 @@ export function buildRewritePrompt(input: RewriteBriefInput): { system: string; 
       length: 'a few paragraphs',
       instruction: OP_RULES[input.op],
       context: input.context,
+      storySoFar: input.storySoFar,
       style: input.style,
       facts: input.facts,
     },

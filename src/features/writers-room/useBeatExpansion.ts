@@ -37,6 +37,7 @@ export async function buildBeatRequest(input: {
     scene: gathered.scene,
     precedingProse: input.precedingProse.slice(-PRECEDING_PROSE_CHARS),
     context: gathered.context,
+    storySoFar: gathered.storySoFar,
     style: manuscript.trim() ? analyzeStyle(manuscript) : null,
     facts: gathered.facts,
     tier: input.tier ?? 'large',

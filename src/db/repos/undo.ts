@@ -101,6 +101,7 @@ export async function undoAuditEntry(entryId: string): Promise<boolean> {
           db.links,
           db.suggestions,
           db.candidates,
+          db.progressions,
           db.auditLog,
         ],
         async () => {
@@ -117,6 +118,9 @@ export async function undoAuditEntry(entryId: string): Promise<boolean> {
           await db.chapters.bulkDelete(record.chapterIds);
           await db.links.bulkDelete(record.linkIds);
           await db.suggestions.bulkDelete(record.suggestionIds);
+          // The timeline the accept wrote comes back out with it. Optional
+          // because entries logged before progressions existed have none.
+          await db.progressions.bulkDelete(record.progressionIds ?? []);
           // Candidates the accept closed out go back to pending: the entity
           // they described no longer exists, so they are outstanding again.
           for (const id of record.resolvedCandidateIds ?? []) {

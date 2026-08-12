@@ -27,6 +27,12 @@ export interface ProseBrief {
    * structured list, because beats and rewrites take exactly this and three
    * renderings of one idea is how they drifted apart in the first place. */
   context: string;
+  /** Ordered summaries of everything before this point, from
+   * `services/context/story-so-far.ts`. The scalable half of long-book
+   * memory: the digests above say who these people are, this says what has
+   * already happened to them. Optional — a project with no summaries sends
+   * nothing rather than an empty heading. */
+  storySoFar?: string;
   /** Measured from the author's own manuscript, never guessed. */
   style?: StyleProfile | null;
   /** Canon the passage must not contradict — ownership, whereabouts, bonds. */
@@ -108,6 +114,14 @@ export function buildProseBrief(brief: ProseBrief, options: { tier?: ModelTier }
       '',
       'WHO AND WHAT IS IN THIS PASSAGE — use these, and only these, by name:',
       brief.context
+    );
+  }
+
+  if (brief.storySoFar?.trim()) {
+    sections.push(
+      '',
+      'THE STORY SO FAR — what has already happened, in order. Do not repeat it; continue from it:',
+      brief.storySoFar.trim()
     );
   }
 

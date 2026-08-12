@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N7 · step 8 of 8 (steps 1–7 done)
-**Last verified green:** N7 step 7 — lint ✅ tsc ✅ build ✅ vitest 364 ✅ playwright 260 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N9 · not started (N8 closed)
+**Last verified green:** N8 — lint ✅ tsc ✅ build ✅ vitest 393 ✅ playwright 270 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -16,8 +16,8 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N5a | Scene beats | 7 | ✅ 7/7 |
 | N5b | AI visibility, acts, sections, rewrite, focus | 7 | ✅ 7/7 |
 | N6 | Typed `@` mentions | 6 | ✅ 6/6 |
-| N7 | Context engine + policy + tracking + budget rail | 8 | 🔄 7/8 |
-| N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
+| N7 | Context engine + policy + tracking + budget rail | 8 | ✅ 8/8 |
+| N8 | Progressions + scene summaries / storySoFar | 7 | ✅ 7/7 |
 | N9 | Chat dock | 6 | ⬜ |
 | N10 | Prompt library | 6 | ⬜ |
 | N11 | Story health charts | 7 | ⬜ |
@@ -173,17 +173,17 @@ same filter; the half-built fields ride along.
 - [x] 5. **`src/services/context/scene-context.ts` — the assembler.** Lanes (`always`/`detected`/`excluded`) each carrying a plain-words `reason` the rail renders verbatim. **`entityDigest` is the first generic renderer of entity fields in the app** — every other AI path names ~8 fields by hand — which is what makes step 2's per-field gate real and what finally reads cast's `writingInstructions`/`avoidTropes` (zero readers until now). `detected` is the **union of a live scan and this scene's `source:'typed'` occurrences**, with the typed mention ranked higher: it is an assertion, and it catches "the ferryman → Marrow" which no matcher can. Budget from `TIER_BUDGET[tier].digestChars` with `fitToBudget`; depth clamped by tier as `enrich.ts:42` does; a per-entity cap so one digest cannot starve the scene. **`always` is trimmed last but still trimmed** — 30 Always entities would otherwise fail a small model's request outright — and anything cut moves to `excluded` with the reason "no room in the budget". New `field-text.ts` (`fieldValueToText`) rather than extracting world-bible's `renderValue`, which is shaped for markdown a person reads. 17 unit tests.
 - [x] 6. **`ContextRail.tsx` — the trust surface.** Fourth panel beside Compose/Scene/Notes, built on the free-standing `<aside>` shape `ScenePanel` set (there is no shared panel wrapper in the Writer's Room; `PanelDock` is the app shell's codex rail, a different thing). Three lanes, the **app's first progress meter** (`.lw-budget`, new CSS — nothing in `src/styles/` rendered a filled track before), and a `<details>` Preview whose body is `ctx.text` **verbatim**. **Lane moves are per-scene**: `scene.attachedRefs` / the new non-indexed `Scene.excludedRefs` (no Dexie bump, the `scene.mentions` trick from N6). Never the entity policy — a gesture while reading one scene must not silently change the other two hundred; each chip links to the global setting instead. Buttons as well as drag (the N4 rule). 12 e2e on both projects.
 - [x] 7. **Everything routed through `buildSceneContext`.** `gatherSceneContext` kept its return shape, so **beats and the rewrite bubble converted with zero edits** — their specs staying green is the proof. `ProseBrief.cast` became `context: string`, so `prose.ts` has one rendering and beat/rewrite dropped their own duplicate heading. `ComposePanel` takes a `scene` prop, is gated on it like `ScenePanel`, and lost both its byte-identical `personality`/`speechStyle` block and its dead `dropped` state — **deleted, not wired**: the rail is the place to shape context now, with a real drop target and a reason per chip. `EntityDetail`'s Copy AI prompt filters through `isFieldHiddenFromAi` via `entityWireString(e, {forPrompt:true})`; Copy as JSON deliberately does not. **New `services/context/pinned.ts`**: the rail passed only the focus lock while `gatherSceneContext` also folded in `focusedByType`, so the Preview would have under-reported what beats send — one helper, read by both.
-- [ ] 8. **← IN PROGRESS** `tests/unit/scene-context.spec.ts`; extend `28-context.spec.ts` with the payload assertions — a hidden field absent from what a mocked provider receives, `Never` removing an entity from the Preview, moving a chip changing the payload. SURFACE_CHECKLIST rows for the rail.
+- [x] 8. **Coverage.** `tests/unit/scene-context.spec.ts` (lanes, ranking, budget reporting, depth clamping, the per-field gate asserted against the real digest) and `28-context.spec.ts` — the Preview proved byte-identical to what a beat's Copy prompt produces, and a field hidden from AI absent from both. SURFACE_CHECKLIST rows for every rail control.
 
 ## N8 — Progressions + story memory
 
-- [ ] 1. `Progression` type + Dexie v10 + `src/db/repos/progressions.ts`
-- [ ] 2. `entityAtScene()` layering (additions on, replacements over, later anchors invisible)
-- [ ] 3. `buildSceneContext()` calls `entityAtScene()` for every item
-- [ ] 4. `/progress` editor affordance anchoring a progression at the caret's scene
-- [ ] 5. **`intelligence/apply.ts` writes `source:'extracted'` progressions from field patches** — the auto-generated timeline of truth
-- [ ] 6. `services/context/story-so-far.ts` + `summarizeScene()` with the **offline extractive fallback** (reuse `extraction/quality.ts` scoring)
-- [ ] 7. `summary-stale` detection; unit specs; e2e `26-progressions.spec.ts`
+- [x] 1. **`Progression` + Dexie v10 + `db/repos/progressions.ts`.** A new table needs no `upgrade()`. **The row stores `sceneId` and no position** — `resequenceScenes` rewrites `globalOrder` on every insert or move, so a stored order goes stale the first time the author adds a scene. Position is resolved at read time through an `orderOf` callback the caller supplies.
+- [x] 2. **`entityAtScene()`** — pure, DB-free, tested first. Additions layer onto the summary in story order; replacements override their field, latest anchor winning; anything anchored later is invisible. **And a field whose replacements are all anchored later is withheld entirely**: the stored row already holds chapter 40's owner, so leaving it in place while claiming to have withheld the progression would be the same leak wearing a fix. Never mutates the row — the codex, the roster and the Matrix keep showing current truth.
+- [x] 3. **`buildSceneContext()` layers it in.** One call site. Because N7 made the assembler the only path to a model, drafting an earlier scene stopped leaking later facts across beats, rewrite, Compose and the Preview at once.
+- [x] 4. **Authoring.** A "What changed here" section in `ScenePanel` (entity picker, an optional field picker that makes it a replacement, the list with delete), plus `slash-progress.ts`: `/progress ` opens that composer focused. **Deliberately leaves nothing in the document** — a progression node would reach the word count, the exports and extraction, which would then propose back the fact it had just been told.
+- [x] 5. **The multiplier — extraction writes progressions.** One `Progression` per accepted field patch in `applyDelta`, `source: 'extracted'`, at `delta.sceneId`. `replace` → a replacement anchored to the field; `append`/`remove` → a prose addition, because a list gaining a member is an event rather than a new value for the whole list. Written after the missing-entity guard and against the **idMap-resolved** id, so nothing is orphaned. `db.progressions` in the transaction table list (and in undo's), `DeltaApplyRecord.progressionIds` optional so pre-N8 audit entries still revert.
+- [x] 6. **Story memory.** `story-so-far.ts` (`storySoFar` / `storyToCome`). **Truncates newest-first**, so when the book outgrows the budget the *opening* falls off — the obvious front-truncating implementation hands a model the setup and withholds the situation it is being asked to continue. Threaded into `ProseBrief.storySoFar`, so beats, rewrite and Compose all carry it. `summarize.ts`: an extractive summariser scoring position + named subjects + verbs of consequence, minus dialogue-only lines — **the default path, not the fallback**; the model path is `completeDetailed` and surfaces `truncated`.
+- [x] 7. **Stale summaries + coverage.** New non-indexed `Scene.proseUpdatedAt`, stamped by `saveSceneDoc`; `updateSceneMeta` stamps `summaryUpdatedAt` itself whenever `summary` is in the patch, so no caller has to remember. **Compared against `proseUpdatedAt`, never `updatedAt`** — the latter also moves for a label, a status or a POV, and a dropdown cannot stale a summary. 24 unit tests + `29-progressions.spec.ts` 5/5 on both projects.
 
 ## N9 — Chat
 
@@ -382,3 +382,10 @@ Hard-won facts, in rough order of how much time they cost:
   scene does. See the N5a notes.
 - The presence map in `usePlanData.ts` is where a new "scene knows about entity X" source
   goes — it already ranks asserted > summary > extracted.
+- **Never store a scene's position on another row.** `resequenceScenes` reassigns
+  `globalOrder` on every insert and move, so anything that cached it is wrong by the next
+  scene the author adds. Store `sceneId` and resolve the order at read time.
+- **`updatedAt` is not "the prose changed".** Every metadata edit bumps it. N8 added
+  `proseUpdatedAt` for the question the stale-summary chip actually asks.
+- A new table added to `applyDelta` must go in **both** transaction table lists — the one
+  in `intelligence/apply.ts` and the one in `db/repos/undo.ts` — or the write throws.

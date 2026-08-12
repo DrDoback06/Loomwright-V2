@@ -63,6 +63,9 @@ export interface BeatBriefInput {
   /** Entity digests. N7's `buildSceneContext()` replaces the SOURCE of this
    * string without changing this signature. */
   context: string;
+  /** Ordered summaries of every prior scene. Optional: a project with no
+   * summaries sends nothing rather than an empty heading. */
+  storySoFar?: string;
   style: StyleProfile | null;
   /** From `buildCanonFacts` — ownership, whereabouts, bonds. */
   facts: string[];
@@ -100,6 +103,7 @@ export function buildBeatPrompt(input: BeatBriefInput): { system: string; prompt
       length: 'a few paragraphs',
       instruction: instruction || 'Continue the scene.',
       context: input.context,
+      storySoFar: input.storySoFar,
       style: input.style,
       facts: input.facts,
     },

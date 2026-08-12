@@ -29,6 +29,7 @@ import { deriveScene } from '@/lib/prose';
 import { MentionHighlights } from './mention-highlights';
 import { SceneBeat } from './scene-beat';
 import { Section } from './section';
+import { SlashProgress } from './slash-progress';
 import { Toolbar } from './Toolbar';
 import { NotesMargin } from './NotesMargin';
 import { ComposePanel } from './ComposePanel';
@@ -68,6 +69,10 @@ export function WritersRoom() {
   );
   const activeScene = scenes?.find((s) => s.id === activeSceneId) ?? null;
   const [metaOpen, setMetaOpen] = useState(false);
+  /** Bumped by `/progress` so the panel focuses its composer — a token
+   * rather than a boolean, because typing the slash twice must focus
+   * twice even though the panel never closed. */
+  const [progressFocus, setProgressFocus] = useState(0);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'idle' | 'error'>('idle');
   // Monotonic count of COMPLETED saves — a deterministic signal for tests
   // and future sync features ("has everything since X been written?").
@@ -236,6 +241,7 @@ export function WritersRoom() {
       MentionHighlights,
       SceneBeat,
       Section,
+      SlashProgress,
       FocusDim,
       Mention,
       MentionSuggestExtension,
@@ -360,6 +366,17 @@ export function WritersRoom() {
     storage.flush = flushEditorNow;
   }, [editor, projectId, activeSceneId, flushEditorNow]);
 
+  // `/progress ` opens the scene panel's composer rather than leaving a
+  // node in the prose — a progression is a row about the story, not part
+  // of it.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    editor.storage.slashProgress.onProgress = () => {
+      setMetaOpen(true);
+      setProgressFocus((n) => n + 1);
+    };
+  }, [editor]);
+
   // Live entity-mention highlights from persisted occurrences.
   const occurrences = useLiveQuery(
     async () =>
@@ -403,7 +420,14 @@ export function WritersRoom() {
       // Propagate from the candidates that pass already produced — scanning
       // the same prose a second time was seconds of frozen UI on a real
       // chapter and produced nothing extra.
-      const delta = await deltaFromCandidates(chapter.projectId, summary.candidates, chapter.id);
+      // The scene is what a progression anchors to. Extraction still runs
+        // against the whole chapter — this only records where the author was.
+        const delta = await deltaFromCandidates(
+          chapter.projectId,
+          summary.candidates,
+          chapter.id,
+          activeSceneId ?? undefined
+        );
       if (delta.groups.length) stageDelta(delta);
 
       const known = summary.knownMentions
@@ -777,6 +801,7 @@ export function WritersRoom() {
             <ScenePanel
               scene={activeScene}
               onClose={() => setMetaOpen(false)}
+              focusProgressions={progressFocus}
               onProseReplaced={() => setReloadToken((n) => n + 1)}
             />
           )}

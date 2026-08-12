@@ -6,6 +6,7 @@ import type {
   KeyRow,
   Scene,
   SceneSnapshot,
+  Progression,
   RandomTable,
   SkillTree,
   TangleBoard,
@@ -55,6 +56,7 @@ export class LoomwrightDB extends Dexie {
   acts!: EntityTable<Act, 'id'>;
   scenes!: EntityTable<Scene, 'id'>;
   sceneSnapshots!: EntityTable<SceneSnapshot, 'id'>;
+  progressions!: EntityTable<Progression, 'id'>;
 
   constructor() {
     super('loomwright');
@@ -146,6 +148,13 @@ export class LoomwrightDB extends Dexie {
           }))
         );
       });
+
+    // A new table needs no upgrade: Dexie creates it empty, and every row
+    // is written by code that did not exist before. The v8→v9 chapter split
+    // is the only migration in this app that has to move data.
+    this.version(10).stores({
+      progressions: 'id, projectId, entityId, sceneId, [projectId+entityId]',
+    });
   }
 }
 

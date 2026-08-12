@@ -117,6 +117,11 @@ export interface Scene {
    * than the prose, which is how continuity survives at 150k words. */
   summary: string;
   summaryUpdatedAt: number;
+  /** When the PROSE last changed — distinct from `updatedAt`, which also
+   * moves for a label, a status or a POV. Only a change to the words can
+   * make a summary stale, so only this can. Non-indexed: no version bump,
+   * and a scene written before N8 simply has none. */
+  proseUpdatedAt?: number;
   status: SceneStatus;
   /** Cast entity id of the POV character. */
   pov: string | null;
@@ -409,4 +414,40 @@ export interface UiStateRow {
   /** `${projectId}:${name}` */
   key: string;
   value: unknown;
+}
+
+/**
+ * A codex fact anchored to a point in the story.
+ *
+ * The correct model of a novel: what is true of an entity depends on where
+ * you are in it. A progression attached at scene 30 is invisible to a model
+ * drafting scene 12, so writing chapter 2 can never leak chapter 40.
+ *
+ * **A progression is not a patch.** `applyDelta` still writes the field, so
+ * the codex, the roster and the Matrix stay current. The progression records
+ * *when it became true*, which is the only thing that lets the context
+ * assembler withhold it from earlier scenes. Both, not either.
+ */
+export interface Progression {
+  id: string;
+  projectId: string;
+  entityId: string;
+  /** Where in the manuscript this became true.
+   *
+   * **The scene id is the anchor, and `globalOrder` is resolved from it at
+   * read time.** Storing the order would be wrong within one insert:
+   * `resequenceScenes` reassigns every scene's `globalOrder` whenever one is
+   * created or moved, so a progression that had cached `7` would silently
+   * start applying to the wrong part of the book. Ids never move. */
+  sceneId: string;
+  /** `addition` layers on; `replacement` overrides `fieldId`. */
+  mode: 'addition' | 'replacement';
+  /** Which field a replacement overrides. `null` = a free prose addendum. */
+  fieldId: string | null;
+  text: string;
+  /** `extracted` rows were written by Save & Extract and can be reviewed;
+   * `manual` came from `/progress`; `ai` from a model suggestion. */
+  source: 'manual' | 'extracted' | 'ai';
+  confidence: number;
+  createdAt: number;
 }

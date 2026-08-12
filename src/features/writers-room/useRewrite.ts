@@ -50,6 +50,7 @@ export async function buildRewriteRequest(
     scene: gathered.scene,
     precedingProse: input.precedingProse.slice(-800),
     context: gathered.context,
+    storySoFar: gathered.storySoFar,
     style: manuscript.trim() ? analyzeStyle(manuscript) : null,
     facts: gathered.facts,
     tier: input.tier ?? 'large',

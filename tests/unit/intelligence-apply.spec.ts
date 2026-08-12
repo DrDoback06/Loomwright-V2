@@ -368,6 +368,109 @@ describe('intelligence/applyDelta', () => {
   });
 });
 
+describe('extraction writes the story’s timeline of truth', () => {
+  beforeEach(async () => {
+    await Promise.all(db.tables.map((t) => t.clear()));
+  });
+
+  const transfer = (swordId: string, marrowId: string, vexId: string) => ({
+    ...unit('u1', 'itemTransfer'),
+    entityId: swordId,
+    entityType: 'items' as const,
+    entityName: 'Saltbrand',
+    fieldId: 'currentOwner',
+    fieldLabel: 'Current owner',
+    before: { id: marrowId, type: 'cast' as const, name: 'Marrow' },
+    after: { id: vexId, type: 'cast' as const, name: 'Vex' },
+    mode: 'replace' as const,
+  });
+
+  async function seed() {
+    const marrow = await createEntity({ projectId: 'p1', type: 'cast', name: 'Marrow' });
+    const vex = await createEntity({ projectId: 'p1', type: 'cast', name: 'Vex' });
+    const sword = await createEntity({
+      projectId: 'p1',
+      type: 'items',
+      name: 'Saltbrand',
+      fields: { currentOwner: { id: marrow.id, type: 'cast', name: 'Marrow' } },
+    });
+    return { marrow, vex, sword };
+  }
+
+  it('anchors a progression at the scene the patch came from', async () => {
+    // The feature novelcrafter asks its users to hand-author, falling out
+    // of a Save & Extract because the engine already knows which scene the
+    // author was in.
+    const { marrow, vex, sword } = await seed();
+    await applyDelta(
+      deltaWith({ sceneId: 'sc7', patches: [transfer(sword.id, marrow.id, vex.id)] })
+    );
+
+    const rows = await db.progressions.toArray();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      entityId: sword.id,
+      sceneId: 'sc7',
+      mode: 'replacement',
+      fieldId: 'currentOwner',
+      source: 'extracted',
+    });
+    expect(rows[0].text).toBe('Vex');
+  });
+
+  it('still writes the field — the codex stays current, and the timeline is extra', async () => {
+    const { marrow, vex, sword } = await seed();
+    await applyDelta(
+      deltaWith({ sceneId: 'sc7', patches: [transfer(sword.id, marrow.id, vex.id)] })
+    );
+    const after = await db.entities.get(sword.id);
+    expect((after!.fields.currentOwner as { id: string }).id).toBe(vex.id);
+  });
+
+  it('an append becomes an addition rather than a replacement of the whole list', async () => {
+    const skill = await createEntity({ projectId: 'p1', type: 'skills', name: 'Venom Strike' });
+    const vex = await createEntity({ projectId: 'p1', type: 'cast', name: 'Vex', fields: { skills: [] } });
+    await applyDelta(
+      deltaWith({
+        sceneId: 'sc3',
+        patches: [
+          {
+            ...unit('u1', 'skillAcquisition'),
+            entityId: vex.id,
+            entityType: 'cast',
+            entityName: 'Vex',
+            fieldId: 'skills',
+            fieldLabel: 'Skills',
+            before: [],
+            after: [{ id: skill.id, type: 'skills', name: 'Venom Strike' }],
+            mode: 'append',
+          },
+        ],
+      })
+    );
+    const [row] = await db.progressions.toArray();
+    expect(row.mode).toBe('addition');
+    expect(row.fieldId).toBeNull();
+    expect(row.text).toBe('Skills gained: Venom Strike');
+  });
+
+  it('writes nothing when the delta has no scene — a paste has no place in the book', async () => {
+    const { marrow, vex, sword } = await seed();
+    await applyDelta(deltaWith({ patches: [transfer(sword.id, marrow.id, vex.id)] }));
+    expect(await db.progressions.count()).toBe(0);
+  });
+
+  it('one undo takes the timeline back out with the cascade', async () => {
+    const { marrow, vex, sword } = await seed();
+    const result = await applyDelta(
+      deltaWith({ sceneId: 'sc7', patches: [transfer(sword.id, marrow.id, vex.id)] })
+    );
+    expect(await db.progressions.count()).toBe(1);
+    expect(await undoAuditEntry(result.auditId)).toBe(true);
+    expect(await db.progressions.count()).toBe(0);
+  });
+});
+
 describe('the two review lanes do not each create the same thing', () => {
   beforeEach(async () => {
     await Promise.all(db.tables.map((t) => t.clear()));

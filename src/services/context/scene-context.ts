@@ -7,6 +7,7 @@ import { isLiveEntity, toKnownEntity } from '@/services/extraction/entity-to-kno
 import { scanTextForKnownEntities } from '@/services/extraction/known-index';
 import { fitToBudget, TIER_BUDGET, type ModelTier } from '@/services/ai/prompts';
 import { fieldValueToText } from './field-text';
+import { entityAtScene } from './entity-at-scene';
 
 export type ContextLane = 'always' | 'detected' | 'excluded';
 export type ContextDepth = 'lean' | 'standard' | 'full';
@@ -114,6 +115,18 @@ export async function buildSceneContext(
 
   const rows = await db.entities.where('projectId').equals(projectId).toArray();
   const world = rows.filter(isLiveEntity);
+  // Every fact anchored later than this scene is withheld. Because the
+  // assembler is the only path to a model (N7 step 7), this one read stops
+  // beats, rewrite, Compose and the Preview leaking the future all at once.
+  const progressions = await db.progressions.where('projectId').equals(projectId).toArray();
+  // Positions are resolved here rather than stored on the progression:
+  // `resequenceScenes` rewrites them whenever a scene is inserted or moved.
+  const orderByScene = new Map(
+    (await db.scenes.where('projectId').equals(projectId).toArray()).map((s) => [
+      s.id,
+      s.globalOrder,
+    ])
+  );
   const byId = new Map(world.map((e) => [e.id, e]));
 
   /** id → the strongest reason it is here, and which lane that implies. */
@@ -176,7 +189,13 @@ export async function buildSceneContext(
   for (const [id, claimed] of reasons) {
     const entity = byId.get(id);
     if (!entity) continue;
-    const digest = claimed.lane === 'excluded' ? '' : entityDigest(entity, depth);
+    const digest =
+      claimed.lane === 'excluded'
+        ? ''
+        : entityDigest(
+            entityAtScene(entity, progressions, scene.globalOrder, (id) => orderByScene.get(id)),
+            depth
+          );
     scored.push({
       ref: refOf(entity),
       lane: claimed.lane,

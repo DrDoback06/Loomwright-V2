@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db/schema';
 import { listSnapshots, restoreSnapshot, snapshotScene, updateSceneMeta } from '@/db/repos/scenes';
 import type { Scene, ScenePovType, SceneStatus } from '@/db/types';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
+import { createProgression, deleteProgression } from '@/db/repos/progressions';
+import { entitySpec, generableFields } from '@/services/generate/spec';
+import { isSummaryStale, summarizeScene } from '@/services/context/summarize';
 import { STATUS_META } from './SceneStrip';
 import { toast } from '@/stores/toasts';
 
@@ -27,9 +30,13 @@ export function ScenePanel({
   scene,
   onClose,
   onProseReplaced,
+  focusProgressions = 0,
 }: {
   scene: Scene;
   onClose: () => void;
+  /** Bumped by `/progress` in the editor. A token rather than a boolean so
+   * typing the slash again re-focuses a panel that never closed. */
+  focusProgressions?: number;
   /** Tell the editor its document has been replaced from underneath it.
    * Without this the editor keeps the version on screen and writes it
    * straight back on the next keystroke, undoing the restore. */
@@ -87,6 +94,51 @@ export function ScenePanel({
     void updateSceneMeta(scene.id, next);
   };
 
+  const [summarizing, setSummarizing] = useState(false);
+
+  /** Everything anchored at this scene, whoever wrote it. Extraction's rows
+   * sit in the same list as the author's — a fact found and a fact stated
+   * are the same claim about the story, and both are removable here. */
+  const progressions = useLiveQuery(
+    async () =>
+      (await db.progressions.where('projectId').equals(scene.projectId).toArray())
+        .filter((row) => row.sceneId === scene.id)
+        .sort((a, b) => a.createdAt - b.createdAt),
+    [scene.projectId, scene.id],
+    []
+  );
+  const nameOf = (entityId: string) =>
+    attachable.find((entity) => entity.id === entityId)?.name ?? 'Removed entry';
+
+  const [progEntity, setProgEntity] = useState('');
+  const [progField, setProgField] = useState('');
+  const [progText, setProgText] = useState('');
+  const progType = attachable.find((entity) => entity.id === progEntity)?.type;
+  // The same field list the drawer and the context assembler use, so the
+  // three cannot disagree about which fields exist.
+  const progSpec = progType ? entitySpec(progType) : null;
+  const progFields = progSpec ? generableFields(progSpec) : [];
+
+  const progEntityRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    if (focusProgressions > 0) progEntityRef.current?.focus();
+  }, [focusProgressions]);
+
+  const addProgression = () => {
+    const text = progText.trim();
+    if (!progEntity || !text) return;
+    void createProgression({
+      projectId: scene.projectId,
+      entityId: progEntity,
+      sceneId: scene.id,
+      text,
+      mode: progField ? 'replacement' : 'addition',
+      fieldId: progField || null,
+      source: 'manual',
+    });
+    setProgText('');
+  };
+
   const [labelDraft, setLabelDraft] = useState('');
   const addLabel = () => {
     const label = labelDraft.trim();
@@ -108,19 +160,150 @@ export function ScenePanel({
       </div>
 
       <div className="lw-field lw-field--full">
-        <label htmlFor="scene-summary">Summary</label>
+        <div className="lw-scenepanel__historyhead">
+          <label htmlFor="scene-summary">Summary</label>
+          <button
+            type="button"
+            className="lw-btn lw-btn--sm"
+            disabled={summarizing || draft.wordCount === 0}
+            onClick={() => {
+              setSummarizing(true);
+              void summarizeScene(scene.projectId, scene)
+                .then((result) => {
+                  if (!result.text) {
+                    toast('There is not enough prose here to summarise yet.', { kind: 'error' });
+                    return;
+                  }
+                  patch({ summary: result.text });
+                  toast(
+                    result.truncated
+                      ? 'Summarised, but the model stopped early — check the end.'
+                      : result.source === 'ai'
+                        ? 'Summarised with your model.'
+                        : 'Summarised from the scene’s own sentences.'
+                  );
+                })
+                .finally(() => setSummarizing(false));
+            }}
+          >
+            {summarizing ? 'Summarising…' : 'Summarise'}
+          </button>
+        </div>
         <textarea
           id="scene-summary"
           className="lw-input lw-input--area"
           rows={3}
           placeholder="What happens, in a sentence or two."
           value={draft.summary}
-          onChange={(e) => patch({ summary: e.target.value, summaryUpdatedAt: Date.now() })}
+          onChange={(e) => patch({ summary: e.target.value })}
         />
+        {/* A chip, never a toast: staleness is a state of the scene, not an
+            event, so it belongs beside the thing that is stale. */}
+        {isSummaryStale({ ...scene, summary: draft.summary }) ? (
+          <p className="lw-stale" data-testid="summary-stale">
+            <span aria-hidden>◑</span> The prose changed after this summary was written.
+          </p>
+        ) : null}
         <p className="lw-fieldnote">
           The unit long-book memory is built from — summaries travel to the AI instead of the
-          whole manuscript.
+          whole manuscript. Summarising works with no API key: it takes the scene’s own
+          strongest sentences.
         </p>
+      </div>
+
+      <div className="lw-field lw-field--full">
+        <span className="lw-tweak__label" id="scene-progressions">
+          What changed here
+        </span>
+        <p className="lw-fieldnote">
+          Facts that become true at this point in the book. Every earlier scene is written
+          without them, so drafting chapter two can’t leak chapter forty.
+        </p>
+        {progressions.length ? (
+          <ul className="lw-progressions" aria-labelledby="scene-progressions">
+            {progressions.map((row) => (
+              <li key={row.id} className="lw-progression" data-source={row.source}>
+                <span className="lw-progression__who">{nameOf(row.entityId)}</span>
+                <span className="lw-progression__text">{row.text}</span>
+                {row.source === 'extracted' ? (
+                  <span className="lw-progression__badge">found</span>
+                ) : null}
+                <button
+                  type="button"
+                  className="lw-chip__x"
+                  aria-label={`Remove progression ${row.text}`}
+                  onClick={() => void deleteProgression(row.id)}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="lw-empty__note">Nothing yet.</p>
+        )}
+
+        <div className="lw-field">
+          <label htmlFor="prog-entity">Who or what</label>
+          <select
+            id="prog-entity"
+            ref={progEntityRef}
+            className="lw-input"
+            value={progEntity}
+            onChange={(e) => {
+              setProgEntity(e.target.value);
+              setProgField('');
+            }}
+          >
+            <option value="">Choose an entry…</option>
+            {attachable.map((entity) => (
+              <option key={entity.id} value={entity.id}>
+                {ENTITY_TYPE_META[entity.type].label} · {entity.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="lw-field">
+          <label htmlFor="prog-field">Replaces</label>
+          <select
+            id="prog-field"
+            className="lw-input"
+            value={progField}
+            disabled={!progFields.length}
+            onChange={(e) => setProgField(e.target.value)}
+          >
+            <option value="">Nothing — this is an addition</option>
+            {progFields.map((field) => (
+              <option key={field.id} value={field.id}>
+                {field.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="lw-chips__add">
+          <input
+            className="lw-input"
+            aria-label="What became true"
+            placeholder="Vex is carrying the ash-blade."
+            value={progText}
+            onChange={(e) => setProgText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              addProgression();
+            }}
+          />
+          <button
+            type="button"
+            className="lw-btn lw-btn--sm"
+            disabled={!progEntity || !progText.trim()}
+            onClick={addProgression}
+          >
+            Anchor here
+          </button>
+        </div>
       </div>
 
       <div className="lw-field lw-field--full">

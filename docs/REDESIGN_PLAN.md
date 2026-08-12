@@ -1620,6 +1620,78 @@ This is the most trust-building screen in the app: *the author can see exactly w
 is told.* `ComposePanel`, `AiTab`, beats and chat all switch to `buildSceneContext()`.
 `focusStore` remains the cross-surface selection mechanism and becomes one `always` input.
 
+## N8 — Progressions and story memory (this pass, whole milestone)
+
+### Context
+
+An entity's fields are timeless today. Writing chapter 2, a model is told everything the codex
+knows — including facts that will not be true until chapter 40. That is the single largest
+correctness gap in what N7 just built: the context rail now shows the author *exactly* what
+gets sent, which makes it exactly clear that what gets sent is anachronistic.
+
+Novelcrafter solves this with hand-authored **Progressions**. **Ours writes them for you**:
+`intelligence/rules.ts` already knows which chapter every propagated fact came from, so a
+Save & Extract can anchor the fact at the scene that established it. The feature they ask
+users to maintain by hand falls out of writing the book. That is the strongest idea in this
+plan, and it only became cheap once N3 gave us scenes and N7 gave us one assembler.
+
+Paired with it, because they answer the same question at different scales: **scene summaries**
+and `storySoFar()` — the scalable answer to long-book context, and the reason novelcrafter
+holds continuity at 150k words where a raw-prose approach cannot.
+
+### The seven steps
+
+**1. Dexie + types.** `Progression` as specified below; a new version block with **no
+`upgrade()`** — a new table needs none, and the v8→v9 chapter split is the only migration in
+the app that does. `src/db/repos/progressions.ts` mirrors `scenes.ts` for audit and trash.
+
+**2. `entityAtScene(entity, progs, globalOrder)`** — pure, DB-free, unit-tested first. Additions
+layer on, replacements override, and **anything anchored later is invisible**. That last clause
+is the whole feature and gets its own test.
+
+**3. `buildSceneContext` layers it in.** One call site: `entityDigest(entity, depth)` becomes
+`entityDigest(entityAtScene(entity, progs, scene.globalOrder), depth)`. Because N7 made the
+assembler the only path, drafting an earlier scene stops leaking later facts **everywhere at
+once** — beats, rewrite, Compose, the Preview.
+
+**4. Authoring.** `/progress` in the editor picks an entity and anchors at the caret's scene,
+reusing the `/beat` input-rule shape from N5a and the `@` picker from N6.
+
+**5. The multiplier — extraction writes progressions.** `applyDelta` gains one write per
+accepted field patch: a `Progression` with `source: 'extracted'` at the originating scene.
+Reversible through the existing audit, because it goes in the same transaction.
+
+**6. Story memory.** `services/context/story-so-far.ts` (`storySoFar` / `storyToCome`, budgeted
+newest-first — recent context matters more than the opening) and `summarizeScene`, with an
+**offline extractive fallback** built from the scene's top-ranked occurrences and highest-signal
+sentences. Never a dead button, never a required key.
+
+**7. Stale summaries + coverage.** A scene whose prose changed after `summaryUpdatedAt` shows a
+chip — deterministic, in-place, never a toast. Unit specs for `entityAtScene`, `storySoFar`
+truncation and the offline summariser; e2e `29-progressions.spec.ts`.
+
+### Two things to get right
+
+**`summaryUpdatedAt` must actually be written.** N3 added the field; if nothing sets it, the
+stale chip is another control that cannot fire — the exact pattern N5b spent a milestone
+removing. `updateSceneMeta` stamps it whenever `summary` changes, and the spec asserts the chip
+appears after an edit rather than asserting the field was stored.
+
+**A progression is not a patch.** `applyDelta` still writes the field — the codex stays current,
+which is what the roster and the Matrix show. The progression records *when it became true*, so
+the context assembler can withhold it from earlier scenes. Both, not either.
+
+### Verification
+
+`entityAtScene` layering and the invisibility rule · `storySoFar` ordering and budget
+truncation · the offline summariser with no provider · a Save & Extract writing an
+`extracted` progression · **drafting an earlier scene excludes it, asserted through the context
+rail's Preview** — which is the payload, so that assertion covers beats and Compose too.
+
+---
+
+### The original N8 sketch (retained)
+
 ### 6.4 N8 — Progressions and story memory
 
 Two mechanisms, one milestone, because they are both "what did the AI know, and when".
@@ -2053,6 +2125,28 @@ step is incomplete."
 the cron. A cron that fires before the ledger exists will improvise.
 
 ---
+
+## Pace — batch a milestone, not a step
+
+The first seven N7 steps each took a full pass: an exploration cycle, one step, then the
+**whole** e2e suite. The suite is ~7 minutes, so a milestone of eight steps spent nearly an
+hour re-proving work that had not changed. That is the wrong trade once the codebase is
+familiar.
+
+**From N8 on, a pass is a milestone, not a step:**
+
+1. **Explore once per milestone**, not once per step. By N7 the recurring facts — panel shapes,
+   drag payload, budget primitives, fixture conventions — are in the ledger already.
+2. **Run the targeted spec while working**; the full gate (`lint · tsc · build · vitest ·
+   playwright both projects`) **once**, before the commit that closes the milestone.
+   The exception is a change to the matcher or the schema, where the 16 extraction fixtures
+   and the migration test run immediately, because those fail in ways that are hard to
+   attribute later.
+3. **Commit per logical unit, push once at the end** — unless the pass is long enough that an
+   interruption would lose work, in which case push at the halfway mark too.
+4. Keep every guard: SURFACE_CHECKLIST rows, consequence-not-storage assertions, and the
+   ledger updated before the push. Speed comes from not repeating verification, never from
+   skipping it.
 
 ## Progress accounting
 

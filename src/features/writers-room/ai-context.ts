@@ -4,6 +4,7 @@ import type { Entity } from '@/db/types';
 import { buildCanonFacts } from '@/services/ai/canon';
 import { buildSceneContext } from '@/services/context/scene-context';
 import { pinnedRefs } from '@/services/context/pinned';
+import { storySoFar } from '@/services/context/story-so-far';
 
 /** How much manuscript to measure the author's voice from — the same
  * budget ComposePanel uses, for the same reason. */
@@ -12,6 +13,10 @@ export const STYLE_SAMPLE_CHARS = 40_000;
 export interface SceneAiContext {
   scene: { title: string; summary: string; povName: string | null; povType: string | null };
   context: string;
+  /** Ordered summaries of every prior scene — long-book memory, assembled
+   * by `storySoFar()`. Empty until the author has summarised something,
+   * which is why nothing depends on it. */
+  storySoFar: string;
   facts: string[];
   subjects: Entity[];
   world: Entity[];
@@ -41,10 +46,18 @@ export async function gatherSceneContext(
   const byId = new Map(world.map((e) => [e.id, e]));
 
   if (!scene) {
-    return { scene: { title: '', summary: '', povName: null, povType: null }, context: '', facts: [], subjects: [], world };
+    return {
+      scene: { title: '', summary: '', povName: null, povType: null },
+      context: '',
+      storySoFar: '',
+      facts: [],
+      subjects: [],
+      world,
+    };
   }
 
   const ctx = await buildSceneContext(projectId, scene, { pinned: pinnedRefs() });
+  const scenes = await db.scenes.where('projectId').equals(projectId).toArray();
 
   // `subjects` feeds `buildCanonFacts`, which answers "what is true" rather
   // than "who is here". Anything the assembler excluded is not in the
@@ -63,6 +76,7 @@ export async function gatherSceneContext(
       povType: scene.povType,
     },
     context: ctx.text,
+    storySoFar: storySoFar(scenes, scene.globalOrder),
     facts: buildCanonFacts(subjects, world),
     subjects,
     world,

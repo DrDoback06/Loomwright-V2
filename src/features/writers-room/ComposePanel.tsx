@@ -16,6 +16,7 @@ import { toast } from '@/stores/toasts';
 import type { Scene } from '@/db/types';
 import { buildSceneContext } from '@/services/context/scene-context';
 import { pinnedRefs } from '@/services/context/pinned';
+import { storySoFar } from '@/services/context/story-so-far';
 
 const MODES = ['scene', 'chapter opening', 'dialogue', 'description', 'transition'] as const;
 const POVS = ['third limited', 'third omniscient', 'first person', 'second person'] as const;
@@ -106,6 +107,17 @@ export function ComposePanel({ scene, onInsert, onInsertProse, onClose }: Compos
     null
   );
   const contextItems = (sceneContext?.items ?? []).filter((i) => i.lane !== 'excluded');
+  // Long-book memory: what has already happened, as summaries rather than
+  // as prose nobody's context window can hold.
+  const soFar = useLiveQuery(
+    async () =>
+      storySoFar(
+        await db.scenes.where('projectId').equals(scene.projectId).toArray(),
+        scene.globalOrder
+      ),
+    [scene.projectId, scene.globalOrder],
+    ''
+  );
   const details = useLiveQuery(
     async () => {
       const rows = await Promise.all(contextItems.map((i) => db.entities.get(i.ref.id)));
@@ -132,6 +144,7 @@ export function ComposePanel({ scene, onInsert, onInsertProse, onClose }: Compos
       length,
       instruction,
       context: sceneContext?.text ?? '',
+      storySoFar: soFar,
       style: matchVoice ? style : null,
       facts: buildCanonFacts(details, world),
     }, options);

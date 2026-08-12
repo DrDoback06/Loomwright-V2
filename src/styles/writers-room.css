@@ -552,6 +552,63 @@
 }
 .lw-snapshot .lw-btn { grid-row: 1 / span 2; grid-column: 2; }
 
+/* ---------------------------------------------------------------------
+   Progressions (N8) — facts anchored to a point in the story.
+   Rows the author wrote and rows extraction found sit in one list, so
+   the badge is the only thing that distinguishes them.
+   --------------------------------------------------------------------- */
+.lw-stale {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-2xs);
+  color: var(--warn);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.lw-progressions {
+  list-style: none;
+  margin: var(--sp-4) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.lw-progression {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: var(--sp-1) var(--sp-3);
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line-1);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--r-3);
+  background: var(--bg-paper);
+}
+.lw-progression__who {
+  grid-column: 1;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--tr-eyebrow);
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.lw-progression__text {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: var(--fs-xs);
+  color: var(--ink-1);
+}
+.lw-progression__badge {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  font-size: var(--fs-3xs);
+  color: var(--ink-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  padding: 0 var(--sp-3);
+}
+.lw-progression .lw-chip__x { grid-column: 3; grid-row: 1 / span 2; }
+
 @media (max-width: 720px) {
   /* On a phone the panel is a sheet over the manuscript rather than a
      column beside it: there is no width to spare, and half-covering the
