@@ -7,6 +7,8 @@ import type {
   Scene,
   SceneSnapshot,
   Progression,
+  ChatThread,
+  ChatMessage,
   RandomTable,
   SkillTree,
   TangleBoard,
@@ -57,6 +59,8 @@ export class LoomwrightDB extends Dexie {
   scenes!: EntityTable<Scene, 'id'>;
   sceneSnapshots!: EntityTable<SceneSnapshot, 'id'>;
   progressions!: EntityTable<Progression, 'id'>;
+  chatThreads!: EntityTable<ChatThread, 'id'>;
+  chatMessages!: EntityTable<ChatMessage, 'id'>;
 
   constructor() {
     super('loomwright');
@@ -154,6 +158,14 @@ export class LoomwrightDB extends Dexie {
     // is the only migration in this app that has to move data.
     this.version(10).stores({
       progressions: 'id, projectId, entityId, sceneId, [projectId+entityId]',
+    });
+
+    // Threads are listed newest-first per project; messages are always read
+    // as one thread in order, so `[threadId+createdAt]` is the only compound
+    // index either needs.
+    this.version(11).stores({
+      chatThreads: 'id, projectId, sceneId, [projectId+updatedAt]',
+      chatMessages: 'id, threadId, [threadId+createdAt]',
     });
   }
 }

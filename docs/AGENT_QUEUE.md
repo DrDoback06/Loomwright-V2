@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N9 · not started (N8 closed)
-**Last verified green:** N8 — lint ✅ tsc ✅ build ✅ vitest 393 ✅ playwright 270 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N10 · not started (N9 closed)
+**Last verified green:** N9 — lint ✅ tsc ✅ build ✅ vitest 411 ✅ playwright 282 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -18,7 +18,7 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N6 | Typed `@` mentions | 6 | ✅ 6/6 |
 | N7 | Context engine + policy + tracking + budget rail | 8 | ✅ 8/8 |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ✅ 7/7 |
-| N9 | Chat dock | 6 | ⬜ |
+| N9 | Chat dock | 6 | ✅ 6/6 |
 | N10 | Prompt library | 6 | ⬜ |
 | N11 | Story health charts | 7 | ⬜ |
 | N12 | Nudge inbox | 6 | ⬜ |
@@ -187,12 +187,12 @@ same filter; the half-built fields ride along.
 
 ## N9 — Chat
 
-- [ ] 1. Dexie v11 + `src/db/repos/chat.ts`
-- [ ] 2. `services/ai/prompts/chat.ts` — one system prompt per mode
-- [ ] 3. `ChatDock.tsx` in the existing `PanelDock` z-layer
-- [ ] 4. `+ Context` breadth (novel / outline / act / chapter / scenes / codex by type or tag) + removable chips; `memoryPairs` cutoff
-- [ ] 5. **Insert into scene** (snapshot-then-insert) and **Send to codex** via `parseDeltaReply`
-- [ ] 6. Offline empty state ("Copy this conversation as a prompt"); e2e `27-chat.spec.ts`
+- [x] 1. **Dexie v11 + `db/repos/chat.ts`.** `chatThreads` / `chatMessages`, no `upgrade()`. Threads are working notes, so `deleteThread` is a hard delete that takes its messages with it rather than a trip through the trash. A thread titles itself from the first thing the author said, once.
+- [x] 2. **`services/ai/prompts/chat.ts`.** Five modes, and **every one of them ends in the same rule: do not invent canon** — not politeness, but what makes a reply safe to hand to `parseDeltaReply` afterwards. `recentHistory` cuts at a **user turn, never at a message count**: a count-based window eventually opens the history with an answer whose question was left behind. The prompt is rendered as text rather than a messages array, because the offline path copies it verbatim.
+- [x] 3. **`ChatDock.tsx` — a fifth Writer's Room panel**, not a `PanelDock` entry: the dock is the app shell's codex rail and does not exist on a phone, and the plan's own IA puts chat inside Write. Same `<aside>` shape as the context rail, sheet-over-manuscript on mobile.
+- [x] 4. **`+ Context` and `services/context/chat-context.ts`.** This scene · the story so far · the outline · a whole codex type · one entry. Assembled from the **same** pieces the Writer's Room uses (`buildSceneContext`, `storySoFar`, `entityDigest`) — a chat that described entities differently from a beat would be two apps sharing a database. "The story so far" stops at the latest attached scene, not at the end of the book, or attaching scene two hands the model the ending. `memoryPairs` defaults to 14.
+- [x] 5. **Insert into scene** (a `pre-ai` snapshot labelled "Before a chat insertion", then the same insertion path Compose uses) and **Send to codex** (`parseDeltaReply` → `stageDelta`, so a chat reply becomes a verified, propagated, undoable cascade rather than text).
+- [x] 6. **The offline path is the same conversation**, not a reduced one: Copy conversation is present with or without a key, and the paste box puts the reply in the log where both buttons work identically. 18 unit tests + `30-chat.spec.ts` 6/6 on both projects.
 
 ## N10 — Prompt library
 
@@ -387,5 +387,11 @@ Hard-won facts, in rough order of how much time they cost:
   scene the author adds. Store `sceneId` and resolve the order at read time.
 - **`updatedAt` is not "the prose changed".** Every metadata edit bumps it. N8 added
   `proseUpdatedAt` for the question the stale-summary chip actually asks.
+- **`useLiveQuery` with an empty-array default cannot be told from a genuinely empty
+  table.** N9's dock created a fresh thread on every reload because of it. Omit the default
+  and guard on `undefined` whenever "no rows yet" triggers a write.
+- The Writer's Room panel button row wraps now (`.lw-wroom__chapteractions`). It grew from
+  three buttons to five, and before the wrap it ran under the notes rail where it could not
+  be clicked.
 - A new table added to `applyDelta` must go in **both** transaction table lists — the one
   in `intelligence/apply.ts` and the one in `db/repos/undo.ts` — or the write throws.

@@ -451,3 +451,54 @@ export interface Progression {
   confidence: number;
   createdAt: number;
 }
+
+/* ---------------------------------------------------------------------
+   Chat
+   --------------------------------------------------------------------- */
+
+export type ChatMode = 'brainstorm' | 'ask-the-codex' | 'editor' | 'continuity' | 'free';
+
+/** What a thread carries into every message it sends. Chips above the
+ * composer render exactly this list, and removing one genuinely removes it
+ * from the payload — the context rail's rule, applied to chat. */
+export type ChatContextKind = 'scene' | 'story-so-far' | 'codex-type' | 'entity' | 'outline';
+
+export interface ChatContextRef {
+  kind: ChatContextKind;
+  /** Entity id, entity type, or scene id depending on `kind`. Empty for
+   * the whole-project sources, which need no target. */
+  id: string;
+  /** What the chip says. Stored rather than derived so a thread still
+   * reads correctly after the thing it named was renamed or deleted. */
+  label: string;
+}
+
+export interface ChatThread {
+  id: string;
+  projectId: string;
+  /** The scene the thread was started from, when it was started from one.
+   * Its context travels only if a `scene` chip is attached. */
+  sceneId: string | null;
+  title: string;
+  mode: ChatMode;
+  context: ChatContextRef[];
+  /** How many prior message PAIRS travel with each send — novelcrafter's
+   * "knowledge cutoff". A thread that sends its whole history stops fitting
+   * long before the author notices. */
+  memoryPairs: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  threadId: string;
+  role: 'user' | 'assistant';
+  text: string;
+  /** One line naming what travelled with this message. Auditability: an
+   * author should never have to guess why a reply knew something. */
+  contextSummary?: string;
+  /** The model stopped because it ran out of budget. Never hidden. */
+  truncated?: boolean;
+  createdAt: number;
+}

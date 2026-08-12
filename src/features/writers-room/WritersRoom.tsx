@@ -36,6 +36,7 @@ import { ComposePanel } from './ComposePanel';
 import { SceneHead, SceneStrip } from './SceneStrip';
 import { ScenePanel } from './ScenePanel';
 import { ContextRail } from './ContextRail';
+import { ChatDock } from './ChatDock';
 import { RewriteBubble } from './RewriteBubble';
 import { FocusDim } from './focus-dim';
 import { useFocusMode } from './useFocusMode';
@@ -87,6 +88,7 @@ export function WritersRoom() {
   const stageDelta = useIntelligenceStore((s) => s.stage);
   const [composeOpen, setComposeOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [aiReady, setAiReady] = useState(false);
   const [deepConfirming, setDeepConfirming] = useState(false);
   useEffect(() => {
@@ -712,6 +714,14 @@ export function WritersRoom() {
                 >
                   Context
                 </button>
+                <button
+                  type="button"
+                  className="lw-btn"
+                  aria-pressed={chatOpen}
+                  onClick={() => setChatOpen((o) => !o)}
+                >
+                  Chat
+                </button>
               </div>
             </div>
 
@@ -810,6 +820,28 @@ export function WritersRoom() {
           )}
           {contextOpen && activeScene && (
             <ContextRail scene={activeScene} onClose={() => setContextOpen(false)} />
+          )}
+          {chatOpen && (
+            <ChatDock
+              projectId={projectId}
+              scene={activeScene}
+              onClose={() => setChatOpen(false)}
+              onInsert={(prose) => {
+                editor
+                  .chain()
+                  .focus('end')
+                  .insertContent(
+                    prose
+                      .split(/\n{2,}/)
+                      .filter((p) => p.trim())
+                      .map((p) => ({
+                        type: 'paragraph',
+                        content: [{ type: 'text', text: p.replace(/\s*\n\s*/g, ' ').trim() }],
+                      }))
+                  )
+                  .run();
+              }}
+            />
           )}
         </div>
       ) : (

@@ -548,3 +548,13 @@ out of extraction, and out of every export in one omission.
 | Progressions (effect) | A fact anchored at a later scene is **absent from an earlier scene's payload**, asserted through the context rail's Preview — which is the payload, so beats, rewrite and Compose are covered by the same assertion | `29-progressions.spec.ts`, unit `progressions.spec.ts` |
 | Save & Extract → progressions | Every accepted field patch also anchors a `Progression` at the scene it came from, `source: 'extracted'`. In the same transaction, so one Undo reverts the cascade and the timeline together | unit `intelligence-apply.spec.ts` |
 | Story so far (effect) | Prior scene summaries reach a beat's prompt under THE STORY SO FAR, newest-first when the budget bites — the opening falls off, never the most recent scene | `29-progressions.spec.ts`, unit `progressions.spec.ts` |
+| Write ▸ Chat (toolbar) | Opens the chat dock — a fifth panel beside Compose/Scene/Notes/Context; a full-screen sheet on a phone | `30-chat.spec.ts` |
+| Chat: thread picker / New thread / Delete | Threads per project, newest first, titled from the first thing the author said. Delete takes its messages with it | `30-chat.spec.ts`, unit `chat.spec.ts` |
+| Chat: mode pills | One system prompt per mode (Brainstorm · Ask the codex · Editor · Continuity · Free). Every one of them forbids inventing canon | unit `chat.spec.ts` |
+| Chat: + Context | Attaches this scene, the story so far, the outline, a whole codex type, or one entry. Chips are the payload | `30-chat.spec.ts`, unit `chat.spec.ts` |
+| Chat: remove a context chip | Genuinely removes it from what is sent, asserted against the assembled block rather than against stored state | unit `chat.spec.ts` |
+| Chat: Send | `completeDetailed` behind the existing privacy guard; surfaces `truncated`. Absent with no provider — Copy conversation is not | `30-chat.spec.ts` |
+| Chat: Copy conversation | Present **with or without** a key: the whole conversation as one prompt, plus a paste box for the reply. The prompt is shown as text because the clipboard can refuse | `30-chat.spec.ts` |
+| Chat: "Sent with:" line | Names what travelled with each message, stored on the row — an author never has to guess why a reply knew something | `30-chat.spec.ts` |
+| Chat: Insert into scene | Takes a `pre-ai` snapshot labelled "Before a chat insertion", then inserts. The page before it is recoverable in the Scene panel | `30-chat.spec.ts` |
+| Chat: Send to codex | Routes the reply through `parseDeltaReply` — the same verification a pasted reply gets — and stages a cascade. A model cannot make the app write what the offline engine would not | `30-chat.spec.ts` |

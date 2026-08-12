@@ -119,6 +119,10 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  /* Wraps rather than overflowing. The panel buttons grew from three to
+     five across N7–N9, and without this the row runs past the editor
+     column and sits under the notes rail, where it cannot be clicked. */
+  flex-wrap: wrap;
 }
 
 /* ---- Toolbar ---- */
@@ -1104,4 +1108,88 @@
     padding-bottom: calc(var(--sp-14) + env(safe-area-inset-bottom));
   }
   .lw-ctxchip__pop { position: static; max-width: none; }
+}
+
+/* ---------------------------------------------------------------------
+   Chat dock (N9)
+   A conversation about the book with the book attached. Same panel shape
+   as the context rail — a column on a desktop, a sheet on a phone.
+   --------------------------------------------------------------------- */
+.lw-chatdock {
+  width: var(--panel-w-default);
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  padding: var(--sp-8);
+  border-left: 1px solid var(--line-1);
+  background: var(--bg-paper-2);
+}
+.lw-chatdock__threads {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.lw-chatdock__threads .lw-input { flex: 1; min-width: 0; }
+.lw-chatdock__modes,
+.lw-chatdock__picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.lw-chatdock__pick { display: contents; }
+.lw-chatdock__log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.lw-chatmsg {
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-4);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--bg-paper);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.lw-chatmsg[data-role='user'] {
+  background: var(--bg-tint);
+  border-color: var(--accent-soft);
+}
+.lw-chatmsg__who {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--tr-eyebrow);
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.lw-chatmsg__text {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--ink-1);
+  white-space: pre-wrap;
+}
+.lw-chatmsg__ctx {
+  margin: 0;
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+}
+.lw-chatmsg__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+@media (max-width: 720px) {
+  .lw-chatdock {
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    width: 100%;
+    z-index: var(--z-panel);
+    border-left: 0;
+    border-top: 1px solid var(--line-1);
+    padding-bottom: calc(var(--sp-14) + env(safe-area-inset-bottom));
+  }
 }
