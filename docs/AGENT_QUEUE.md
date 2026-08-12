@@ -4,7 +4,7 @@ The single source of truth for what is in flight. Read it first, rewrite it last
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
 **Current:** N7 · step 4 of 8 (steps 1–3 done; the build grew from 6 steps to 8 after exploration)
-**Last verified green:** N7 steps 2–3 — lint ✅ tsc ✅ build ✅ vitest 323 ✅ · `28-context.spec.ts` 3/3 on desktop + mobile ✅ · full playwright run 249 passed / 10 skipped / **1 failed** — `21-scenes` "scene metadata persists" on mobile-chromium, which **passes in isolation** and which nothing in this change touches. Same parallel-load flake class as the `14-offline` mobile one recorded under N1. A confirming re-run was still in flight when this was pushed; **re-run the full suite before checking off step 4** and if it reproduces, treat it as real rather than inherited.
+**Last verified green:** N7 steps 2–3 — lint ✅ tsc ✅ build ✅ vitest 323 ✅ playwright 250 passed / 10 skipped / 0 failed on desktop + mobile ✅ (a first run had `21-scenes` "scene metadata persists" red on mobile; it passed in isolation and the confirming full re-run was clean, so it was the parallel-load flake — same class as the `14-offline` one under N1. Recorded because it will happen again: **re-run before believing a single red mobile scene test**.)
 **Blocked:** —
 
 | # | Milestone | Steps | State |
