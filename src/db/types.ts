@@ -128,6 +128,15 @@ export interface Scene {
   locationId: string | null;
   /** Entries force-included in this scene's AI context (N7). */
   attachedRefs: EntityRef[];
+  /** Entries kept out of THIS scene's AI context, without touching the
+   * entity's own policy.
+   *
+   * The pair matters: dragging a chip out of the context rail must not
+   * silently change what every other scene in the book sends. The global
+   * choice lives on the entity (`fields.__ai.context`) and is one click
+   * away from the chip; this is the local one. Optional because it is
+   * non-indexed and every row written before N7 predates it. */
+  excludedRefs?: EntityRef[];
   /** User-defined labels; also the Matrix's colour source. */
   labels: string[];
   targetWords: number | null;

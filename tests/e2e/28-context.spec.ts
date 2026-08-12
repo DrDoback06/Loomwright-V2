@@ -106,3 +106,91 @@ test.describe('entity AI policy', () => {
     );
   });
 });
+
+async function openWriteWithScene(page: Page, text: string) {
+  await openNav(page, "Writer's Room");
+  await page
+    .getByRole('tablist', { name: 'Chapters' })
+    .getByRole('button', { name: '+ New chapter' })
+    .click();
+  await page.getByLabel('Manuscript body').click();
+  await page.keyboard.type(text);
+  await expect(page.getByTestId('save-state')).toHaveAttribute('data-save-state', 'saved');
+  await page.getByRole('button', { name: 'Context', exact: true }).click();
+  return page.getByTestId('context-rail');
+}
+
+test.describe('context rail', () => {
+  test('shows the three lanes, a budget, and the exact text that gets sent', async ({ page }) => {
+    await bootWithProject(page);
+    await createCastMember(page, { name: 'Marrow', summary: 'A ferryman with a long pole.' });
+    const rail = await openWriteWithScene(page, 'Marrow poled the ferry across the water.');
+
+    await expect(rail.getByRole('region', { name: 'Always sent' })).toBeVisible();
+    await expect(rail.getByRole('region', { name: 'Found in this scene' })).toBeVisible();
+    await expect(rail.getByRole('region', { name: 'Not sent' })).toBeVisible();
+
+    // Characters, not tokens — there is no tokeniser in this repo.
+    await expect(rail.getByTestId('context-budget')).toContainText('characters');
+
+    // The Preview is the payload, not a summary of it.
+    await rail.getByText('Show exactly what gets sent').click();
+    await expect(rail.getByTestId('context-preview')).toContainText('Marrow');
+    await expect(rail.getByTestId('context-preview')).toContainText('A ferryman with a long pole.');
+  });
+
+  test('removing a chip changes this scene and leaves the entity alone', async ({ page }) => {
+    // The reason lane moves are per-scene: a gesture made while reading one
+    // scene must not silently change what every other scene sends.
+    await bootWithProject(page);
+    await createCastMember(page, { name: 'Marrow', summary: 'A ferryman.' });
+    const rail = await openWriteWithScene(page, 'Marrow poled the ferry across the water.');
+
+    const found = rail.getByRole('region', { name: 'Found in this scene' });
+    await expect(found.getByRole('button', { name: /Marrow/ })).toBeVisible();
+
+    await found.getByRole('button', { name: /Marrow/ }).click();
+    await rail.getByRole('button', { name: "Don't send here" }).click();
+
+    await expect(
+      rail.getByRole('region', { name: 'Not sent' }).getByRole('button', { name: /Marrow/ })
+    ).toBeVisible();
+    await rail.getByText('Show exactly what gets sent').click();
+    await expect(rail.getByTestId('context-preview')).not.toContainText('A ferryman.');
+
+    // On a phone the rail is a full-screen sheet over the nav (the pattern
+    // ScenePanel sets), so close it before navigating — as a reader would.
+    await rail.getByRole('button', { name: 'Close AI context' }).click();
+
+    // The entity's own policy is untouched — still the default.
+    const dialog = await openAiSection(page, 'Marrow');
+    await expect(dialog.getByRole('radio', { name: 'When detected' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+  });
+
+  test('the lane move survives a reload', async ({ page }) => {
+    await bootWithProject(page);
+    await createCastMember(page, { name: 'Marrow', summary: 'A ferryman.' });
+    const rail = await openWriteWithScene(page, 'Marrow poled the ferry across the water.');
+
+    await rail.getByRole('region', { name: 'Found in this scene' })
+      .getByRole('button', { name: /Marrow/ })
+      .click();
+    await rail.getByRole('button', { name: 'Always send' }).click();
+    await expect(
+      rail.getByRole('region', { name: 'Always sent' }).getByRole('button', { name: /Marrow/ })
+    ).toBeVisible();
+
+    await page.reload();
+    await openNav(page, "Writer's Room");
+    await page.getByRole('button', { name: 'Context', exact: true }).click();
+    await expect(
+      page
+        .getByTestId('context-rail')
+        .getByRole('region', { name: 'Always sent' })
+        .getByRole('button', { name: /Marrow/ })
+    ).toBeVisible();
+  });
+});

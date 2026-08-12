@@ -34,6 +34,7 @@ import { NotesMargin } from './NotesMargin';
 import { ComposePanel } from './ComposePanel';
 import { SceneHead, SceneStrip } from './SceneStrip';
 import { ScenePanel } from './ScenePanel';
+import { ContextRail } from './ContextRail';
 import { RewriteBubble } from './RewriteBubble';
 import { FocusDim } from './focus-dim';
 import { useFocusMode } from './useFocusMode';
@@ -80,6 +81,7 @@ export function WritersRoom() {
   const [mentionTarget, setMentionTarget] = useState<MentionTarget | null>(null);
   const stageDelta = useIntelligenceStore((s) => s.stage);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
   const [aiReady, setAiReady] = useState(false);
   const [deepConfirming, setDeepConfirming] = useState(false);
   useEffect(() => {
@@ -678,6 +680,14 @@ export function WritersRoom() {
                 >
                   Notes
                 </button>
+                <button
+                  type="button"
+                  className="lw-btn"
+                  aria-pressed={contextOpen}
+                  onClick={() => setContextOpen((o) => !o)}
+                >
+                  Context
+                </button>
               </div>
             </div>
 
@@ -771,6 +781,9 @@ export function WritersRoom() {
           )}
           {notesOpen && (
             <NotesMargin projectId={projectId} chapterId={activeChapter.id} editor={editor} />
+          )}
+          {contextOpen && activeScene && (
+            <ContextRail scene={activeScene} onClose={() => setContextOpen(false)} />
           )}
         </div>
       ) : (

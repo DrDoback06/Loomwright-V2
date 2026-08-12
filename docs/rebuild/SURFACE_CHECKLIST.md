@@ -529,3 +529,10 @@ out of extraction, and out of every export in one omission.
 | AI context: Never count as a mention (effect) | Suppresses a hit by the phrase around it, so "the Reach" stops counting while "Reach the stone" still does | unit `tracking-controls.spec.ts`, fixture `17-tracking-controls` |
 | AI context: per-field gate (effect) | A field turned off is genuinely absent from the assembled context block, and one turned on appears — asserted against the real digest, not against stored state | unit `scene-context.spec.ts` |
 | AI context: Always / Never (effect) | Always reaches a scene that never names the entity; Never keeps it out of the payload even when the prose names it | unit `scene-context.spec.ts` |
+| Write ▸ Context (toolbar) | Opens the AI context rail — a fourth panel beside Compose/Scene/Notes; a full-screen sheet on a phone | `28-context.spec.ts` |
+| Context rail: three lanes | Always sent / Found in this scene / Not sent, each chip carrying the plain-words reason it is there | `28-context.spec.ts` |
+| Context rail: budget meter | Characters used against the tier budget, tinted `--ok`/`--warn`/`--risk`, and it says when a digest was trimmed. Characters not tokens — there is no tokeniser in this repo | `28-context.spec.ts` |
+| Context rail: Preview | Renders `ctx.text` **verbatim** — the payload, not a summary of it | `28-context.spec.ts` |
+| Context rail: chip → Always send / Don't send here / Let the scan decide | Writes `scene.attachedRefs` / `scene.excludedRefs`. **This scene only** — the entity's own policy is untouched, asserted directly | `28-context.spec.ts`, unit `scene-context.spec.ts` |
+| Context rail: chip drag between lanes | Same mutation as the buttons; the detected lane deliberately rejects drops rather than looking droppable | `28-context.spec.ts` covers the button path on both projects |
+| Context rail: Change this everywhere… | Opens that entity's AI context section — the global choice, one click away and unmistakably different | rendered handler; `28-context.spec.ts` asserts the policy is otherwise untouched |

@@ -1430,6 +1430,23 @@ per-chip digests on click. Moving a chip between lanes has a **button path as we
 the N4 rule: a drag-only affordance is unreachable by keyboard, on a phone, and to a screen
 reader. Reuses `writeDragPayload` / `readDragPayload`.
 
+**Lane moves are per-scene, not global** (decided). Dragging Marrow to *Always* writes
+`scene.attachedRefs`, which already exists and already feeds the `always` lane. Dragging him out
+writes a **new `Scene.excludedRefs: EntityRef[]`** — non-indexed, so no Dexie version bump, the
+same trick `scene.mentions` used in N6.
+
+The alternative — a lane move editing `__ai.context` on the entity — was rejected precisely
+because it is what a novelcrafter user might expect: their policy is per-entry and global. Here
+it would mean a gesture made while reading *one* scene silently changes what every other scene
+in the book sends, with nothing on screen to say so. That is the exact class of surprise this
+milestone exists to remove. The permanent choice stays reachable: each chip's popover links
+straight to that entity's **AI context** section, so the global setting is one click away and
+unmistakably a different act.
+
+`buildSceneContext` therefore gains one more input and one more reason string —
+*"you removed this from this scene"* — and `excludedRefs` outranks a detection, because the
+author said so after seeing what the matcher found.
+
 **7. Route everything through it.** `gatherSceneContext`'s body is replaced — its docblock
 already says so — converting beats and the rewrite bubble in one edit. `ComposePanel` follows,
 deleting the duplicate at `:130-137`, and its dead `dropped` state either becomes a real drop
@@ -1479,6 +1496,8 @@ Filtering it would make it impossible to *generate* an appearance.
 | The policy surfacing as raw JSON in the merge dialog | `isReservedFieldKey`, applied inside the fields loop only so `__summary` survives |
 | Truncation hiding something that mattered | `droppedForBudget` rendered in the `excluded` lane with a reason |
 | A drag-only lane control | Buttons too, asserted on the mobile project |
+| A lane move quietly changing every other scene | Lane moves write `scene.attachedRefs` / `scene.excludedRefs`, never the entity policy; e2e asserts a second scene's payload is unchanged after a move in the first |
+| The budget bar reading as a token count | Labelled in characters, with the approximate token figure clearly secondary — there is no tokeniser in this repo and pretending otherwise would be a number the author could act on wrongly |
 
 ### Verification
 

@@ -921,3 +921,130 @@
   .lw-beat__actions .lw-btn { flex: 1; }
   .lw-section__spacer { display: none; }
 }
+
+/* ── AI context rail ────────────────────────────────────────────────────
+   A fourth panel beside Compose / Scene / Notes, built on the same
+   free-standing <aside> shape ScenePanel established. */
+.lw-ctxrail {
+  width: var(--panel-w-default);
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  padding: var(--sp-8);
+  border-left: 1px solid var(--line-1);
+  background: var(--bg-paper-2);
+}
+.lw-ctxrail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+/* The app's first progress meter. Deliberately a plain div pair rather
+   than <progress>, which cannot be styled consistently across engines. */
+.lw-budget {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.lw-budget__track {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.lw-budget__fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--ok);
+  transition: width var(--motion-base) var(--ease-move);
+}
+.lw-budget[data-tone='warn'] .lw-budget__fill { background: var(--warn); }
+.lw-budget[data-tone='risk'] .lw-budget__fill { background: var(--risk); }
+.lw-budget__label {
+  margin: 0;
+  font-size: var(--fs-2xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+/* Colour is never the only encoding: the label says the numbers, and at
+   risk it also says what was done about it. */
+.lw-budget[data-tone='risk'] .lw-budget__label { color: var(--risk); }
+
+.lw-ctxlane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-6);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-4);
+  background: var(--bg-paper);
+}
+.lw-ctxlane--drop {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  background: var(--bg-tint);
+}
+.lw-ctxlane__title {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semi);
+  text-transform: uppercase;
+  letter-spacing: var(--tr-eyebrow);
+  color: var(--ink-4);
+}
+
+.lw-ctxchip { position: relative; display: inline-flex; }
+.lw-ctxchip > .lw-chip { cursor: grab; text-align: left; }
+.lw-ctxchip__reason {
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+  margin-left: var(--sp-2);
+}
+.lw-ctxchip__pop {
+  position: absolute;
+  top: calc(100% + var(--sp-2));
+  left: 0;
+  z-index: var(--z-panel);
+  min-width: 240px;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-6);
+  border-radius: var(--r-5);
+  border: 1px solid var(--line-2);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+}
+.lw-ctxchip__moves { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.lw-ctxchip__digest,
+.lw-ctxpreview__body {
+  margin: 0;
+  padding: var(--sp-4);
+  border-radius: var(--r-3);
+  background: var(--bg-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-snug);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+.lw-ctxpreview__body { max-height: 40vh; overflow-y: auto; }
+
+@media (max-width: 720px) {
+  /* A sheet over the manuscript, not a column beside it — the pattern
+     .lw-scenepanel sets. There is no width to spare on a phone. */
+  .lw-ctxrail {
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    width: 100%;
+    z-index: var(--z-panel);
+    border-left: 0;
+    border-top: 1px solid var(--line-1);
+    padding-bottom: calc(var(--sp-14) + env(safe-area-inset-bottom));
+  }
+  .lw-ctxchip__pop { position: static; max-width: none; }
+}

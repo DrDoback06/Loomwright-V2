@@ -183,6 +183,37 @@ describe('buildSceneContext lanes', () => {
     expect(item?.reason).toBe('set to Always');
   });
 
+  it('excludedRefs keeps an entity out of THIS scene without touching its policy', async () => {
+    // The whole reason lane moves are per-scene: dragging Marrow out of one
+    // scene must not silently change what the other two hundred send.
+    const marrow = await cast('Marrow');
+    const paragraphs = [{ id: 'p1', text: 'Marrow poled the ferry across.' }];
+
+    const removed = await buildSceneContext(
+      PROJECT,
+      scene({ paragraphs, excludedRefs: [{ id: marrow.id, type: 'cast', name: 'Marrow' }] })
+    );
+    const item = removed.items.find((i) => i.ref.name === 'Marrow');
+    expect(item?.lane).toBe('excluded');
+    expect(item?.reason).toBe('you removed this from this scene');
+    expect(removed.text).not.toContain('Marrow');
+
+    // A different scene, same entity, untouched policy.
+    const elsewhere = await buildSceneContext(PROJECT, scene({ id: 'sc2', paragraphs }));
+    expect(elsewhere.items.find((i) => i.ref.name === 'Marrow')?.lane).toBe('detected');
+  });
+
+  it('attachedRefs promotes an entity the prose never names', async () => {
+    const marrow = await cast('Marrow');
+    const ctx = await buildSceneContext(
+      PROJECT,
+      scene({ attachedRefs: [{ id: marrow.id, type: 'cast', name: 'Marrow' }] })
+    );
+    const item = ctx.items.find((i) => i.ref.name === 'Marrow');
+    expect(item?.lane).toBe('always');
+    expect(item?.reason).toBe('attached to this scene');
+  });
+
   it('an entity nobody mentioned and nobody pinned is simply absent', async () => {
     await cast('Someone Else');
     const ctx = await buildSceneContext(PROJECT, scene());

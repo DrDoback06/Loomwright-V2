@@ -165,6 +165,12 @@ export async function buildSceneContext(
       reasons.set(entity.id, { lane: 'excluded', reason: 'set to Never', bonus: -1 });
     }
   }
+  // Removed from THIS scene only, and it wins over any claim above: the
+  // author said so after seeing what the matcher found. The entity's own
+  // policy is untouched, so every other scene is unaffected.
+  for (const ref of scene.excludedRefs ?? []) {
+    reasons.set(ref.id, { lane: 'excluded', reason: 'you removed this from this scene', bonus: -1 });
+  }
 
   const scored: ContextItem[] = [];
   for (const [id, claimed] of reasons) {
