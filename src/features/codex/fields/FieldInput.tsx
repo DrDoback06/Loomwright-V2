@@ -149,7 +149,7 @@ function PillsInput({
   );
 }
 
-function ChipsInput({
+export function ChipsInput({
   field,
   value,
   onChange,

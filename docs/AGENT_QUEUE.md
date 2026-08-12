@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N7 · step 2 of 6 (step 1 done)
-**Last verified green:** N7 step 1 — lint ✅ tsc ✅ build ✅ vitest 306 ✅ playwright 244 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N7 · step 4 of 8 (steps 1–3 done; the build grew from 6 steps to 8 after exploration)
+**Last verified green:** N7 steps 2–3 — lint ✅ tsc ✅ build ✅ vitest 323 ✅ · `28-context.spec.ts` 3/3 on desktop + mobile ✅ · full playwright run 249 passed / 10 skipped / **1 failed** — `21-scenes` "scene metadata persists" on mobile-chromium, which **passes in isolation** and which nothing in this change touches. Same parallel-load flake class as the `14-offline` mobile one recorded under N1. A confirming re-run was still in flight when this was pushed; **re-run the full suite before checking off step 4** and if it reproduces, treat it as real rather than inherited.
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -16,7 +16,7 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N5a | Scene beats | 7 | ✅ 7/7 |
 | N5b | AI visibility, acts, sections, rewrite, focus | 7 | ✅ 7/7 |
 | N6 | Typed `@` mentions | 6 | ✅ 6/6 |
-| N7 | Context engine + policy + tracking + budget rail | 6 | 🔄 1/6 |
+| N7 | Context engine + policy + tracking + budget rail | 8 | 🔄 3/8 |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
 | N9 | Chat dock | 6 | ⬜ |
 | N10 | Prompt library | 6 | ⬜ |
@@ -167,11 +167,13 @@ same filter; the half-built fields ride along.
 ## N7 — Context engine
 
 - [x] 1. **`toKnownEntity()` — the enabling refactor.** `services/extraction/entity-to-known.ts` (type-only imports, so `known-index.ts` stays decoupled from Dexie) adopted by all **seven** hand-rolled builders. Fixed two silent bugs on the way: `intelligence/engine.ts` read `fields.statPhrases` where the stats config writes `extractionRules` (whole-book intake had never seen an author-defined phrase rule), and four builders dropped `pronouns`/`gender` entirely, disabling pronoun resolution on those paths. `HandoffSurface` had no status filter at all. 9 unit tests; the 16 extraction fixtures and `extraction-bootstrap` green **unchanged**, which is the condition for the refactor being right.
-- [ ] 2. `EntityAiPolicy` in the reserved `fields.__ai` block + an **AI** section in `EntityEditorDrawer` (policy, case-sensitivity, exclusions, per-field hide list). Default `'detected'`; appearance fields default-hidden on **new entities only**.  ← IN PROGRESS
-- [ ] 3. Tracking controls into the matcher. `caseSensitive` flips `buildKnownIndex`'s regex flags + an option on `findRanges`; `exclusions` filter the label arrays at `known-index.ts:32/144/197` **and** post-filter ranges, because `findEntityInSpan` bypasses the scan path (18 detector call sites). **Scope the flag to the prose scan only** — `findKnownEntityMention` also resolves model-emitted names at thresholds 0.85–0.92 and must stay case-insensitive. **`engine.ts:180` must keep its insensitive path** or every discovery highlight vanishes.
-- [ ] 4. `services/context/scene-context.ts` — lanes, ranking, budget via `TIER_BUDGET[tier].digestChars` + `fitToBudget`, `droppedForBudget` reported rather than silent. `aiVisible: false` / `hiddenFromAi` are free (already absent from `scene.paragraphs`).
-- [ ] 5. `ContextRail.tsx` — fourth panel with its own toolbar button; three lanes, budget bar, Preview disclosure, per-chip digest. **Buttons as well as drag** for moving a chip between lanes (the N4 rule). Reuses `writeDragPayload`/`readDragPayload`.
-- [ ] 6. Route `ai-context.ts` (converts beats + rewrite in one edit) and `ComposePanel` through it; wire or delete `ComposePanel.dropped`, which is dead state whose `×` can never render. `tests/unit/scene-context.spec.ts`; e2e `28-context.spec.ts`.
+- [x] 2. **`EntityAiPolicy` at `fields.__ai`** — `src/domain/ai-policy.ts`: the type, `DEFAULT_AI_POLICY` (`context: 'detected'`), a guarded `readAiPolicy` that degrades to the default rather than throwing on a malformed bag, `isFieldHiddenFromAi`, and `isReservedFieldKey`. `FieldDef` gained `aiHidden?: true`; cast's three appearance fields carry it. **The opinion lives in the entity config, not in rows** — nothing is written on create, so a later change to the default still reaches everyone who never expressed one, and the three entity-creation paths needed no edits. Override is a three-state map because a `hiddenFieldIds` array cannot express "send this field the config hides".
+- [x] 3. **"AI context" section in the drawer** — a synthetic nav entry (`AiContextSection.tsx`), not a config section. `ChipsInput` exported and reused via a synthetic `FieldDef` rather than a second chips editor. `formFromEntity`/`splitForm`/`deriveName` extracted to `entity-form.ts` so the round-trip is testable without React. Reserved keys skipped in `merge.ts` (inside the fields loop only, so `__summary` keeps its conflict row) and `templates.ts`. 16 unit tests + `28-context.spec.ts` 3/3 on both projects.
+- [ ] 4. **← IN PROGRESS** Tracking controls into the matcher. `caseSensitive` flips `buildKnownIndex`'s regex flags (`known-index.ts:41`) and threads an option into `findRanges`; `exclusions` filter the label arrays at `known-index.ts:32/144/197` **and** post-filter produced ranges, because `findEntityInSpan` bypasses the scan path (18 detector call sites). **Scope to the prose scan only** — `findKnownEntityMention` also resolves model-emitted names at 0.85–0.92 and must stay insensitive. **`intelligence/engine.ts:180` must keep its insensitive path** or every discovery highlight vanishes: new optional argument, never a new default. Fixture `11-false-positive-trap` claims `Hess` "should only match when capitalised" — it does not today; this makes its stated intent true for the first time, so say so rather than letting it read as no change.
+- [ ] 5. `src/services/context/scene-context.ts` — the assembler, and **the first generic renderer of entity fields**, which is what makes step 2's per-field gate mean anything. Lanes (`always`/`detected`/`excluded`), ranking by mentions × recency × type weight, budget from `TIER_BUDGET[tier].digestChars` with `fitToBudget`, depth clamped by tier exactly as `intelligence/enrich.ts:42` does, `droppedForBudget` returned rather than silently cut. This is where cast's `writingInstructions`/`avoidTropes` finally get read — that whole "AI profile" section has **zero readers** today.
+- [ ] 6. `ContextRail.tsx` — fourth panel with its own toolbar button; three lanes, budget bar (**characters**, not tokens — there is no token counter in this repo), Preview disclosure, per-chip digest. **Buttons as well as drag** for moving a chip between lanes (the N4 rule). Reuses `writeDragPayload`/`readDragPayload`.
+- [ ] 7. Route everything through it. `features/writers-room/ai-context.ts`'s `gatherSceneContext` body is replaced — its docblock already says so — converting beats and the rewrite bubble in one edit. `ComposePanel` follows, deleting the byte-identical duplicate at `:130-137`; wire or delete `ComposePanel.dropped`, dead state whose `×` can never render. `EntityDetail`'s **Copy AI prompt** filters through `isFieldHiddenFromAi`; **Copy as JSON** deliberately does not, because filtering a data export makes it lossy.
+- [ ] 8. `tests/unit/scene-context.spec.ts`; extend `28-context.spec.ts` with the payload assertions — a hidden field absent from what a mocked provider receives, `Never` removing an entity from the Preview, moving a chip changing the payload. SURFACE_CHECKLIST rows for the rail.
 
 ## N8 — Progressions + story memory
 
@@ -240,7 +242,8 @@ same filter; the half-built fields ride along.
 
 ## Notes for the next run
 
-N1–N6 and N7 step 1 are complete and pushed. Start N7 step 2 — the entity AI policy.
+N1–N6 and N7 steps 1–3 are complete and pushed. Start N7 step 4 — the tracking
+controls into the matcher.
 
 **There is no token counter in this repo.** Everything budgets in *characters* — `TIER_BUDGET`
 is `chunkChars`/`digestChars`/`namesPerType`, and `fitToBudget` (`ai/prompts/index.ts:165`) is
@@ -254,7 +257,7 @@ Three matcher changes at once makes a red run impossible to attribute.
 
 **Fixture `11-false-positive-trap` lies in its comments.** It claims `Hess` "should only match
 when capitalised"; it does not today, and passes for an unrelated reason (the `(?![A-Za-z0-9])`
-boundary rejects `hessian`). Step 3 makes its stated intent true for the first time — say so
+boundary rejects `hessian`). Step 4 makes its stated intent true for the first time — say so
 rather than letting it read as no change.
 
 **N7's `buildSceneContext()` replaces the body of ONE file**, `writers-room/ai-context.ts` —
@@ -292,6 +295,20 @@ an act out of sequence appears under that act rather than in manuscript position
 Matrix band is deliberately emitted on every act *change* going down `globalOrder`, so the
 same mis-assignment shows up there as a repeated band instead of being hidden. If acts ever
 need to imply order, that is a `resequenceScenes` change, not a rendering one.
+
+**`__`-prefixed keys in `entity.fields` are reserved.** `isReservedFieldKey` in
+`domain/ai-policy.ts` is the predicate; `__ai` holds the per-entity AI policy and `merge.ts`
+uses `__summary` as a synthetic diff row. Anything that iterates `entity.fields` generically
+and shows the result to a human must skip them — `merge.ts` and `templates.ts` do, and
+`world-bible.ts` gets away with it only because `renderValue` returns `''` for an object with
+no `.name`, which is why `reserved-fields.spec.ts` pins the intent. `relations.ts` and
+`generate/serialize.ts` are safe by construction. The **project archive deliberately keeps
+them** — it round-trips whole rows, and a policy should survive an export/import.
+
+**The appearance-hidden opinion lives in the entity config, not in rows.** `FieldDef.aiHidden`
+carries it; `EntityAiPolicy.fieldVisibility` overrides per entity in **both** directions, which
+is why it is a three-state map and not a list of hidden ids. Nothing is written on create, so
+changing the config default later still reaches every entity that never expressed an opinion.
 
 **`chapter.paragraphs` now means something narrower than it used to.** It is *what a model
 is shown*, not *every word in the chapter*. Anything that shows the author their own text —

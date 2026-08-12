@@ -1171,297 +1171,228 @@ worth exactly as much as a finding made by the engine.
 
 Novelcrafter has typed mentions and no extraction. We will have both, reading one table.
 
-### What exploration changed about the plan
-
-**1. Occurrences cannot be written at pick time.** `extractChapter`
-(`src/services/extraction/session.ts:48`) opens with:
-
-```ts
-await db.occurrences.where('[projectId+chapterId]').equals([projectId, chapter.id]).delete();
-```
-
-Save & Extract deletes **every** occurrence in the chapter and rewrites only what the offline
-detectors found. A typed occurrence written once, at pick time, would be destroyed by a button
-sitting in the same toolbar.
-
-So: **the document is the source of truth and occurrences are a projection**, re-derived on
-save exactly as `scene.paragraphs` already is. The mark in the prose is the fact; the row is a
-view of it. This is the pattern the repo already uses (`deriveScene` in `src/lib/prose.ts`) and
-it makes the whole class of drift impossible — delete the sentence and the mention goes with
-it, because there was never a second copy to forget.
-
-**2. A merge must not need to rewrite documents.** `05-cross-panel.spec.ts` proves that merging
-one entity into another repoints its occurrences (`src/db/repos/merge.ts:1011`). A typed *mark*
-would still carry the old id, and — because rows are re-derived — the next save would quietly
-un-merge it. The fix is free: `Entity.mergedIntoId` already exists, and
-`getEntity()` (`src/db/repos/entities.ts:15`) already follows the redirect. **Resolve the
-mark's id through the merge chain at derivation time.** The document is never rewritten, the
-merge undo receipt stays exact, and typed mentions merge more cleanly than extracted ones do.
-
-**3. `@tiptap/suggestion` and `@tiptap/extension-mention` are not installed at all** — not even
-transitively. The popup is hand-rolled on `@tiptap/pm`, and positioned the way
-`RewriteBubble.tsx` already positions itself: `posToDOMRect` off the caret, minus the canvas
-rect, plus its `scrollTop`. `.lw-wroom__canvas` is already `position: relative` from N5b.
-
-**4. Two existing specs assert `.lw-mention` and click-through-to-dossier**
-(`04-extraction-review.spec.ts:33-43`, `05-cross-panel.spec.ts:116-137`). The base class stays;
-typed mentions get a modifier. Both specs get one extra click, through the preview card.
-
-### Decisions taken
-
-| Question | Decision |
-|---|---|
-| Unknown name | **Create inline, with a type picker.** The popup's last row is *Create "Marrow" as…* over the story types. One keystroke from prose to codex — the direct answer to novelcrafter's "the codex is a time sink" complaint |
-| Searchable types | **All 16.** Nothing in the codex is unmentionable. Ranking carries the weight instead of a filter (below) |
-| Click | **Preview card** with *Open dossier* and *Unlink* inside it |
-
-**Ranking, because "all 16" only works if the order is right.** Score by match quality first —
-exact name > name prefix > alias prefix > name contains > summary contains — then break ties by
-type weight (the five story types first, everything else after), then by how many occurrences
-the entity already has. Every row carries its type label and glyph, so the eye filters what the
-ranking did not. This is the same scoring shape `commandScore` in `CommandPalette.tsx` uses,
-and for the same reason.
-
-### The build
-
-**1. Derivation — `src/lib/prose.ts` and the scene row.**
-
-```ts
-export interface TypedMention {
-  pid: string; start: number; end: number;   // paragraph-relative, same contract as Occurrence
-  entityId: string; entityType: EntityType; text: string;
-}
-/** Marks are inline; offsets are accumulated by the same walk `textOf` uses,
- * so they cannot drift from what `paragraphsFromDoc` produced. */
-export function mentionsFromDoc(doc: unknown, skip?: BlockPredicate): TypedMention[]
-```
-
-`deriveScene(doc)` gains `mentions`, derived with `HIDDEN_FROM_AI` — **a mention inside a note
-you hid from models is a link you can click, not an appearance in the book.** That follows
-N5b's rule rather than inventing a new one. `Scene.mentions` is stored on the row: a
-non-indexed field, so **no Dexie version bump**, and having it there makes the save-path
-comparison free.
-
-`Occurrence` gains `source?: 'extraction' | 'typed'` — also non-indexed, also no migration.
-
-**2. The mark — `src/features/writers-room/mention.ts`.**
-A `Mark` from `@tiptap/core` with `entityId`, `entityType` and `label` (the name at insert
-time, so a mention whose entity was deleted still renders and can explain itself).
-`inclusive: false`, so typing after a mention does not extend it. Deliberately a mark and not a
-node: the text is real prose, `textOf` ignores marks, and therefore word count, extraction and
-every export are unaffected by construction — the same argument that made `sceneBeat` free.
-
-**3. The popup — `mention-suggest.ts` (plugin) + `MentionSuggest.tsx` (React).**
-The plugin tracks an active query: `@` at a word boundary starts it, word characters extend it,
-space/Escape/selection-move cancels it, and `handleKeyDown` swallows ↑ ↓ Enter Tab Escape so
-they never reach the editor. It publishes `{ query, from, to }` on extension storage, exactly
-as `MentionHighlights` publishes occurrences. The React popup reads that, ranks the project's
-entities in memory (a few hundred rows — no index to keep warm, no staleness), and renders
-rows in the palette's shape. Last row is the inline-create affordance.
-
-**4. Reconciliation — `src/db/repos/scenes.ts`.**
-`saveSceneDoc` compares the freshly derived `mentions` with `scene.mentions`; when they differ
-it replaces this scene's `source: 'typed'` occurrences. `restoreSnapshot` goes through the same
-path (it already calls `deriveScene`). `deleteSceneToTrash` clears the scene's typed rows —
-nothing else would, because extraction only ever owned them per chapter.
-
-**5. Extraction integration — `src/services/extraction/session.ts`.**
-Two small changes, both load-bearing:
-- the opening delete excludes `source: 'typed'`, so Save & Extract stops destroying assertions;
-- detector hits that fall inside a typed span are dropped, so one mention never becomes two
-  rows. **A typed mention wins.** The author said so; the matcher only guessed.
-
-**6. Rendering and the preview.**
-`MentionHighlights` skips `source: 'typed'` rows — the mark renders those itself, and drawing a
-decoration over it would double up. Typed renders solid in the entity's type colour; extracted
-keeps today's fainter treatment. `MentionPreview.tsx` replaces the current straight-to-dossier
-click in `WritersRoom.onCanvasClick`: glyph, name, type, summary, then *Open dossier* and
-*Unlink*. Unlink removes the mark and leaves the words.
-
-### Risks, and the guard for each
-
-| Risk | Guard |
-|---|---|
-| Save & Extract destroying typed mentions | Rows are derived, not authored; and the delete now excludes them. Asserted in e2e by extracting **after** typing a mention |
-| A merge silently un-merging typed mentions | Resolve through `mergedIntoId` at derivation. `05-cross-panel` extended to cover a typed mention |
-| One mention becoming two occurrence rows | Detector hits inside a typed span are dropped; unit test on the overlap filter |
-| Reconciling on every keystroke | `scene.mentions` is compared first; an unchanged set does no IO at all |
-| The popup eating keys the editor needs | `handleKeyDown` only claims ↑ ↓ Enter Tab Escape, and only while a query is active |
-| Editing the text under a mark | `inclusive: false` plus an `appendTransaction` that drops a mark whose text no longer matches its `label` — the same repair shape `scene-beat.ts` uses for `beatId` |
-| A mention to a deleted entity | The mark carries `label`, so it still renders; the preview says it is gone and offers Unlink |
-
-### Verification
-
-| Unit — `tests/unit/mentions.spec.ts` | E2E — `tests/e2e/27-mentions.spec.ts` |
-|---|---|
-| `mentionsFromDoc` offsets agree with `paragraphsFromDoc` for the same doc | `@` opens the popup; typing filters it; Enter inserts the name as plain prose with a mark |
-| A mention inside a `hiddenFromAi` section is excluded | The mention survives a reload and **survives Save & Extract** |
-| A mark whose entity was merged derives the canonical id | An unknown name offers Create, and picking a type creates the entity **and** links it |
-| The overlap filter drops a detector hit inside a typed span | Clicking a mention shows the preview; Open reaches the dossier; Unlink leaves the words |
-| An unchanged mention set skips the occurrence write | The Matrix cell for that scene/entity reads as author-asserted, not extracted |
-
-Plus `04-extraction-review` and `05-cross-panel` updated to click through the preview card,
-keeping their real assertion — that a mention resolves to the right entity — intact.
-
-Full gate before each step is checked off: `npm run lint` · `npx tsc --noEmit` ·
-`npm run build` · `npx vitest run` ·
-`CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test` on both projects.
-
-**Ledger note:** `docs/AGENT_QUEUE.md` lists N6 as 4 steps and names the spec
-`24-mentions.spec.ts`; it is 6 steps and `27-mentions.spec.ts` — 24, 25 and 26 went to
-sections, rewrite and focus.
-
-## N7 — The context engine (the next milestone)
-
-### Context
-
-Every AI feature in the app now runs through prose the author wrote — beats, rewrites,
-Compose, deep extraction, the handoff pack. None of them can say what the model was told.
-Worse, they do not agree: exploration found **five different renderings of "who is in scope"**
-and **three budget regimes**, two of which are "none at all" — and the two paths with no budget
-(`ai-context.ts`, feeding beats and the rewrite bubble) are the ones sending the most.
-
-N7 makes the context one thing, ranked, budgeted, and **visible**. It is the most
-trust-building screen in the app: the author can see exactly what leaves their machine, why
-each entry is there, and what got dropped to fit. Novelcrafter has a Preview tab; ours is
-always on and carries a budget bar they do not have.
-
 ### What exploration changed
 
-**1. There is no token counter anywhere in the repo.** The whole app budgets in *characters* —
-`TIER_BUDGET` (`src/services/ai/prompts/index.ts:88-102`) is `chunkChars` / `digestChars` /
-`namesPerType`, and the only tokens-per-char statement in the codebase is a comment at
-`intelligence/digest.ts:16`. So the assembler budgets in characters like everything else and
-reuses **`fitToBudget`** (`prompts/index.ts:165`), the one truncation primitive, which is
-sentence-boundary aware and reports whether it cut. `enrich.ts:41-49` is the worked example of
-composing tier + depth + `fitToBudget` and is the shape to copy. The rail shows characters with
-an approximate token figure beside them, rather than inventing an estimator and pretending it
-is exact.
+**1. `hiddenFieldIds`, as originally specified, would have been a dead control.** No AI path
+renders fields generically. There are **four independent renderers, each with a hardcoded field
+list**, and between them the complete set of author-written field values that can currently
+reach a model is eleven ids:
 
-**2. `KnownEntity` already lifts type-scoped fields off `entity.fields`** — `pronouns`,
-`gender`, `statPhrases` (`extraction/known-index.ts:6-17`). The policy belongs there, by exactly
-the same precedent. **But seven places hand-roll that mapping** (`project-known.ts:21`,
-`generate/known.ts:6`, `intelligence/engine.ts:54`, `intelligence/digest.ts:227`,
-`intelligence/rules.ts:189`, `ai/canon.ts:118`, `HandoffSurface.tsx:18`) — and they do not even
-agree on the status filter (`!== 'merged'` vs `=== 'active'` vs nothing). Adding an eighth field
-to seven copies is how a policy silently fails on one path. **A shared
-`toKnownEntity(entity): KnownEntity` is step 1, before any of the rest.**
+`currentOwner` · `status` · `parentId` · `currentLocation` · `skills` · `inventory` · `from` ·
+`to` · `bondType` · `personality` · `speechStyle`
 
-**3. `caseSensitive` must NOT apply to `findKnownEntityMention`.** That function does two jobs
-today: matching prose, and resolving **model-emitted names** (`digest.ts:237`, `rules.ts:198`,
+**Not one of them is an appearance field.** Shipping "appearance is hidden from AI by default"
+against today's code would render a switch that changes nothing — the exact failure N5b spent a
+milestone eliminating. What makes the per-field gate real is **N7's own assembler**, which
+renders digests generically and is therefore the first thing that will send an appearance field
+at all. The gate must land *with* it, not before it. Ordering below reflects that.
+
+The one exception today is `entityToWireJson` (`generate/serialize.ts:12-35`), the only generic
+value dump, reached by two buttons in `EntityDetail.tsx`: **Copy as JSON** (`:102`) and
+**Copy AI prompt** (`:111-123`), the latter pasting every field of an entity under
+*"here is an existing entry as a style/shape example"*. The gate applies to the prompt button
+only — filtering the JSON button would make a data export silently lossy, which is a different
+and worse bug.
+
+**2. `cast.ts` has an entire "AI profile" section that no AI path reads.**
+`writingInstructions`, `aiInterview`, `avoidTropes`, `preferredScenes`
+(`entity-configs/cast.ts:134-143`) have **zero readers** — the only hit anywhere is a generator
+pack that *writes* `writingInstructions`. The app asks the author to write instructions for the
+model and has never once sent them. This is N5b's `aiVisible` again, and the assembler is what
+makes it true. It also forces a rename: the new section cannot be called "AI".
+
+**3. There is no token counter anywhere in the repo.** Everything budgets in *characters* —
+`TIER_BUDGET` (`ai/prompts/index.ts:99-102`) is `{chunkChars, digestChars, namesPerType,
+maxTokens}` per tier, and the only tokens-per-char claim in the codebase is a comment at
+`intelligence/digest.ts:16`. The assembler budgets in characters and reuses **`fitToBudget`**
+(`index.ts:165`), which cuts at a sentence boundary when one falls past 35% of the budget and
+reports `trimmed`. **`intelligence/enrich.ts:28-60`** is the worked example to copy: resolve
+provider → `tierForModel` → **clamp depth by tier** (`small` never gets `full`) → `fitToBudget`
+the digest, then the manuscript → each `trimmed` flag becomes an author-facing warning.
+
+**4. `caseSensitive` must NOT apply to `findKnownEntityMention`.** That function does two jobs:
+matching prose, and resolving **model-emitted names** (`digest.ts:237`, `rules.ts:198`,
 `coerce.ts:69`, `ai-candidates.ts:86/93/129/130`, thresholds 0.85–0.92). Models return arbitrary
-case. Scope the flag to the prose-scan path — `buildKnownIndex`'s regex flags, plus
-`scanTextForKnownEntities` and `resolvePronounsInText` — and leave name resolution insensitive.
+case. Scope the flag to the prose-scan path — `buildKnownIndex`'s regex flags plus
+`scanTextForKnownEntities` / `resolvePronounsInText` — and leave name resolution insensitive.
 
-**4. One line must keep its insensitive path whatever happens.** `engine.ts:180-182` lowercases
-a candidate name and hands it to `findRanges`. If `findRanges` ever defaults to sensitive, every
-discovery highlight span vanishes. `text-utils.ts` carries a "pinned by fixtures — change
-deliberately or not at all" header; a new optional argument is safe, a new default is not.
+**5. One line must keep its insensitive path whatever happens.** `intelligence/engine.ts:180-182`
+lowercases a candidate name and hands it to `findRanges`. If `findRanges` ever defaults to
+sensitive, every discovery highlight span vanishes. `text-utils.ts` carries a "pinned by
+fixtures" header: a new optional argument is safe, a new default is not.
 
-**5. `ComposePanel.dropped` is dead code.** Declared at `:54`, referenced only by its own
-removal filter at `:201`, with no `onDrop` anywhere — so it can never be non-empty and its `×`
-can never render. The panel's copy describes only the focus path. `services/drag.ts` already
-carries a validated entity payload and every codex row is already a drag *source*; the drop
-target is the missing half. N7 either wires it or deletes it — leaving it is the same lie N5b
-spent a milestone removing.
+**6. Five renderings of "who is in scope", two of them byte-identical.**
+`ai-context.ts:49-60` and `ComposePanel.tsx:130-137` both read `personality` + `speechStyle` and
+are copy-paste of one another. `ai-context.ts:26-27` and `beat.ts:63-65` already carry doc
+comments announcing that N7 replaces them — the consolidation is pre-authorised, and converting
+beats and the rewrite bubble is one edit because both go through `gatherSceneContext`.
 
-**6. No progress bar exists anywhere in the app.** Every readout is textual (`{done}/{total}`).
-The budget meter and its CSS are new; `BoardView`'s columns and `.lw-chip` are the house style
-to match, including its rule that a column which does not accept drops must not look as if it
-does.
+**7. `ComposePanel.dropped` is dead code.** Declared at `:54`, referenced only by its own
+removal filter at `:201`, no `onDrop` anywhere — so it can never be non-empty and its `×` can
+never render. `services/drag.ts` already carries a validated payload and every codex row is
+already a drag *source*; the drop target is the missing half.
+
+**8. No progress bar exists anywhere in the app.** Every readout is textual. The budget meter
+and its CSS are new; `BoardView` and `.lw-chip` are the house style, including its rule that a
+column which does not accept drops must not look as though it does.
 
 ### Decisions taken
 
 | Question | Decision |
 |---|---|
-| Default policy for existing entities | **When detected.** Matches novelcrafter, and it is what makes a codex feel alive. It genuinely sends more than today, which is exactly why the rail and the budget bar ship in the same milestone rather than after it |
-| Appearance fields hidden from AI | **Default-hidden on new entities only.** No existing project silently changes what it sends; the drawer explains the asymmetry |
+| Default policy | **When detected.** Matches novelcrafter and is what makes a codex feel alive. It genuinely sends more than today, which is why the rail and the budget bar ship in the same milestone rather than after it |
+| Where the appearance default lives | **The entity config** (`aiHidden?: true` on a `FieldDef`), with a per-entity override. Nothing written into rows on create, and the opinion stays revisable centrally. *This reverses the earlier "new entities only" call* — that was guarding against changing what existing projects send, but this change is strictly **reductive**, rendered in the rail, and reversible per entity in one click. It also removes the need to touch three separate entity-creation paths |
+| Section name | **"AI context"** — `cast.ts` already has an "AI profile" section, and two AI sections in one drawer is a coin toss for the author |
 | Where the rail lives | **A fourth panel with its own toolbar button**, beside Compose / Scene / Notes — a full-screen sheet on a phone, the pattern `ScenePanel` sets |
-| Automatic plurals | **Deferred, recorded in the ledger.** They inject into the same label arrays as exclusions and must inherit the case flag, and 16 golden fixtures plus `extraction-bootstrap.spec.ts:124`'s occurrence-count equality pin current matcher behaviour. Three matcher changes at once makes a red run impossible to attribute |
+| Automatic plurals | **Deferred, recorded in the ledger.** They inject into the same label arrays as exclusions and must inherit the case flag, and 16 golden fixtures plus `extraction-bootstrap.spec.ts:124` pin current matcher behaviour. Three matcher changes at once makes a red run impossible to attribute |
 
 ### The build
 
-**1. `toKnownEntity()` — the enabling refactor.** One mapper in
-`src/services/extraction/known-index.ts`, adopted by all seven call sites, with the status
-filter made explicit at each. No behaviour change, and a unit test that every builder produces
-the same shape for the same entity. Everything else in N7 depends on this being true first.
+**1. `toKnownEntity()` — the enabling refactor.** ✅ Shipped. One mapper, seven call sites, three
+silent bugs fixed on the way.
 
-**2. `EntityAiPolicy` in the reserved `entity.fields.__ai` block.**
+**2. `EntityAiPolicy` at the reserved `fields.__ai` key.**
 
 ```ts
 export interface EntityAiPolicy {
   context: 'always' | 'detected' | 'never';   // default 'detected'
   caseSensitive: boolean;                     // kills "Red" / "Will" / "May"
   exclusions: string[];                       // e.g. "the Reach" for an entity named Reach
-  hiddenFieldIds: string[];                   // never sent, per field
+  /** Per-field override of the config's `aiHidden` default.
+   * true = send it · false = never send it · absent = follow the config. */
+  fieldVisibility: Record<string, boolean>;
 }
 ```
 
-Read with the same `typeof` / `Array.isArray` guards `project-known.ts:38-43` already uses for
-`pronouns`. An **AI** section in `EntityEditorDrawer` renders it: three-way policy, the two
-tracking controls, and a per-field hide list built from the type's config.
+A single `hiddenFieldIds: string[]` cannot express "send this field the config hides", which is
+why the override is a three-state map. Effective visibility is one shared helper, never
+recomputed inline:
 
-**3. Tracking controls into the matcher.** `caseSensitive` flips `buildKnownIndex`'s regex
-flags (`known-index.ts:41`) and threads an option into `findRanges`; `exclusions` filter the
-label arrays at `known-index.ts:32`, `:144`, `:197` **and** post-filter produced ranges, because
+```ts
+export function isFieldHiddenFromAi(field: FieldDef, policy: EntityAiPolicy): boolean {
+  const override = policy.fieldVisibility[field.id];
+  return typeof override === 'boolean' ? !override : field.aiHidden === true;
+}
+```
+
+Read with the same `typeof` / `Array.isArray` guards `project-known.ts` already uses for
+`pronouns`. `__` is already the house convention for a synthetic field key (`merge.ts:284` maps
+`__summary` to a label), so this fits rather than inventing anything.
+
+**3. An "AI context" section in `EntityEditorDrawer`.** The drawer's nav is
+`config.sections.map` (`:267`) and its body is `section.fields.map` (`:285`), so this is a
+synthetic nav entry plus a branch — the shape the paste panel (`:239`) already sets. Controls
+are bespoke rather than `FieldInput`: that component writes `form[field.id]` and has no
+plumbing for a nested `__ai.x` path.
+
+*The drawer already round-trips unknown keys safely* — `formFromEntity` (`:25`) spreads
+`entity.fields` and `splitForm` (`:43`) copies back every non-top-level key, and an object
+survives its `!== '' && !== undefined` filter. So `__ai` is not lost on an ordinary save today.
+That is worth a unit test precisely **because** it is incidental: `updateEntity`
+(`entities.ts:66`) does `{...before, ...patch}`, so `patch.fields` replaces the whole bag, and
+the day someone rebuilds `splitForm` from the config instead of the form, every policy in the
+project silently resets with nothing on screen to show it.
+
+**4. Tracking controls into the matcher.** `caseSensitive` flips `buildKnownIndex`'s regex flags
+(`known-index.ts:41`) and threads an option into `findRanges`; `exclusions` filter the label
+arrays at `known-index.ts:32/144/197` **and** post-filter produced ranges, because
 `findEntityInSpan` bypasses the scan path and 18 detector call sites go through it. One control,
-two wins: the same setting that keeps "May" out of a prompt keeps it out of the review queue.
+two wins: the setting that keeps "May" out of a prompt keeps it out of the review queue.
 
-*Note for the changelog:* fixture `11-false-positive-trap` claims `Hess` "should only match
-when capitalised" — it does not today, and passes for an unrelated reason. This makes its
-stated intent true for the first time.
+*For the changelog:* fixture `11-false-positive-trap` claims `Hess` "should only match when
+capitalised". It does not today, and passes for an unrelated reason. This makes its stated
+intent true for the first time.
 
-**4. `src/services/context/scene-context.ts` — the assembler.** Signature as in the retained
-sketch below. Deterministic, offline, and the only place that decides:
+**5. `src/services/context/scene-context.ts` — the assembler**, and the first generic renderer
+of entity fields, which is what makes step 2 mean anything:
 
 - `always` = policy `always` + POV + `scene.attachedRefs` + focus lock;
 - `detected` = name/alias matches in the scene text **using the same matcher extraction uses**,
   ranked by mentions × recency-in-scene × type weight;
 - `excluded` = policy `never`, plus anything dropped for budget — reported, not hidden;
-- scenes with `aiVisible: false` and sections with `hiddenFromAi` never enter the scan or the
-  payload, which is free: they are already absent from `scene.paragraphs`.
+- each entity's digest is built from its config fields minus `isFieldHiddenFromAi`, which is
+  where cast's `writingInstructions` and `avoidTropes` finally get read;
+- scenes with `aiVisible: false` and sections with `hiddenFromAi` never enter the scan, which is
+  free — they are already absent from `scene.paragraphs`.
 
-Budget is `TIER_BUDGET[tier].digestChars`, truncation is `fitToBudget`, and `droppedForBudget`
-is part of the return value rather than a silent cut.
+Budget is `TIER_BUDGET[tier].digestChars`, truncation is `fitToBudget`, depth is clamped by tier
+exactly as `enrich.ts:42` does, and `droppedForBudget` is part of the return value.
 
-**5. `ContextRail.tsx`.** Three lanes as chip groups, a live budget bar tinted
+**6. `ContextRail.tsx`.** Three lanes as chip groups, a live budget bar tinted
 `--ok`/`--warn`/`--risk`, a **Preview** disclosure rendering the assembled block verbatim, and
-per-chip digests on click. Moving a chip between lanes has a **button path as well as a drag**
-— the N4 rule: a drag-only affordance is unreachable by keyboard, on a phone, and to a screen
-reader. Reuses `writeDragPayload` / `readDragPayload` from `services/drag.ts`.
+per-chip digests on click. Moving a chip between lanes has a **button path as well as a drag** —
+the N4 rule: a drag-only affordance is unreachable by keyboard, on a phone, and to a screen
+reader. Reuses `writeDragPayload` / `readDragPayload`.
 
-**6. Route everything through it.** `ai-context.ts`'s body is replaced — its docblock already
-says so — which converts beats and the rewrite bubble in one edit. `ComposePanel` follows, and
-its dead `dropped` state either becomes a real drop target or goes.
+**7. Route everything through it.** `gatherSceneContext`'s body is replaced — its docblock
+already says so — converting beats and the rewrite bubble in one edit. `ComposePanel` follows,
+deleting the duplicate at `:130-137`, and its dead `dropped` state either becomes a real drop
+target or goes. `EntityDetail`'s **Copy AI prompt** filters through `isFieldHiddenFromAi`;
+**Copy as JSON** deliberately does not.
+
+**8. Keep the reserved key out of human-facing surfaces.** Five places iterate `fields`
+generically. Three are already safe: `relations.ts:25` (`isRef` needs `id`+`type`+`name`),
+`generate/serialize.ts:16` (skips keys absent from the spec), and `coerce.ts:303` (warns and
+drops unknown keys, so a paste can never write a policy). Two are not:
+
+| Site | What happens today |
+|---|---|
+| `merge.ts:418` | ad-hoc skip list of three tracking keys, so `__ai` becomes a merge row labelled `" ai"` and `MergePreviewDialog.tsx:598-614` prints it as raw JSON |
+| `templates.ts:77` | copies every key but two, so one entity's tracking settings ride into a template and back out onto every entity created from it |
+
+One predicate — `isReservedFieldKey(key) => key.startsWith('__')` — fixes both. In `merge.ts` the
+skip belongs **inside** the `Object.entries(entity.fields)` loop only: `__summary` is pushed
+separately at `:417`, and a blanket prefix skip would delete the summary conflict row that
+`05-cross-panel` covers. The existing ad-hoc lists stay — they encode identity-stripping, a
+different intent.
+
+`archive/world-bible.ts:51` renders every key with no filter at all, but `renderValue` returns
+`''` for an object with no `.name`, so the row is dropped. **Safe by accident, so it gets a test
+rather than a change** — nothing there states the intent, and the next edit to `renderValue`
+would leak the policy into a shareable export with no failing test to catch it.
+
+**Two things need no work at all**, confirmed rather than assumed: `search.ts:33-43` indexes only
+`name`/`summary`/`aliases`/`tags`, so the policy is unsearchable by construction; and `logAudit`
+stores whole `before`/`after` rows rather than per-field diffs (`entities.ts:56/74`), so a policy
+change is already reversible through the existing undo with nothing added.
+
+**Deliberately not filtered:** `promptFieldLines` (`generate/spec.ts:146`) sends a hidden field's
+**id and label** in generation prompts and invites the model to fill it. That is correct —
+`aiHidden` means "do not send this value as context", not "pretend this field does not exist".
+Filtering it would make it impossible to *generate* an appearance.
 
 ### Risks, and the guard for each
 
 | Risk | Guard |
 |---|---|
-| A policy silently missing on one AI path | `toKnownEntity` first, adopted everywhere, with a unit test that the seven builders agree |
+| A per-field control that changes nothing | It ships **with** the assembler (step 5), the first generic renderer; e2e asserts a hidden field is absent from a real payload, never merely that the toggle persisted |
 | Case-sensitivity breaking model-name resolution | Scoped to the prose scan; `findKnownEntityMention` stays insensitive, asserted in a unit test |
 | `findRanges` losing its insensitive default | New optional argument only; `engine.ts:180` covered by an assertion that discovery spans survive |
-| 'detected' quietly sending far more than before | The rail and the budget bar ship in the same milestone; e2e asserts what a mocked call actually receives |
-| Truncation hiding something that mattered | `droppedForBudget` is rendered in the `excluded` lane with a reason, never dropped in silence |
+| 'detected' quietly sending far more than before | Rail and budget bar ship in the same milestone; e2e asserts what a mocked call actually receives |
+| A policy silently resetting on an ordinary field edit | Unit test on the drawer's `formFromEntity` → `splitForm` round-trip |
+| The policy surfacing as raw JSON in the merge dialog | `isReservedFieldKey`, applied inside the fields loop only so `__summary` survives |
+| Truncation hiding something that mattered | `droppedForBudget` rendered in the `excluded` lane with a reason |
 | A drag-only lane control | Buttons too, asserted on the mobile project |
 
 ### Verification
 
-| Unit — `tests/unit/scene-context.spec.ts` | E2E — `tests/e2e/28-context.spec.ts` |
+| Unit | E2E — `tests/e2e/28-context.spec.ts` |
 |---|---|
-| Lanes populated from policy, POV, attachments, lock | The rail shows the three lanes and a budget figure |
-| Ranking and budget truncation, with `droppedForBudget` reported | Moving a chip between lanes changes what a mocked provider receives |
-| `caseSensitive` / `exclusions` change what is detected — and do **not** change `findKnownEntityMention` | Setting an entity to Never removes it from the Preview and from the payload |
-| `hiddenFieldIds` absent from the digest | A hidden field never appears in the Preview |
-| `aiVisible: false` and `hiddenFromAi` never enter the scan | Preview text equals what the beat's Copy prompt produces |
+| `scene-context.spec.ts`: lanes from policy/POV/attachments/lock; ranking; budget truncation reporting `droppedForBudget`; depth clamped by tier | The rail shows three lanes and a budget figure |
+| `isFieldHiddenFromAi`: config default, override in both directions, absent key | Moving a chip between lanes changes what a mocked provider receives |
+| `caseSensitive` / `exclusions` change what is detected — and do **not** change `findKnownEntityMention` | Setting an entity to Never removes it from the Preview **and** from the payload |
+| `__ai` survives the drawer round-trip; is absent from a template, from a merge row, and from the world bible | A field marked hidden is absent from the Preview and from a beat's copied prompt |
+| Cast's `writingInstructions` **is** present in the assembled digest | Preview text equals what the beat's Copy prompt produces |
 
 Full gate before each step: `npm run lint` · `npx tsc --noEmit` · `npm run build` ·
 `npx vitest run` · `CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test` on both
-projects. Plus the 16 extraction fixtures and `extraction-bootstrap.spec.ts` green **unchanged**
-— if a fixture moves, the matcher change was wrong.
+projects. Plus the 16 extraction fixtures and `extraction-bootstrap` green **unchanged** — if a
+fixture moves, the matcher change was wrong.
 
-**Ledger note:** the spec is `28-context.spec.ts`; the plan's old `25-context.spec.ts` was taken
-by the rewrite bubble.
+**Ledger notes:** the spec is `28-context.spec.ts` (`25` went to the rewrite bubble). Two paths
+in the earlier draft of this plan were wrong: `ai-context.ts` lives at
+`src/features/writers-room/`, not `src/services/ai/`, and the `fitToBudget` worked example is
+`src/services/intelligence/enrich.ts`, not `src/services/ai/enrich.ts`.
 
 ---
 

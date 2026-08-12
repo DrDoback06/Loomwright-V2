@@ -47,9 +47,13 @@ export const castConfig: EntityConfig = {
       title: 'Appearance',
       fields: [
         { id: 'portrait', label: 'Portrait', kind: 'image', hint: 'Upload or paste a reference image.' },
-        { id: 'physicalDescription', label: 'Physical description', kind: 'longtext', span: 2 },
-        { id: 'clothing', label: 'Clothing / equipment visual notes', kind: 'textarea', span: 2 },
-        { id: 'distinguishingMarks', label: 'Distinguishing marks', kind: 'chips' },
+        // Withheld from AI context by default. A model handed a vivid physical
+        // description will reach for it in every scene the character appears
+        // in — the green eyes get mentioned eleven times. Turn any of these
+        // back on per entity in the drawer's "AI context" section.
+        { id: 'physicalDescription', label: 'Physical description', kind: 'longtext', span: 2, aiHidden: true },
+        { id: 'clothing', label: 'Clothing / equipment visual notes', kind: 'textarea', span: 2, aiHidden: true },
+        { id: 'distinguishingMarks', label: 'Distinguishing marks', kind: 'chips', aiHidden: true },
       ],
     },
     {

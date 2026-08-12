@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { getEntityConfig } from '@/domain/entity-configs';
 import { ENTITY_TYPE_META } from '@/domain/entity-types';
 import { createEntity, getEntity, updateEntity } from '@/db/repos/entities';
-import type { Entity } from '@/db/types';
 import { useEditorStore } from '@/stores/editor';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
@@ -13,47 +12,14 @@ import { generateRandomBundle, rollEmptyFields, rollField } from '@/services/gen
 import { parseJsonObject } from '@/services/ai/ai-candidates';
 import type { FieldDef } from '@/domain/entity-configs/types';
 import { FieldInput } from './fields/FieldInput';
+import { AiContextSection } from './AiContextSection';
+import { AI_SECTION_ID, deriveName, formFromEntity, splitForm, type FormState } from './entity-form';
 
 /** Kinds the per-field dice can roll something for. */
 const ROLLABLE_KINDS = new Set<FieldDef['kind']>([
   'text', 'textarea', 'longtext', 'chips', 'pills', 'select', 'multiselect',
   'toggle', 'number', 'related', 'related-multi',
 ]);
-
-type FormState = Record<string, unknown>;
-
-function formFromEntity(entity: Entity, nameFieldId: 'name' | 'title' | null): FormState {
-  return {
-    ...(nameFieldId ? { [nameFieldId]: entity.name } : {}),
-    aliases: entity.aliases,
-    summary: entity.summary,
-    tags: entity.tags,
-    ...entity.fields,
-  };
-}
-
-function deriveName(form: FormState, nameFieldId: 'name' | 'title' | null): string {
-  if (nameFieldId) return String(form[nameFieldId] ?? '').trim();
-  const from = form.from as { name?: string } | undefined;
-  const to = form.to as { name?: string } | undefined;
-  if (from?.name && to?.name) return `${from.name} → ${to.name}`;
-  return '';
-}
-
-function splitForm(form: FormState, nameFieldId: 'name' | 'title' | null) {
-  const fields: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(form)) {
-    if (key === nameFieldId || key === 'name') continue;
-    if (!TOP_LEVEL_FIELDS.has(key) && value !== undefined && value !== '') fields[key] = value;
-  }
-  return {
-    name: deriveName(form, nameFieldId),
-    aliases: (form.aliases as string[]) ?? [],
-    summary: String(form.summary ?? ''),
-    tags: (form.tags as string[]) ?? [],
-    fields,
-  };
-}
 
 export function EntityEditorDrawer() {
   const target = useEditorStore((s) => s.target);
@@ -96,7 +62,10 @@ export function EntityEditorDrawer() {
 
   if (!target || !config || !meta || !projectId) return null;
 
-  const section = config.sections.find((s) => s.id === activeSection) ?? config.sections[0];
+  const aiActive = activeSection === AI_SECTION_ID;
+  const section = aiActive
+    ? null
+    : (config.sections.find((s) => s.id === activeSection) ?? config.sections[0]);
   const nameFieldId = nameFieldIdOf(config);
   const name = deriveName(form, nameFieldId);
 
@@ -268,16 +237,32 @@ export function EntityEditorDrawer() {
               <button
                 key={s.id}
                 type="button"
-                className={s.id === section.id ? 'lw-navitem lw-navitem--sm' : 'lw-navitem lw-navitem--sm'}
-                aria-current={s.id === section.id ? 'true' : undefined}
+                className={s.id === section?.id ? 'lw-navitem lw-navitem--sm' : 'lw-navitem lw-navitem--sm'}
+                aria-current={s.id === section?.id ? 'true' : undefined}
                 onClick={() => setActiveSection(s.id)}
               >
                 {s.title}
               </button>
             ))}
+            <button
+              type="button"
+              className="lw-navitem lw-navitem--sm"
+              aria-current={activeSection === AI_SECTION_ID ? 'true' : undefined}
+              onClick={() => setActiveSection(AI_SECTION_ID)}
+            >
+              AI context
+            </button>
           </nav>
 
           <div className="lw-drawer__fields">
+            {aiActive || !section ? (
+              <AiContextSection
+                type={target.type}
+                policy={form[AI_SECTION_ID]}
+                onChange={(next) => setForm((f) => ({ ...f, [AI_SECTION_ID]: next }))}
+              />
+            ) : (
+            <>
             {section.id === config.sections[0].id && (
               <p className="lw-fieldnote">{config.defaultSummary}</p>
             )}
@@ -318,6 +303,8 @@ export function EntityEditorDrawer() {
                 </div>
               ))}
             </div>
+            </>
+            )}
           </div>
         </div>
 

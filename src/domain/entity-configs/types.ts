@@ -34,6 +34,14 @@ export interface FieldDef {
   required?: boolean;
   /** 1 (half row, default) or 2 (full row). */
   span?: 1 | 2;
+  /** Never send this field's VALUE to a model as context, unless the author
+   * turns it back on for a particular entity. Physical detail is the usual
+   * case: models latch onto a vivid description and repeat it every scene.
+   *
+   * This is not "hide the field" — its id and label still travel in
+   * generation prompts, because you must be able to *generate* an appearance.
+   * See `isFieldHiddenFromAi` in `@/domain/ai-policy`. */
+  aiHidden?: true;
 }
 
 export interface SectionDef {

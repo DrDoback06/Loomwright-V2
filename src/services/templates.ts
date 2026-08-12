@@ -2,6 +2,7 @@ import { db } from '@/db/schema';
 import type { BoardTemplate, Entity, EntityTemplate, GraphEdge, GraphNode, Template } from '@/db/types';
 import type { EntityType } from '@/domain/entity-types';
 import { newId } from '@/lib/id';
+import { isReservedFieldKey } from '@/domain/ai-policy';
 
 /** Nine code-level genre starters (legacy parity: high fantasy /
  * grimdark / science fiction × class / race / skill). Builtins are
@@ -76,6 +77,9 @@ export async function saveEntityTemplate(
   const fields: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(entity.fields)) {
     if (key === 'firstChapter' || key === 'notes') continue;
+    // One entity's AI settings must not ride into a template and back out
+    // onto every entity created from it.
+    if (isReservedFieldKey(key)) continue;
     fields[key] = value;
   }
   const template: EntityTemplate = {

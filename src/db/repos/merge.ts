@@ -9,6 +9,7 @@ import type {
 import type { EntityRef, EntityType } from '@/domain/entity-types';
 import { logAudit } from './audit';
 import { normaliseIdentitySurface } from './identity';
+import { isReservedFieldKey } from '@/domain/ai-policy';
 import {
   buildChapterLookup,
   candidateToChapterFact,
@@ -417,6 +418,10 @@ export async function buildMergePreview(request: MergeRequest): Promise<MergePre
     if (entity.summary) push('__summary', { sourceId: entity.id, sourceLabel: entity.name, value: entity.summary });
     for (const [key, value] of Object.entries(entity.fields)) {
       if (key === 'timelineFacts' || key === 'travelTimeline' || key === 'characterVisits') continue;
+      // Settings, not content — a policy has no meaningful "which of these two
+      // values wins". Scoped to this loop on purpose: '__summary' is pushed
+      // separately above and must keep its conflict row.
+      if (isReservedFieldKey(key)) continue;
       push(key, { sourceId: entity.id, sourceLabel: entity.name, value });
     }
   }

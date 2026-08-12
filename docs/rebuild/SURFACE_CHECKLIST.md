@@ -519,3 +519,9 @@ out of extraction, and out of every export in one omission.
 | Rewrite draft: missing names warning | Proper nouns present in the original and absent from the rewrite, reported to read rather than used to block | unit `rewrite-prompt.spec.ts` |
 | Rewrite: Close rewrite | Dismisses the bubble without touching the selection | rendered handler; the bubble specs cover its lifecycle |
 | Settings ▸ Appearance: Prose width | **Now genuinely changes the manuscript measure** — `.lw-manuscript` reads `--measure` | `19-studio.spec.ts` |
+| Entity drawer ▸ AI context | A synthetic nav entry — the policy is settings, not a config section. Named "AI context" because `cast` already has an "AI profile" | `28-context.spec.ts` |
+| AI context: Always / When detected / Never | The entity's context policy. Default `detected`. Stored at the reserved `fields.__ai` key and survives an unrelated field edit | `28-context.spec.ts`, unit `ai-policy.spec.ts`, `entity-form.spec.ts` |
+| AI context: Match case-sensitively | For names that are also words (Red, Will, May). Applies to the prose scan; a name a model writes back stays loosely matched | `28-context.spec.ts`, unit `ai-policy.spec.ts` |
+| AI context: Never count as a mention | Phrases excluded from matching. Reuses the shared `ChipsInput` via a synthetic `FieldDef` rather than a second chips editor | `28-context.spec.ts` |
+| AI context: Fields sent as context | One checkbox per config field. Appearance starts unticked from the **entity config**, not from data — and the override goes both ways, which a hidden-ids list could not express | `28-context.spec.ts`, unit `ai-policy.spec.ts` |
+| AI context: Reset to defaults | Clears the entity's opinion so it follows the config again | `28-context.spec.ts` covers the controls it resets |
