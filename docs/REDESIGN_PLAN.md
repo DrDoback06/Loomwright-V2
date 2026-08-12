@@ -1348,16 +1348,81 @@ A red fixture means the defaults leaked.
 of entity fields, which is what makes step 2 mean anything:
 
 - `always` = policy `always` + POV + `scene.attachedRefs` + focus lock;
-- `detected` = name/alias matches in the scene text **using the same matcher extraction uses**,
-  ranked by mentions × recency-in-scene × type weight;
+- `detected` = **two sources, not one** (below);
 - `excluded` = policy `never`, plus anything dropped for budget — reported, not hidden;
 - each entity's digest is built from its config fields minus `isFieldHiddenFromAi`, which is
   where cast's `writingInstructions` and `avoidTropes` finally get read;
 - scenes with `aiVisible: false` and sections with `hiddenFromAi` never enter the scan, which is
   free — they are already absent from `scene.paragraphs`.
 
+**`detected` reads typed mentions as well as scanning.** Re-scanning the scene text keeps the
+lane fresh for prose that has never been through extraction, and it is the only thing that
+honours the case and exclusion controls from step 4. But it can never reproduce *"the ferryman"
+→ Marrow*, which is exactly what a typed `@` mention from N6 asserts. So the lane is the union
+of a live scan and this scene's `Occurrence` rows with `source: 'typed'`, filtered by the
+scene's own paragraph ids — no shared helper needed, `scene.paragraphs` already has them.
+
+**A typed mention outranks a scan hit**, mirroring the precedence the Matrix already renders:
+the author said so, the matcher only guessed. It is also what makes N6 pay for itself twice.
+
+**The `always` lane is trimmed last, but it is still trimmed.** Thirty entities marked *always*
+would otherwise blow a small model's whole budget and fail the request outright. Ranking puts
+`always` first so it is the last thing to go, and anything cut lands in the `excluded` lane with
+a reason. Silently exceeding the budget and silently dropping a promise are both worse than
+saying which entries did not fit.
+
 Budget is `TIER_BUDGET[tier].digestChars`, truncation is `fitToBudget`, depth is clamped by tier
 exactly as `enrich.ts:42` does, and `droppedForBudget` is part of the return value.
+
+```ts
+// src/services/context/scene-context.ts
+export interface ContextItem {
+  ref: EntityRef;
+  lane: 'always' | 'detected' | 'excluded';
+  /** Plain words, rendered verbatim in the rail: "POV character",
+   * "named in this scene", "you linked this with @", "attached to scene",
+   * "pinned", "set to Never", "no room in the budget". */
+  reason: string;
+  digest: string;   // exactly the text that will be sent
+  chars: number;
+  score: number;
+}
+
+export interface SceneContext {
+  items: ContextItem[];
+  budget: number;      // TIER_BUDGET[tier].digestChars
+  used: number;
+  trimmed: boolean;    // fitToBudget cut an individual digest
+  text: string;        // the assembled block
+}
+
+/** Deterministic and offline. `pinned` is the focus lock; `depth` is
+ * clamped by tier the way `intelligence/enrich.ts:42` clamps it. */
+export async function buildSceneContext(
+  projectId: string,
+  scene: Scene,
+  opts?: { depth?: DigestDepth; pinned?: EntityRef[]; tier?: ModelTier }
+): Promise<SceneContext>;
+```
+
+**What it reuses rather than reinvents:**
+
+| Need | Existing |
+|---|---|
+| Matching, with the step-4 controls | `scanTextForKnownEntities` + `toKnownEntity` |
+| Per-field AI gate | `isFieldHiddenFromAi` (`domain/ai-policy.ts`) |
+| Field list per type | `entitySpec` / `generableFields` (`generate/spec.ts`) — the same filter the drawer's checkbox list uses, so the two cannot disagree |
+| Budget + truncation + tier | `TIER_BUDGET`, `fitToBudget`, `tierForModel` (`ai/prompts/index.ts`) |
+| Depth clamping worked example | `intelligence/enrich.ts:28-60` |
+| Type priority for ranking | `DIGEST_ORDER` (`intelligence/digest.ts`) rather than a second opinion about which types matter |
+| Canon sentences | `buildCanonFacts` (`ai/canon.ts:52`) stays as it is — it answers "what is true", not "who is here" |
+
+**One genuinely new piece: a generic field-value renderer.** Nothing exported does this.
+`renderValue` in `archive/world-bible.ts:59` is module-private and shaped for markdown bullets;
+`entityToWireJson` emits JSON filtered by the generation spec. The assembler needs
+`fieldValueToText(value)` handling string / number / boolean / array / `EntityRef` / quest-step /
+stat-row, living in `services/context/` beside its only caller until something else wants it.
+Extracting `renderValue` instead would drag the world bible's formatting decisions into prompts.
 
 **6. `ContextRail.tsx`.** Three lanes as chip groups, a live budget bar tinted
 `--ok`/`--warn`/`--risk`, a **Preview** disclosure rendering the assembled block verbatim, and

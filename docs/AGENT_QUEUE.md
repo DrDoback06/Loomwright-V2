@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N7 · step 5 of 8 (steps 1–4 done)
-**Last verified green:** N7 step 4 — lint ✅ tsc ✅ build ✅ vitest 341 ✅ playwright 250 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N7 · step 6 of 8 (steps 1–5 done)
+**Last verified green:** N7 step 5 — lint ✅ tsc ✅ build ✅ vitest 358 ✅ playwright 250 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -16,7 +16,7 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N5a | Scene beats | 7 | ✅ 7/7 |
 | N5b | AI visibility, acts, sections, rewrite, focus | 7 | ✅ 7/7 |
 | N6 | Typed `@` mentions | 6 | ✅ 6/6 |
-| N7 | Context engine + policy + tracking + budget rail | 8 | 🔄 4/8 |
+| N7 | Context engine + policy + tracking + budget rail | 8 | 🔄 5/8 |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ⬜ |
 | N9 | Chat dock | 6 | ⬜ |
 | N10 | Prompt library | 6 | ⬜ |
@@ -170,8 +170,8 @@ same filter; the half-built fields ride along.
 - [x] 2. **`EntityAiPolicy` at `fields.__ai`** — `src/domain/ai-policy.ts`: the type, `DEFAULT_AI_POLICY` (`context: 'detected'`), a guarded `readAiPolicy` that degrades to the default rather than throwing on a malformed bag, `isFieldHiddenFromAi`, and `isReservedFieldKey`. `FieldDef` gained `aiHidden?: true`; cast's three appearance fields carry it. **The opinion lives in the entity config, not in rows** — nothing is written on create, so a later change to the default still reaches everyone who never expressed one, and the three entity-creation paths needed no edits. Override is a three-state map because a `hiddenFieldIds` array cannot express "send this field the config hides".
 - [x] 3. **"AI context" section in the drawer** — a synthetic nav entry (`AiContextSection.tsx`), not a config section. `ChipsInput` exported and reused via a synthetic `FieldDef` rather than a second chips editor. `formFromEntity`/`splitForm`/`deriveName` extracted to `entity-form.ts` so the round-trip is testable without React. Reserved keys skipped in `merge.ts` (inside the fields loop only, so `__summary` keeps its conflict row) and `templates.ts`. 16 unit tests + `28-context.spec.ts` 3/3 on both projects.
 - [x] 4. **Tracking controls into the matcher.** `findRanges` gained an **optional** `{caseSensitive}` bag (a new default would have silently killed every discovery highlight via `extraction/engine.ts:180`, which lowercases its needle); `isExcludedAt` in `text-utils.ts` suppresses **by surrounding phrase**, windowed to the phrase length either side. Wired into `buildKnownIndex` (per-entity regex flags), `scanTextForKnownEntities`, `resolvePronounsInText` and `findEntityInSpan` — which **walks past** an excluded hit rather than giving up on the entity, so a real mention behind an excluded one still lands. `findKnownEntityMention` deliberately untouched and now carries a long comment saying why. New fixture `17-tracking-controls`, and the runner passes both controls through from the seed. 17 unit tests.
-- [ ] 5. **← IN PROGRESS** `src/services/context/scene-context.ts` — the assembler, and **the first generic renderer of entity fields**, which is what makes step 2's per-field gate mean anything. Lanes (`always`/`detected`/`excluded`), ranking by mentions × recency × type weight, budget from `TIER_BUDGET[tier].digestChars` with `fitToBudget`, depth clamped by tier exactly as `intelligence/enrich.ts:42` does, `droppedForBudget` returned rather than silently cut. This is where cast's `writingInstructions`/`avoidTropes` finally get read — that whole "AI profile" section has **zero readers** today.
-- [ ] 6. `ContextRail.tsx` — fourth panel with its own toolbar button; three lanes, budget bar (**characters**, not tokens — there is no token counter in this repo), Preview disclosure, per-chip digest. **Buttons as well as drag** for moving a chip between lanes (the N4 rule). Reuses `writeDragPayload`/`readDragPayload`.
+- [x] 5. **`src/services/context/scene-context.ts` — the assembler.** Lanes (`always`/`detected`/`excluded`) each carrying a plain-words `reason` the rail renders verbatim. **`entityDigest` is the first generic renderer of entity fields in the app** — every other AI path names ~8 fields by hand — which is what makes step 2's per-field gate real and what finally reads cast's `writingInstructions`/`avoidTropes` (zero readers until now). `detected` is the **union of a live scan and this scene's `source:'typed'` occurrences**, with the typed mention ranked higher: it is an assertion, and it catches "the ferryman → Marrow" which no matcher can. Budget from `TIER_BUDGET[tier].digestChars` with `fitToBudget`; depth clamped by tier as `enrich.ts:42` does; a per-entity cap so one digest cannot starve the scene. **`always` is trimmed last but still trimmed** — 30 Always entities would otherwise fail a small model's request outright — and anything cut moves to `excluded` with the reason "no room in the budget". New `field-text.ts` (`fieldValueToText`) rather than extracting world-bible's `renderValue`, which is shaped for markdown a person reads. 17 unit tests.
+- [ ] 6. **← IN PROGRESS** `ContextRail.tsx` — fourth panel with its own toolbar button; three lanes, budget bar (**characters**, not tokens — there is no token counter in this repo), Preview disclosure, per-chip digest. **Buttons as well as drag** for moving a chip between lanes (the N4 rule). Reuses `writeDragPayload`/`readDragPayload`.
 - [ ] 7. Route everything through it. `features/writers-room/ai-context.ts`'s `gatherSceneContext` body is replaced — its docblock already says so — converting beats and the rewrite bubble in one edit. `ComposePanel` follows, deleting the byte-identical duplicate at `:130-137`; wire or delete `ComposePanel.dropped`, dead state whose `×` can never render. `EntityDetail`'s **Copy AI prompt** filters through `isFieldHiddenFromAi`; **Copy as JSON** deliberately does not, because filtering a data export makes it lossy.
 - [ ] 8. `tests/unit/scene-context.spec.ts`; extend `28-context.spec.ts` with the payload assertions — a hidden field absent from what a mocked provider receives, `Never` removing an entity from the Preview, moving a chip changing the payload. SURFACE_CHECKLIST rows for the rail.
 
@@ -242,7 +242,7 @@ same filter; the half-built fields ride along.
 
 ## Notes for the next run
 
-N1–N6 and N7 steps 1–4 are complete and pushed. Start N7 step 5 — the assembler.
+N1–N6 and N7 steps 1–5 are complete and pushed. Start N7 step 6 — the context rail.
 
 **There is no token counter in this repo.** Everything budgets in *characters* — `TIER_BUDGET`
 is `chunkChars`/`digestChars`/`namesPerType`, and `fitToBudget` (`ai/prompts/index.ts:165`) is
@@ -297,6 +297,14 @@ an act out of sequence appears under that act rather than in manuscript position
 Matrix band is deliberately emitted on every act *change* going down `globalOrder`, so the
 same mis-assignment shows up there as a repeated band instead of being hidden. If acts ever
 need to imply order, that is a `resequenceScenes` change, not a rendering one.
+
+**`buildSceneContext` is the only thing that decides what an AI is told about a scene.**
+`services/context/scene-context.ts`. It is deterministic and offline — no provider, no network,
+no randomness — because the rail renders its output verbatim and a Preview that differs from
+the payload is worse than no Preview. Anything new that wants entity context calls it rather
+than naming fields by hand; that hand-rolling is what produced five divergent renderings before
+N7. `entityDigest` uses the **same** `generableFields` filter as the drawer's checkbox list, so
+the two cannot disagree about which fields exist.
 
 **`__`-prefixed keys in `entity.fields` are reserved.** `isReservedFieldKey` in
 `domain/ai-policy.ts` is the predicate; `__ai` holds the per-entity AI policy and `merge.ts`

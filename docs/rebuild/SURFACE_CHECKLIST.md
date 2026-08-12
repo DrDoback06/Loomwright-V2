@@ -527,3 +527,5 @@ out of extraction, and out of every export in one omission.
 | AI context: Reset to defaults | Clears the entity's opinion so it follows the config again | `28-context.spec.ts` covers the controls it resets |
 | AI context: Match case-sensitively (effect) | Genuinely changes what extraction finds — the ordinary-word match disappears from the review queue and from AI context alike. Prose scan only; a name a model writes back still resolves loosely | unit `tracking-controls.spec.ts`, fixture `17-tracking-controls` |
 | AI context: Never count as a mention (effect) | Suppresses a hit by the phrase around it, so "the Reach" stops counting while "Reach the stone" still does | unit `tracking-controls.spec.ts`, fixture `17-tracking-controls` |
+| AI context: per-field gate (effect) | A field turned off is genuinely absent from the assembled context block, and one turned on appears — asserted against the real digest, not against stored state | unit `scene-context.spec.ts` |
+| AI context: Always / Never (effect) | Always reaches a scene that never names the entity; Never keeps it out of the payload even when the prose names it | unit `scene-context.spec.ts` |
