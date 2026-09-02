@@ -47,6 +47,12 @@ const MODE_RULES: Record<BeatMode, string> = {
  * model spends its whole budget re-reading. */
 export const PRECEDING_PROSE_CHARS = 1200;
 
+/** Exported so the prompt library can seed its builtin from the prompt the
+ * app actually sends, rather than from a second copy that drifts. */
+export const BEAT_SYSTEM =
+  'You are a fiction co-writer continuing a scene mid-flow. Write polished prose that ' +
+  'follows the brief exactly. Return only the prose.';
+
 export interface BeatBriefInput {
   /** The author's instruction, verbatim. */
   beat: string;
@@ -156,10 +162,5 @@ export function buildBeatPrompt(input: BeatBriefInput): { system: string; prompt
     'no bracketed asides, and no summary of what you wrote.'
   );
 
-  return {
-    system:
-      'You are a fiction co-writer continuing a scene mid-flow. Write polished prose that ' +
-      'follows the brief exactly. Return only the prose.',
-    prompt: lines.join('\n'),
-  };
+  return { system: BEAT_SYSTEM, prompt: lines.join('\n') };
 }

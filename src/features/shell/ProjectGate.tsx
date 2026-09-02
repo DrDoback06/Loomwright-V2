@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { createProject, listProjects } from '@/db/repos/projects';
 import { ensureScenesForProject } from '@/db/repos/scenes';
+import { ensureBuiltinPrompts } from '@/db/repos/prompts';
 import { createSampleProject } from '@/services/sample-project';
 import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard';
 import { useProjectStore } from '@/stores/project';
@@ -40,6 +41,14 @@ export function ProjectGate({ children }: { children: React.ReactNode }) {
     if (!currentProjectId) return;
     void ensureScenesForProject(currentProjectId);
   }, [currentProjectId, projects]);
+
+  // The shipped prompt set. Seeded here rather than inside the panel's
+  // live query, because a write inside a `useLiveQuery` re-triggers the
+  // query that performed it — and every AI path reads a template whether
+  // or not anyone has opened Settings.
+  useEffect(() => {
+    void ensureBuiltinPrompts();
+  }, []);
 
   if (projects === null) return null; // booting
 

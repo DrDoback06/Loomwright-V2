@@ -13,6 +13,7 @@ import {
 } from '@/services/ai/prompts/rewrite';
 import { checkDraftAgainstCanon, type CanonIssue } from '@/services/ai/canon';
 import { analyzeStyle } from '@/services/style-analysis';
+import { applyProjectTemplate, codexScope } from '@/services/prompts/apply';
 import { gatherSceneContext, manuscriptStyleSample } from './ai-context';
 
 export interface RewriteDraft {
@@ -56,7 +57,16 @@ export async function buildRewriteRequest(
     tier: input.tier ?? 'large',
   });
 
-  return { ...built, world: gathered.world };
+  const layered = await applyProjectTemplate(input.projectId, 'rewrite', built, {
+    selection: input.selection,
+    scene: gathered.scene,
+    precedingProse: input.precedingProse.slice(-800),
+    context: gathered.context,
+    storySoFar: gathered.storySoFar,
+    ...(await codexScope(input.projectId)),
+  });
+
+  return { ...layered, world: gathered.world };
 }
 
 /** Capitalised words that are not sentence-initial: a cheap, offline proxy

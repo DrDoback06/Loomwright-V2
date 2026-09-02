@@ -10,6 +10,7 @@ import { renderWorldBible } from '@/services/archive/world-bible';
 import { clearApiKey, listKeyedProviders, saveApiKey } from '@/services/crypto/keys';
 import { downloadFile, fileStem } from '@/lib/download';
 import { TweaksPanel } from '@/features/settings/TweaksPanel';
+import { PromptsPanel } from '@/features/settings/PromptsPanel';
 import { useProjectStore } from '@/stores/project';
 import { toast } from '@/stores/toasts';
 
@@ -104,6 +105,8 @@ export function SettingsSurface() {
       </div>
 
       <TweaksPanel />
+
+      <PromptsPanel />
 
       <section className="lw-card">
         <h2 className="lw-card__title">AI mode</h2>

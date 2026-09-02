@@ -3,8 +3,8 @@
 The single source of truth for what is in flight. Read it first, rewrite it last, **every
 run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIGN_PLAN.md`.
 
-**Current:** N10 · not started (N9 closed)
-**Last verified green:** N9 — lint ✅ tsc ✅ build ✅ vitest 411 ✅ playwright 282 passed / 10 skipped / 0 failed on desktop + mobile ✅
+**Current:** N11 · not started (N10 closed)
+**Last verified green:** N10 — lint ✅ tsc ✅ build ✅ vitest 433 ✅ playwright 294 passed / 10 skipped / 0 failed on desktop + mobile ✅
 **Blocked:** —
 
 | # | Milestone | Steps | State |
@@ -19,7 +19,7 @@ run**. Operating instructions: `docs/AGENT_RUNBOOK.md`. Full spec: `docs/REDESIG
 | N7 | Context engine + policy + tracking + budget rail | 8 | ✅ 8/8 |
 | N8 | Progressions + scene summaries / storySoFar | 7 | ✅ 7/7 |
 | N9 | Chat dock | 6 | ✅ 6/6 |
-| N10 | Prompt library | 6 | ⬜ |
+| N10 | Prompt library | 6 | ✅ 6/6 |
 | N11 | Story health charts | 7 | ⬜ |
 | N12 | Nudge inbox | 6 | ⬜ |
 | N13 | Momentum | 5 | ⬜ |
@@ -196,12 +196,17 @@ same filter; the half-built fields ride along.
 
 ## N10 — Prompt library
 
-- [ ] 1. `PromptTemplate` / `PromptInput` types + Dexie v12 + repo
-- [ ] 2. `services/prompts/resolve.ts` — the C-style, case-insensitive, non-chaining resolver
-- [ ] 3. Seed builtins by exporting the existing hardcoded prompts (prose, extraction, delta)
-- [ ] 4. Settings ▸ Prompts: list, edit, duplicate, reset-to-builtin, **test-run showing resolved text**
-- [ ] 5. Clipboard import/export; model banks; prompt picker at every AI entry point
-- [ ] 6. Resolver unit specs; e2e `28-prompts.spec.ts`
+- [x] 1. **`PromptTemplate` + Dexie v12 + `db/repos/prompts.ts`.** Builtins are project-less (`projectId: null`) and **copy-on-write**: editing one writes a project-scoped copy and leaves the shipped row alone, so "reset to default" is a promise the app can always keep. Seeding is idempotent and keyed on `slug`, so a later release can add a template without touching an edited one.
+- [x] 2. **`services/prompts/resolve.ts`.** Case-insensitive, non-chaining, C-style — the same shape novelcrafter uses, so community prompts are portable. Scope is a **plain pre-computed data bag** rather than callbacks, so resolution is synchronous and pure: the panel can re-resolve on every keystroke and the specs need no database. An unrecognised token is **left in the text and reported**, never swallowed — a variable that silently resolves to nothing is a template that quietly stopped working.
+- [x] 3. **Builtins seeded from what the app actually sends.** `BEAT_SYSTEM` and `REWRITE_SYSTEM` were extracted as exported constants and `chatSystemPrompt` reused, so a builtin cannot drift from the prompt in force. **Deliberately narrower than the plan sketched:** only the seven kinds that a code path genuinely reads (5 chat modes, beat, rewrite). Seeding an "extraction" or "delta" template nothing consults would be a rendered control that does nothing, dressed as a feature.
+- [x] 4. **Settings ▸ Prompts.** Two fields whose labels state exactly what they do — "How the model should behave" **replaces** the system message, "Extra instructions" is **appended** after the context and canon. The body deliberately does not become the whole prompt: the assembled block carries the context engine, the canon facts and the measured style, and a blank page that silently drops all three is a worse prompt with more knobs on it. **Test run** resolves against the author's real project, not a fixture, and names unrecognised variables.
+- [x] 5. **Clipboard round-trip.** Export is a versioned envelope; import accepts a fenced paste (what a model hands you) and skips-and-names a `kind` the app does not have rather than storing a row nothing will read. Model banks and per-call pickers deliberately deferred — see below.
+- [x] 6. **Layered where the request is BUILT, not where it is sent** (`buildBeatRequest`, `buildRewriteRequest`, ChatDock's `assemble`), so the offline copy-prompt path carries the same edit. A template that only applied when you had a key would make the no-key route a different product rather than the same one run elsewhere. 22 unit tests + `31-prompts.spec.ts` 6/6 on both projects.
+
+**Deferred from N10, deliberately:** model banks, personas, presets, and a per-call prompt
+picker. All four need a second selection surface at every AI entry point, and none of them
+changes a payload on their own — they choose between payloads. Worth doing once there is
+more than one template per kind to choose from.
 
 ## N11 — Story health
 
@@ -387,6 +392,9 @@ Hard-won facts, in rough order of how much time they cost:
   scene the author adds. Store `sceneId` and resolve the order at read time.
 - **`updatedAt` is not "the prose changed".** Every metadata edit bumps it. N8 added
   `proseUpdatedAt` for the question the stale-summary chip actually asks.
+- **Never write from inside a `useLiveQuery`.** The write re-triggers the query that
+  performed it. N10's prompt seeding had to move to `ProjectGate`, which is where any
+  other "make sure this exists" backfill belongs too.
 - **`useLiveQuery` with an empty-array default cannot be told from a genuinely empty
   table.** N9's dock created a fresh thread on every reload because of it. Omit the default
   and guard on `undefined` whenever "no rows yet" triggers a write.

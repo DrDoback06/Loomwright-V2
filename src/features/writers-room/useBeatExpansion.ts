@@ -7,6 +7,7 @@ import { tierForModel } from '@/services/ai/prompts';
 import { buildBeatPrompt, PRECEDING_PROSE_CHARS, type BeatMode } from '@/services/ai/prompts/beat';
 import { checkDraftAgainstCanon, type CanonIssue } from '@/services/ai/canon';
 import { analyzeStyle } from '@/services/style-analysis';
+import { applyProjectTemplate, codexScope } from '@/services/prompts/apply';
 import { gatherSceneContext, manuscriptStyleSample } from './ai-context';
 
 export interface BeatDraft {
@@ -43,7 +44,23 @@ export async function buildBeatRequest(input: {
     tier: input.tier ?? 'large',
   });
 
-  return { ...built, world: gathered.world };
+  // The author's template, if they have edited one. `layerTemplate` is a
+  // no-op for an untouched builtin, so this changes nothing until somebody
+  // changes something — and it sits HERE rather than in `expandBeat`, so
+  // the offline copy-prompt path carries the same edit the in-app call
+  // would have. A template that only applied when you had a key would be
+  // the worst of both.
+  const layered = await applyProjectTemplate(input.projectId, 'beat', built, {
+    beat: input.beat,
+    targetWords: input.targetWords,
+    scene: gathered.scene,
+    precedingProse: input.precedingProse.slice(-PRECEDING_PROSE_CHARS),
+    context: gathered.context,
+    storySoFar: gathered.storySoFar,
+    ...(await codexScope(input.projectId)),
+  });
+
+  return { ...layered, world: gathered.world };
 }
 
 /** Expand a beat with the configured provider.

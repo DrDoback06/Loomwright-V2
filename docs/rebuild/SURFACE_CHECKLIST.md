@@ -558,3 +558,11 @@ out of extraction, and out of every export in one omission.
 | Chat: "Sent with:" line | Names what travelled with each message, stored on the row — an author never has to guess why a reply knew something | `30-chat.spec.ts` |
 | Chat: Insert into scene | Takes a `pre-ai` snapshot labelled "Before a chat insertion", then inserts. The page before it is recoverable in the Scene panel | `30-chat.spec.ts` |
 | Chat: Send to codex | Routes the reply through `parseDeltaReply` — the same verification a pasted reply gets — and stages a cascade. A model cannot make the app write what the offline engine would not | `30-chat.spec.ts` |
+| Settings ▸ Prompts | Every prompt the app sends, as editable text. Seeded from `services/ai/prompts/` via exported constants, so a builtin is the prompt the app actually uses rather than a copy that drifts | `31-prompts.spec.ts`, unit `prompts.spec.ts` |
+| Prompts: How the model should behave | **Replaces** the built-in system message. Runs through the variable resolver | `31-prompts.spec.ts`, unit `prompts.spec.ts` |
+| Prompts: Extra instructions | **Appended** to the assembled prompt, after the context and the canon. Empty = no change, which is what makes seeding the library safe | `31-prompts.spec.ts`, unit `prompts.spec.ts` |
+| Prompts: Save | Copy-on-write — editing a default writes a project copy and leaves the shipped row intact | `31-prompts.spec.ts`, unit `prompts.spec.ts` |
+| Prompts: Test run | Resolves against the author's **real** project, not a fixture, and names any variable the resolver does not recognise | `31-prompts.spec.ts` |
+| Prompts: Reset to default | Drops the project override; the shipped prompt is genuinely back in the payload, asserted through a beat's copied prompt | `31-prompts.spec.ts`, unit `prompts.spec.ts` |
+| Prompts: Copy all as JSON / Import from JSON | Clipboard round-trip. A fenced paste is accepted; a `kind` the app does not have is skipped and named rather than stored | `31-prompts.spec.ts`, unit `prompts.spec.ts` |
+| Prompt templates (effect) | A saved edit reaches the beat, the rewrite and every chat mode — **and the offline copy-prompt path carries the same edit**, because the template is layered where the request is built rather than where it is sent | `31-prompts.spec.ts` |

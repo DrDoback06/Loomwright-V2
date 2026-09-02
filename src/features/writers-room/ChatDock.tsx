@@ -19,6 +19,7 @@ import { completeDetailed } from '@/services/ai/providers';
 import { getAiSettings, resolveProvider } from '@/services/ai/settings';
 import { tierForModel, TIER_BUDGET } from '@/services/ai/prompts';
 import { parseDeltaReply } from '@/services/intelligence/digest';
+import { applyProjectTemplate, codexScope } from '@/services/prompts/apply';
 import { PrivacyConfirm } from '@/features/generate/PrivacyConfirm';
 import { useIntelligenceStore } from '@/stores/intelligence';
 import { useUiStore } from '@/stores/ui';
@@ -132,9 +133,7 @@ export function ChatDock({
     const config = await resolveProvider(projectId);
     const tier = config ? tierForModel(config) : 'large';
     const context = await buildChatContext(projectId, thread.context, { tier });
-    return {
-      config,
-      tier,
+    const built = {
       system: chatSystemPrompt(thread.mode),
       prompt: buildChatPrompt({
         mode: thread.mode,
@@ -142,6 +141,19 @@ export function ChatDock({
         history: recentHistory(messages, thread.memoryPairs),
         message,
       }),
+    };
+    // The mode's prompt is editable in Settings ▸ Prompts. Layered here so
+    // Send and Copy conversation carry the same edit — a template that
+    // only applied to the in-app call would make the offline path a
+    // different product rather than the same one, run elsewhere.
+    const layered = await applyProjectTemplate(projectId, `chat-${thread.mode}`, built, {
+      context: context.text,
+      ...(await codexScope(projectId)),
+    });
+    return {
+      config,
+      tier,
+      ...layered,
       summary: describeContext(thread.context),
       trimmed: context.trimmed,
     };

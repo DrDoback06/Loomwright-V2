@@ -87,6 +87,12 @@ export function rewriteTarget(op: RewriteOp, selectionWords: number): [number, n
   return [Math.max(3, Math.round(selectionWords * low)), Math.max(6, Math.round(selectionWords * high))];
 }
 
+/** Exported so the prompt library seeds its builtin from what the app
+ * actually sends. */
+export const REWRITE_SYSTEM =
+  'You are a fiction editor rewriting a passage in place. Preserve every fact and every ' +
+  'proper noun. Return only the rewritten passage.';
+
 export function buildRewritePrompt(input: RewriteBriefInput): { system: string; prompt: string } {
   const words = countSelectionWords(input.selection);
   const [low, high] = rewriteTarget(input.op, words);
@@ -156,10 +162,5 @@ export function buildRewritePrompt(input: RewriteBriefInput): { system: string; 
     'explanation of what you changed, and no quotation marks around it.'
   );
 
-  return {
-    system:
-      'You are a fiction editor rewriting a passage in place. Preserve every fact and every ' +
-      'proper noun. Return only the rewritten passage.',
-    prompt: lines.join('\n'),
-  };
+  return { system: REWRITE_SYSTEM, prompt: lines.join('\n') };
 }

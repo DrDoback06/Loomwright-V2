@@ -9,6 +9,7 @@ import type {
   Progression,
   ChatThread,
   ChatMessage,
+  PromptTemplate,
   RandomTable,
   SkillTree,
   TangleBoard,
@@ -61,6 +62,7 @@ export class LoomwrightDB extends Dexie {
   progressions!: EntityTable<Progression, 'id'>;
   chatThreads!: EntityTable<ChatThread, 'id'>;
   chatMessages!: EntityTable<ChatMessage, 'id'>;
+  promptTemplates!: EntityTable<PromptTemplate, 'id'>;
 
   constructor() {
     super('loomwright');
@@ -166,6 +168,13 @@ export class LoomwrightDB extends Dexie {
     this.version(11).stores({
       chatThreads: 'id, projectId, sceneId, [projectId+updatedAt]',
       chatMessages: 'id, threadId, [threadId+createdAt]',
+    });
+
+    // `builtin` is indexed so the seeder can find the shipped set without
+    // scanning; `[projectId+kind]` is how every AI path looks up the one
+    // template it should use.
+    this.version(12).stores({
+      promptTemplates: 'id, projectId, kind, slug, [projectId+kind], builtin',
     });
   }
 }

@@ -4342,3 +4342,67 @@ select.lw-input {
   letter-spacing: var(--tr-eyebrow);
   color: var(--ink-4);
 }
+
+/* ---------------------------------------------------------------------
+   Prompt library (N10)
+   --------------------------------------------------------------------- */
+.lw-prompts {
+  list-style: none;
+  margin: var(--sp-6) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.lw-prompt {
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-4);
+  background: var(--bg-paper);
+  overflow: hidden;
+}
+.lw-prompt__open {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-6);
+  text-align: left;
+  background: transparent;
+}
+.lw-prompt__name {
+  flex: 1;
+  font-size: var(--fs-sm);
+  color: var(--ink-1);
+}
+.lw-prompt__kind {
+  font-size: var(--fs-3xs);
+  color: var(--ink-4);
+}
+.lw-prompt__badge {
+  font-size: var(--fs-3xs);
+  color: var(--ink-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  padding: 0 var(--sp-3);
+}
+.lw-prompt__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-6) var(--sp-6);
+  border-top: 1px solid var(--line-1);
+  background: var(--bg-paper-2);
+}
+.lw-prompt__preview {
+  margin: 0;
+  padding: var(--sp-5);
+  border-radius: var(--r-3);
+  background: var(--bg-sunken);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-normal);
+  white-space: pre-wrap;
+  max-height: 40vh;
+  overflow: auto;
+}

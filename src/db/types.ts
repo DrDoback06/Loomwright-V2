@@ -502,3 +502,56 @@ export interface ChatMessage {
   truncated?: boolean;
   createdAt: number;
 }
+
+/* ---------------------------------------------------------------------
+   Prompt library
+   --------------------------------------------------------------------- */
+
+export type PromptKind =
+  | 'chat-brainstorm'
+  | 'chat-ask-the-codex'
+  | 'chat-editor'
+  | 'chat-continuity'
+  | 'chat-free'
+  | 'beat'
+  | 'rewrite';
+
+export interface PromptInput {
+  name: string;
+  label: string;
+  kind: 'text' | 'textarea' | 'dropdown' | 'number';
+  options?: string[];
+  default?: string;
+}
+
+/**
+ * A prompt the author can edit.
+ *
+ * Two fields, and each one does exactly what its label says:
+ *
+ * - `system` REPLACES the built-in system message — who the model is and
+ *   how it should behave.
+ * - `body` is APPENDED to the assembled prompt as extra instructions.
+ *
+ * Deliberately not "the body IS the whole prompt". The assembled block is
+ * built from the context engine, the canon facts and the measured style,
+ * and handing an author a blank page that silently drops all three would
+ * be a worse prompt with more knobs on it. Both fields run through the
+ * variable resolver, so a template can still reach anything the app knows.
+ */
+export interface PromptTemplate {
+  id: string;
+  /** null = a builtin shipped with the app. Editing one copies it to the
+   * project first, so a builtin is never destroyed. */
+  projectId: string | null;
+  /** Stable identity across versions — what "reset to default" looks up. */
+  slug: string;
+  name: string;
+  kind: PromptKind;
+  system: string;
+  body: string;
+  inputs: PromptInput[];
+  builtin: 0 | 1;
+  createdAt: number;
+  updatedAt: number;
+}
